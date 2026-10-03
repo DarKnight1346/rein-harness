@@ -1,5 +1,6 @@
 import React, {useEffect, useState} from 'react';
 import {Box, Text, useInput} from 'ink';
+import {TabBar} from './TabBar.js';
 import {PROVIDERS, parseRef, refKey} from '../providers/types.js';
 import {runtime} from '../runtime.js';
 import {catalog, toRef, type CatalogModel} from '../router/catalog.js';
@@ -112,16 +113,7 @@ export function ModelScreen({onClose, onLog, bare}: {onClose(): void; onLog(kind
 
   return (
     <Box flexDirection="column" {...(bare ? {} : {borderStyle: 'round' as const, borderColor: 'cyan', paddingX: 1})}>
-      <Box>
-        {SECTIONS.map((s, i) => (
-          <Clickable key={s.id} onClick={() => showSection(i)}>
-            <Text color={i === section ? 'cyan' : undefined} bold={i === section} dimColor={i !== section}>
-              {i === section ? `[${s.title}]` : ` ${s.title} `}
-              {'  '}
-            </Text>
-          </Clickable>
-        ))}
-      </Box>
+      <TabBar titles={SECTIONS.map((s) => s.title)} active={section} onSelect={showSection} />
       <Text dimColor>{describe(sec.id)}</Text>
       <Box flexDirection="column" marginY={1}>
         {start > 0 && (
