@@ -20,6 +20,8 @@ type Opts = {
   noThinking?: boolean;
   /** With resumeId: branch into a new session id instead of continuing the original (/btw). */
   fork?: boolean;
+  /** `--effort` level (fixed for the process; a change reopens the session). */
+  effort?: string;
   /** The CLI's server-side WebSearch only (one-shot search calls); every other built-in stays off. */
   webSearch?: boolean;
   /** Rein tools: MCP proxy server + its socket, resolved before spawning. */
@@ -46,6 +48,7 @@ export function claudeArgs(opts: Omit<Opts, 'account'>): string[] {
     '--setting-sources', '',
     '--disable-slash-commands',
     '--model', opts.model,
+    ...(opts.effort ? ['--effort', opts.effort] : []),
     ...(opts.resumeId ? ['--resume', opts.resumeId] : []),
     ...(opts.resumeId && opts.fork ? ['--fork-session'] : []),
     ...(opts.persist ? [] : ['--no-session-persistence']),
@@ -67,6 +70,10 @@ export class ClaudeSession implements ProviderSession {
   private nextControl = 1;
   private exited = false;
   private stderr = '';
+
+  get effort(): string | undefined {
+    return this.opts.effort;
+  }
 
   constructor(private readonly opts: Opts) {
     this.accountId = opts.account.id;

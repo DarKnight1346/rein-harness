@@ -13,7 +13,7 @@ export const COMMANDS: {name: CommandName; description: string}[] = [
   {name: 'resume', description: 'Continue a saved conversation from this project'},
   {name: 'login', description: 'List signed-in accounts, add or remove accounts'},
   {name: 'usage', description: 'Usage windows (5h / weekly / …) and resets per account (/usage refresh)'},
-  {name: 'model', description: 'Chat, decision and compaction models (/model auto, /model sonnet)'},
+  {name: 'model', description: 'Chat, decision and compaction models (/model auto, /model <name>)'},
   {name: 'context', description: 'Show what the current context holds and how full it is'},
   {name: 'compact', description: 'Summarize the conversation with the compaction model'},
   {name: 'shells', description: 'Shell commands the agent started; open one to see its logs (/shells <id>)'},

@@ -154,6 +154,10 @@ class CodexSession implements ProviderSession {
 
   /** Reasoning effort per turn (`low` for decider calls); undefined = model default. */
   effort: string | undefined;
+  setEffort(effort: string | undefined): void {
+    this.effort = effort;
+  }
+
   /** Images produced by Codex's image generation during this session's turns. */
   readonly generated: GeneratedImage[] = [];
 
@@ -200,6 +204,7 @@ class CodexSession implements ProviderSession {
             ? {config: {...(opts.webSearch ? {web_search: 'live'} : {}), ...(opts.imageGeneration ? {features: {image_generation: true}} : {})}}
             : {}),
         });
+    if (opts.effort) s.effort = opts.effort;
     s.threadId = res.thread?.id;
     if (s.threadId && opts.tools) toolsByThread.set(s.threadId, opts.tools);
     s.off = client.onNotification((n) => s.onNotification(n));
@@ -313,6 +318,8 @@ export const codexAdapter: ProviderAdapter = {
         tier: codexTier(m.id, m.description ?? ''),
         contextWindow: windows.get(m.id) ?? 128_000,
         isDefault: !!m.isDefault,
+        efforts: Array.isArray(m.supportedReasoningEfforts) ? m.supportedReasoningEfforts.map((o: any) => String(o?.reasoningEffort ?? o?.effort ?? o)).filter(Boolean) : undefined,
+        defaultEffort: m.defaultReasoningEffort ?? undefined,
       }));
   },
 

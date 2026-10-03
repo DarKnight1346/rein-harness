@@ -9,14 +9,14 @@ export const modelLabel = (ref: ModelRef) => catalog.get(ref)?.label ?? ref.mode
 export const accountLabel = (a: Pick<Account, 'email' | 'id' | 'provider'>) => accountName(a);
 
 /** `sonnet · me@x.com (auto · 0.86)` */
-export function routeLabel(route: Route, account: Account): string {
+export function routeLabel(route: Route, account: Account, effort?: string): string {
   const why =
     route.reason === 'auto' ? `auto${route.confidence !== undefined ? ` · ${route.confidence.toFixed(2)}` : ''}`
     : route.reason === 'sticky' ? 'auto · stayed'
     : route.reason === 'failover' ? 'failover'
     : route.reason === 'default' ? 'default'
     : undefined;
-  return `${modelLabel(route.ref)} · ${accountLabel(account)}${why ? ` (${why})` : ''}`;
+  return `${modelLabel(route.ref)}${effort ? ` · effort ${effort}` : ''} · ${accountLabel(account)}${why ? ` (${why})` : ''}`;
 }
 
 /** One-line summary of a tool result for the transcript (`Read` → line count, else first line). */

@@ -36,6 +36,8 @@ export type Transcript = {
   native: Record<string, NativeRef>;
   /** Auto-routing task tag (one line), set by the router. */
   taskTag?: string;
+  /** The agent's task list (todo_write). */
+  todos?: import('../tools/todo.js').Todo[];
   /** Standing objective set with /goal. */
   goal?: import('../goals/manager.js').Goal;
   /** Subagents spawned in this conversation (task, model, outcome, tool calls). */

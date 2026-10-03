@@ -1,3 +1,4 @@
+import {tierFrom} from '../tier.js';
 import {mkdir, readFile, writeFile} from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -65,14 +66,7 @@ export async function contextWindows(account: Account): Promise<Map<string, numb
 }
 
 /** Relative cost tier from the model's own description (Codex exposes no prices). */
-export function codexTier(id: string, description = ''): number {
-  const s = `${id} ${description}`.toLowerCase();
-  if (/\b(mini|nano|lite)\b|affordable|cheap|fast and/.test(s)) return 1;
-  if (/efficient|\bluna\b|fast/.test(s)) return 2;
-  if (/balanced|terra/.test(s)) return 3;
-  if (/\b(pro|max)\b|most capable|frontier/.test(s)) return 6;
-  return 4;
-}
+export const codexTier = (_id: string, description = '') => tierFrom(description);
 
 /** App-server flags that remove Codex's built-in tools and extra prompt sections. */
 export function appServerArgs(catalogPath: string | undefined): string[] {

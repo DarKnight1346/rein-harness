@@ -174,7 +174,7 @@ function EntryView({entry: raw}: {entry: Entry}) {
     case 'route':
       return (
         <Text dimColor>
-          {'  '}→ {routeLabel(entry.route, entry.account)}
+          {'  '}→ {routeLabel(entry.route, entry.account, entry.effort)}
           {entry.interrupted ? <Text color="yellow"> · interrupted</Text> : null}
         </Text>
       );

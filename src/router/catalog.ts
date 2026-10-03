@@ -2,6 +2,11 @@ import {adapters} from '../providers/index.js';
 import type {Account, ModelInfo, ModelRef} from '../providers/types.js';
 import {refKey} from '../providers/types.js';
 import {loadAccounts} from '../store/accounts.js';
+import {readJson, writeJson} from '../store/json.js';
+import {paths} from '../store/paths.js';
+import path from 'node:path';
+
+const windowsFile = () => path.join(paths.state(), 'context-windows.json');
 import {balanceScore, headroom, usageStore} from '../store/usage.js';
 
 /** Score points per live session already on an account. */
@@ -23,6 +28,11 @@ export class ModelCatalog {
   readonly authFailed = new Set<string>();
 
   async refresh(): Promise<void> {
+    if (!this.windowsLoaded) {
+      this.windowsLoaded = true;
+      const saved = await readJson<Record<string, number>>(windowsFile(), {}).catch(() => ({}));
+      for (const [k, v] of Object.entries(saved)) if (!this.learnedWindows.has(k)) this.learnedWindows.set(k, v);
+    }
     const {accounts} = await loadAccounts();
     this.accounts = accounts;
     this.authFailed.clear(); // refresh follows /login changes: give re-authenticated accounts a new chance
@@ -47,14 +57,17 @@ export class ModelCatalog {
     this.loaded = true;
   }
 
-  /** Provider-reported context window overrides the static default. */
+  /** Provider-reported context window (from a request's usage) — remembered across restarts. */
   learnContextWindow(ref: ModelRef, tokens: number): void {
     if (tokens <= 0) return;
+    const changed = this.learnedWindows.get(refKey(ref)) !== tokens;
     this.learnedWindows.set(refKey(ref), tokens);
+    if (changed) void writeJson(windowsFile(), Object.fromEntries(this.learnedWindows)).catch(() => {});
     const m = this.models.get(refKey(ref));
     if (m) m.contextWindow = tokens;
   }
   private learnedWindows = new Map<string, number>();
+  private windowsLoaded = false;
 
   all(): CatalogModel[] {
     return [...this.models.values()].sort((a, b) => a.provider.localeCompare(b.provider) || a.tier - b.tier);

@@ -14,7 +14,7 @@ import {carriedTools, selectCarriedTools, type CarrySelector} from './carry.js';
 export type Route = {ref: ModelRef; reason: 'fixed' | 'auto' | 'sticky' | 'default' | 'failover'; confidence?: number};
 
 export type EngineEvent =
-  | {type: 'route'; route: Route; account: Account}
+  | {type: 'route'; route: Route; account: Account; effort?: string}
   | {type: 'tool'; activity: ToolActivity}
   | {type: 'tokens'; call: TokenCount}
   | {type: 'compact'; phase: 'start'; reason: CompactReason; messages: number}
@@ -36,6 +36,8 @@ export type EngineDeps = {
   tools?: {binding: ToolBinding; forkBinding?: ToolBinding; onActivity(fn: (a: ToolActivity) => void): () => void};
   /** Picks which tool results a new session needs when the conversation moves (compaction model). */
   selectCarry?: CarrySelector;
+  /** Auto effort: the decision model picks a level for this message from `levels`. */
+  pickEffort?: (text: string, levels: string[]) => Promise<string | undefined>;
 };
 
 /** Context carried into a fresh native session before compaction kicks in. */
@@ -244,7 +246,8 @@ export class Engine {
       let prompt: string;
       let carried: string | undefined;
       try {
-        ({session, prompt, carried} = await this.prepare(route.ref, account, userIndex));
+        const effort = await this.effortFor(route.ref, account, text);
+        ({session, prompt, carried} = await this.prepare(route.ref, account, userIndex, effort));
       } catch (err) {
         catalog.authFailed.add(account.id);
         excluded.add(account.id);
@@ -254,11 +257,11 @@ export class Engine {
       if (estimateTokens(prompt) > CARRY_BUDGET_TOKENS + estimateTokens(text) && !compacted) {
         compacted = true;
         yield* this.compactWithEvents('handoff');
-        ({prompt, carried} = await this.prepare(route.ref, account, userIndex));
+        ({prompt, carried} = await this.prepare(route.ref, account, userIndex, this.active?.session.effort));
       }
       if (carried) yield {type: 'notice', text: carried};
 
-      yield {type: 'route', route, account};
+      yield {type: 'route', route, account, effort: session.effort};
       let reply = '';
       const replyTools: NonNullable<Message['tools']> = [];
       let failure: {kind: string; message: string; resetsAt?: number} | undefined;
@@ -404,6 +407,26 @@ export class Engine {
     this.cacheBroken = false;
   }
 
+  /**
+   * Effort for this turn. A fixed level (clamped to what the model supports) or the model default;
+   * 'auto' asks the decision model — but only when the prompt cache is cold anyway, since changing
+   * effort mid-conversation invalidates it. A warm session keeps its effort.
+   */
+  private async effortFor(ref: ModelRef, account: Account, text: string): Promise<string | undefined> {
+    const levels = catalog.get(ref)?.efforts;
+    if (!levels?.length) return undefined;
+    const pref = this.deps.config().chatEffort ?? 'auto';
+    if (pref === 'default') return undefined;
+    if (pref !== 'auto') return clampEffort(pref, levels);
+    const key = `${ref.provider}:${account.id}`;
+    const warm = this.active?.key === key && !this.cacheBroken && Date.now() - (this.lastUsed.get(account.id) ?? 0) < (CACHE_WARM_MS[ref.provider] ?? 5 * 60_000);
+    if (warm) return this.active!.session.effort;
+    // Auto never reaches for the levels the CLIs flag as excessive.
+    const choices = levels.filter((l) => l !== 'max' && l !== 'ultra');
+    const picked = await this.deps.pickEffort?.(text, choices).catch(() => undefined);
+    return picked && choices.includes(picked) ? picked : undefined;
+  }
+
   /** Account of the native session this conversation used most recently for a provider. */
   private lastAccount(provider: string): string | undefined {
     return Object.values(this.transcript.native)
@@ -412,16 +435,21 @@ export class Engine {
   }
 
   /** Reuse or open the native session for (provider, account) and build the prompt with carry. */
-  private async prepare(ref: ModelRef, account: Account, userIndex: number): Promise<{session: ProviderSession; prompt: string; carried?: string}> {
+  private async prepare(ref: ModelRef, account: Account, userIndex: number, effort?: string): Promise<{session: ProviderSession; prompt: string; carried?: string}> {
     const t = this.transcript;
     const key = `${ref.provider}:${account.id}`;
     const text = t.messages[userIndex]!.text;
     if (this.active && this.active.key !== key) this.closeActive();
+    // A different effort: Codex changes it per turn; Claude's is per process — reopen (resumes).
+    if (this.active && this.active.session.effort !== effort) {
+      if (this.active.session.setEffort) this.active.session.setEffort(effort);
+      else this.closeActive();
+    }
     if (!this.active) {
       const known = t.native[key];
       // Resume the native session only if it saw everything up to now; otherwise carry context.
       const resumeId = known && known.coversUpTo === userIndex ? known.nativeId : undefined;
-      const session = catalog.track(await adapters[ref.provider].openSession({account, model: ref.model, systemPrompt: await systemPrompt({tools: !!this.deps.tools, scratch: this.scratch}), resumeId, tools: this.deps.tools?.binding}));
+      const session = catalog.track(await adapters[ref.provider].openSession({account, model: ref.model, systemPrompt: await systemPrompt({tools: !!this.deps.tools, scratch: this.scratch}), resumeId, tools: this.deps.tools?.binding, effort}));
       this.active = {session, key, ref};
       if (!resumeId) t.native[key] = {provider: ref.provider, accountId: account.id, nativeId: '', coversUpTo: 0};
     }
@@ -496,3 +524,13 @@ export function clock(ms: number): string {
 }
 
 export {toRef};
+
+const EFFORT_ORDER = ['low', 'medium', 'high', 'xhigh', 'max', 'ultra'];
+
+/** A chosen level the model doesn't offer → the highest one it has at or below it (else its lowest). */
+export function clampEffort(level: string, levels: string[]): string | undefined {
+  if (levels.includes(level)) return level;
+  const rank = EFFORT_ORDER.indexOf(level);
+  const below = levels.filter((l) => EFFORT_ORDER.indexOf(l) <= rank).sort((a, b) => EFFORT_ORDER.indexOf(b) - EFFORT_ORDER.indexOf(a));
+  return below[0] ?? levels[0];
+}

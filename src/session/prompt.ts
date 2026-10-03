@@ -15,6 +15,7 @@ You have tools for working in the project: list, read, write, edit, delete, sear
 - Read a file before editing it. Edit with exact, unique old_string values (no line-number prefixes); prefer edit over rewriting whole files.
 - Use list to see what's in a folder and search to find code, before guessing at paths.
 - shell runs commands in the project root (no stdin/TTY; use non-interactive flags). Use background: true for servers/watchers, then check shell_logs. Prefer read/search/edit over shell equivalents (cat, grep, sed).
+- For multi-step work keep a task list with todo_write (one task in_progress at a time; mark tasks completed as you finish them).
 - write/edit/delete/shell may need the user's approval; if one is denied, ask how to proceed instead of retrying.`;
 
 const MAX_AGENTS_BYTES = 64 * 1024;

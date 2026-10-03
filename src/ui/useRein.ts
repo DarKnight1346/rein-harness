@@ -537,7 +537,7 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
           });
           break;
         }
-        log('info', force ? 'Refreshing usage (Claude accounts send a tiny haiku request)…' : 'Checking usage…');
+        log('info', force ? 'Refreshing usage (Claude accounts send a tiny request on their cheapest model)…' : 'Checking usage…');
         void collectUsage({force}).then(({rows, jev}) => {
           add({kind: 'usage', rows, jev});
           bump();
