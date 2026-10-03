@@ -35,8 +35,9 @@ jobs:
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:
-      contents: write # push the vX.Y.Z tag after publishing
-      id-token: write # npm provenance (signed "built from this repo" attestation)
+      contents: write # create the vX.Y.Z tag and GitHub Release
+      id-token: write # sign provenance (npm and the GitHub attestation)
+      attestations: write # store the build attestation
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
@@ -63,18 +64,38 @@ jobs:
           echo "publish=true" >> "$GITHUB_OUTPUT"
           echo "::notice::Publishing $NAME@$VERSION (npm had ${LATEST:-nothing}, newest tag ${TAG:-none})"
 
-      - name: Publish
+      - name: Pack
+        id: pack
         if: steps.check.outputs.publish == 'true'
-        # Already built and tested above, so skip the prepublishOnly script.
-        run: npm publish --provenance --access public --ignore-scripts
+        # One tarball: the exact file that's signed, published to npm and attached to the release.
+        run: echo "tarball=$(npm pack --ignore-scripts --silent | tail -1)" >> "$GITHUB_OUTPUT"
+
+      - name: Sign build provenance
+        id: attest
+        if: steps.check.outputs.publish == 'true'
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: ${{ steps.pack.outputs.tarball }}
+
+      - name: Publish to npm
+        if: steps.check.outputs.publish == 'true'
+        # Already built and tested above, so skip lifecycle scripts.
+        run: npm publish "${{ steps.pack.outputs.tarball }}" --provenance --access public --ignore-scripts
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
-      - name: Tag the release
+      - name: GitHub Release
         if: steps.check.outputs.publish == 'true'
+        # Tags the commit and attaches the tarball with its Sigstore provenance bundle
+        # (verify with: gh attestation verify <tarball> -R DarKnight1346/rein-harness).
         run: |
           TAG="v${{ steps.check.outputs.version }}"
-          if ! git ls-remote --exit-code --tags origin "refs/tags/$TAG" >/dev/null; then
-            git tag "$TAG"
-            git push origin "$TAG"
+          TARBALL="${{ steps.pack.outputs.tarball }}"
+          cp "${{ steps.attest.outputs.bundle-path }}" "$TARBALL.sigstore.json"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" "$TARBALL" "$TARBALL.sigstore.json" --clobber
+          else
+            gh release create "$TAG" "$TARBALL" "$TARBALL.sigstore.json" --target "$GITHUB_SHA" --title "$TAG" --generate-notes
           fi
+        env:
+          GH_TOKEN: ${{ github.token }}

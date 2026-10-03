@@ -1,5 +1,5 @@
 import {execFile} from 'node:child_process';
-import {existsSync, mkdirSync, readFileSync, statSync} from 'node:fs';
+import {closeSync, existsSync, fstatSync, mkdirSync, openSync, readFileSync, statSync} from 'node:fs';
 import {copyFile} from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -130,14 +130,19 @@ export class Attachments {
 
 /** `<file>` block for a dropped file: its text, or a note when it's binary or too big. */
 function fileBlock(file: string): string {
+  let fd: number | undefined;
   try {
-    const size = statSync(file).size;
+    // One open: size and contents come from the same file even if the path changes meanwhile.
+    fd = openSync(file, 'r');
+    const size = fstatSync(fd).size;
     if (size > MAX_INLINE_FILE) return `<file path="${file}">(${Math.round(size / 1024)} KB — too large to include; ask the user for the relevant part)</file>`;
-    const buf = readFileSync(file);
+    const buf = readFileSync(fd);
     if (buf.includes(0)) return `<file path="${file}">(binary file, ${Math.round(size / 1024)} KB — not included)</file>`;
     return `<file path="${file}">\n${buf.toString('utf8')}\n</file>`;
   } catch (err) {
     return `<file path="${file}">(could not read: ${(err as Error).message})</file>`;
+  } finally {
+    if (fd !== undefined) closeSync(fd);
   }
 }
 
