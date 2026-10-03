@@ -1,8 +1,9 @@
 import type {Skill} from '../skills/index.js';
 
-export type CommandName = 'mcp' | 'rewind' | 'permissions' | 'add-dir' | 'goal' | 'btw' | 'agents' | 'agent' | 'resume' | 'login' | 'usage' | 'model' | 'context' | 'compact' | 'shells' | 'configure' | 'update' | 'tui' | 'clear' | 'help' | 'exit';
+export type CommandName = 'memory' | 'mcp' | 'rewind' | 'permissions' | 'add-dir' | 'goal' | 'btw' | 'agents' | 'agent' | 'resume' | 'login' | 'usage' | 'model' | 'context' | 'compact' | 'shells' | 'configure' | 'update' | 'tui' | 'clear' | 'help' | 'exit';
 
 export const COMMANDS: {name: CommandName; description: string}[] = [
+  {name: 'memory', description: "This project's memory (.rein/MEMORY.md) — what Rein has learned here"},
   {name: 'mcp', description: 'MCP servers: status and tools; approve project servers, reconnect'},
   {name: 'rewind', description: 'Undo: restore files and/or the conversation to before one of your messages (also esc twice)'},
   {name: 'permissions', description: 'Show the allow/deny rules in effect and where they come from'},

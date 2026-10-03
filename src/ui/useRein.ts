@@ -23,6 +23,7 @@ import {Attachments} from './attachments.js';
 import {mentionAt, primeFiles, suggestFiles} from './mentions.js';
 import type {RewindMode, RewindPoint} from './RewindScreen.js';
 import {settingsFiles} from '../tools/permissions.js';
+import {memoryFacts, memoryFile} from '../tools/memory.js';
 import {readFileSync} from 'node:fs';
 import {accountName, hidingIdentity} from './privacy.js';
 import nodePath from 'node:path';
@@ -427,6 +428,11 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
       case 'mcp':
         setOverlay({name: 'mcp'});
         break;
+      case 'memory': {
+        const facts = memoryFacts(process.cwd());
+        log('info', facts.length ? `Project memory (${memoryFile(process.cwd())}):\n${facts.map((f) => `• ${f}`).join('\n')}\nThe agent adds and removes facts itself; you can also edit the file.` : `Project memory is empty. The agent saves lasting facts about this project there (${memoryFile(process.cwd())}); you can also write it yourself.`);
+        break;
+      }
       case 'rewind':
         if (chat.busy) {
           log('info', 'The agent is working — press esc to stop it first, then /rewind.');
