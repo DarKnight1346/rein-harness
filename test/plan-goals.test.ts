@@ -13,7 +13,7 @@ beforeEach(() => {
 describe('saved plans', () => {
   it('saves markdown with a milestone checklist (replacing one in the body), ticks and lists them', () => {
     const file = savePlan(root, {title: 'Hobby OS', plan: '# Old title\n## Goal\nBoot.\n## Milestones\n- [ ] stale', milestones: ['toolchain', 'bootloader', 'kernel']});
-    expect(file).toMatch(/\.rein\/plans\/\d{4}-\d\d-\d\d-hobby-os\.md$/);
+    expect(file.replace(/\\/g, '/')).toMatch(/\.rein\/plans\/\d{4}-\d\d-\d\d-hobby-os\.md$/);
     const text = readFileSync(file, 'utf8');
     expect(text.startsWith('# Hobby OS\n')).toBe(true);
     expect(text).not.toContain('stale');
