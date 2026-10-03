@@ -1,0 +1,799 @@
+import React, {useEffect, useMemo, useRef, useState, type ReactNode} from 'react';
+import {Box, Text, useBoxMetrics, useInput, useWindowSize} from 'ink';
+import {PROVIDERS, parseRef, refKey} from '../../providers/types.js';
+import {runtime, type Resume} from '../../runtime.js';
+import {catalog, toRef} from '../../router/catalog.js';
+import {defaultRef} from '../../router/index.js';
+import {estimateTokens, renderMessages} from '../../session/transcript.js';
+import {usageStore, windowLabel} from '../../store/usage.js';
+import type {Entry} from '../entries.js';
+import {accountLabel, modelLabel} from '../format.js';
+import {ImportPrompt} from '../ImportPrompt.js';
+import {LoginScreen} from '../LoginScreen.js';
+import {ModelScreen} from '../ModelScreen.js';
+import {Clickable, useClickable} from '../terminal/clicks.js';
+import {TextInput} from '../TextInput.js';
+import {goalSummary, useRein} from '../useRein.js';
+import {hidingIdentity, redact} from '../privacy.js';
+import {contextPct, enabledItems, statusInfo} from '../layout.js';
+import {ConfigureScreen} from '../ConfigureScreen.js';
+import {ApprovalPrompt} from '../ApprovalPrompt.js';
+import {ResumeScreen} from '../ResumeScreen.js';
+import {ShellsWindow, ShellWindow, useShellsTick} from './Shells.js';
+import {AgentsWindow, agentGlyph, useAgentsTick} from './Agents.js';
+import {subagentStatusText, type Subagent} from '../../agents/manager.js';
+import {kTokens, rainbow, Working} from '../Working.js';
+import {agentLines, assistantLines, entryLines, wrap} from './lines.js';
+import {InfoWindow, Window} from './Window.js';
+import {COMMANDS} from '../../commands/index.js';
+import {skillDirs, type Skill} from '../../skills/index.js';
+import chalk from 'chalk';
+import {isEmpty, lineRange, selectedText, type Selection} from './selection.js';
+import {copyToClipboard} from '../terminal/clipboard.js';
+import stripAnsi from 'strip-ansi';
+import stringWidth from 'string-width';
+import cliTruncate from 'cli-truncate';
+
+const SIDEBAR_WIDTH = 32;
+const SIDEBAR_MIN_COLS = 96;
+const MAX_INPUT_LINES = 6;
+
+/** Latest transcript entries, printed to the normal screen when fullscreen exits. */
+export const lastEntries: {current: Entry[]} = {current: []};
+
+/**
+ * Fullscreen renderer (alt screen): top bar · history (virtualized, scrollable) + sidebar · activity
+ * line · input · footer. The root is exactly the terminal size, so Ink never overflows into a full
+ * clear and resizes redraw cleanly.
+ */
+export function FullscreenApp({resume}: {resume: Resume}) {
+  const {columns: cols, rows} = useWindowSize();
+  const r = useRein({resume, renderer: 'fullscreen', onClear: () => setScroll(0)});
+  const {chat, overlay} = r;
+  const [sidebarOpen, setSidebarOpen] = useState(runtime.config.sidebar ?? true);
+  const [scroll, setScroll] = useState(0); // lines scrolled up from the bottom
+  const [selection, setSelection] = useState<Selection | undefined>();
+  const [flash, setFlash] = useState<string | undefined>();
+  useEffect(() => {
+    if (!flash) return;
+    const t = setTimeout(() => setFlash(undefined), 2500);
+    return () => clearTimeout(t);
+  }, [flash]);
+
+  useEffect(() => {
+    lastEntries.current = r.entries;
+  }, [r.entries]);
+
+  const showSidebar = sidebarOpen && cols >= SIDEBAR_MIN_COLS;
+  const mainWidth = cols - (showSidebar ? SIDEBAR_WIDTH : 0);
+  const textWidth = Math.max(20, mainWidth - 2);
+
+  useAgentsTick();
+  const viewing = r.viewing;
+  useEffect(() => setScroll(0), [r.view]);
+
+  // History lines, cached per entry for the current width.
+  // Lines pass through redact() (hide personal info): emails → "Claude Account 1", home → ~.
+  const hide = hidingIdentity();
+  const cache = useRef(new Map<number, {width: number; hide: boolean; lines: string[]}>());
+  const mainLines = useMemo(() => {
+    const out: string[] = [];
+    for (const e of r.entries) {
+      let c = cache.current.get(e.id);
+      if (!c || c.width !== textWidth || c.hide !== hide) {
+        c = {width: textWidth, hide, lines: entryLines(e, textWidth).map(redact)};
+        cache.current.set(e.id, c);
+      }
+      out.push(...c.lines);
+    }
+    if (chat.live) out.push(...assistantLines(chat.live, textWidth).map(redact));
+    return out;
+  }, [r.entries, chat.live, textWidth, hide]);
+  // Viewing a subagent: its conversation replaces the main history (recomputed on its updates).
+  const lines = viewing ? agentLines(viewing, textWidth).map(redact) : mainLines;
+
+  const toggleSidebar = () => {
+    const next = !sidebarOpen;
+    setSidebarOpen(next);
+    void runtime.setConfig({sidebar: next});
+  };
+
+  // Keep the view anchored when scrolled up and new lines arrive.
+  const prevTotal = useRef(lines.length);
+  useEffect(() => {
+    const delta = lines.length - prevTotal.current;
+    prevTotal.current = lines.length;
+    if (delta > 0) setScroll((s) => (s > 0 ? s + delta : 0));
+  }, [lines.length]);
+
+  const draftLines = Math.min(MAX_INPUT_LINES, Math.max(1, r.draft.split('\n').length));
+  const mainHeight = Math.max(3, rows - 1 /* top */ - 1 /* activity */ - (draftLines + 2) /* input */ - 1 /* footer */);
+
+  const scrollBy = (n: number, viewport: number) =>
+    setScroll((s) => Math.max(0, Math.min(Math.max(0, lines.length - viewport), s + n)));
+
+  useInput((input, key) => {
+    if (overlay.name !== 'none') return;
+    if (key.ctrl && input === 'b') toggleSidebar();
+    else if (key.pageUp) scrollBy(Math.max(1, mainHeight - 2), mainHeight);
+    else if (key.pageDown) scrollBy(-Math.max(1, mainHeight - 2), mainHeight);
+    else if (key.end && scroll > 0) setScroll(0);
+  });
+
+  // Commands that show information or options open a centered window over everything; the
+  // conversation keeps streaming underneath. Only autocomplete stays anchored above the input.
+  const windowWidth = Math.min(100, cols - 4);
+  const windowText = windowWidth - 4;
+  const window = (() => {
+    switch (overlay.name) {
+      case 'import':
+        return (
+          <Window title="Found existing logins" width={72} onClose={() => r.finishImport(false)}>
+            <ImportPrompt bare rows={overlay.rows} onImport={() => r.finishImport(true)} onSkip={() => r.finishImport(false)} />
+          </Window>
+        );
+      case 'login':
+        return (
+          <Window title="Accounts" width={windowWidth} onClose={r.closeOverlay}>
+            <LoginScreen bare onLog={r.log} onClose={r.closeOverlay} />
+          </Window>
+        );
+      case 'model':
+        return (
+          <Window title="Models" width={windowWidth} onClose={r.closeOverlay}>
+            <ModelScreen bare onLog={r.log} onClose={r.closeOverlay} />
+          </Window>
+        );
+      case 'approval':
+        return (
+          <Window
+            title={`${overlay.req.tool.name === 'shell' ? 'Approve command' : 'Approve file change'}${overlay.total > 1 ? ` (${overlay.position} of ${overlay.total})` : ''}${overlay.req.origin ? ` · subagent ${overlay.req.origin.name}` : ''}`}
+            width={windowWidth} color="yellow" dismissable={false} onClose={() => overlay.resolve('deny')}>
+            <ApprovalPrompt bare req={overlay.req} onDecide={overlay.resolve} />
+          </Window>
+        );
+      case 'btw':
+        return (
+          <InfoWindow
+            title={`btw · ${overlay.question.length > windowText - 10 ? overlay.question.slice(0, windowText - 11) + '…' : overlay.question}`}
+            width={windowWidth}
+            onClose={r.closeOverlay}
+            lines={
+              overlay.error
+                ? [chalk.red(overlay.error)]
+                : overlay.answer
+                  ? [
+                      ...overlay.answer.trim().split('\n').flatMap((p) => wrap(p, windowText)),
+                      '',
+                      chalk.dim(
+                        `${overlay.model ?? 'model'} · ${overlay.mode === 'fork' ? 'forked agent' : 'from the conversation'}${overlay.done ? '' : ' · answering…'} · not added to the conversation`,
+                      ),
+                    ]
+                  : [chalk.dim('Forking the agent to answer… the main agent keeps working.')]
+            }
+          />
+        );
+      case 'resume':
+        return (
+          <Window title="Continue a conversation" width={windowWidth} onClose={r.closeOverlay}>
+            <ResumeScreen bare sessions={overlay.sessions} onPick={(id) => void r.pickSession(id)} onCancel={r.closeOverlay} />
+          </Window>
+        );
+      case 'goal':
+        return runtime.goals.goal ? (
+          <InfoWindow
+            title="Goal"
+            width={windowWidth}
+            onClose={r.closeOverlay}
+            lines={goalSummary(runtime.goals.goal).split('\n').flatMap((l) => wrap(l, windowText)).concat(['', chalk.dim('/goal pause · /goal resume · /goal clear')])}
+          />
+        ) : null;
+      case 'agents':
+        return (
+          <AgentsWindow
+            width={windowWidth}
+            onOpen={(id) => {
+              r.setView(id);
+              r.closeOverlay();
+            }}
+            onClose={r.closeOverlay}
+          />
+        );
+      case 'shell':
+        return <ShellWindow id={overlay.id} width={windowWidth} onClose={r.closeOverlay} />;
+      case 'shells':
+        return <ShellsWindow width={windowWidth} onOpen={(id) => r.setOverlay({name: 'shell', id})} onClose={r.closeOverlay} />;
+      case 'configure':
+        return (
+          <Window title="Configure" width={windowWidth} onClose={r.closeOverlay}>
+            <ConfigureScreen bare onClose={r.closeOverlay} onChange={r.bump} />
+          </Window>
+        );
+      case 'usage':
+        return (
+          <InfoWindow
+            title="Usage"
+            width={windowWidth}
+            onClose={r.closeOverlay}
+            lines={overlay.data ? entryLines({id: -1, kind: 'usage', ...overlay.data}, windowText).slice(1) : ['Checking usage…']}
+          />
+        );
+      case 'context':
+        return (
+          <InfoWindow
+            title="Context"
+            width={windowWidth}
+            onClose={r.closeOverlay}
+            lines={overlay.report ? entryLines({id: -1, kind: 'context', report: overlay.report}, windowText).slice(1) : ['Measuring…']}
+          />
+        );
+      case 'help':
+        return <InfoWindow title="Commands" width={windowWidth} onClose={r.closeOverlay} lines={helpLines(windowText, r.skills)} />;
+      case 'update':
+        return (
+          <InfoWindow
+            title={r.updating ? 'Updating…' : 'Update finished'}
+            width={windowWidth}
+            follow
+            onClose={r.closeOverlay}
+            lines={r.updateLog.length ? r.updateLog.flatMap((line) => entryLines({id: -1, kind: 'update', line}, windowText)) : ['Starting…']}
+          />
+        );
+      default:
+        return null;
+    }
+  })();
+
+  const panel = (() => {
+    if (r.inputActive && r.suggestions.length > 0) {
+      return (
+        <Box flexDirection="column" borderStyle="round" borderColor="gray" paddingX={1}>
+          {r.suggestions.map((c, i) => (
+            <Clickable
+              key={c.name}
+              onClick={() => {
+                r.onDraft('');
+                r.runCommand(`/${c.name}`);
+              }}
+              onHover={() => r.setSuggestIndex(i)}
+            >
+              <Text color={c === r.selected ? 'cyan' : undefined} dimColor={c !== r.selected} wrap="truncate">
+                {c === r.selected ? '❯ ' : '  '}
+                {`/${c.name}`.padEnd(10)}
+                {c.description}
+                {c.skill ? <Text dimColor> · {c.skill.source === 'builtin' ? 'built-in' : c.skill.source} skill</Text> : null}
+              </Text>
+            </Clickable>
+          ))}
+        </Box>
+      );
+    }
+    return null;
+  })();
+
+  return (
+    <Box flexDirection="column" height={rows}>
+      <TopBar tick={r.statusTick} sidebarOpen={showSidebar} onToggleSidebar={toggleSidebar} run={r.runCommand} openModel={() => r.setOverlay({name: 'model'})} openShells={r.openShells} viewing={viewing} setView={r.setView} />
+      <Box flexDirection="row" height={mainHeight}>
+        <Box flexDirection="column" flexGrow={1} flexShrink={1} flexBasis={0} minWidth={0} height={mainHeight} overflow="hidden">
+          <History
+            width={textWidth}
+            lines={lines}
+            scroll={scroll}
+            onScroll={(n, vp) => scrollBy(n, vp)}
+            selection={selection}
+            onSelect={setSelection}
+            onCopy={(text) => {
+              void copyToClipboard(text).then((ok) => setFlash(ok ? `Copied ${text.length} characters` : 'Copy failed (no clipboard tool)'));
+            }}
+          />
+          {panel ? <Box flexShrink={0}>{panel}</Box> : null}
+        </Box>
+        {showSidebar ? <Sidebar width={SIDEBAR_WIDTH} height={mainHeight} tick={r.statusTick} run={r.runCommand} view={r.view} setView={r.setView} /> : null}
+      </Box>
+      <Box height={1} paddingLeft={1}>
+        {flash ? (
+          <Text color="green">✓ {flash}</Text>
+        ) : viewing ? (
+          runtime.agents.isActive(viewing) ? (
+            <Working
+              startedAt={viewing.startedAt}
+              phase="tool"
+              tool={viewing.status === 'checking' ? 'Checking completion' : viewing.status === 'starting' ? 'Starting' : runningToolLabel(viewing) ?? `${viewing.name} working`}
+              tokens={viewing.tokens}
+            />
+          ) : (
+            <Text dimColor>
+              {viewing.name} {subagentStatusText(viewing)} · type to message it · <Text color="cyan">◂ main</Text> in the sidebar or /agent main to go back
+            </Text>
+          )
+        ) : chat.busy ? (
+          <Working startedAt={chat.startedAt} phase={chat.phase} tool={chat.toolLabel} tokens={chat.tokens} queued={r.queued.length} />
+        ) : r.compacting ? (
+          <Working startedAt={r.compacting.startedAt} phase="tool" tool={r.compacting.label} />
+        ) : r.goalNote ? (
+          <Working startedAt={r.goalNote.startedAt} phase="tool" tool={r.goalNote.label} />
+        ) : scroll > 0 ? (
+          <Clickable onClick={() => setScroll(0)}>
+            <Text color="yellow">↓ {scroll} lines below · End or click to jump to latest</Text>
+          </Clickable>
+        ) : (
+          <Text> </Text>
+        )}
+      </Box>
+      <Box borderStyle="round" borderColor={r.inputActive ? 'cyan' : 'gray'} paddingX={1} height={draftLines + 2} overflow="hidden">
+        <Text color="cyan">{'> '}</Text>
+        <Box flexDirection="column" flexGrow={1} justifyContent="flex-end" overflow="hidden">
+          <TextInput isActive={r.inputActive} value={r.draft} onChange={r.onDraft} onPaste={r.onPaste} onImagePaste={r.onImagePaste} placeholder={!r.ready ? 'starting…' : viewing ? `message ${viewing.name} (subagent)…` : chat.busy ? 'queue a message, or /btw <question>' : 'message, / for commands'} onSubmit={r.onSubmit} />
+        </Box>
+      </Box>
+      <Box height={1} paddingX={1}>
+        {r.exitArmed ? (
+          <Text color="yellow">Press Ctrl+C again to exit</Text>
+        ) : (
+          <Text dimColor wrap="truncate">
+            esc interrupt · ctrl+c stop (twice to exit) · wheel/PgUp scroll · ⇧↵ / ⌥↵ / \↵ newline · ctrl+b sidebar
+          </Text>
+        )}
+      </Box>
+      {window}
+    </Box>
+  );
+}
+
+function helpLines(width: number, skills: Skill[]): string[] {
+  const dirs = skillDirs();
+  return [
+    ...COMMANDS.flatMap((c) => wrap(c.description, width, chalk.cyan(`/${c.name}`.padEnd(10)))),
+    '',
+    chalk.bold('Skills') + chalk.dim(`  name clashes: built-in → ${dirs.project} (project) → ${dirs.global} (global)`),
+    ...(skills.length
+      ? skills.flatMap((s) => wrap(`${s.description} ${chalk.dim(`(${s.source})`)}`, width, chalk.magenta(`/${s.name}`.padEnd(10))))
+      : [chalk.dim('  none yet — /skill:create makes one')]),
+    '',
+    ...wrap('esc interrupts a reply (or closes a window) · wheel / PgUp / PgDn scroll · drag to select & copy · ctrl+b sidebar · shift/option+enter or \\+enter for a new line · rein --continue picks a conversation', width).map((l) => chalk.dim(l)),
+  ];
+}
+
+
+type HistoryProps = {
+  /** Text columns available (pane minus padding); every line is clipped to it. */
+  width: number;
+  lines: string[];
+  scroll: number;
+  onScroll(n: number, viewport: number): void;
+  selection: Selection | undefined;
+  onSelect(sel: Selection | undefined): void;
+  onCopy(text: string): void;
+};
+
+/**
+ * Virtualized history: renders only the visible window of `lines`. Drag selects text (the
+ * terminal's own selection is unavailable while mouse reporting is on); release copies it.
+ * Dragging past the top/bottom edge scrolls.
+ */
+function History({width, lines, scroll, onScroll, selection, onSelect, onCopy}: HistoryProps) {
+  const ref = useRef(null);
+  const {height} = useBoxMetrics(ref);
+  const viewport = Math.max(1, height);
+  const end = Math.max(0, lines.length - scroll);
+  const start = Math.max(0, end - viewport);
+  const visible = lines.slice(start, end);
+  // Content is bottom-aligned: when there are fewer lines than rows, row 0 isn't line `start`.
+  const topPad = viewport - visible.length;
+  const posAt = (local: {x: number; y: number}) => ({
+    line: Math.max(0, Math.min(lines.length - 1, start + local.y - topPad)),
+    col: Math.max(0, local.x - 1), // paddingX
+  });
+  const sel = useRef<Selection | undefined>(undefined);
+  useClickable(ref, {
+    onWheel: (dir) => onScroll(dir === -1 ? 3 : -3, viewport),
+    onDragStart: (local) => {
+      sel.current = {anchor: posAt(local), focus: posAt(local)};
+      onSelect(undefined);
+    },
+    onDrag: (local) => {
+      if (!sel.current) return;
+      if (local.y < 0) onScroll(1, viewport);
+      else if (local.y >= viewport) onScroll(-1, viewport);
+      sel.current = {...sel.current, focus: posAt(local)};
+      onSelect(sel.current);
+    },
+    onDragEnd: (local) => {
+      if (!sel.current) return;
+      const done = {...sel.current, focus: posAt(local)};
+      sel.current = undefined;
+      if (isEmpty(done)) return onSelect(undefined); // plain click clears the selection
+      onSelect(done);
+      const text = selectedText(done, lines);
+      if (text.trim()) onCopy(text);
+    },
+  });
+  return (
+    <Box ref={ref} flexDirection="column" flexGrow={1} flexShrink={1} overflow="hidden" justifyContent="flex-end" paddingX={1}>
+      {visible.map((line, i) => {
+        const index = start + i;
+        const plain = selection ? stripAnsi(line) : '';
+        const range = selection ? lineRange(selection, index, plain.length) : undefined;
+        if (!range) {
+          // Backstop: a line wider than the pane would widen the column and push the sidebar.
+          return (
+            <Text key={i} wrap="truncate">
+              {(stringWidth(line) > width ? cliTruncate(line, width) : line) || ' '}
+            </Text>
+          );
+        }
+        return (
+          <Text key={i} wrap="truncate">
+            {plain.slice(0, range[0])}
+            <Text inverse>{plain.slice(range[0], range[1])}</Text>
+            {plain.slice(range[1]) || ' '}
+          </Text>
+        );
+      })}
+    </Box>
+  );
+}
+
+function TopBar(props: {tick: number; sidebarOpen: boolean; onToggleSidebar(): void; run(cmd: string): void; openModel(): void; openShells(): void; viewing?: Subagent; setView(v: 'main' | number): void}) {
+  useShellsTick();
+  useAgentsTick();
+  const background = runtime.tools.shells.running({background: true}).length;
+  const activeAgents = runtime.agents.running();
+  const openAgents = () => (activeAgents.length === 1 ? props.setView(activeAgents[0]!.id) : props.run('/agents'));
+  const [, setUsageTick] = useState(0);
+  useEffect(() => usageStore.subscribe(() => setUsageTick((t) => t + 1)), []);
+  void props.tick;
+  const info = statusInfo();
+  const items = enabledItems('status', runtime.config);
+  const segment = (id: string): ReactNode => {
+    switch (id) {
+      case 'model':
+        return (
+          <Seg key={id} onClick={props.openModel}>
+            <Text color="cyan">{info.model}</Text>
+          </Seg>
+        );
+      case 'account':
+        return (
+          <Seg key={id} onClick={() => props.run('/usage')}>
+            <Text>{info.account}</Text>
+          </Seg>
+        );
+      case 'usage':
+        return info.usage ? (
+          <Seg key={id} onClick={() => props.run('/usage')}>
+            <Text dimColor>{info.usage}</Text>
+          </Seg>
+        ) : null;
+      case 'context':
+        return (
+          <Seg key={id} onClick={() => props.run('/context')}>
+            <Text dimColor>ctx </Text>
+            <Text color={info.context >= 80 ? 'red' : info.context >= 50 ? 'yellow' : 'green'}>{info.context}%</Text>
+          </Seg>
+        );
+      case 'decider':
+        return (
+          <Seg key={id} onClick={props.openModel}>
+            <Text dimColor>decides: </Text>
+            <Text>{info.decider}</Text>
+          </Seg>
+        );
+      case 'advisor':
+        return (
+          <Seg key={id} onClick={props.openModel}>
+            <Text dimColor>advisor: </Text>
+            <Text color={info.advisor === 'off' ? 'gray' : 'magenta'}>{info.advisor}</Text>
+          </Seg>
+        );
+      case 'approvals':
+        return (
+          <Seg key={id} onClick={() => props.run('/configure')}>
+            <Text dimColor>edits: </Text>
+            <Text color={info.approvals === 'bypass' ? 'red' : info.approvals === 'auto' ? 'yellow' : 'green'}>{info.approvals}</Text>
+          </Seg>
+        );
+      case 'messages':
+        return (
+          <Seg key={id} onClick={() => props.run('/context')}>
+            <Text dimColor>{info.messages} msgs</Text>
+          </Seg>
+        );
+      default:
+        return null;
+    }
+  };
+  return (
+    <Box height={1}>
+      <Text bold>
+        {[...'▁▃▅▇'].map((c, i) => (
+          <Text key={i} color={rainbow(i * 2, 0)}>
+            {c}
+          </Text>
+        ))}{' '}
+        Rein{' '}
+      </Text>
+      {props.viewing ? (
+        <Seg onClick={() => props.setView('main')}>
+          <Text color="cyan">◂ main</Text>
+          <Text dimColor> · viewing </Text>
+          <Text color="magenta" bold>
+            {props.viewing.name}
+          </Text>
+        </Seg>
+      ) : null}
+      {items.filter((id) => id !== 'sidebarToggle').map(segment)}
+      {runtime.goals.goal ? (
+        <Seg onClick={() => props.run('/goal')}>
+          <Text color={runtime.goals.goal.status === 'active' ? 'cyan' : runtime.goals.goal.status === 'done' ? 'green' : 'yellow'}>
+            ◎ goal · {runtime.goals.goal.status}
+          </Text>
+        </Seg>
+      ) : null}
+      {activeAgents.length ? (
+        <Seg onClick={openAgents}>
+          <Text color="magenta">
+            ● {activeAgents.length} agent{activeAgents.length === 1 ? '' : 's'}
+          </Text>
+        </Seg>
+      ) : null}
+      {background ? (
+        <Seg onClick={props.openShells}>
+          <Text color="yellow">
+            ● {background} background{background === 1 ? '' : ' processes'}
+          </Text>
+        </Seg>
+      ) : null}
+      <Box flexGrow={1} />
+      {items.includes('sidebarToggle') ? (
+        <Clickable onClick={props.onToggleSidebar}>
+          <Text color={props.sidebarOpen ? 'cyan' : 'gray'}>[≡]</Text>
+        </Clickable>
+      ) : null}
+    </Box>
+  );
+}
+
+function Seg({children, onClick}: {children: ReactNode; onClick(): void}) {
+  return (
+    <>
+      <Text dimColor> │ </Text>
+      <Clickable onClick={onClick}>{children}</Clickable>
+    </>
+  );
+}
+
+function Heading({children}: {children: string}) {
+  return (
+    <Text dimColor bold>
+      {children}
+    </Text>
+  );
+}
+
+/** Sidebar: the sections chosen in /configure, in order. */
+function Sidebar({width, height, tick, run, view, setView}: {width: number; height: number; tick: number; run(cmd: string): void; view: 'main' | number; setView(v: 'main' | number): void}) {
+  const [, setUsageTick] = useState(0);
+  useEffect(() => usageStore.subscribe(() => setUsageTick((t) => t + 1)), []);
+  void tick;
+  const inner = width - 3;
+  const sections = enabledItems('sidebar', runtime.config);
+  const render = (id: string): ReactNode => {
+    switch (id) {
+      case 'agents':
+        return <AgentsSection inner={inner} view={view} setView={setView} />;
+      case 'accounts':
+        return <AccountsSection inner={inner} run={run} />;
+      case 'models':
+        return <ModelsSection inner={inner} run={run} />;
+      case 'context':
+        return <ContextSection inner={inner} run={run} />;
+      case 'routing':
+        return <RoutingSection inner={inner} />;
+      case 'session':
+        return <SessionSection run={run} />;
+      case 'shortcuts':
+        return <ShortcutsSection />;
+      default:
+        return null;
+    }
+  };
+  return (
+    <Box flexDirection="column" width={width} height={height} borderStyle="single" borderLeft borderTop={false} borderRight={false} borderBottom={false} borderColor="gray" paddingLeft={1} overflow="hidden">
+      {sections.map((id, i) => (
+        <Box key={id} flexDirection="column" marginTop={i ? 1 : 0} flexShrink={0}>
+          {render(id)}
+        </Box>
+      ))}
+      {!sections.length && (
+        <Clickable onClick={() => run('/configure')}>
+          <Text dimColor>empty · /configure</Text>
+        </Clickable>
+      )}
+    </Box>
+  );
+}
+
+const miniBar = (pct: number, cells = 8) => {
+  const n = Math.round((Math.min(100, pct) / 100) * cells);
+  return {fill: '█'.repeat(n), rest: '░'.repeat(cells - n), color: pct >= 90 ? 'red' : pct >= 70 ? 'yellow' : 'green'};
+};
+
+/**
+ * main + subagents that are running or being viewed (finished ones drop off once you look away;
+ * /agents lists them all). Click to switch the main pane to that agent.
+ */
+function AgentsSection({inner, view, setView}: {inner: number; view: 'main' | number; setView(v: 'main' | number): void}) {
+  const shown = runtime.agents.list().filter((a) => runtime.agents.isActive(a) || a.id === view);
+  return (
+    <>
+      <Heading>AGENTS</Heading>
+      <Clickable onClick={() => setView('main')}>
+        <Text color={view === 'main' ? 'cyan' : undefined} wrap="truncate">
+          {view === 'main' ? '▸ ' : '  '}
+          <Text bold={view === 'main'}>main</Text>
+          {runtime.engine?.isBusy ? <Text color="yellow"> ●</Text> : null}
+        </Text>
+      </Clickable>
+      {shown.map((a) => {
+        const g = agentGlyph(a);
+        return (
+          <Clickable key={a.id} onClick={() => setView(a.id)}>
+            <Text color={view === a.id ? 'cyan' : undefined} wrap="truncate">
+              {view === a.id ? '▸ ' : '  '}
+              <Text color={g.color}>{g.g} </Text>
+              <Text bold={view === a.id}>{truncate(a.name, Math.max(6, inner - 14))}</Text>
+              <Text dimColor> {a.modelLabel ?? a.requested}</Text>
+            </Text>
+          </Clickable>
+        );
+      })}
+    </>
+  );
+}
+
+function AccountsSection({inner, run}: {inner: number; run(cmd: string): void}) {
+  const accounts = [...new Map(catalog.all().flatMap((m) => m.accountIds).map((id) => [id, catalog.account(id)])).values()].filter((a) => !!a);
+  return (
+    <>
+      <Heading>ACCOUNTS</Heading>
+      {accounts.map((a) => {
+        const snap = usageStore.get(a!.id);
+        return (
+          <Clickable key={a!.id} onClick={() => run('/usage')}>
+            <Box flexDirection="column">
+              <Text wrap="truncate">
+                <Text bold>{PROVIDERS[a!.provider].name}</Text> <Text dimColor>{truncate(accountLabel(a!), inner - 8)}</Text>
+              </Text>
+              {(snap?.windows ?? []).map((w) => {
+                // Bar fills the row: ' ' + 7-char label + bar + ' ' + 4-char percent.
+                const b = miniBar(w.usedPct, Math.max(4, inner - 13));
+                return (
+                  <Text key={w.windowMins} wrap="truncate">
+                    {' '}
+                    {windowLabel(w.windowMins).padEnd(7)}
+                    <Text color={b.color}>{b.fill}</Text>
+                    <Text dimColor>{b.rest}</Text> {`${Math.round(w.usedPct)}%`.padStart(4)}
+                  </Text>
+                );
+              })}
+            </Box>
+          </Clickable>
+        );
+      })}
+      {!accounts.length && (
+        <Clickable onClick={() => run('/login')}>
+          <Text color="yellow">+ add an account</Text>
+        </Clickable>
+      )}
+    </>
+  );
+}
+
+function ModelsSection({inner, run}: {inner: number; run(cmd: string): void}) {
+  const cfg = runtime.config;
+  const selected = cfg.chatModel ?? (defaultRef(cfg) ? refKey(defaultRef(cfg)!) : '');
+  const models = [{value: 'auto', label: 'auto'}, ...catalog.all().map((m) => ({value: refKey(toRef(m)), label: `${m.label}`}))];
+  return (
+    <>
+      <Heading>CHAT MODEL</Heading>
+      {models.map((m) => (
+        <Clickable key={m.value} onClick={() => run(`/model ${m.value}`)}>
+          <Text color={m.value === selected ? 'cyan' : undefined} dimColor={m.value !== selected} wrap="truncate">
+            {m.value === selected ? '● ' : '○ '}
+            {truncate(m.label + (m.value === 'auto' ? '' : ` · ${PROVIDERS[parseRef(m.value)!.provider].name}`), inner - 2)}
+          </Text>
+        </Clickable>
+      ))}
+    </>
+  );
+}
+
+function ContextSection({inner, run}: {inner: number; run(cmd: string): void}) {
+  const pct = contextPct();
+  const b = miniBar(pct, Math.max(4, inner - 5)); // bar + ' ' + 4-char percent fills the row
+  return (
+    <>
+      <Heading>CONTEXT</Heading>
+      <Clickable onClick={() => run('/context')}>
+        <Text>
+          <Text color={b.color}>{b.fill}</Text>
+          <Text dimColor>{b.rest}</Text> {`${pct}%`.padStart(4)}
+        </Text>
+      </Clickable>
+    </>
+  );
+}
+
+function RoutingSection({inner}: {inner: number}) {
+  const info = statusInfo();
+  return (
+    <>
+      <Heading>AUTO ROUTING</Heading>
+      <Text dimColor wrap="truncate">
+        decides: {truncate(info.decider, inner - 9)}
+      </Text>
+      <Text wrap="wrap">{runtime.lastDecision ? truncate(runtime.lastDecision, inner * 2) : <Text dimColor>no decisions yet{runtime.config.chatModel === 'auto' ? '' : ' (chat model is fixed)'}</Text>}</Text>
+    </>
+  );
+}
+
+function SessionSection({run}: {run(cmd: string): void}) {
+  const t = runtime.engine?.sessionTokens ?? {uncached: 0, cached: 0, output: 0};
+  const row = (label: string, n: number) => (
+    <Text key={label} wrap="truncate">
+      <Text dimColor>{label.padEnd(10)}</Text>
+      {kTokens(n)}
+    </Text>
+  );
+  return (
+    <>
+      <Heading>SESSION</Heading>
+      <Text dimColor wrap="truncate">
+        {runtime.engine?.transcript.messages.length ?? 0} messages{runtime.engine?.transcript.summary ? ' · summarized' : ''}
+      </Text>
+      {row('uncached', t.uncached)}
+      {row('cached', t.cached)}
+      {row('received', t.output)}
+      <Clickable onClick={() => run('/compact')}>
+        <Text color="gray">↻ compact</Text>
+      </Clickable>
+      <Clickable onClick={() => run('/login')}>
+        <Text color="gray">⚙ accounts</Text>
+      </Clickable>
+      <Clickable onClick={() => run('/configure')}>
+        <Text color="gray">☰ configure</Text>
+      </Clickable>
+    </>
+  );
+}
+
+function ShortcutsSection() {
+  return (
+    <>
+      <Heading>SHORTCUTS</Heading>
+      {[
+        ['esc', 'interrupt / close'],
+        ['wheel', 'scroll history'],
+        ['drag', 'select & copy'],
+        ['⇧↵ \\↵', 'new line'],
+        ['ctrl+b', 'sidebar'],
+        ['/', 'commands'],
+      ].map(([k, v]) => (
+        <Text key={k} wrap="truncate">
+          <Text color="cyan">{k!.padEnd(8)}</Text>
+          <Text dimColor>{v}</Text>
+        </Text>
+      ))}
+    </>
+  );
+}
+
+const truncate = (s: string, n: number) => (s.length > n ? s.slice(0, Math.max(1, n - 1)) + '…' : s);
+
+/** The subagent's tool call in flight, e.g. `Edit(src/a.ts)`. */
+function runningToolLabel(a: Subagent): string | undefined {
+  const last = [...a.events].reverse().find((e) => e.kind === 'tool');
+  return last && last.kind === 'tool' && last.ok === undefined ? `${last.label}(${last.summary})` : undefined;
+}

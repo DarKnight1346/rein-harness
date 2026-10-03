@@ -1,0 +1,42 @@
+{
+  "name": "rein-harness",
+  "version": "0.1.0",
+  "description": "Terminal chat harness that drives Claude Code and Codex across multiple subscription accounts",
+  "type": "module",
+  "bin": {
+    "rein": "dist/cli.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "tsx src/cli.tsx",
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@vscode/ripgrep": "^1.18.0",
+    "chalk": "^5.6.2",
+    "cli-truncate": "^6.1.1",
+    "diff": "^9.0.0",
+    "highlight.js": "^11.12.0",
+    "ink": "^7.1.1",
+    "marked": "^18.0.14",
+    "react": "^19.3.0",
+    "slice-ansi": "^9.0.1",
+    "string-width": "^8.3.0",
+    "strip-ansi": "^7.2.0",
+    "turndown": "^7.2.4",
+    "wrap-ansi": "^10.0.2"
+  },
+  "devDependencies": {
+    "@types/diff": "^7.0.2",
+    "@types/node": "^26.6.4",
+    "@types/react": "^19.3.0",
+    "@types/turndown": "^5.0.6",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.3"
+  }
+}

@@ -1,0 +1,68 @@
+import {existsSync} from 'node:fs';
+import {readFile} from 'node:fs/promises';
+import path from 'node:path';
+import {reinHome} from '../store/paths.js';
+
+const BASE_PROMPT = `You are Rein, a coding assistant working in the user's project from a terminal chat.
+- Be direct and concise. Lead with the answer.
+- Output renders as plain text in a terminal: prefer short paragraphs and simple lists; use code blocks for code.`;
+
+const TOOLS_PROMPT = `# Tools
+You have tools for working in the project: list, read, write, edit, delete, search, and shell (with shell_logs / shell_kill for background processes), plus web_search and web_fetch for the web.
+- Paths are relative to the project root. You cannot access files outside it.
+- Read a file before editing it. Edit with exact, unique old_string values (no line-number prefixes); prefer edit over rewriting whole files.
+- Use list to see what's in a folder and search to find code, before guessing at paths.
+- shell runs commands in the project root (no stdin/TTY; use non-interactive flags). Use background: true for servers/watchers, then check shell_logs. Prefer read/search/edit over shell equivalents (cat, grep, sed).
+- write/edit/delete/shell may need the user's approval; if one is denied, ask how to proceed instead of retrying.`;
+
+const MAX_AGENTS_BYTES = 64 * 1024;
+
+/**
+ * AGENTS.md files, most general first: ~/.rein/AGENTS.md, then from the git root (or the
+ * filesystem root) down to the project root. Each becomes one section of the system prompt.
+ */
+export async function agentsFiles(cwd = process.cwd()): Promise<{path: string; text: string}[]> {
+  const dirs: string[] = [];
+  let dir = path.resolve(cwd);
+  for (;;) {
+    dirs.unshift(dir);
+    if (existsSync(path.join(dir, '.git'))) break;
+    const parent = path.dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
+  }
+  const candidates = [path.join(reinHome(), 'AGENTS.md'), ...dirs.map((d) => path.join(d, 'AGENTS.md'))];
+  const out: {path: string; text: string}[] = [];
+  for (const file of [...new Set(candidates)]) {
+    const text = await readFile(file, 'utf8').catch(() => '');
+    if (text.trim()) out.push({path: file, text: text.slice(0, MAX_AGENTS_BYTES).trim()});
+  }
+  return out;
+}
+
+/**
+ * Rein's system prompt for chat sessions (all providers): base instructions (or
+ * `~/.rein/system-prompt.md`), the tools section, the project root, and AGENTS.md files.
+ */
+export async function systemPrompt(opts: {tools?: boolean; scratch?: string} = {}): Promise<string> {
+  let base = BASE_PROMPT;
+  try {
+    const custom = (await readFile(path.join(reinHome(), 'system-prompt.md'), 'utf8')).trim();
+    if (custom) base = custom;
+  } catch {}
+  const sections = [base];
+  if (opts.tools) {
+    sections.push(TOOLS_PROMPT, `Project root: ${process.cwd()}`);
+    if (opts.scratch) {
+      sections.push(
+        `Scratchpad: ${opts.scratch}\nA private folder for this session only. Put temporary files, notes, drafts and experiments here (absolute paths) instead of the project; changes there never need approval. It persists if the session is resumed.`,
+      );
+    }
+    sections.push('Past conversations in this project can be searched with sessions_search and read with session_read.');
+    sections.push('If an advisor tool is available, it consults a stronger, expensive model: use it sparingly for important decisions or when stuck.');
+  }
+  for (const f of await agentsFiles()) {
+    sections.push(`# Project instructions (${f.path})\nFollow these instructions from AGENTS.md:\n\n${f.text}`);
+  }
+  return sections.join('\n\n');
+}

@@ -1,0 +1,272 @@
+import {adapters} from './providers/index.js';
+import {catalog} from './router/catalog.js';
+import {makeRouter, type AutoRouter} from './router/index.js';
+import {makeAutoRouter} from './router/auto.js';
+import {Engine} from './session/engine.js';
+import {compactTranscript, type CompactReason, type CompactResult} from './session/compactor.js';
+import {loadTranscript, type Transcript} from './session/transcript.js';
+
+/** `true` = show the picker, a string = continue that session id, `false` = new conversation. */
+export type Resume = boolean | string;
+import {DEFAULT_CONFIG, loadConfig, saveConfig, type Config} from './store/config.js';
+import {usageStore} from './store/usage.js';
+import {SubagentManager, SUBAGENT_PROMPT, type Subagent} from './agents/manager.js';
+import {agentTools} from './agents/tools.js';
+import {advisorRef, advisorTool} from './agents/advisor.js';
+import {GoalManager} from './goals/manager.js';
+import {goalDoneTool} from './goals/tool.js';
+import {webTools} from './tools/web.js';
+import {newTranscript, saveTranscript} from './session/transcript.js';
+import {systemPrompt} from './session/prompt.js';
+import {parseRef, refKey, type ModelRef, type TokenCount, type ToolBinding} from './providers/types.js';
+import {decide} from './decider/index.js';
+import {headTail} from './router/auto.js';
+
+/** `auto` approval mode: allow without asking only at this confidence or higher. */
+const AUTO_APPROVE_MIN = 0.85;
+import {mcpProxyCommand, ToolHost, type ApprovalDecision, type ApprovalRequest, type ToolActivity} from './tools/host.js';
+
+/** Process-wide state shared by the UI and commands. */
+export class Runtime {
+  config: Config = DEFAULT_CONFIG;
+  engine!: Engine;
+  /** Last auto-routing decision, for the status line / debugging. */
+  lastDecision: string | undefined;
+  auto: AutoRouter = makeAutoRouter({config: () => this.config, onDecision: (d) => (this.lastDecision = d)});
+  compact = (t: Transcript, _reason: CompactReason): Promise<CompactResult> => compactTranscript(t, this.config);
+
+  /** Set by the UI: shows the approval prompt for a file-changing tool call. */
+  approver: ((req: ApprovalRequest) => Promise<ApprovalDecision>) | undefined;
+  readonly tools = new ToolHost({
+    root: process.cwd(),
+    approve: (req) => (this.approver ? this.approver(req) : Promise.resolve('deny')),
+    mode: () => this.config.toolApproval,
+    shellMaxMs: () => this.config.shellMaxMinutes * 60_000,
+    scratch: () => this.engine?.scratch,
+    sessionId: () => this.engine?.transcript.id,
+    judge: (req) => this.judgeChange(req),
+  });
+
+  /**
+   * `auto` approvals: one decision-model call (Jev or the cheap LLM) with minimal state — the user's
+   * latest request, the action and a clipped preview. Allows only confident "clearly requested and
+   * safe" verdicts; everything else is shown to the user.
+   */
+  private async judgeChange(req: ApprovalRequest): Promise<{allow: boolean; note: string}> {
+    const lastUser = [...(this.engine?.transcript.messages ?? [])].reverse().find((m) => m.role === 'user');
+    const state = {
+      user_request: headTail(lastUser?.text ?? ''),
+      action: `${req.tool.label} ${req.summary}`,
+      change_preview: req.preview.slice(0, 1500),
+    };
+    const decision = await decide(this.config, state, {
+      allow: {
+        type: 'noul',
+        instructions:
+          req.tool.name === 'shell'
+            ? 'Is this shell command clearly something the user asked for (directly or as a necessary step, e.g. running tests/builds or a dev server they want), and safe — no deleting files, force-pushing, installing system software, touching credentials, or contacting unexpected hosts?'
+            : 'Is this file change clearly something the user asked for (directly or as a necessary step), and safe — not deleting or overwriting unrelated work?',
+        criteria: {true: 'clearly requested and safe', false: 'not requested, unclear, or risky'},
+      },
+    });
+    const a = decision.answers.allow;
+    const p = a?.type === 'noul' ? a.noul : 0;
+    return {allow: p >= AUTO_APPROVE_MIN, note: `${p.toFixed(2)} via ${decision.backend}`};
+  }
+
+  /** `resume`: a session id to load directly; `true`/`false` start fresh (the UI shows the picker for `true`). */
+  /** Subagents spawned by the main agent's `agent` tool. */
+  readonly agents: SubagentManager = new SubagentManager({
+    limit: () => this.config.subagentLimit,
+    resolve: async () => {
+      throw new Error('unused');
+    },
+    open: (agent, tools) => this.openSubagent(agent, tools),
+    bind: (agent) => {
+      const origin = {agentId: agent.id, name: agent.name};
+      let closeSocket: (() => void) | undefined;
+      const host = this.tools;
+      return {
+        binding: {
+          // Fork-mode histories reference agent/agent_result, so forks still see their definitions.
+          get tools() {
+            return host.specs({subagent: true, includeMainOnly: agent.mode === 'fork'});
+          },
+          call: (name, args) => host.call(name, args, origin),
+          listen: async () => {
+            const l = await host.listenFor(origin);
+            closeSocket = l.close;
+            return l.socket;
+          },
+          proxy: mcpProxyCommand(),
+          allowed: host.specs({subagent: true}).map((t) => t.name),
+        },
+        close: () => closeSocket?.(),
+      };
+    },
+    judge: (agent) => this.judgeCompletion(agent),
+    onActivity: (agentId, fn) => {
+      const h = (a: ToolActivity) => {
+        if (a.origin?.agentId === agentId) fn(a);
+      };
+      this.tools.on('activity', h);
+      return () => void this.tools.off('activity', h);
+    },
+    finished: (agent) => this.subagentFinished(agent),
+    killShells: (agentId) => {
+      for (const s of this.tools.shells.running()) if (s.origin?.agentId === agentId) this.tools.shells.kill(s.id);
+    },
+  });
+
+  private folded = new Map<number, TokenCount>();
+
+  /** `/goal`: keeps the agent on an objective until the decision model accepts the evidence. */
+  readonly goals = new GoalManager({
+    maxRounds: () => this.config.goalMaxRounds,
+    transcript: () => this.engine?.transcript,
+    save: () => {
+      if (this.engine) void saveTranscript(this.engine.transcript).catch(() => {});
+    },
+    decide: (state, questions) => decide(this.config, state, questions),
+    advise: async (question) => {
+      const ref = advisorRef(this.config);
+      if (!ref) return undefined;
+      const res = await this.tools.call('advisor', {question});
+      return res.ok ? res.text : undefined;
+    },
+    investigate: async (task) => {
+      const {done} = this.agents.spawn({task, mode: 'new', model: 'auto', name: 'goal-unblocker'});
+      const a = await done;
+      return a.output || `(no report; ${a.status})`;
+    },
+  });
+
+  private async openSubagent(agent: Subagent, tools: ToolBinding) {
+    if (agent.mode === 'fork') {
+      const session = await this.engine.openFork(tools);
+      const ref = this.engine.current!.ref;
+      return {session, ref, accountId: this.engine.current!.accountId, label: catalog.get(ref)?.label ?? ref.model};
+    }
+    let ref: ModelRef | undefined;
+    if (agent.requested === 'auto') {
+      const t = newTranscript();
+      t.messages.push({role: 'user', text: agent.task, at: Date.now()});
+      ref = (await this.auto(agent.task, t, undefined, new Set())).ref;
+    } else {
+      ref = parseRef(agent.requested);
+      if (!ref || !catalog.get(ref)) throw new Error(`model ${agent.requested} isn't available; use one from the tool description or "auto"`);
+    }
+    const account = catalog.healthyAccounts(ref, this.config.maxUsedPct)[0];
+    if (!account) throw new Error(`no healthy account for ${ref.model}`);
+    const prompt = `${await systemPrompt({tools: true, scratch: this.engine.scratch})}\n\n${SUBAGENT_PROMPT(agent.name)}`;
+    const session = await adapters[ref.provider].openSession({account, model: ref.model, systemPrompt: prompt, tools});
+    return {session, ref, accountId: account.id, label: catalog.get(ref)?.label ?? ref.model};
+  }
+
+  /** Decision model: is the subagent's task actually complete? (noul; ≥ 0.5 = yes) */
+  private async judgeCompletion(agent: Subagent) {
+    const tools = agent.events.flatMap((e) => (e.kind === 'tool' ? [`${e.label}(${e.summary})${e.ok === false ? ' ✗' : ''}`] : []));
+    const d = await decide(this.config, {task: headTail(agent.task), final_report: headTail(agent.output), tool_calls: tools.slice(-40)}, {
+      complete: {
+        type: 'noul',
+        instructions: 'Has the subagent fully completed the task it was given — actually done (not just planned, partially done, or blocked), with a final report?',
+        criteria: {true: 'complete', false: 'incomplete, only planned, blocked, or stopped early'},
+      },
+    });
+    const a = d.answers.complete;
+    const p = a?.type === 'noul' ? a.noul : 1;
+    return {complete: p >= 0.5, note: `${p >= 0.5 ? 'complete' : 'not complete'} (${p.toFixed(2)} via ${d.backend})`};
+  }
+
+  /** Fold new subagent tokens into the conversation totals and save its record. */
+  private subagentFinished(agent: Subagent): void {
+    const prev = this.folded.get(agent.id) ?? {input: 0, cached: 0, output: 0};
+    this.engine.addTokens({input: agent.tokens.input - prev.input, cached: agent.tokens.cached - prev.cached, output: agent.tokens.output - prev.output});
+    this.folded.set(agent.id, {...agent.tokens});
+    const t = this.engine.transcript;
+    const record = {
+      id: agent.id,
+      name: agent.name,
+      task: agent.task,
+      mode: agent.mode,
+      model: agent.ref ? refKey(agent.ref) : agent.requested,
+      status: agent.status,
+      output: agent.output,
+      rounds: agent.rounds,
+      startedAt: agent.startedAt,
+      endedAt: agent.endedAt,
+      tools: agent.events.flatMap((e) => (e.kind === 'tool' ? [{label: e.label, summary: e.summary, ok: e.ok}] : [])),
+    };
+    t.subagents = [...(t.subagents ?? []).filter((s) => s.id !== agent.id), record];
+    void saveTranscript(t).catch(() => {});
+  }
+
+  async init(opts: {resume: Resume}): Promise<{resumed?: Transcript}> {
+    this.tools.register(
+      ...agentTools(this.agents, () => this.config),
+      advisorTool({config: () => this.config, engine: () => this.engine, agents: this.agents}),
+      goalDoneTool(this.goals),
+      ...webTools(() => this.config),
+    );
+    this.config = await loadConfig();
+    await usageStore.load();
+    const router = makeRouter(() => this.config, (...a) => this.auto(...a));
+    const host = this.tools;
+    const resumed = typeof opts.resume === 'string' ? await loadTranscript(opts.resume) : undefined;
+    this.engine = new Engine(
+      {
+        config: () => this.config,
+        route: router.route,
+        alternative: router.alternative,
+        compact: (t, reason) => this.compact(t, reason),
+        tools: {
+          binding: {
+            // Resolved when a session opens: the agent tool lists the models signed in right now.
+            get tools() {
+              return host.specs();
+            },
+            call: (name, args) => this.tools.call(name, args),
+            listen: () => this.tools.listen(),
+            proxy: mcpProxyCommand(),
+          },
+          forkBinding: {
+            get tools() {
+              return host.specs();
+            },
+            call: (name, args) => this.tools.readOnly().call(name, args),
+            listen: () => this.tools.listenReadOnly(),
+            proxy: mcpProxyCommand(),
+            allowed: this.tools.tools.filter((t) => !t.mutating && !t.mainOnly).map((t) => t.name),
+          },
+          onActivity: (fn: (a: ToolActivity) => void) => {
+            this.tools.on('activity', fn);
+            return () => void this.tools.off('activity', fn);
+          },
+        },
+      },
+      resumed,
+    );
+    return {resumed};
+  }
+
+  /** Reload accounts/models (after /login changes). */
+  async refreshCatalog(): Promise<void> {
+    await catalog.refresh();
+  }
+
+  async setConfig(patch: Partial<Config>): Promise<void> {
+    const toolsChanged = patch.advisorModel !== undefined && patch.advisorModel !== this.config.advisorModel;
+    this.config = {...this.config, ...patch};
+    if (toolsChanged) this.engine?.refreshTools();
+    await saveConfig(this.config);
+  }
+
+  shutdown(): void {
+    this.agents.closeAll();
+    this.engine?.shutdown();
+    this.tools.close();
+    for (const a of Object.values(adapters)) a.shutdown();
+  }
+}
+
+export const runtime = new Runtime();
