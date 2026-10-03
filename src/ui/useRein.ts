@@ -22,6 +22,8 @@ import {useChat} from './useChat.js';
 import {Attachments} from './attachments.js';
 import {mentionAt, primeFiles, suggestFiles} from './mentions.js';
 import type {RewindMode, RewindPoint} from './RewindScreen.js';
+import type {PlanDecision} from '../tools/plan.js';
+import type {AskAnswer, AskQuestion} from '../tools/ask.js';
 import {settingsFiles} from '../tools/permissions.js';
 import {memoryFacts, memoryFile} from '../tools/memory.js';
 import {readFileSync} from 'node:fs';
@@ -48,6 +50,8 @@ export type Overlay =
   | {name: 'resume'; sessions: SessionInfo[]}
   | {name: 'rewind'; points: RewindPoint[]}
   | {name: 'mcp'}
+  | {name: 'plan'; plan: string; resolve(d: PlanDecision): void}
+  | {name: 'ask'; questions: AskQuestion[]; resolve(a: AskAnswer[] | undefined): void}
   | {name: 'agents'}
   | {name: 'goal'}
   | {name: 'btw'; question: string; answer?: string; model?: string; mode?: 'fork' | 'context'; done?: boolean; error?: string}
@@ -220,6 +224,49 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
     {isActive: overlay.name === 'none' && !viewing && !chat.busy && !draft},
   );
 
+  const togglePlanMode = () => {
+    runtime.planMode = !runtime.planMode;
+    log('info', runtime.planMode ? 'Plan mode on — the agent explores read-only and presents a plan for your approval before changing anything. shift+tab to turn it off.' : 'Plan mode off.');
+    bump();
+  };
+  // The agent asks questions: show them and wait for every answer.
+  useEffect(() => {
+    runtime.askPresenter = (questions) =>
+      new Promise((resolve) => {
+        setOverlay({
+          name: 'ask',
+          questions,
+          resolve: (answers) => {
+            setOverlay({name: 'none'});
+            bump();
+            resolve(answers);
+          },
+        });
+      });
+    return () => {
+      runtime.askPresenter = undefined;
+    };
+  }, []);
+  // The agent presents a plan: show it and wait for the user's decision.
+  useEffect(() => {
+    runtime.planPresenter = (plan) =>
+      new Promise((resolve) => {
+        setOverlay({
+          name: 'plan',
+          plan,
+          resolve: (d) => {
+            setOverlay({name: 'none'});
+            log('info', d === 'revise' ? 'Keep planning — type your feedback.' : `Plan approved${d === 'approve-all' ? ' (all changes allowed this session)' : ''} — plan mode off.`);
+            bump();
+            resolve(d);
+          },
+        });
+      });
+    return () => {
+      runtime.planPresenter = undefined;
+    };
+  }, []);
+
   /** /rewind: your messages, newest first, with how many files Rein changed since each. */
   function openRewind() {
     const points: RewindPoint[] = runtime.engine.transcript.messages
@@ -372,6 +419,13 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
     },
     {isActive: inputActive && fileSuggestions.length > 0},
   );
+  // Shift+Tab toggles plan mode (like Claude Code), when no suggestion list is using Tab.
+  useInput(
+    (_input, key) => {
+      if (key.tab && key.shift) togglePlanMode();
+    },
+    {isActive: inputActive && !suggestions.length && !fileSuggestions.length},
+  );
 
   const runCommand = (raw: string) => {
     const parsed = parseInput(raw, skills);
@@ -388,6 +442,10 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
         return;
       }
       const args = attachments.current.expand(parsed.args);
+      if (parsed.skill.planMode && !runtime.planMode) {
+        runtime.planMode = true;
+        log('info', 'Plan mode on — nothing changes until you approve the plan (shift+tab turns it off).');
+      }
       void chat.send(skillPrompt(parsed.skill, args.text), args.images).then(bump);
       return;
     }
@@ -740,13 +798,22 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
       acceptFile(fileSelected);
       return;
     }
+    // Enter on a partial command fills in the highlighted suggestion ("/name ") so arguments can
+    // follow; Enter again runs it. A command typed out in full runs right away.
+    const partial = suggestCommands(typed, skills);
+    const exact = partial.some((c) => `/${c.name}` === typed.trim().toLowerCase());
+    if (partial.length && !exact) {
+      const pick = partial[Math.min(suggestIndex, partial.length - 1)] ?? partial[0]!;
+      const filled = `/${pick.name} `;
+      prevDraft.current = filled;
+      setDraft(filled);
+      setSuggestIndex(0);
+      return;
+    }
     prevDraft.current = '';
     setDraft('');
     setSuggestIndex(0);
-    // Enter on a partial command runs the highlighted suggestion (like Claude Code).
-    const partial = suggestCommands(typed, skills);
-    const exact = partial.some((c) => `/${c.name}` === typed.trim().toLowerCase());
-    runCommand(partial.length && !exact ? `/${(partial[Math.min(suggestIndex, partial.length - 1)] ?? partial[0]!).name}` : typed);
+    runCommand(typed);
   };
 
   const finishImport = (accept: boolean) => {
@@ -822,7 +889,7 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
 
   return {
     entries, add, log, overlay, setOverlay, closeOverlay, finishImport, ready, updating, updateLog, statusTick, bump,
-    draft, onDraft, onSubmit, onPaste, onImagePaste, doRewind, fileSuggestions, fileSelected, acceptFile, runCommand, suggestions, selected, setSuggestIndex, inputActive, chat, skills, openShells, queued, exitArmed, compacting, pickSession,
+    draft, onDraft, onSubmit, onPaste, onImagePaste, doRewind, togglePlanMode, fileSuggestions, fileSelected, acceptFile, runCommand, suggestions, selected, setSuggestIndex, inputActive, chat, skills, openShells, queued, exitArmed, compacting, pickSession,
     view, setView, viewing, goalNote,
   };
 }

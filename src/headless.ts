@@ -11,7 +11,7 @@ import {redact} from './ui/privacy.js';
  *
  *   --model <ref|auto>             --effort <level|auto|default>
  *   --output-format text|json|stream-json
- *   --permission-mode ask|auto|bypass   (ask = refuse what would need a yes)
+ *   --permission-mode ask|auto|bypass|plan   (ask = refuse what would need a yes; plan = read-only, print the plan)
  *   --allowedTools "shell(npm test:*),edit(src/**)"   --disallowedTools "…"
  *   -c, --continue [id]            continue the latest (or a given) conversation in this project
  *   --verbose                      tool calls on stderr (text mode)
@@ -59,9 +59,13 @@ export async function runHeadless(argv: string[]): Promise<number> {
   // Per-run settings: never saved to config.json.
   const model = opt('--model');
   const effort = opt('--effort');
-  const mode = opt('--permission-mode') as ApprovalMode | undefined;
-  if (mode && !['ask', 'auto', 'bypass'].includes(mode)) return fail(`--permission-mode must be ask, auto or bypass`);
-  runtime.config = {...runtime.config, ...(model ? {chatModel: model} : {}), ...(effort ? {chatEffort: effort} : {}), ...(mode ? {toolApproval: mode} : {})};
+  const mode = opt('--permission-mode') as ApprovalMode | 'plan' | undefined;
+  if (mode && !['ask', 'auto', 'bypass', 'plan'].includes(mode)) return fail(`--permission-mode must be ask, auto, bypass or plan`);
+  // plan: read-only exploration; the plan the agent presents is the result (nothing is changed).
+  runtime.planMode = mode === 'plan';
+  let presented: string | undefined;
+  runtime.planPresenter = async (plan) => ((presented = plan), undefined);
+  runtime.config = {...runtime.config, ...(model ? {chatModel: model} : {}), ...(effort ? {chatEffort: effort} : {}), ...(mode && mode !== 'plan' ? {toolApproval: mode as ApprovalMode} : {})};
   const list = (s: string | undefined) => (s ?? '').split(/,(?![^(]*\))/).map((r) => r.trim()).filter(Boolean);
   runtime.extraRules = {allow: list(opt('--allowedTools')), deny: list(opt('--disallowedTools'))};
   runtime.approver = undefined; // no one to ask: anything needing a yes is refused
@@ -107,6 +111,8 @@ export async function runHeadless(argv: string[]): Promise<number> {
   } catch (err) {
     error = (err as Error).message;
   }
+  if (presented) reply = presented; // plan mode: the plan is the answer
+  if (format === 'text' && presented) write(`\n${presented}\n`);
   if (format === 'text' && reply && !reply.endsWith('\n')) write('\n');
   if (format !== 'text') {
     const t = runtime.engine.sessionTokens;

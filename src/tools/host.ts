@@ -9,6 +9,7 @@ import {TOOLS, toolByName, type ToolDef} from './registry.js';
 import {addProjectRule, check, loadRules, ruleTool, suggestRule, type Rules, type Subject} from './permissions.js';
 import {hasHooks, runHooks} from '../hooks.js';
 import {renderScoped, scopedInstructions} from '../session/prompt.js';
+import {readOnlyCommand} from './plan.js';
 import {ipcPath, isWindows} from '../util/platform.js';
 import {ShellManager} from './shells.js';
 import type {DiffLine} from './diff.js';
@@ -54,6 +55,8 @@ export type ToolHostOptions = {
   configDirs?: () => string[];
   /** Extra rules for this run only (headless --allowedTools / --disallowedTools). */
   extraRules?: () => Rules;
+  /** Plan mode: file changes and non-read-only commands are refused until the plan is approved. */
+  planMode?: () => boolean;
   /** Save a file's state before a tool changes it (checkpoints for /rewind). */
   checkpoint?: (file: string) => Promise<void>;
 };
@@ -139,6 +142,7 @@ export class ToolHost extends EventEmitter {
       const hookInput = {session_id: this.opts.sessionId?.(), tool: tool.name, tool_input: args ?? {}};
       const pre = hasHooks('PreToolUse', this.opts.root) ? await runHooks('PreToolUse', this.opts.root, hookInput) : undefined;
       if (pre?.block) throw new ToolError(`blocked by a PreToolUse hook: ${pre.block}`);
+      if (this.opts.planMode?.()) this.checkPlanMode(ctx, tool, args);
       if (pre?.allow && !pre.ask) approvedBy = 'hook';
       const suggestion = suggestRule(subject, (p) => this.ruleRel(p));
       const remember = (decision: ApprovalDecision) => {
@@ -238,6 +242,16 @@ export class ToolHost extends EventEmitter {
     return items.length ? renderScoped(items) : undefined;
   }
 
+  /** Plan mode: only reading. Scratchpad notes and read-only shell commands are fine. */
+  private checkPlanMode(ctx: ToolContext, tool: ToolDef, args: any): void {
+    const blocked = 'plan mode is on — nothing can be changed until the user approves your plan. Keep exploring read-only, then call present_plan.';
+    if (tool.name === 'shell') {
+      if (!readOnlyCommand(String(args?.command ?? ''))) throw new ToolError(`${blocked} (only read-only commands like ls, grep, git status/log/diff run now)`);
+      return;
+    }
+    if (tool.mutating && !this.inScratch(ctx, tool, args)) throw new ToolError(blocked);
+  }
+
   /** What permission rules look at for this call: the command, the paths it touches, the URL. */
   private subject(ctx: ToolContext, tool: ToolDef, args: any): Subject {
     const paths: string[] = [];
@@ -265,6 +279,11 @@ export class ToolHost extends EventEmitter {
     if (rel && !rel.startsWith('..') && !path.isAbsolute(rel)) return toPosix(rel);
     const home = os.homedir();
     return toPosix(abs.startsWith(home + path.sep) ? `~${abs.slice(home.length)}` : abs);
+  }
+
+  /** "Allow all changes for this session" from outside the approval prompt (plan approval). */
+  allowSession(): void {
+    this.sessionAllowed = true;
   }
 
   /** Add working directories for this session (must exist); returns the ones added. */

@@ -19,6 +19,8 @@ import {McpManager} from './mcp/manager.js';
 import {mcpTools} from './mcp/tools.js';
 import {skillTool} from './skills/tool.js';
 import {memoryTools} from './tools/memory.js';
+import {PLAN_MODE_CONTEXT, presentPlanTool, type PlanDecision} from './tools/plan.js';
+import {askUserTool, type AskAnswer, type AskQuestion} from './tools/ask.js';
 import {decideTool} from './decider/tool.js';
 import {startUsageRefresh} from './accounts/usage.js';
 import {hasHooks, runHooks} from './hooks.js';
@@ -52,6 +54,12 @@ export class Runtime {
     return compactTranscript(t, this.config);
   };
 
+  /** Plan mode (/plan, Shift+Tab, --permission-mode plan): read-only until a plan is approved. */
+  planMode = false;
+  /** Set by the UI: shows a presented plan and resolves with the user's decision. */
+  planPresenter: ((plan: string) => Promise<PlanDecision | undefined>) | undefined;
+  /** Set by the UI: shows the agent's questions and resolves with the answers (undefined = dismissed). */
+  askPresenter: ((questions: AskQuestion[]) => Promise<AskAnswer[] | undefined>) | undefined;
   /** Rules for this run only (headless --allowedTools / --disallowedTools). */
   extraRules: {allow: string[]; deny: string[]} = {allow: [], deny: []};
   /** Set by the UI: shows the approval prompt for a file-changing tool call. */
@@ -60,6 +68,7 @@ export class Runtime {
     root: process.cwd(),
     approve: (req) => (this.approver ? this.approver(req) : Promise.resolve('deny')),
     extraRules: () => this.extraRules,
+    planMode: () => this.planMode,
     mode: () => this.config.toolApproval,
     shellMaxMs: () => this.config.shellMaxMinutes * 60_000,
     scratch: () => this.engine?.scratch,
@@ -227,7 +236,7 @@ Drop superseded reads of the same file, routine listings, and output that no lon
     const root = process.cwd();
     const session_id = this.engine?.transcript.id;
     const out = hasHooks('UserPromptSubmit', root) ? await runHooks('UserPromptSubmit', root, {session_id, prompt: text}) : {errors: []};
-    const context = [this.sessionContext, out.context].filter(Boolean).join('\n');
+    const context = [this.sessionContext, out.context, this.planMode ? PLAN_MODE_CONTEXT : undefined].filter(Boolean).join('\n');
     if (!out.block) this.sessionContext = undefined;
     return {block: out.block, context: context || undefined};
   }
@@ -306,8 +315,19 @@ Drop superseded reads of the same file, routine listings, and output that no lon
       advisorTool({config: () => this.config, engine: () => this.engine, agents: this.agents}),
       goalDoneTool(this.goals),
       ...webTools(() => this.config),
-      skillTool(() => process.cwd()),
+      skillTool(() => process.cwd(), () => (this.planMode = true)),
       ...memoryTools(() => process.cwd()),
+      askUserTool(() => this.askPresenter),
+      presentPlanTool({
+        active: () => this.planMode,
+        scratch: () => this.engine?.scratch,
+        present: async (plan) => (this.planPresenter ? this.planPresenter(plan) : undefined),
+        done: (decision) => {
+          if (decision === 'revise') return;
+          this.planMode = false;
+          if (decision === 'approve-all') this.tools.allowSession();
+        },
+      }),
       decideTool(() => this.config),
       ...mcpTools({mcp: this.mcp, root: () => process.cwd(), call: (name, args, origin) => this.tools.call(name, args, origin)}),
       todoTool({

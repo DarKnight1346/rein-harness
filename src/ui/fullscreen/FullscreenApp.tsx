@@ -16,6 +16,8 @@ import {TextInput} from '../TextInput.js';
 import {goalSummary, useRein} from '../useRein.js';
 import {RewindScreen} from '../RewindScreen.js';
 import {McpScreen} from '../McpScreen.js';
+import {PlanScreen} from '../PlanScreen.js';
+import {AskScreen} from '../AskScreen.js';
 import {todoLine} from '../../tools/todo.js';
 import {splashLines} from './splash.js';
 
@@ -200,6 +202,18 @@ export function FullscreenApp({resume}: {resume: Resume}) {
             }
           />
         );
+      case 'ask':
+        return (
+          <Window title="Questions from the agent" width={windowWidth} onClose={() => overlay.resolve(undefined)}>
+            <AskScreen questions={overlay.questions} onDone={overlay.resolve} />
+          </Window>
+        );
+      case 'plan':
+        return (
+          <Window title="Plan — approve to start" width={windowWidth} onClose={() => overlay.resolve('revise')}>
+            <PlanScreen plan={overlay.plan} width={windowText} onDecide={overlay.resolve} />
+          </Window>
+        );
       case 'mcp':
         return (
           <Window title="MCP servers" width={windowWidth} onClose={r.closeOverlay}>
@@ -326,7 +340,7 @@ export function FullscreenApp({resume}: {resume: Resume}) {
 
   return (
     <Box flexDirection="column" height={rows}>
-      <TopBar tick={r.statusTick} sidebarOpen={showSidebar} onToggleSidebar={toggleSidebar} run={r.runCommand} openModel={() => r.setOverlay({name: 'model'})} openShells={r.openShells} viewing={viewing} setView={r.setView} />
+      <TopBar tick={r.statusTick} sidebarOpen={showSidebar} onToggleSidebar={toggleSidebar} togglePlanMode={r.togglePlanMode} run={r.runCommand} openModel={() => r.setOverlay({name: 'model'})} openShells={r.openShells} viewing={viewing} setView={r.setView} />
       <Box flexDirection="row" height={mainHeight}>
         <Box flexDirection="column" flexGrow={1} flexShrink={1} flexBasis={0} minWidth={0} height={mainHeight} overflow="hidden">
           <History
@@ -502,7 +516,7 @@ function History({width, lines, scroll, onScroll, selection, onSelect, onCopy, s
   );
 }
 
-function TopBar(props: {tick: number; sidebarOpen: boolean; onToggleSidebar(): void; run(cmd: string): void; openModel(): void; openShells(): void; viewing?: Subagent; setView(v: 'main' | number): void}) {
+function TopBar(props: {tick: number; sidebarOpen: boolean; onToggleSidebar(): void; togglePlanMode(): void; run(cmd: string): void; openModel(): void; openShells(): void; viewing?: Subagent; setView(v: 'main' | number): void}) {
   useShellsTick();
   useAgentsTick();
   const background = runtime.tools.shells.running({background: true}).length;
@@ -591,6 +605,13 @@ function TopBar(props: {tick: number; sidebarOpen: boolean; onToggleSidebar(): v
         </Seg>
       ) : null}
       {items.filter((id) => id !== 'sidebarToggle').map(segment)}
+      {runtime.planMode ? (
+        <Seg onClick={props.togglePlanMode}>
+          <Text color="yellow" bold>
+            ⏸ plan mode
+          </Text>
+        </Seg>
+      ) : null}
       {runtime.goals.goal ? (
         <Seg onClick={() => props.run('/goal')}>
           <Text color={runtime.goals.goal.status === 'active' ? 'cyan' : runtime.goals.goal.status === 'done' ? 'green' : 'yellow'}>

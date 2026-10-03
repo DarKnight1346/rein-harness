@@ -142,6 +142,9 @@ Design, findings and status: [PLAN.md](PLAN.md). Tests: `npm test`. License: [MI
 - **Permissions:** "Always allow" in an approval prompt saves a rule (`shell(npm test:*)`, `edit(src/**)`) to
   `.rein/settings.json`; `/permissions` lists them. Existing `.claude/settings.json` rules apply too.
 - **Undo:** `/rewind` (or esc twice) restores files and/or the conversation to before one of your messages.
+- **Plan first:** `/plan <task>` (or `/plan:deep` for big, risky changes) — the agent explores read-only, asks you
+  questions, then presents a plan to approve before changing anything. Shift+Tab toggles plan mode.
+- **Questions:** the agent can ask you multiple-choice questions (with your own answer as an option) mid-task.
 - **Tasks and effort:** the agent keeps a task list in the sidebar for multi-step work; pick an effort level (or
   auto) after choosing a model in `/model`.
 - **Context:** `@path` attaches a file; `read` shows images and PDFs to the model.
