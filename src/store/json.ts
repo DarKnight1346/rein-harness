@@ -1,3 +1,4 @@
+import {mkdirSync, readFileSync, renameSync, writeFileSync} from 'node:fs';
 import {mkdir, readFile, rename, writeFile} from 'node:fs/promises';
 import path from 'node:path';
 
@@ -23,4 +24,22 @@ export async function writeFileSecure(file: string, content: string): Promise<vo
   const tmp = `${file}.${process.pid}.tmp`;
   await writeFile(tmp, content, {mode: 0o600});
   await rename(tmp, file);
+}
+
+/**
+ * Read-modify-write a small JSON settings file: read it (missing/invalid → {}), let `update`
+ * change it, and write it back atomically (temp file + rename) — no separate exists check.
+ */
+export function updateJsonFileSync(file: string, update: (data: any) => void): void {
+  let data: any = {};
+  try {
+    data = JSON.parse(readFileSync(file, 'utf8')) ?? {};
+  } catch {
+    data = {};
+  }
+  update(data);
+  mkdirSync(path.dirname(file), {recursive: true});
+  const tmp = `${file}.${process.pid}.${Math.random().toString(36).slice(2, 8)}.tmp`;
+  writeFileSync(tmp, JSON.stringify(data, null, 2) + '\n');
+  renameSync(tmp, file);
 }

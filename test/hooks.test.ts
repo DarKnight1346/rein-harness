@@ -29,7 +29,8 @@ describe('hooks', () => {
 
   it('PreToolUse gets the call as JSON on stdin; "allow" skips the prompt, "deny" blocks', async () => {
     const log = path.join(root, 'seen.json');
-    settings({PreToolUse: [{matcher: 'write', hooks: [{type: 'command', command: `cat > ${log}; echo '{"hookSpecificOutput":{"permissionDecision":"allow"}}'`}]}]});
+    // Forward slashes: hooks run in bash (Git Bash on Windows), where backslashes are escapes.
+    settings({PreToolUse: [{matcher: 'write', hooks: [{type: 'command', command: `cat > '${log.replace(/\\/g, '/')}'; echo '{"hookSpecificOutput":{"permissionDecision":"allow"}}'`}]}]});
     const asked: ApprovalRequest[] = [];
     const host = new ToolHost({root, mode: () => 'ask', approve: async (r) => (asked.push(r), 'deny')});
     const res = await host.call('write', {path: 'a.txt', content: 'x'});

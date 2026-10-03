@@ -1,8 +1,9 @@
 import type {Skill} from '../skills/index.js';
 
-export type CommandName = 'rewind' | 'permissions' | 'add-dir' | 'goal' | 'btw' | 'agents' | 'agent' | 'resume' | 'login' | 'usage' | 'model' | 'context' | 'compact' | 'shells' | 'configure' | 'update' | 'tui' | 'clear' | 'help' | 'exit';
+export type CommandName = 'mcp' | 'rewind' | 'permissions' | 'add-dir' | 'goal' | 'btw' | 'agents' | 'agent' | 'resume' | 'login' | 'usage' | 'model' | 'context' | 'compact' | 'shells' | 'configure' | 'update' | 'tui' | 'clear' | 'help' | 'exit';
 
 export const COMMANDS: {name: CommandName; description: string}[] = [
+  {name: 'mcp', description: 'MCP servers: status and tools; approve project servers, reconnect'},
   {name: 'rewind', description: 'Undo: restore files and/or the conversation to before one of your messages (also esc twice)'},
   {name: 'permissions', description: 'Show the allow/deny rules in effect and where they come from'},
   {name: 'add-dir', description: 'Add a working directory the agent can use without asking: /add-dir <path> (no path: list them)'},

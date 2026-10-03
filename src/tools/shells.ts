@@ -1,3 +1,4 @@
+import {isWindows, killTree, shellFor} from '../util/platform.js';
 import {spawn, type ChildProcess} from 'node:child_process';
 import {EventEmitter} from 'node:events';
 import stripAnsi from 'strip-ansi';
@@ -54,12 +55,15 @@ export class ShellManager extends EventEmitter {
   start(command: string, opts: {cwd: string; background: boolean; timeoutMs?: number; maxMs?: number; origin?: Shell['origin']}): {shell: Shell; done: Promise<Shell>} {
     const shell: Shell = {id: this.nextId++, command, cwd: opts.cwd, background: opts.background, startedAt: Date.now(), status: 'running', lines: [], dropped: 0, origin: opts.origin};
     this.shells.set(shell.id, shell);
-    const sh = process.env.SHELL || '/bin/sh';
-    const child = spawn(sh, ['-c', command], {
+    const sh = shellFor(command);
+    const child = spawn(sh.file, sh.args, {
       cwd: opts.cwd,
       env: {...process.env, FORCE_COLOR: '0', CI: process.env.CI ?? '1', PAGER: 'cat', GIT_PAGER: 'cat'},
       stdio: ['ignore', 'pipe', 'pipe'],
-      detached: true, // own process group → kill(-pid) reaches children (dev servers, watchers)
+      // Own process group → killTree reaches children (dev servers, watchers). Windows uses
+      // taskkill /T instead, and a detached child there would open its own console window.
+      detached: !isWindows,
+      windowsHide: true,
     });
     shell.pid = child.pid;
     this.procs.set(shell.id, child);
@@ -93,16 +97,10 @@ export class ShellManager extends EventEmitter {
     const shell = this.shells.get(id);
     if (!child || !shell || shell.status !== 'running') return false;
     shell.status = reason;
-    try {
-      if (child.pid) process.kill(-child.pid, 'SIGTERM');
-    } catch {
-      child.kill('SIGTERM');
-    }
+    killTree(child.pid, 'SIGTERM');
     // Escalate if it ignores SIGTERM.
     setTimeout(() => {
-      try {
-        if (child.pid && this.procs.has(id)) process.kill(-child.pid, 'SIGKILL');
-      } catch {}
+      if (this.procs.has(id)) killTree(child.pid, 'SIGKILL');
     }, 3000).unref();
     this.emit('change', shell);
     return true;

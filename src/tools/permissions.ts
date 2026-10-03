@@ -1,7 +1,8 @@
-import {existsSync, mkdirSync, readFileSync, writeFileSync} from 'node:fs';
+import {readFileSync} from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import {reinHome} from '../store/paths.js';
+import {updateJsonFileSync} from '../store/json.js';
 
 /**
  * Permission rules, in Claude Code's format: `Tool` or `Tool(specifier)` in `allow` / `deny` lists.
@@ -63,7 +64,8 @@ export function loadRules(root: string): Rules {
 
 /** Glob → RegExp: `**` any depth, `*` within a segment, `?` one char. */
 function globRe(glob: string): RegExp {
-  const g = glob.replace(/^~(?=\/|$)/, os.homedir());
+  // Rules use forward slashes; Windows paths are normalized to match (see check()).
+  const g = glob.replace(/^~(?=\/|$)/, os.homedir().replace(/\\/g, '/')).replace(/\\/g, '/');
   let re = '';
   for (let i = 0; i < g.length; i++) {
     const c = g[i]!;
@@ -141,7 +143,7 @@ function ruleCovers(rule: Parsed, s: Subject, forms: (p: string) => string[], pa
   }
   if (!s.paths?.length) return false;
   const re = globRe(rule.spec);
-  return s.paths.every((p) => forms(p).some((f) => re.test(f)));
+  return s.paths.every((p) => forms(p).some((f) => re.test(f.replace(/\\/g, '/'))));
 }
 
 /**
@@ -189,8 +191,8 @@ export function suggestRule(s: Subject, rel: (p: string) => string): string | un
     }
   }
   if (s.paths?.length === 1) {
-    const r = rel(s.paths[0]!);
-    const dir = path.dirname(r);
+    const r = rel(s.paths[0]!).replace(/\\/g, '/');
+    const dir = path.posix.dirname(r);
     return `${tool}(${dir === '.' ? '**' : `${dir}/**`})`;
   }
   return tool === 'edit' || tool === 'read' ? undefined : tool;
@@ -199,17 +201,9 @@ export function suggestRule(s: Subject, rel: (p: string) => string): string | un
 /** Save an allow rule to the project's .rein/settings.json (created if needed). */
 export function addProjectRule(root: string, rule: string, list: 'allow' | 'deny' = 'allow'): string {
   const file = path.join(root, '.rein', 'settings.json');
-  let data: any = {};
-  if (existsSync(file)) {
-    try {
-      data = JSON.parse(readFileSync(file, 'utf8'));
-    } catch {
-      data = {};
-    }
-  }
-  data.permissions ??= {};
-  data.permissions[list] = [...new Set([...(data.permissions[list] ?? []), rule])];
-  mkdirSync(path.dirname(file), {recursive: true});
-  writeFileSync(file, JSON.stringify(data, null, 2) + '\n');
+  updateJsonFileSync(file, (data) => {
+    data.permissions ??= {};
+    data.permissions[list] = [...new Set([...(data.permissions[list] ?? []), rule])];
+  });
   return file;
 }

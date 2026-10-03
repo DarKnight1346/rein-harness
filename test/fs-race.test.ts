@@ -40,7 +40,7 @@ describe('file tools vs. symlink swaps', () => {
     await writeTool(ctx, {path: 'dir/new.sh', content: 'echo two\n'});
     await editTool(ctx, {path: 'dir/new.sh', old_string: 'two', new_string: 'three'});
     expect(readFileSync(path.join(root, 'dir/new.sh'), 'utf8')).toBe('echo three\n');
-    expect(statSync(path.join(root, 'dir/new.sh')).mode & 0o777).toBe(0o755);
+    if (process.platform !== 'win32') expect(statSync(path.join(root, 'dir/new.sh')).mode & 0o777).toBe(0o755); // no Unix modes on Windows
   });
 
   it('big-file streaming edit uses a random, exclusive temp file and keeps the mode', async () => {
@@ -51,7 +51,7 @@ describe('file tools vs. symlink swaps', () => {
     const res = await editTool(ctx, {path: 'big.log', old_string: 'NEEDLE', new_string: 'FOUND'});
     expect(res.text).toMatch(/streamed/);
     expect(readFileSync(big, 'utf8').endsWith('\nFOUND\n')).toBe(true);
-    expect(statSync(big).mode & 0o777).toBe(0o640);
+    if (process.platform !== 'win32') expect(statSync(big).mode & 0o777).toBe(0o640);
     expect(readdirSync(root).filter((f) => f.endsWith('.tmp'))).toEqual([]);
   });
 });

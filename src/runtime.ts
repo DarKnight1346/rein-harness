@@ -15,6 +15,7 @@ import {agentTools} from './agents/tools.js';
 import {advisorRef, advisorTool} from './agents/advisor.js';
 import {GoalManager} from './goals/manager.js';
 import {Checkpoints} from './session/checkpoints.js';
+import {McpManager} from './mcp/manager.js';
 import {startUsageRefresh} from './accounts/usage.js';
 import {hasHooks, runHooks} from './hooks.js';
 import {goalDoneTool} from './goals/tool.js';
@@ -59,6 +60,9 @@ export class Runtime {
     configDirs: () => this.config?.additionalDirectories ?? [],
     checkpoint: (file) => this.checkpoints.snapshot(this.currentTurn(), file),
   });
+
+  /** MCP servers (project .mcp.json, ~/.rein/mcp.json, Claude Code's ~/.claude.json). */
+  readonly mcp = new McpManager(process.cwd());
 
   /** File checkpoints for /rewind, per conversation. */
   readonly checkpoints = new Checkpoints(() => this.engine?.transcript.id ?? 'none');
@@ -308,6 +312,18 @@ Drop superseded reads of the same file, routine listings, and output that no lon
       const out = await runHooks('SessionStart', process.cwd(), {source: typeof opts.resume === 'string' ? 'resume' : 'startup'}).catch(() => undefined);
       this.sessionContext = out?.context;
     }
+    // MCP servers connect in the background; their tools appear as they come up.
+    this.tools.addSource(() => this.mcp.tools());
+    let mcpTools = '';
+    this.mcp.on('change', () => {
+      // Only a different tool list needs new sessions (status changes alone don't).
+      const now = this.mcp.tools().map((t) => t.name).sort().join(',');
+      if (now !== mcpTools) {
+        mcpTools = now;
+        this.engine?.refreshTools();
+      }
+    });
+    void this.mcp.start().catch(() => {});
     this.stopUsageRefresh = startUsageRefresh({balancing: () => this.config.loadBalancing !== 'sticky', busy: (id) => catalog.busy.get(id) ?? 0});
     setExtraWorkingDirs(() => this.tools.extraWorkingDirs());
     await usageStore.load();
@@ -393,6 +409,7 @@ Drop superseded reads of the same file, routine listings, and output that no lon
   }
 
   shutdown(): void {
+    void this.mcp.closeAll();
     this.stopUsageRefresh();
     this.agents.closeAll();
     this.engine?.shutdown();

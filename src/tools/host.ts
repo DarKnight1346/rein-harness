@@ -4,10 +4,11 @@ import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {resolveInRoot, resolvePath, ToolError, workingDirs, type Origin, type ToolContext, type ToolResult} from './fs.js';
+import {resolveInRoot, resolvePath, toPosix, ToolError, workingDirs, type Origin, type ToolContext, type ToolResult} from './fs.js';
 import {TOOLS, toolByName, type ToolDef} from './registry.js';
 import {addProjectRule, check, loadRules, ruleTool, suggestRule, type Rules, type Subject} from './permissions.js';
 import {hasHooks, runHooks} from '../hooks.js';
+import {ipcPath, isWindows} from '../util/platform.js';
 import {ShellManager} from './shells.js';
 import type {DiffLine} from './diff.js';
 import {skillDirs} from '../skills/index.js';
@@ -87,13 +88,19 @@ export class ToolHost extends EventEmitter {
     this.extra.push(...defs.filter((d) => !this.extra.some((e) => e.name === d.name)));
   }
 
+  /** Tool sources that change at runtime (MCP servers connecting, adding or dropping tools). */
+  private dynamic: (() => ToolDef[])[] = [];
+  addSource(fn: () => ToolDef[]): void {
+    this.dynamic.push(fn);
+  }
+
   get tools(): ToolDef[] {
-    return [...TOOLS, ...this.extra];
+    return [...TOOLS, ...this.extra, ...this.dynamic.flatMap((f) => f())];
   }
 
   private find(name: string): ToolDef | undefined {
     const n = name.replace(/^mcp__rein__/, '');
-    return toolByName(n) ?? this.extra.find((t) => t.name === n);
+    return toolByName(n) ?? this.extra.find((t) => t.name === n) ?? this.dynamic.flatMap((f) => f()).find((t) => t.name === n);
   }
 
   /** Definitions as the model sees them right now (dynamic descriptions resolved). */
@@ -227,9 +234,9 @@ export class ToolHost extends EventEmitter {
   /** How a suggested rule names a path: project-relative inside the project, else ~/… or absolute. */
   private ruleRel(abs: string): string {
     const rel = path.relative(realpathSync(this.opts.root), abs);
-    if (rel && !rel.startsWith('..') && !path.isAbsolute(rel)) return rel;
+    if (rel && !rel.startsWith('..') && !path.isAbsolute(rel)) return toPosix(rel);
     const home = os.homedir();
-    return abs.startsWith(home + path.sep) ? `~${abs.slice(home.length)}` : abs;
+    return toPosix(abs.startsWith(home + path.sep) ? `~${abs.slice(home.length)}` : abs);
   }
 
   /** Add working directories for this session (must exist); returns the ones added. */
@@ -350,9 +357,10 @@ export class ToolHost extends EventEmitter {
   }
 
   private async serve(call: (name: string, args: unknown) => Promise<ToolResult>): Promise<string> {
-    // Socket paths are limited to ~104 bytes on macOS: keep it short, in the per-user tmpdir.
-    const sock = path.join(os.tmpdir(), `rein-${process.pid}-${Math.random().toString(36).slice(2, 8)}.sock`);
-    if (existsSync(sock)) rmSync(sock);
+    // A unix socket (paths are limited to ~104 bytes on macOS: short, in the per-user tmpdir), or a
+    // named pipe on Windows.
+    const sock = ipcPath(`rein-${process.pid}-${Math.random().toString(36).slice(2, 8)}`);
+    if (!isWindows && existsSync(sock)) rmSync(sock);
     const server = net.createServer((conn) => {
       let buf = '';
       conn.on('data', (d) => {
@@ -391,7 +399,7 @@ export class ToolHost extends EventEmitter {
   close(): void {
     this.shells.killAll();
     for (const s of this.servers) s.close();
-    for (const sock of this.sockets) if (existsSync(sock)) rmSync(sock, {force: true});
+    if (!isWindows) for (const sock of this.sockets) if (existsSync(sock)) rmSync(sock, {force: true});
     this.servers = [];
     this.sockets = [];
     this.mainSocket = this.readOnlySocket = undefined;

@@ -1,4 +1,5 @@
-import {spawn, type ChildProcessWithoutNullStreams} from 'node:child_process';
+import {spawn} from '../../util/platform.js';
+import type {ChildProcessWithoutNullStreams} from 'node:child_process';
 import {mkdir} from 'node:fs/promises';
 import readline from 'node:readline';
 import {accountEnv} from '../env.js';

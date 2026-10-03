@@ -8,6 +8,19 @@ const SERVICE = 'rein-jev-api-key';
 const ACCOUNT = 'rein';
 const fallbackFile = () => path.join(reinHome(), 'secrets', 'jev.key');
 const useKeychain = () => process.platform === 'darwin' && !process.env.REIN_HOME;
+/** Windows: the key file is encrypted with DPAPI (only this Windows user can decrypt it). */
+const useDpapi = () => process.platform === 'win32' && !process.env.REIN_HOME;
+const dpapiFile = () => path.join(reinHome(), 'secrets', 'jev.key.dpapi');
+
+/** Run a DPAPI step in PowerShell; the secret travels via an env var, never the command line. */
+async function dpapi(op: 'protect' | 'unprotect', value: string): Promise<string | undefined> {
+  const script =
+    op === 'protect'
+      ? "Add-Type -AssemblyName System.Security; [Convert]::ToBase64String([Security.Cryptography.ProtectedData]::Protect([Text.Encoding]::UTF8.GetBytes($env:REIN_SECRET), $null, 'CurrentUser'))"
+      : "Add-Type -AssemblyName System.Security; [Text.Encoding]::UTF8.GetString([Security.Cryptography.ProtectedData]::Unprotect([Convert]::FromBase64String($env:REIN_SECRET), $null, 'CurrentUser'))";
+  const res = await run('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', script], {timeoutMs: 15_000, env: {...process.env, REIN_SECRET: value}}).catch(() => undefined);
+  return res?.code === 0 ? res.stdout.trim() || undefined : undefined;
+}
 
 let cached: string | null | undefined;
 
@@ -19,6 +32,10 @@ export async function getJevKey(): Promise<string | undefined> {
   if (useKeychain()) {
     const res = await run('security', ['find-generic-password', '-s', SERVICE, '-a', ACCOUNT, '-w'], {timeoutMs: 10_000}).catch(() => undefined);
     if (res?.code === 0) key = res.stdout.trim() || undefined;
+  }
+  if (!key && useDpapi()) {
+    const blob = (await readFile(dpapiFile(), 'utf8').catch(() => '')).trim();
+    if (blob) key = await dpapi('unprotect', blob);
   }
   if (!key) key = (await readFile(fallbackFile(), 'utf8').catch(() => '')).trim() || undefined;
   cached = key ?? null;
@@ -35,6 +52,14 @@ export async function setJevKey(key: string): Promise<'keychain' | 'file'> {
       return 'keychain';
     }
   }
+  if (useDpapi()) {
+    const blob = await dpapi('protect', key);
+    if (blob) {
+      await writeFileSecure(dpapiFile(), blob + '\n');
+      await rm(fallbackFile(), {force: true});
+      return 'keychain';
+    }
+  }
   await writeFileSecure(fallbackFile(), key + '\n');
   return 'file';
 }
@@ -43,4 +68,5 @@ export async function deleteJevKey(): Promise<void> {
   cached = null;
   if (useKeychain()) await run('security', ['delete-generic-password', '-s', SERVICE, '-a', ACCOUNT], {timeoutMs: 10_000}).catch(() => {});
   await rm(fallbackFile(), {force: true});
+  await rm(dpapiFile(), {force: true});
 }

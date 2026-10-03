@@ -45,10 +45,11 @@ export type EngineDeps = {
 /** Context carried into a fresh native session before compaction kicks in. */
 const CARRY_BUDGET_TOKENS = 24_000;
 /**
- * How long a provider keeps a conversation's prompt cache after a request. Claude: Rein's sessions
- * get the 1-hour cache (`ephemeral_1h` cache writes, verified). Codex: measured — see PLAN.md §22.
+ * How long a provider keeps a conversation's prompt cache after a request — measured through
+ * Rein's own sessions (PLAN.md §22): Claude writes `ephemeral_1h` and served 99% from cache after
+ * 58 min, 0% after 65; Codex still served 94% after 61 min. One hour for both.
  */
-const CACHE_WARM_MS: Record<string, number> = {claude: 60 * 60_000, codex: 5 * 60_000};
+const CACHE_WARM_MS: Record<string, number> = {claude: 60 * 60_000, codex: 60 * 60_000};
 /** A cold switch needs the other account to be at least this much better (no flip-flopping). */
 const BALANCE_MARGIN = 15;
 const MAX_ATTEMPTS = 5;

@@ -1,6 +1,7 @@
 import {spawn} from 'node:child_process';
 import {readFileSync} from 'node:fs';
 import {settingsFiles} from './tools/permissions.js';
+import {isWindows, shellFor} from './util/platform.js';
 
 /**
  * Hooks, in Claude Code's format and semantics, so existing `.claude/settings.json` hooks work:
@@ -76,8 +77,10 @@ function matches(matcher: string | undefined, tool: string | undefined): boolean
 
 function runCommand(cmd: HookCommand, input: object, root: string): Promise<{code: number | null; stdout: string; stderr: string; timedOut: boolean}> {
   return new Promise((resolve) => {
-    const shell = process.platform === 'win32' ? {file: process.env.ComSpec ?? 'cmd.exe', args: ['/d', '/s', '/c', cmd.command]} : {file: '/bin/sh', args: ['-c', cmd.command]};
-    const child = spawn(shell.file, shell.args, {cwd: root, env: {...process.env, REIN_PROJECT_DIR: root, CLAUDE_PROJECT_DIR: root}, stdio: ['pipe', 'pipe', 'pipe']});
+    // Hooks are usually bash: Git Bash on Windows when installed (as in Claude Code), else PowerShell.
+    const shell = isWindows ? shellFor(cmd.command) : {file: '/bin/sh', args: ['-c', cmd.command]};
+    const child = spawn(shell.file, shell.args, {
+      windowsHide: true,cwd: root, env: {...process.env, REIN_PROJECT_DIR: root, CLAUDE_PROJECT_DIR: root}, stdio: ['pipe', 'pipe', 'pipe']});
     let stdout = '';
     let stderr = '';
     let timedOut = false;

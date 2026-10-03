@@ -22,7 +22,7 @@ export function primeFiles(root: string): Promise<void> {
     let files: string[] = [];
     if (rg) {
       const res = await run(rg, ['--files', '--color', 'never', root], {timeoutMs: 15_000}).catch(() => undefined);
-      files = (res?.stdout ?? '').split('\n').filter(Boolean).slice(0, MAX_FILES).map((f) => path.relative(root, f));
+      files = (res?.stdout ?? '').split(/\r?\n/).filter(Boolean).slice(0, MAX_FILES).map((f) => path.relative(root, f));
     }
     const dirs = [...new Set(files.flatMap((f) => {
       const parts = f.split(/[\\/]/).slice(0, -1);

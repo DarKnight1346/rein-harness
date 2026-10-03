@@ -43,9 +43,11 @@
     "prepublishOnly": "npm run build && npm test"
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.32.0",
     "@vscode/ripgrep": "^1.18.0",
     "chalk": "^6.0.1",
     "cli-truncate": "^6.1.1",
+    "cross-spawn": "^7.0.6",
     "diff": "^9.0.0",
     "highlight.js": "^11.12.0",
     "ink": "^7.1.1",
@@ -59,6 +61,7 @@
     "wrap-ansi": "^10.0.2"
   },
   "devDependencies": {
+    "@types/cross-spawn": "^6.0.6",
     "@types/node": "^26.6.4",
     "@types/react": "^19.3.0",
     "@types/turndown": "^5.0.6",

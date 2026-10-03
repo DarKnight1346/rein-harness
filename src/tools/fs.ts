@@ -1,4 +1,4 @@
-import {constants, createReadStream, createWriteStream, existsSync, realpathSync} from 'node:fs';
+import {constants, createReadStream, createWriteStream, existsSync, lstatSync, realpathSync} from 'node:fs';
 import {randomBytes} from 'node:crypto';
 import readline from 'node:readline';
 import {createdDiff, fileDiff, regionDiff, type DiffLine} from './diff.js';
@@ -75,7 +75,10 @@ export function resolveInRoot(ctx: ToolContext, p: string): string {
   return real;
 }
 
-export const rel = (ctx: ToolContext, abs: string) => path.relative(realpathSync(ctx.root), abs) || '.';
+/** Paths shown to models and users use `/` on every platform (Windows paths included). */
+export const toPosix = (p: string) => (path.sep === '\\' ? p.replace(/\\/g, '/') : p);
+
+export const rel = (ctx: ToolContext, abs: string) => toPosix(path.relative(realpathSync(ctx.root), abs)) || '.';
 
 /**
  * Streams the file and stops as soon as the requested lines are collected, so reading the top of a
@@ -127,7 +130,7 @@ async function looksBinary(file: string): Promise<boolean> {
     const {bytesRead} = await fh.read(buf, 0, buf.length, 0);
     return buf.subarray(0, bytesRead).includes(0);
   } finally {
-    await fh.close();
+    await fh.close().catch(() => {}); // may already be closed (streaming edit)
   }
 }
 
@@ -137,6 +140,14 @@ async function looksBinary(file: string): Promise<boolean> {
  * the open fails instead of writing outside the project. All later reads/writes use the handle.
  */
 export async function openConfined(file: string, display: string, flags: number): Promise<FileHandle> {
+  // Windows has no O_NOFOLLOW: refuse a symlink explicitly instead (a tiny window remains there).
+  if (!constants.O_NOFOLLOW) {
+    try {
+      if (lstatSync(file).isSymbolicLink()) throw new ToolError(`${display} became a symlink after it was checked; refusing to follow it`);
+    } catch (err) {
+      if (err instanceof ToolError) throw err;
+    }
+  }
   try {
     return await open(file, flags | constants.O_NOFOLLOW, 0o666);
   } catch (err) {
@@ -175,7 +186,7 @@ export async function writeTool(ctx: ToolContext, args: {path: string; content: 
     if (existed && st.size <= 1024 * 1024) before = await fh.readFile('utf8');
     await overwrite(fh, args.content);
   } finally {
-    await fh.close();
+    await fh.close().catch(() => {}); // may already be closed (streaming edit)
   }
   const diff = !existed ? createdDiff(args.content) : before !== undefined ? fileDiff(before, args.content) : undefined;
   const n = args.content ? args.content.split('\n').length - (args.content.endsWith('\n') ? 1 : 0) : 0;
@@ -210,7 +221,7 @@ export async function editTool(ctx: ToolContext, args: {path: string; old_string
     next = args.replace_all ? text.split(args.old_string).join(args.new_string) : text.replace(args.old_string, () => args.new_string);
     await overwrite(fh, next);
   } finally {
-    await fh.close();
+    await fh.close().catch(() => {}); // may already be closed (streaming edit)
   }
   const line = text.slice(0, text.indexOf(args.old_string)).split('\n').length;
   const diff = fileDiff(text, next) ?? regionDiff(line, args.old_string, args.new_string);
@@ -259,6 +270,8 @@ async function streamingEdit(ctx: ToolContext, file: string, fh: FileHandle, arg
   try {
     await scan((s) => void out.write(s));
     await new Promise<void>((resolve, reject) => out.end((err?: Error | null) => (err ? reject(err) : resolve())));
+    // Windows can't replace a file that's still open: release the original first.
+    await fh.close().catch(() => {});
     await rename(tmp, file);
   } catch (err) {
     await rm(tmp, {force: true});
@@ -361,7 +374,16 @@ export async function searchTool(ctx: ToolContext, args: SearchArgs): Promise<To
       ? await run(rg, ['--files', '--color', 'never', ...flags, base], {timeoutMs: 30_000})
       : await run(rg, ['-n', '--no-heading', '--color', 'never', '-M', '400', '--max-count', String(MAX_SEARCH_LINES), ...flags, '-e', args.pattern, '--', base], {timeoutMs: 30_000});
     if (res.code !== 0 && res.code !== 1) throw new ToolError(`search failed: ${res.stderr.trim().slice(0, 300)}`);
-    lines = res.stdout.split('\n').filter(Boolean).map((l) => (l.startsWith(root + path.sep) ? l.slice(root.length + 1) : l));
+    lines = res.stdout
+      .split(/\r?\n/)
+      .filter(Boolean)
+      .map((l) => (l.startsWith(root + path.sep) ? l.slice(root.length + 1) : l))
+      // Only the path part becomes /-separated: matched code may contain backslashes.
+      .map((l) => {
+        if (args.files_only) return toPosix(l);
+        const m = /^(.*?):(\d+):/.exec(l);
+        return m ? toPosix(m[1]!) + l.slice(m[1]!.length) : l;
+      });
     if (args.files_only) lines = lines.filter((f) => re.test(f));
   } else {
     lines = await jsSearch(root, base, re, args);
@@ -378,7 +400,7 @@ async function jsSearch(root: string, base: string, re: RegExp, args: SearchArgs
     for (const e of await readdir(dir, {withFileTypes: true}).catch(() => [])) {
       if (out.length > MAX_SEARCH_LINES * 5) return;
       const full = path.join(dir, e.name);
-      const relPath = path.relative(root, full);
+      const relPath = toPosix(path.relative(root, full));
       if (e.isDirectory()) {
         if (!SKIP_DIRS.has(e.name)) await walk(full);
         continue;
@@ -394,7 +416,7 @@ async function jsSearch(root: string, base: string, re: RegExp, args: SearchArgs
   };
   const st = await stat(base);
   if (st.isDirectory()) await walk(base);
-  else await grepFile(base, path.relative(root, base), re, out);
+  else await grepFile(base, toPosix(path.relative(root, base)), re, out);
   return out;
 }
 
