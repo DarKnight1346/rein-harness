@@ -36,6 +36,8 @@ export type EngineDeps = {
   tools?: {binding: ToolBinding; forkBinding?: ToolBinding; onActivity(fn: (a: ToolActivity) => void): () => void};
   /** Picks which tool results a new session needs when the conversation moves (compaction model). */
   selectCarry?: CarrySelector;
+  /** Another conversation is now active (/clear, /resume): drop per-conversation state elsewhere. */
+  onConversationChange?: () => void;
   /** UserPromptSubmit / SessionStart hooks: block the message, or add context to it. */
   beforePrompt?: (text: string) => Promise<{block?: string; context?: string}>;
   /** Auto effort: the decision model picks a level for this message from `levels`. */
@@ -412,6 +414,7 @@ export class Engine {
 
   /** A different conversation: no account history or warm cache carries over. */
   private forgetAccounts(): void {
+    this.deps.onConversationChange?.();
     this.lastUsed.clear();
     this.lastAccountId = undefined;
     this.cacheBroken = false;

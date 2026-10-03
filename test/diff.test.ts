@@ -30,6 +30,7 @@ describe('diffs', () => {
     await writeFile(path.join(root, 'f.ts'), 'const a = 1;\nconst b = 2;\n');
     const host = new ToolHost({root, mode: () => 'bypass', approve: async () => 'once'});
     const acts: ToolActivity[] = [];
+    await host.call('read', {path: 'f.ts'}); // edits need a prior read (stale-file protection)
     host.on('activity', (a) => acts.push(a));
     const res = await host.call('edit', {path: 'f.ts', old_string: 'const b = 2;', new_string: 'const b = 3;'});
     expect(res).toEqual({ok: true, text: 'Edited f.ts: 1 replacement at line 2'});

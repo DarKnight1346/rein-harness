@@ -18,6 +18,8 @@ export type ToolContext = {
   extraRoots?: string[];
   /** This session's scratchpad (also one of extraRoots). */
   scratch?: string;
+  /** Files read in this conversation and their state then (stale-file protection); undefined = off. */
+  reads?: Map<string, FileStamp>;
   /** Paths outside the working directories the user approved for this one call. */
   outsideAllowed?: string[];
   shells?: import('./shells.js').ShellManager;
@@ -75,6 +77,22 @@ export function resolveInRoot(ctx: ToolContext, p: string): string {
   return real;
 }
 
+/** What a file looked like when the agent last read or wrote it. */
+export type FileStamp = {mtimeMs: number; size: number};
+const stampOf = (st: {mtimeMs: number; size: number}): FileStamp => ({mtimeMs: st.mtimeMs, size: st.size});
+
+/**
+ * Stale-file protection (like Claude Code's read-before-edit): changing an existing file requires
+ * that it was read in this conversation and hasn't changed since — otherwise the agent would edit
+ * from contents it never saw, or overwrite someone else's newer changes. The scratchpad is exempt.
+ */
+function checkFresh(ctx: ToolContext, file: string, display: string, st: {mtimeMs: number; size: number}): void {
+  if (!ctx.reads || (ctx.scratch && (file === ctx.scratch || file.startsWith(ctx.scratch + path.sep)))) return;
+  const seen = ctx.reads.get(file);
+  if (!seen) throw new ToolError(`read ${display} before changing it (it exists and you haven't read it in this conversation)`);
+  if (seen.mtimeMs !== st.mtimeMs || seen.size !== st.size) throw new ToolError(`${display} changed since you last read it (edited outside this conversation, or by a command) — read it again, then redo the change`);
+}
+
 /** Paths shown to models and users use `/` on every platform (Windows paths included). */
 export const toPosix = (p: string) => (path.sep === '\\' ? p.replace(/\\/g, '/') : p);
 
@@ -94,6 +112,7 @@ export async function readTool(ctx: ToolContext, args: {path: string; offset?: n
     const list = entries.map((e) => (e.isDirectory() ? `${e.name}/` : e.name)).sort();
     return {ok: true, text: `${rel(ctx, file)}/ is a directory:\n${list.join('\n') || '(empty)'}`};
   }
+  ctx.reads?.set(file, stampOf(st));
   if (isImage(file)) return readImage(file, rel(ctx, file));
   if (isPdf(file)) return readPdf(file, rel(ctx, file), args.pages);
   if (await looksBinary(file)) return {ok: true, text: `${rel(ctx, file)} is a binary file (${st.size} bytes)`};
@@ -183,8 +202,10 @@ export async function writeTool(ctx: ToolContext, args: {path: string; content: 
   try {
     const st = await fh.stat();
     if (st.isDirectory()) throw new ToolError(`${args.path} is a directory`);
+    if (existed) checkFresh(ctx, file, args.path, st);
     if (existed && st.size <= 1024 * 1024) before = await fh.readFile('utf8');
     await overwrite(fh, args.content);
+    ctx.reads?.set(file, stampOf(await fh.stat())); // the agent knows what it just wrote
   } finally {
     await fh.close().catch(() => {}); // may already be closed (streaming edit)
   }
@@ -214,12 +235,14 @@ export async function editTool(ctx: ToolContext, args: {path: string; old_string
   try {
     const st = await fh.stat();
     if (st.isDirectory()) throw new ToolError(`${args.path} does not exist`);
+    checkFresh(ctx, file, args.path, st);
     if (st.size > STREAM_EDIT_BYTES) return await streamingEdit(ctx, file, fh, args);
     text = await fh.readFile('utf8');
     count = text.split(args.old_string).length - 1;
     checkCount(ctx, file, count, args.replace_all);
     next = args.replace_all ? text.split(args.old_string).join(args.new_string) : text.replace(args.old_string, () => args.new_string);
     await overwrite(fh, next);
+    ctx.reads?.set(file, stampOf(await fh.stat()));
   } finally {
     await fh.close().catch(() => {}); // may already be closed (streaming edit)
   }
@@ -273,6 +296,7 @@ async function streamingEdit(ctx: ToolContext, file: string, fh: FileHandle, arg
     // Windows can't replace a file that's still open: release the original first.
     await fh.close().catch(() => {});
     await rename(tmp, file);
+    ctx.reads?.set(file, stampOf(await stat(file)));
   } catch (err) {
     await rm(tmp, {force: true});
     throw err;

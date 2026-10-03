@@ -345,6 +345,7 @@ Drop superseded reads of the same file, routine listings, and output that no lon
         selectCarry: (input) => this.selectCarry(input),
         pickEffort: (text, levels) => this.pickEffort(text, levels),
         beforePrompt: (text) => this.beforePrompt(text),
+        onConversationChange: () => this.tools.reads.clear(),
         tools: {
           binding: {
             // Resolved when a session opens: the agent tool lists the models signed in right now.

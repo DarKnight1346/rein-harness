@@ -4,7 +4,7 @@ import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {resolveInRoot, resolvePath, toPosix, ToolError, workingDirs, type Origin, type ToolContext, type ToolResult} from './fs.js';
+import {resolveInRoot, resolvePath, toPosix, ToolError, workingDirs, type FileStamp, type Origin, type ToolContext, type ToolResult} from './fs.js';
 import {TOOLS, toolByName, type ToolDef} from './registry.js';
 import {addProjectRule, check, loadRules, ruleTool, suggestRule, type Rules, type Subject} from './permissions.js';
 import {hasHooks, runHooks} from '../hooks.js';
@@ -69,6 +69,8 @@ export class ToolHost extends EventEmitter {
   private outsideReadsAllowed = false;
   /** Working directories added this session (/add-dir, --add-dir, "allow this folder"). */
   private addedDirs: string[] = [];
+  /** Files read in this conversation (stale-file protection); cleared when the conversation changes. */
+  readonly reads = new Map<string, FileStamp>();
   /** Processes started by the shell tool (foreground + background). */
   readonly shells = new ShellManager();
   private nextId = 1;
@@ -289,6 +291,7 @@ export class ToolHost extends EventEmitter {
     return {
       root: this.opts.root,
       scratch,
+      reads: this.reads,
       extraRoots: [...(scratch ? [scratch] : []), globalSkills, ...config, ...this.addedDirs],
       shells: this.shells,
       shellMaxMs: this.opts.shellMaxMs?.(),
