@@ -1,4 +1,4 @@
-import React, {useRef, useState, type ReactNode} from 'react';
+import React, {useEffect, useRef, useState, type ReactNode} from 'react';
 import {Box, Text, useBoxMetrics, useInput, useWindowSize} from 'ink';
 import {Clickable, useClickable} from '../terminal/clicks.js';
 import {redact} from '../privacy.js';
@@ -9,12 +9,19 @@ export const WINDOW_BG = '#262626';
 
 /**
  * A centered window drawn over the whole screen (absolute position, own background), so the
- * conversation keeps streaming underneath. Height comes from its content, capped to the screen.
+ * conversation keeps streaming underneath. Its size is stable: with `height` (tabbed windows) it is
+ * fixed; otherwise it fits the content but never shrinks while open (no jumping as content changes).
  */
-export function Window({title, width, children, onClose, footer, dismissable = true, color = 'cyan'}: {title: string; width?: number; children: ReactNode; onClose(): void; footer?: string; dismissable?: boolean; color?: string}) {
+export function Window({title, width, height: fixed, children, onClose, footer, dismissable = true, color = 'cyan'}: {title: string; width?: number; height?: number; children: ReactNode; onClose(): void; footer?: string; dismissable?: boolean; color?: string}) {
   const {columns, rows} = useWindowSize();
   const ref = useRef(null);
   const {height, hasMeasured} = useBoxMetrics(ref);
+  const [tallest, setTallest] = useState(0);
+  useEffect(() => {
+    if (hasMeasured && !fixed && height > tallest) setTallest(height);
+  }, [height, hasMeasured, fixed, tallest]);
+  const boxHeight = fixed ? Math.min(fixed, rows - 2) : undefined;
+  const minHeight = !fixed && tallest ? Math.min(tallest, rows - 2) : undefined;
   // Modal for the mouse: clicks outside close the window, nothing underneath is clickable.
   // Non-dismissable windows (approvals) ignore outside clicks: a stray click must not decide.
   useClickable(ref, {modal: true, onOutside: dismissable ? onClose : () => {}});
@@ -23,7 +30,7 @@ export function Window({title, width, children, onClose, footer, dismissable = t
   // Centered once measured; the first frame sits at the top (never past the screen edge, which would overflow the frame).
   const top = hasMeasured ? Math.max(1, Math.floor((rows - height) / 2)) : 1;
   return (
-    <Box ref={ref} position="absolute" top={top} left={left} width={w} flexDirection="column" borderStyle="round" borderColor={color} backgroundColor={WINDOW_BG} paddingX={1}>
+    <Box ref={ref} position="absolute" top={top} left={left} width={w} {...(boxHeight ? {height: boxHeight, overflow: 'hidden' as const} : {})} {...(minHeight ? {minHeight} : {})} flexDirection="column" borderStyle="round" borderColor={color} backgroundColor={WINDOW_BG} paddingX={1}>
       <Box>
         <Text bold color={color}>
           {title}
@@ -35,7 +42,9 @@ export function Window({title, width, children, onClose, footer, dismissable = t
           </Clickable>
         ) : null}
       </Box>
-      {children}
+      <Box flexDirection="column" flexGrow={1}>
+        {children}
+      </Box>
       {footer ? <Text dimColor>{footer}</Text> : null}
     </Box>
   );

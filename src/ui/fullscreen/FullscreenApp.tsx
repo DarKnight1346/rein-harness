@@ -48,6 +48,8 @@ import cliTruncate from 'cli-truncate';
 const SIDEBAR_WIDTH = 32;
 const SIDEBAR_MIN_COLS = 96;
 const MAX_INPUT_LINES = 6;
+/** Windows with tabs keep one size whichever tab is showing (capped to the terminal). */
+const TABBED_HEIGHT = 30;
 
 /** Latest transcript entries, printed to the normal screen when fullscreen exits. */
 export const lastEntries: {current: Entry[]} = {current: []};
@@ -173,7 +175,7 @@ export function FullscreenApp({resume}: {resume: Resume}) {
         );
       case 'model':
         return (
-          <Window title="Models" width={windowWidth} onClose={r.closeOverlay}>
+          <Window title="Models" width={windowWidth} height={TABBED_HEIGHT} onClose={r.closeOverlay}>
             <ModelScreen bare onLog={r.log} onClose={r.closeOverlay} />
           </Window>
         );
@@ -268,7 +270,7 @@ export function FullscreenApp({resume}: {resume: Resume}) {
         return <ShellsWindow width={windowWidth} agent={viewing} onOpen={(id) => r.setOverlay({name: 'shell', id})} onClose={r.closeOverlay} />;
       case 'configure':
         return (
-          <Window title="Configure" width={windowWidth} onClose={r.closeOverlay}>
+          <Window title="Configure" width={windowWidth} height={TABBED_HEIGHT} onClose={r.closeOverlay}>
             <ConfigureScreen bare onClose={r.closeOverlay} onChange={r.bump} />
           </Window>
         );
