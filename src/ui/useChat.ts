@@ -1,4 +1,5 @@
 import {useCallback, useEffect, useRef, useState} from 'react';
+import {planPreview} from './planPreview.js';
 import {useStdout} from 'ink';
 import type {Route} from '../session/engine.js';
 import type {CompactReason, CompactResult} from '../session/compactor.js';
@@ -10,7 +11,7 @@ import type {Phase} from './Working.js';
 
 export type ChatEntry =
   | {id: number; kind: 'assistant'; text: string; first: boolean}
-  | {id: number; kind: 'tool'; label: string; summary: string; ok: boolean; result: string; approvedBy?: string; judge?: string; diff?: DiffLine[]}
+  | {id: number; kind: 'tool'; label: string; summary: string; ok: boolean; result: string; approvedBy?: string; judge?: string; diff?: DiffLine[]; plan?: string}
   | {id: number; kind: 'compact'; reason: CompactReason; result: Extract<CompactResult, {summarized: number}>}
   | {id: number; kind: 'route'; route: Route; account: Account; effort?: string; interrupted: boolean};
 
@@ -115,7 +116,8 @@ export function useChat(commit: (e: NewEntry<ChatEntry>) => void, notice: (kind:
             } else {
               setToolLabel(undefined);
               setPhase('thinking');
-              commit({kind: 'tool', label: a.label, summary: a.summary, ok: a.ok, result: a.result, approvedBy: a.approvedBy, judge: a.judge, diff: a.diff});
+              const plan = planPreview(a.label, a.summary, a.ok, a.result); // plans show rendered, not as a diff
+              commit({kind: 'tool', label: a.label, summary: a.summary, ok: a.ok, result: a.result, approvedBy: a.approvedBy, judge: a.judge, diff: a.diff, ...(plan ? {plan} : {})});
             }
           } else if (ev.type === 'text') {
             pending.current += ev.delta;

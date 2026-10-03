@@ -18,6 +18,7 @@ import {RewindScreen} from '../RewindScreen.js';
 import {McpScreen} from '../McpScreen.js';
 import {PlanScreen} from '../PlanScreen.js';
 import {AskScreen} from '../AskScreen.js';
+import {renderMarkdown} from '../markdown.js';
 import {progress} from '../../plans/store.js';
 import {PlansScreen} from '../PlansScreen.js';
 import {todoLine} from '../../tools/todo.js';
@@ -198,7 +199,7 @@ export function FullscreenApp({resume}: {resume: Resume}) {
                 ? [chalk.red(overlay.error)]
                 : overlay.answer
                   ? [
-                      ...overlay.answer.trim().split('\n').flatMap((p) => wrap(p, windowText)),
+                      ...renderMarkdown(overlay.answer.trim(), windowText),
                       '',
                       chalk.dim(
                         `${overlay.model ?? 'model'} · ${overlay.mode === 'fork' ? 'forked agent' : 'from the conversation'}${overlay.done ? '' : ' · answering…'} · not added to the conversation`,

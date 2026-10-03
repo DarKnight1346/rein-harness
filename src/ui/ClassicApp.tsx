@@ -20,6 +20,7 @@ import {ContextView} from './ContextView.js';
 import type {Entry} from './entries.js';
 import {useRein} from './useRein.js';
 import {diffLines} from './fullscreen/lines.js';
+import {planPreviewLines} from './planPreview.js';
 import {renderMarkdown} from './markdown.js';
 import {redact} from './privacy.js';
 import {runtime, type Resume} from '../runtime.js';
@@ -184,7 +185,11 @@ function EntryView({entry: raw}: {entry: Entry}) {
             {'  ⎿ '}
             {toolResultSummary(entry.label, entry.result)}
           </Text>
-          {entry.diff?.length ? <Text>{diffLines(entry.diff, (process.stdout.columns ?? 100) - 2, entry.summary).join('\n')}</Text> : null}
+          {entry.plan ? (
+            <Text>{planPreviewLines(entry.plan, (process.stdout.columns ?? 100) - 2).join('\n')}</Text>
+          ) : entry.diff?.length ? (
+            <Text>{diffLines(entry.diff, (process.stdout.columns ?? 100) - 2, entry.summary).join('\n')}</Text>
+          ) : null}
         </Box>
       );
     case 'route':
