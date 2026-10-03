@@ -17,6 +17,7 @@ import {GoalManager} from './goals/manager.js';
 import {Checkpoints} from './session/checkpoints.js';
 import {McpManager} from './mcp/manager.js';
 import {mcpTools} from './mcp/tools.js';
+import {skillTool} from './skills/tool.js';
 import {startUsageRefresh} from './accounts/usage.js';
 import {hasHooks, runHooks} from './hooks.js';
 import {goalDoneTool} from './goals/tool.js';
@@ -299,6 +300,7 @@ Drop superseded reads of the same file, routine listings, and output that no lon
       advisorTool({config: () => this.config, engine: () => this.engine, agents: this.agents}),
       goalDoneTool(this.goals),
       ...webTools(() => this.config),
+      skillTool(() => process.cwd()),
       ...mcpTools({mcp: this.mcp, root: () => process.cwd(), call: (name, args, origin) => this.tools.call(name, args, origin)}),
       todoTool({
         transcript: () => this.engine?.transcript,
