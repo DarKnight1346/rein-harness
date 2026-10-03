@@ -3,6 +3,7 @@ import {randomBytes} from 'node:crypto';
 import readline from 'node:readline';
 import {createdDiff, fileDiff, regionDiff, type DiffLine} from './diff.js';
 import {mkdir, open, readdir, rename, rm, rmdir, stat, type FileHandle} from 'node:fs/promises';
+import os from 'node:os';
 import path from 'node:path';
 import {run} from '../util/proc.js';
 
@@ -10,8 +11,10 @@ import {run} from '../util/proc.js';
 export type ToolResult = {ok: boolean; text: string; diff?: DiffLine[]};
 export type ToolContext = {
   root: string;
-  /** Other directories tools may use (the session scratchpad). */
+  /** Other working directories (scratchpad, global skills, /add-dir and config additions). */
   extraRoots?: string[];
+  /** Paths outside the working directories the user approved for this one call. */
+  outsideAllowed?: string[];
   shells?: import('./shells.js').ShellManager;
   shellMaxMs?: number;
   /** Current conversation id (marks it in session search). */
@@ -34,15 +37,36 @@ export class ToolError extends Error {}
  * Resolve a model-supplied path inside the project root. Symlinks are resolved on the nearest
  * existing ancestor, so `link → /etc` can't be used to escape.
  */
-export function resolveInRoot(ctx: ToolContext, p: string): string {
+const within = (real: string, dir: string) => real === dir || real.startsWith(dir.endsWith(path.sep) ? dir : dir + path.sep);
+
+/** The project root plus every other working directory, symlinks resolved. */
+export function workingDirs(ctx: ToolContext): string[] {
+  return [realpathSync(ctx.root), ...(ctx.extraRoots ?? []).filter(existsSync).map((r) => realpathSync(r))];
+}
+
+/**
+ * Where a path really points (relative to the project root; absolute and `~/` work too), with
+ * symlinks resolved, and whether that's inside a working directory.
+ */
+export function resolvePath(ctx: ToolContext, p: string): {real: string; inside: boolean} {
   if (typeof p !== 'string' || !p.trim()) throw new ToolError('path is required');
-  const root = realpathSync(ctx.root);
-  const abs = path.resolve(root, p);
+  const expanded = p === '~' ? os.homedir() : p.startsWith('~/') ? path.join(os.homedir(), p.slice(2)) : p;
+  const abs = path.resolve(realpathSync(ctx.root), expanded);
   let existing = abs;
   while (!existsSync(existing)) existing = path.dirname(existing);
   const real = path.join(realpathSync(existing), path.relative(existing, abs));
-  const allowed = [root, ...(ctx.extraRoots ?? []).filter(existsSync).map((r) => realpathSync(r))];
-  if (!allowed.some((r) => real === r || real.startsWith(r + path.sep))) throw new ToolError(`${p} is outside the project (${root}) and the scratchpad`);
+  return {real, inside: workingDirs(ctx).some((d) => within(real, d))};
+}
+
+/**
+ * Resolve a tool's path. Outside the working directories it's refused unless the user approved
+ * that path for this call (the tool host asks before running the tool, like Claude Code does).
+ */
+export function resolveInRoot(ctx: ToolContext, p: string): string {
+  const {real, inside} = resolvePath(ctx, p);
+  if (!inside && !(ctx.outsideAllowed ?? []).some((a) => within(real, a))) {
+    throw new ToolError(`${p} is outside the project and its working directories, and wasn't approved`);
+  }
   return real;
 }
 

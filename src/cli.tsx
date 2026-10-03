@@ -19,6 +19,7 @@ if (args.includes('--help') || args.includes('-h')) {
   -c, --continue [id]   pick a saved conversation from this project to continue (or continue <id>)
   --classic        inline renderer (native scrollback, no mouse)
   --fullscreen     app-style renderer: top bar, sidebar, mouse clicks (default)
+  --add-dir <path> also let the agent use this folder without asking (repeatable)
   --update         update Rein (latest from npm) and the claude / codex CLIs, then exit
   -v, --version    print Rein's version`);
   process.exit(0);
@@ -48,6 +49,19 @@ if (!process.stdin.isTTY) {
 
 const cfg = await loadConfig();
 let renderer: Renderer = args.includes('--classic') ? 'classic' : args.includes('--fullscreen') ? 'fullscreen' : (cfg.tui ?? 'fullscreen');
+// --add-dir <path> (repeatable): extra working directories for this session, like Claude Code.
+{
+  const dirs = args.flatMap((a, i) => (a === '--add-dir' && args[i + 1] ? [args[i + 1]!] : []));
+  if (dirs.length) {
+    const {runtime} = await import('./runtime.js');
+    try {
+      runtime.tools.addDirs(dirs);
+    } catch (err) {
+      console.error(`rein: ${(err as Error).message}`);
+      process.exit(1);
+    }
+  }
+}
 const ci = args.findIndex((a) => a === '--continue' || a === '-c');
 let resume: Resume = ci < 0 ? false : args[ci + 1] && !args[ci + 1]!.startsWith('-') ? args[ci + 1]! : true;
 installTerminalRestore();

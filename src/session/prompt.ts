@@ -9,13 +9,20 @@ const BASE_PROMPT = `You are Rein, a coding assistant working in the user's proj
 
 const TOOLS_PROMPT = `# Tools
 You have tools for working in the project: list, read, write, edit, delete, search, and shell (with shell_logs / shell_kill for background processes), plus web_search and web_fetch for the web.
-- Paths are relative to the project root. You cannot access files outside it.
+- Paths are relative to the project root; absolute paths and ~/ work too.
+- Inside the project (and any extra working directories) the tools work directly. Paths anywhere else need the user's approval per call (they may allow more for the session); credentials and secrets always ask. If a path is denied, ask instead of retrying.
 - Read a file before editing it. Edit with exact, unique old_string values (no line-number prefixes); prefer edit over rewriting whole files.
 - Use list to see what's in a folder and search to find code, before guessing at paths.
 - shell runs commands in the project root (no stdin/TTY; use non-interactive flags). Use background: true for servers/watchers, then check shell_logs. Prefer read/search/edit over shell equivalents (cat, grep, sed).
 - write/edit/delete/shell may need the user's approval; if one is denied, ask how to proceed instead of retrying.`;
 
 const MAX_AGENTS_BYTES = 64 * 1024;
+
+/** Extra working directories (config / --add-dir), supplied by the runtime. */
+let extraDirs: () => string[] = () => [];
+export function setExtraWorkingDirs(fn: () => string[]): void {
+  extraDirs = fn;
+}
 
 /**
  * AGENTS.md files, most general first: ~/.rein/AGENTS.md, then from the git root (or the
@@ -52,7 +59,8 @@ export async function systemPrompt(opts: {tools?: boolean; scratch?: string} = {
   } catch {}
   const sections = [base];
   if (opts.tools) {
-    sections.push(TOOLS_PROMPT, `Project root: ${process.cwd()}`);
+    const extra = extraDirs();
+    sections.push(TOOLS_PROMPT, `Project root: ${process.cwd()}${extra.length ? `\nAlso working directories: ${extra.join(', ')}` : ''}`);
     if (opts.scratch) {
       sections.push(
         `Scratchpad: ${opts.scratch}\nA private folder for this session only. Put temporary files, notes, drafts and experiments here (absolute paths) instead of the project; changes there never need approval. It persists if the session is resumed.`,

@@ -1,16 +1,26 @@
 import {EventEmitter} from 'node:events';
-import {existsSync, mkdirSync, realpathSync, rmSync} from 'node:fs';
+import {existsSync, mkdirSync, realpathSync, rmSync, statSync} from 'node:fs';
 import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {resolveInRoot, ToolError, type Origin, type ToolContext, type ToolResult} from './fs.js';
+import {resolveInRoot, resolvePath, ToolError, workingDirs, type Origin, type ToolContext, type ToolResult} from './fs.js';
 import {TOOLS, toolByName, type ToolDef} from './registry.js';
 import {ShellManager} from './shells.js';
 import type {DiffLine} from './diff.js';
 import {skillDirs} from '../skills/index.js';
 
-export type ApprovalRequest = {tool: ToolDef; args: any; summary: string; preview: string; origin?: Origin};
+export type ApprovalRequest = {
+  tool: ToolDef;
+  args: any;
+  summary: string;
+  preview: string;
+  origin?: Origin;
+  /** Paths outside the working directories this call would touch (asks about access, not just the change). */
+  outside?: string[];
+  /** One of them is a credentials/secrets location: no "allow for the session" option. */
+  sensitive?: boolean;
+};
 export type ApprovalDecision = 'once' | 'session' | 'deny';
 export type ApprovalMode = 'ask' | 'auto' | 'bypass';
 /** How a file change got approved (shown in the transcript). */
@@ -34,6 +44,8 @@ export type ToolHostOptions = {
   shellMaxMs?: () => number;
   /** `auto` mode: the decision model's verdict; `ask` falls through to the user. */
   judge?: (req: ApprovalRequest) => Promise<{allow: boolean; note: string}>;
+  /** Extra working directories from config (`additionalDirectories`). */
+  configDirs?: () => string[];
 };
 
 const MAX_RESULT_CHARS = 60_000;
@@ -44,6 +56,10 @@ const MAX_RESULT_CHARS = 60_000;
  */
 export class ToolHost extends EventEmitter {
   private sessionAllowed = false;
+  /** "Allow reads outside the project this session" was chosen. */
+  private outsideReadsAllowed = false;
+  /** Working directories added this session (/add-dir, --add-dir, "allow this folder"). */
+  private addedDirs: string[] = [];
   /** Processes started by the shell tool (foreground + background). */
   readonly shells = new ShellManager();
   private nextId = 1;
@@ -91,7 +107,32 @@ export class ToolHost extends EventEmitter {
     let approvedBy: ApprovedBy | undefined;
     let judge: string | undefined;
     try {
-      const ctx = {...this.context(), origin};
+      const ctx: ToolContext = {...this.context(), origin};
+      // Paths outside the working directories: ask first, like Claude Code ("allow this read
+      // outside the working directories?"). Writes there always need an explicit yes.
+      const outside = this.outsidePaths(ctx, tool, args);
+      if (outside.length) {
+        const mode = this.opts.mode();
+        const sensitive = outside.some(isSensitivePath);
+        const req = {tool, args, summary, preview: preview(tool, args), origin, outside, sensitive};
+        if (mode === 'bypass' && !sensitive) approvedBy = 'bypass';
+        else if (!tool.mutating && this.outsideReadsAllowed && !sensitive) approvedBy = 'session';
+        else if (mode === 'auto' && !tool.mutating && !sensitive && this.opts.judge) {
+          const verdict = await this.opts.judge(req).catch((err) => ({allow: false, note: `judge failed: ${(err as Error).message}`}));
+          judge = verdict.note;
+          if (verdict.allow) approvedBy = 'auto';
+        }
+        if (!approvedBy) {
+          const decision = await this.opts.approve(req);
+          if (decision === 'deny') throw new ToolError(`the user denied access to ${outside.join(', ')} (outside the project); ask them how to proceed instead of retrying`);
+          if (decision === 'session' && !sensitive) {
+            if (tool.mutating) this.addDirs(outside.map((p) => (existsSync(p) && statSync(p).isDirectory() ? p : path.dirname(p))));
+            else this.outsideReadsAllowed = true;
+          }
+          approvedBy = decision === 'session' ? 'session' : 'user';
+        }
+        ctx.outsideAllowed = outside;
+      }
       if (tool.mutating && tool.name !== 'shell' && this.inScratch(ctx, args)) approvedBy = 'scratchpad';
       if (tool.mutating && !approvedBy) {
         const mode = this.opts.mode();
@@ -120,13 +161,60 @@ export class ToolHost extends EventEmitter {
     return {ok: result.ok, text: result.text}; // the diff is for the user, not the model
   }
 
+  /** Add working directories for this session (must exist); returns the ones added. */
+  addDirs(dirs: string[]): string[] {
+    const added: string[] = [];
+    for (const d of dirs) {
+      const expanded = d === '~' ? os.homedir() : d.startsWith('~/') ? path.join(os.homedir(), d.slice(2)) : d;
+      const abs = path.resolve(this.opts.root, expanded);
+      if (!existsSync(abs) || !statSync(abs).isDirectory()) throw new ToolError(`${d} is not a directory`);
+      const real = realpathSync(abs);
+      if (!this.addedDirs.includes(real)) {
+        this.addedDirs.push(real);
+        added.push(real);
+      }
+    }
+    return added;
+  }
+
+  /** Directories the user added (config additionalDirectories + /add-dir / --add-dir), resolved. */
+  extraWorkingDirs(): string[] {
+    const config = (this.opts.configDirs?.() ?? []).map((d) => (d.startsWith('~/') ? path.join(os.homedir(), d.slice(2)) : path.resolve(this.opts.root, d)));
+    return [...new Set([...config.filter(existsSync).map((d) => realpathSync(d)), ...this.addedDirs])];
+  }
+
+  /** Every working directory: project root, scratchpad, global skills, config and session additions. */
+  workingDirs(): string[] {
+    return workingDirs(this.context());
+  }
+
+  private outsidePaths(ctx: ToolContext, tool: ToolDef, args: any): string[] {
+    const out: string[] = [];
+    for (const p of tool.paths?.(args) ?? []) {
+      try {
+        const r = resolvePath(ctx, p);
+        if (!r.inside && !out.includes(r.real)) out.push(r.real);
+      } catch {
+        // Invalid path: the tool itself reports it.
+      }
+    }
+    return out;
+  }
+
   private context(): ToolContext {
     const scratch = this.opts.scratch?.();
     if (scratch) mkdirSync(scratch, {recursive: true});
     // Global skills live outside the project; /skill:create and /skill:edit need to reach them.
     const globalSkills = skillDirs(this.opts.root).global;
     mkdirSync(globalSkills, {recursive: true});
-    return {root: this.opts.root, extraRoots: [...(scratch ? [scratch] : []), globalSkills], shells: this.shells, shellMaxMs: this.opts.shellMaxMs?.(), sessionId: this.opts.sessionId?.()};
+    const config = (this.opts.configDirs?.() ?? []).map((d) => (d.startsWith('~/') ? path.join(os.homedir(), d.slice(2)) : d));
+    return {
+      root: this.opts.root,
+      extraRoots: [...(scratch ? [scratch] : []), globalSkills, ...config, ...this.addedDirs],
+      shells: this.shells,
+      shellMaxMs: this.opts.shellMaxMs?.(),
+      sessionId: this.opts.sessionId?.(),
+    };
   }
 
   /** File-tool target inside the scratchpad (not the project) → no approval needed. */
@@ -257,4 +345,13 @@ export function mcpProxyCommand(): {command: string; args: string[]} {
     return {command: tsx, args: [path.join(path.dirname(here), 'mcpProxy.ts')]};
   }
   return {command: process.execPath, args: [path.join(path.dirname(here), 'mcpProxy.js')]};
+}
+
+const HOME = os.homedir();
+/** Credentials and secrets: always asked about individually, even in bypass mode. */
+const SENSITIVE = ['.ssh', '.gnupg', '.aws', '.azure', '.kube', '.docker', '.config/gcloud', '.config/gh', '.netrc', '.npmrc', '.git-credentials', '.pypirc', 'Library/Keychains', '.claude', '.claude.json', '.codex', '.rein/accounts', '.rein/accounts.json'].map((p) => path.join(HOME, p));
+
+export function isSensitivePath(real: string): boolean {
+  if (SENSITIVE.some((p) => real === p || real.startsWith(p + path.sep))) return true;
+  return /(^|\/)\.env(\.[\w.-]+)?$/.test(real) || /\.(pem|key|p12|pfx|keychain)$/i.test(real);
 }

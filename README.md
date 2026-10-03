@@ -69,6 +69,7 @@ npm install && npm run build && npm link   # then: rein   (or: npm run dev)
 rein                     # start in the current folder (fullscreen UI)
 rein --continue [id]     # pick a saved conversation from this project to continue
 rein --classic           # inline renderer (native scrollback, no mouse)
+rein --add-dir ../shared # let the agent also use another folder without asking
 rein --update            # update Rein and the CLIs, then exit
 rein --version
 ```
@@ -90,6 +91,7 @@ In Terminal.app make sure View → Allow Mouse Reporting is on.
 | `/compact` | Summarize the conversation with the compaction model |
 | `/update` | Update Rein (npm), `claude` and `codex`, then check the Codex protocol |
 | `/context` | Context window usage grid |
+| `/add-dir` | Add a working directory for this session (no path: list them) |
 | `/configure` | Choose/reorder status-line segments and sidebar sections (alias `/config`) |
 | `/tui` | `/tui fullscreen` or `/tui classic` |
 | `/clear`, `/help`, `/exit` | |
@@ -98,8 +100,10 @@ State lives in `~/.rein/` (`REIN_HOME` overrides): `accounts.json`, `config.json
 `accounts/<provider>/<id>/` (per-account CLI homes), `state/usage.json`, `sessions/`.
 A custom system prompt can go in `~/.rein/system-prompt.md`.
 
-Agent tools: list · read · write · edit · delete · search · shell (foreground/background, `/shells`),
-limited to the current project. File changes and commands need approval: `/configure` → Approvals
+Agent tools: list · read · write · edit · delete · search · shell (foreground/background, `/shells`).
+They work freely inside the project and its working directories (`/add-dir <path>`, `rein --add-dir <path>`,
+or `additionalDirectories` in `~/.rein/config.json`); paths anywhere else ask first — reads can be allowed
+for the session, writes always need a yes, and credentials/secrets always ask, even in bypass mode. File changes and commands need approval: `/configure` → Approvals
 (ask / auto via the decision model / bypass). `/btw <question>` forks the agent to answer on the side.
 Ctrl+C stops the agent; press it twice to exit.
 Subagents: the agent can delegate with its `agent` tool (fork the conversation, or a new session on any

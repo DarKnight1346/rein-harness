@@ -347,6 +347,20 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
     const opensWindow = ['login', 'usage', 'context', 'help', 'update', 'configure', 'shells', 'btw', 'resume', 'agents', 'agent'].includes(parsed.name) || (parsed.name === 'model' && !parsed.args);
     if (!(windowed && opensWindow)) log('user', raw.trim());
     switch (parsed.name) {
+      case 'add-dir': {
+        const arg = parsed.args.trim();
+        if (!arg) {
+          log('info', `Working directories:\n${runtime.tools.workingDirs().map((d) => `  ${d}`).join('\n')}\nOther paths need approval. /add-dir <path> adds one for this session (or set additionalDirectories in ~/.rein/config.json).`);
+          break;
+        }
+        try {
+          const added = runtime.tools.addDirs([arg]);
+          log('info', added.length ? `Added working directory ${added[0]} for this session.` : `${arg} is already a working directory.`);
+        } catch (err) {
+          log('error', (err as Error).message);
+        }
+        break;
+      }
       case 'goal': {
         const arg = parsed.args.trim();
         const g = runtime.goals.goal;
