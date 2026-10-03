@@ -5,6 +5,8 @@ import {defaultRef} from '../router/index.js';
 import type {Config} from '../store/config.js';
 import type {Engine} from './engine.js';
 import {estimateTokens, renderMessages} from './transcript.js';
+import type {Subagent} from '../agents/manager.js';
+import {subagentConversation} from './context.js';
 
 const CONTEXT_BUDGET_TOKENS = 24_000;
 
@@ -78,6 +80,22 @@ export async function askBtw(engine: Engine, cfg: Config, question: string): Pro
   ]
     .filter(Boolean)
     .join('\n\n');
+  const answer = await adapters[ref.provider].oneShot({account, model: ref.model, system: SYSTEM, prompt, timeoutMs: 120_000});
+  return {answer: answer.trim(), model: catalog.get(ref)?.label ?? ref.model};
+}
+
+/** /btw while viewing a subagent: answered from that subagent's conversation, on its model. */
+export async function askBtwSubagent(agent: Subagent, cfg: Config, question: string): Promise<{answer: string; model: string}> {
+  const ref: ModelRef | undefined = agent.ref ?? defaultRef(cfg);
+  if (!ref) throw new Error('no model available');
+  const account = (agent.accountId && catalog.healthyAccounts(ref, cfg.maxUsedPct).find((a) => a.id === agent.accountId)) || catalog.healthyAccounts(ref, cfg.maxUsedPct)[0];
+  if (!account) throw new Error(`no healthy account for ${ref.model}`);
+  const conv = subagentConversation(agent);
+  const budget = CONTEXT_BUDGET_TOKENS * 4; // characters
+  const text = `${conv.messages}\n\n[tool calls]\n${conv.calls}`;
+  const clipped = text.length > budget ? `[… earlier part omitted]\n${text.slice(-budget)}` : text;
+  const working = agent.status === 'running' || agent.status === 'starting' ? '\n\n(The subagent is still working.)' : '';
+  const prompt = `<conversation subagent="${agent.name}">\n${clipped}${working}\n</conversation>\n\nSide question: ${question}`;
   const answer = await adapters[ref.provider].oneShot({account, model: ref.model, system: SYSTEM, prompt, timeoutMs: 120_000});
   return {answer: answer.trim(), model: catalog.get(ref)?.label ?? ref.model};
 }

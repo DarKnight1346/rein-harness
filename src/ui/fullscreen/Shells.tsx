@@ -53,9 +53,10 @@ export function ShellWindow({id, width, onClose}: {id: number; width: number; on
 }
 
 /** Background shells (plus finished foreground ones); click one for its logs. */
-export function ShellsWindow({width, onOpen, onClose}: {width: number; onOpen(id: number): void; onClose(): void}) {
+/** `agent`: only that subagent's commands (viewing it); undefined: the main agent's. */
+export function ShellsWindow({width, onOpen, onClose, agent}: {width: number; onOpen(id: number): void; onClose(): void; agent?: {id: number; name: string}}) {
   useShellsTick();
-  const shells = runtime.tools.shells.list().sort((a, b) => Number(b.status === 'running') - Number(a.status === 'running') || b.id - a.id);
+  const shells = runtime.tools.shells.list().filter((s) => (agent ? s.origin?.agentId === agent.id : !s.origin)).sort((a, b) => Number(b.status === 'running') - Number(a.status === 'running') || b.id - a.id);
   const [cursor, setCursor] = useState(0);
   useInput((input, key) => {
     if (key.escape || input === 'q') onClose();
@@ -65,7 +66,7 @@ export function ShellsWindow({width, onOpen, onClose}: {width: number; onOpen(id
     else if (input === 'k' && shells[cursor]) runtime.tools.shells.kill(shells[cursor]!.id);
   });
   return (
-    <Window title="Shells" width={width} onClose={onClose} footer="click/enter open logs · k kill · esc close">
+    <Window title={agent ? `Shells — ${agent.name}` : 'Shells'} width={width} onClose={onClose} footer="click/enter open logs · k kill · esc close">
       <Box flexDirection="column" marginY={1}>
         {!shells.length && <Text dimColor>No shells yet — the agent's commands appear here.</Text>}
         {shells.map((s, i) => (

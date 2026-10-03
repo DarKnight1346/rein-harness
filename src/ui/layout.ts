@@ -1,4 +1,5 @@
 import {parseRef, refKey} from '../providers/types.js';
+import type {Subagent} from '../agents/manager.js';
 import {runtime} from '../runtime.js';
 import {catalog} from '../router/catalog.js';
 import {defaultRef} from '../router/index.js';
@@ -43,10 +44,11 @@ export function enabledItems(kind: 'status' | 'sidebar', cfg: Config): string[] 
 }
 
 /** Live values behind the status line (shared by the fullscreen top bar and the classic status bar). */
-export function statusInfo() {
+export function statusInfo(viewing?: Subagent) {
   const cfg = runtime.config;
   const engine = runtime.engine;
   const current = engine?.current;
+  if (viewing) return subagentStatusInfo(viewing);
   const chosen = cfg.chatModel === 'auto' ? undefined : cfg.chatModel ? parseRef(cfg.chatModel) : defaultRef(cfg);
   const model = cfg.chatModel === 'auto' ? `auto${current ? ` · ${modelLabel(current.ref)}` : ''}` : chosen ? modelLabel(chosen) : '—';
   // Only show the live session's account if it still serves the selected model's provider.
@@ -68,8 +70,31 @@ export function statusInfo() {
   };
 }
 
+/** The status line while viewing a subagent: its model, account, usage and context. */
+function subagentStatusInfo(a: Subagent) {
+  const cfg = runtime.config;
+  const account = a.accountId ? catalog.account(a.accountId) : undefined;
+  const snap = account ? usageStore.get(account.id) : undefined;
+  const window = (a.ref && catalog.get(a.ref)?.contextWindow) || 200_000;
+  const decider = cfg.decisionModel === 'jev' ? 'Jev' : cfg.decisionModel === 'cheapest' ? 'cheapest' : modelLabel(parseRef(cfg.decisionModel) ?? {provider: 'claude', model: cfg.decisionModel});
+  return {
+    model: a.modelLabel ?? (a.ref ? modelLabel(a.ref) : a.requested),
+    account: account ? accountLabel(account) : '…',
+    usage: snap?.windows.map((w) => `${windowLabel(w.windowMins)} ${Math.round(w.usedPct)}%`).join(' · ') ?? '',
+    context: contextPct(a, window),
+    decider,
+    messages: a.events.filter((e) => e.kind === 'text' || e.kind === 'user').length + 1,
+    approvals: cfg.toolApproval,
+    advisor: cfg.advisorModel === 'off' ? 'off' : modelLabel(parseRef(cfg.advisorModel) ?? {provider: 'claude', model: cfg.advisorModel}),
+  };
+}
+
 /** Rough context fill of the active (or configured) model: provider-measured if available. */
-export function contextPct(): number {
+export function contextPct(viewing?: Subagent, subWindow?: number): number {
+  if (viewing) {
+    const window = subWindow ?? ((viewing.ref && catalog.get(viewing.ref)?.contextWindow) || 200_000);
+    return Math.min(100, Math.round(((viewing.lastInput ?? 0) / window) * 100));
+  }
   const engine = runtime.engine;
   if (!engine) return 0;
   const ref = engine.current?.ref ?? defaultRef(runtime.config);

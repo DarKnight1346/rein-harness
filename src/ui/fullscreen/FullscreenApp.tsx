@@ -257,7 +257,7 @@ export function FullscreenApp({resume}: {resume: Resume}) {
       case 'shell':
         return <ShellWindow id={overlay.id} width={windowWidth} onClose={r.closeOverlay} />;
       case 'shells':
-        return <ShellsWindow width={windowWidth} onOpen={(id) => r.setOverlay({name: 'shell', id})} onClose={r.closeOverlay} />;
+        return <ShellsWindow width={windowWidth} agent={viewing} onOpen={(id) => r.setOverlay({name: 'shell', id})} onClose={r.closeOverlay} />;
       case 'configure':
         return (
           <Window title="Configure" width={windowWidth} onClose={r.closeOverlay}>
@@ -276,7 +276,7 @@ export function FullscreenApp({resume}: {resume: Resume}) {
       case 'context':
         return (
           <InfoWindow
-            title="Context"
+            title={overlay.agent ? `Context — subagent ${overlay.agent}` : 'Context'}
             width={windowWidth}
             onClose={r.closeOverlay}
             lines={overlay.report ? entryLines({id: -1, kind: 'context', report: overlay.report}, windowText).slice(1) : ['Measuring…']}
@@ -521,13 +521,13 @@ function History({width, lines, scroll, onScroll, selection, onSelect, onCopy, s
 function TopBar(props: {cols: number; tick: number; sidebarOpen: boolean; onToggleSidebar(): void; togglePlanMode(): void; run(cmd: string): void; openModel(): void; openShells(): void; viewing?: Subagent; setView(v: 'main' | number): void}) {
   useShellsTick();
   useAgentsTick();
-  const background = runtime.tools.shells.running({background: true}).length;
+  const background = runtime.tools.shells.running({background: true}).filter((s) => (props.viewing ? s.origin?.agentId === props.viewing.id : !s.origin)).length;
   const activeAgents = runtime.agents.running();
   const openAgents = () => (activeAgents.length === 1 ? props.setView(activeAgents[0]!.id) : props.run('/agents'));
   const [, setUsageTick] = useState(0);
   useEffect(() => usageStore.subscribe(() => setUsageTick((t) => t + 1)), []);
   void props.tick;
-  const info = statusInfo();
+  const info = statusInfo(props.viewing);
   const items = enabledItems('status', runtime.config);
   /** Each status segment's plain text (for fitting the bar to the terminal width). */
   const segText = (id: string): string | undefined => {
@@ -754,7 +754,7 @@ function Sidebar({width, height, tick, run, view, setView}: {width: number; heig
       case 'models':
         return <ModelsSection inner={inner} run={run} />;
       case 'context':
-        return <ContextSection inner={inner} run={run} />;
+        return <ContextSection inner={inner} run={run} viewing={typeof view === 'number' ? runtime.agents.get(view) : undefined} />;
       case 'routing':
         return <RoutingSection inner={inner} />;
       case 'session':
@@ -876,12 +876,12 @@ function ModelsSection({inner, run}: {inner: number; run(cmd: string): void}) {
   );
 }
 
-function ContextSection({inner, run}: {inner: number; run(cmd: string): void}) {
-  const pct = contextPct();
+function ContextSection({inner, run, viewing}: {inner: number; run(cmd: string): void; viewing?: Subagent}) {
+  const pct = contextPct(viewing);
   const b = miniBar(pct, Math.max(4, inner - 5)); // bar + ' ' + 4-char percent fills the row
   return (
     <>
-      <Heading>CONTEXT</Heading>
+      <Heading>{viewing ? `CONTEXT · ${viewing.name}` : 'CONTEXT'}</Heading>
       <Clickable onClick={() => run('/context')}>
         <Text>
           <Text color={b.color}>{b.fill}</Text>

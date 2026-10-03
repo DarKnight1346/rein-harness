@@ -36,6 +36,8 @@ export type Subagent = {
   error?: string;
   /** The main agent has its report (foreground return, agent_result, or automatic delivery). */
   collected?: boolean;
+  /** Input tokens of its latest request (≈ how full its context is). */
+  lastInput?: number;
 };
 
 export type CompletionVerdict = {complete: boolean; note: string};
@@ -274,6 +276,7 @@ export class SubagentManager extends EventEmitter {
   private async turn(agent: Subagent, session: ProviderSession, prompt: string): Promise<string> {
     let text = '';
     const base = {...agent.tokens};
+    let seenInput = 0; // token events are cumulative over the turn's requests
     for await (const ev of session.send(prompt)) {
       if (ev.type === 'text') {
         text += ev.delta;
@@ -283,13 +286,27 @@ export class SubagentManager extends EventEmitter {
         this.changed();
       } else if (ev.type === 'tokens') {
         agent.tokens = {input: base.input + ev.call.input, cached: base.cached + ev.call.cached, output: base.output + ev.call.output};
+        // Each jump in input is one request's full prompt: how full the context is right now.
+        if (ev.call.input > seenInput) {
+          agent.lastInput = ev.call.input - seenInput;
+          seenInput = ev.call.input;
+        }
       } else if (ev.type === 'error') {
         throw new Error(ev.message);
-      } else if (ev.type === 'done' && ev.interrupted) {
-        throw new Cancelled();
+      } else if (ev.type === 'done') {
+        if (ev.interrupted) throw new Cancelled();
+        if (ev.tokens) agent.lastInput = ev.tokens.input;
       }
     }
     return text;
+  }
+
+  /** Show a line in a subagent's view (command feedback while the user looks at it; not sent to the model). */
+  note(id: number, text: string): void {
+    const agent = this.agents.get(id);
+    if (!agent) return;
+    agent.events.push({kind: 'note', text});
+    this.changed();
   }
 
   private changed(): void {

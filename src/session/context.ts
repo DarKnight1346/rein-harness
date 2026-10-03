@@ -7,6 +7,7 @@ import type {Engine} from './engine.js';
 import {systemPrompt} from './prompt.js';
 import {estimateTokens, renderMessages} from './transcript.js';
 import type {ToolSpec} from '../tools/host.js';
+import {SUBAGENT_PROMPT, type Subagent} from '../agents/manager.js';
 
 export type ContextCategory = {key: 'system' | 'tools' | 'summary' | 'messages' | 'calls' | 'other'; label: string; tokens: number};
 
@@ -59,5 +60,50 @@ export async function contextReport(engine: Engine, cfg: Config, toolSpecs: Tool
     messageCount: t.messages.length,
     summarizedCount: from,
     autoCompactAt: cfg.autoCompactPct ? Math.round(window * (cfg.autoCompactPct / 100)) : 0,
+  };
+}
+
+/** The conversation a subagent has had, as text (task, its replies, your messages, tool calls). */
+export function subagentConversation(agent: Subagent): {messages: string; calls: string} {
+  const messages: string[] = [`[task]\n${agent.task}`];
+  const calls: string[] = [];
+  for (const e of agent.events) {
+    if (e.kind === 'text') messages.push(`[${agent.name}]\n${e.text}`);
+    else if (e.kind === 'user') messages.push(`[user]\n${e.text}`);
+    else if (e.kind === 'tool') calls.push(`${e.label} ${e.summary}\n${e.result ?? ''}`);
+  }
+  return {messages: messages.join('\n\n'), calls: calls.join('\n')};
+}
+
+/**
+ * /context while viewing a subagent: its own context. A fork also carries the parent's history up
+ * to the fork (counted under "Inherited" from the measured size).
+ */
+export async function subagentContextReport(agent: Subagent, cfg: Config, toolSpecs: ToolSpec[] = []): Promise<ContextReport> {
+  const model = agent.ref;
+  const info = model ? catalog.get(model) : undefined;
+  const window = info?.contextWindow ?? 200_000;
+  const conv = subagentConversation(agent);
+  const categories: ContextCategory[] = [
+    {key: 'system', label: 'System prompt', tokens: estimateTokens(`${await systemPrompt({tools: true})}\n\n${SUBAGENT_PROMPT(agent.name)}`)},
+    {key: 'tools', label: `Tool definitions (${toolSpecs.length})`, tokens: toolSpecs.length ? estimateTokens(JSON.stringify(toolSpecs)) : 0},
+    {key: 'messages', label: 'Task & messages', tokens: estimateTokens(conv.messages)},
+    {key: 'calls', label: 'Tool calls & results', tokens: conv.calls ? estimateTokens(conv.calls) : 0},
+  ];
+  const measured = agent.lastInput;
+  const estimated = categories.reduce((n, c) => n + c.tokens, 0);
+  if (measured !== undefined && measured > estimated)
+    categories.push({key: 'other', label: agent.mode === 'fork' ? 'Inherited from the parent + provider overhead' : 'Other (provider overhead, full tool output)', tokens: measured - estimated});
+  const turns = agent.events.filter((e) => e.kind === 'text' || e.kind === 'user').length + 1;
+  return {
+    model,
+    modelLabel: agent.modelLabel ?? info?.label ?? model?.model ?? 'resolving…',
+    window,
+    categories,
+    used: Math.max(estimated, measured ?? 0),
+    measured,
+    messageCount: turns,
+    summarizedCount: 0,
+    autoCompactAt: 0,
   };
 }
