@@ -1,13 +1,64 @@
 # Rein
 
+[![npm](https://img.shields.io/npm/v/rein-harness)](https://www.npmjs.com/package/rein-harness)
+[![CI](https://github.com/DarKnight1346/rein-harness/actions/workflows/publish.yml/badge.svg)](https://github.com/DarKnight1346/rein-harness/actions/workflows/publish.yml)
+
 A terminal chat harness that looks like Claude Code and drives the official `claude` and `codex`
 CLIs across one or more subscription accounts, with per-task model routing (Jev or a cheap model)
 and a compaction model. No OAuth tokens are extracted: all traffic goes through the CLIs.
 
+## Install
+
+**Requirements**
+- macOS or Linux, and **Node.js 20+** (`node --version`)
+- At least one of the official CLIs, installed and signed in:
+  - **Claude Code** — `curl -fsSL https://claude.ai/install.sh | bash` (or `npm install -g @anthropic-ai/claude-code`), then run `claude` once to sign in
+  - **Codex** — `npm install -g @openai/codex`, then `codex login`
+
+**Install Rein**
+
 ```sh
+npm install -g rein-harness
+rein
+```
+
+If npm fails with `EACCES` (a root-owned global folder), either use `sudo npm install -g rein-harness`
+or point npm at a folder you own once, then install again:
+
+```sh
+npm config set prefix ~/.npm-global
+echo 'export PATH="$HOME/.npm-global/bin:$PATH"' >> ~/.zshrc   # or ~/.bashrc
+```
+
+**First run**
+- Rein finds your existing `claude` / `codex` logins and offers to import them (used in place; it never
+  logs them out). Add more accounts — e.g. a second Claude subscription — with `/login`.
+- Optional: add a [Jev](https://typesafe.ai) API key in `/login` to use Jev as the decision model;
+  otherwise the cheapest signed-in model makes routing decisions.
+- Pick models with `/model`; `/help` lists every command.
+- In Terminal.app, turn on View → Allow Mouse Reporting for clicks and scrolling.
+
+**Updating:** Rein checks npm on launch and installs new versions in the background (restart to use
+them). `rein --update` (or `/update`) updates Rein plus the `claude` and `codex` CLIs.
+
+**Uninstall:** `npm uninstall -g rein-harness`. Rein's data lives in `~/.rein/` — delete it to remove
+saved conversations, settings and Rein-added accounts (your own CLI logins are untouched).
+
+**From source**
+
+```sh
+git clone https://github.com/DarKnight1346/rein-harness.git && cd rein-harness
 npm install && npm run build && npm link   # then: rein   (or: npm run dev)
-rein --continue [id]                        # pick a saved conversation from this project to continue
-rein --classic                              # inline renderer (native scrollback, no mouse)
+```
+
+## Usage
+
+```sh
+rein                     # start (fullscreen UI)
+rein --continue [id]     # pick a saved conversation from this project to continue
+rein --classic           # inline renderer (native scrollback, no mouse)
+rein --update            # update Rein and the CLIs, then exit
+rein --version
 ```
 
 Fullscreen (default): top status bar (click model / usage / context), scrollable history (wheel,
@@ -25,7 +76,7 @@ In Terminal.app make sure View → Allow Mouse Reporting is on.
 | `/btw` | Side question answered by a fork of the agent, without interrupting it |
 | `/shells` | Agent shell commands and their logs |
 | `/compact` | Summarize the conversation with the compaction model |
-| `/update` | `claude update`, `codex update`, Codex protocol check, Rein self-update |
+| `/update` | Update Rein (npm), `claude` and `codex`, then check the Codex protocol |
 | `/context` | Context window usage grid |
 | `/configure` | Choose/reorder status-line segments and sidebar sections (alias `/config`) |
 | `/tui` | `/tui fullscreen` or `/tui classic` |
@@ -47,7 +98,7 @@ optional `config.json` (`name`, `description`, `main`, `aliases`). Name clashes:
 global. Run as `/name args`; `/skill:create` and `/skill:edit` (built in) have the agent write them for you.
 AGENTS.md: `~/.rein/AGENTS.md` plus the project's AGENTS.md files are added to the system prompt.
 
-Design, findings and status: [PLAN.md](PLAN.md). Tests: `npm test`.
+Design, findings and status: [PLAN.md](PLAN.md). Tests: `npm test`. License: [MIT](LICENSE).
 
 ### Input
 - Big pastes collapse to `[Pasted text #1 +42 lines]`; Ctrl+V pastes a clipboard image; drag a file
@@ -63,6 +114,4 @@ Design, findings and status: [PLAN.md](PLAN.md). Tests: `npm test`.
   screenshots are shareable. Toggle in /configure → Privacy.
 
 ### Updates
-- Rein checks npm on launch and installs a newer version in the background (restart to use it);
-  turn it off in /configure → Updates.
-- `/update` or `rein --update` updates Rein from npm plus the `claude` and `codex` CLIs.
+- Auto-update on launch can be turned off in /configure → Updates.
