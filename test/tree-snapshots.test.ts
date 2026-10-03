@@ -37,6 +37,15 @@ describe('whole-tree snapshots', () => {
     expect(r.removed).toEqual(['src/new.ts']);
   });
 
+  it('restores bytes exactly, whatever the line endings or .gitattributes say', async () => {
+    writeFileSync(f('.gitattributes'), '* text=auto eol=crlf\n');
+    writeFileSync(f('src/mixed.txt'), 'unix\nwindows\r\nend');
+    await snaps.snapshot(1);
+    writeFileSync(f('src/mixed.txt'), 'changed');
+    await snaps.restore(1);
+    expect(readFileSync(f('src/mixed.txt'), 'latin1')).toBe('unix\nwindows\r\nend');
+  });
+
   it("never touches the project's own git repo", async () => {
     execFileSync('git', ['init', '-q'], {cwd: root});
     execFileSync('git', ['-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-q', '--allow-empty', '-m', 'first'], {cwd: root});

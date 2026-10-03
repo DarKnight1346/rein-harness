@@ -23,11 +23,12 @@ export class TreeSnapshots {
   private dir = () => path.join(reinHome(), 'checkpoints', this.sessionId());
   private gitDir = () => path.join(this.dir(), 'tree.git');
 
-  private git(args: string[]) {
-    return run('git', ['-c', 'core.hooksPath=/dev/null', '-c', 'gc.auto=0', '-c', 'core.autocrlf=false', '-c', 'core.safecrlf=false', ...args], {
+  /** Every git call: no hooks, no gc, and byte-exact (no line-ending conversion, see init). */
+  private git(args: string[], index = path.join(this.gitDir(), 'index')) {
+    return run('git', ['-c', 'core.hooksPath=/dev/null', '-c', 'gc.auto=0', '-c', 'core.autocrlf=false', '-c', 'core.safecrlf=false', '-c', 'core.eol=lf', ...args], {
       timeoutMs: TIMEOUT_MS,
       cwd: this.root,
-      env: {...process.env, GIT_DIR: this.gitDir(), GIT_WORK_TREE: this.root, GIT_INDEX_FILE: path.join(this.gitDir(), 'index'), GIT_TERMINAL_PROMPT: '0'},
+      env: {...process.env, GIT_DIR: this.gitDir(), GIT_WORK_TREE: this.root, GIT_INDEX_FILE: index, GIT_TERMINAL_PROMPT: '0'},
     });
   }
 
@@ -53,6 +54,8 @@ export class TreeSnapshots {
       if (r.code !== 0) throw new Error(r.stderr.trim() || 'git init failed');
       // Never record the project's own repo metadata or Rein's per-project state.
       writeFileSync(path.join(this.gitDir(), 'info', 'exclude'), '.git\n.rein/checkpoints/\n');
+      // Byte-exact: overrides the project's .gitattributes — no eol conversion, no filters (LFS…).
+      writeFileSync(path.join(this.gitDir(), 'info', 'attributes'), '* -text -filter -diff -merge\n');
     }
     const add = await this.git(['add', '-A', '--ignore-errors', '--', '.']);
     if (add.code !== 0 && !/warning|error: unable to index/i.test(add.stderr)) throw new Error(add.stderr.trim() || 'git add failed');
@@ -113,11 +116,10 @@ export class TreeSnapshots {
     if (restored.length) {
       // Write the snapshot's version of those files (through a scratch index, not the store's).
       const tmpIndex = path.join(this.gitDir(), 'index.restore');
-      const env = {GIT_INDEX_FILE: tmpIndex};
-      const readTree = await run('git', ['read-tree', target], {timeoutMs: TIMEOUT_MS, cwd: this.root, env: {...process.env, GIT_DIR: this.gitDir(), GIT_WORK_TREE: this.root, ...env}});
+      const readTree = await this.git(['read-tree', target], tmpIndex);
       if (readTree.code !== 0) throw new Error(readTree.stderr.trim());
       for (let i = 0; i < restored.length; i += 200) {
-        const r = await run('git', ['checkout-index', '-f', '--', ...restored.slice(i, i + 200)], {timeoutMs: TIMEOUT_MS, cwd: this.root, env: {...process.env, GIT_DIR: this.gitDir(), GIT_WORK_TREE: this.root, ...env}});
+        const r = await this.git(['checkout-index', '-f', '--', ...restored.slice(i, i + 200)], tmpIndex);
         if (r.code !== 0) throw new Error(r.stderr.trim());
       }
       rmSync(tmpIndex, {force: true});
