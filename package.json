@@ -2,10 +2,36 @@
   "name": "rein-harness",
   "version": "0.1.0",
   "description": "Terminal chat harness that drives Claude Code and Codex across multiple subscription accounts",
+  "license": "MIT",
+  "keywords": [
+    "claude",
+    "claude-code",
+    "codex",
+    "cli",
+    "tui",
+    "ai",
+    "agent",
+    "harness",
+    "terminal"
+  ],
+  "homepage": "https://github.com/DarKnight1346/rein-harness#readme",
+  "bugs": {
+    "url": "https://github.com/DarKnight1346/rein-harness/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/DarKnight1346/rein-harness.git"
+  },
   "type": "module",
   "bin": {
     "rein": "dist/cli.js"
   },
+  "files": [
+    "dist",
+    "skills",
+    "README.md",
+    "LICENSE"
+  ],
   "engines": {
     "node": ">=20"
   },
@@ -13,7 +39,8 @@
     "dev": "tsx src/cli.tsx",
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "prepublishOnly": "npm run build && npm test"
   },
   "dependencies": {
     "@vscode/ripgrep": "^1.18.0",
