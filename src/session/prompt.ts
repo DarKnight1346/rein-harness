@@ -4,6 +4,7 @@ import {readFile} from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import {reinHome} from '../store/paths.js';
+import {memoryFacts} from '../tools/memory.js';
 
 const BASE_PROMPT = `You are Rein, a coding assistant working in the user's project from a terminal chat.
 - Be direct and concise. Lead with the answer.
@@ -83,6 +84,15 @@ export async function systemPrompt(opts: {tools?: boolean; scratch?: string} = {
     }
     sections.push('Past conversations in this project can be searched with sessions_search and read with session_read.');
     sections.push('If an advisor tool is available, it consults a stronger, expensive model: use it sparingly for important decisions or when stuck.');
+  }
+  // Project memory (.rein/MEMORY.md): what earlier sessions learned here.
+  const facts = memoryFacts(process.cwd());
+  if (opts.tools) {
+    sections.push(
+      facts.length
+        ? `# Project memory (.rein/MEMORY.md)\nLearned in earlier sessions on this project — rely on it, keep it current with remember / forget:\n${facts.map((f) => `- ${f}`).join('\n')}`
+        : '# Project memory\nEmpty so far. When you learn something lasting about this project (commands, conventions, decisions, gotchas), save it with remember.',
+    );
   }
   for (const f of await agentsFiles()) {
     sections.push(`# Project instructions (${f.path})\nFollow these instructions from ${path.basename(f.path)}:\n\n${f.text}`);
