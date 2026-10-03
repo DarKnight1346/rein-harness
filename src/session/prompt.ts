@@ -1,5 +1,6 @@
 import {existsSync} from 'node:fs';
 import {readFile} from 'node:fs/promises';
+import os from 'node:os';
 import path from 'node:path';
 import {reinHome} from '../store/paths.js';
 
@@ -24,9 +25,17 @@ export function setExtraWorkingDirs(fn: () => string[]): void {
   extraDirs = fn;
 }
 
+/** Claude Code's user-level instructions (REIN_CLAUDE_GLOBAL overrides — tests). */
+const claudeGlobal = () => process.env.REIN_CLAUDE_GLOBAL ?? path.join(os.homedir(), '.claude', 'CLAUDE.md');
+
+/** Instruction files read per directory: the open standard plus Claude Code's. */
+const PROJECT_FILES = ['AGENTS.md', 'CLAUDE.md', path.join('.claude', 'CLAUDE.md')];
+
 /**
- * AGENTS.md files, most general first: ~/.rein/AGENTS.md, then from the git root (or the
- * filesystem root) down to the project root. Each becomes one section of the system prompt.
+ * Instruction files, most general first: ~/.rein/AGENTS.md and ~/.claude/CLAUDE.md, then per
+ * directory from the git root (or the filesystem root) down to the project root: AGENTS.md,
+ * CLAUDE.md, .claude/CLAUDE.md. Duplicates (symlinks, identical copies) are included once. Each
+ * becomes one section of the system prompt.
  */
 export async function agentsFiles(cwd = process.cwd()): Promise<{path: string; text: string}[]> {
   const dirs: string[] = [];
@@ -38,11 +47,14 @@ export async function agentsFiles(cwd = process.cwd()): Promise<{path: string; t
     if (parent === dir) break;
     dir = parent;
   }
-  const candidates = [path.join(reinHome(), 'AGENTS.md'), ...dirs.map((d) => path.join(d, 'AGENTS.md'))];
+  const candidates = [path.join(reinHome(), 'AGENTS.md'), claudeGlobal(), ...dirs.flatMap((d) => PROJECT_FILES.map((f) => path.join(d, f)))];
   const out: {path: string; text: string}[] = [];
+  const seen = new Set<string>();
   for (const file of [...new Set(candidates)]) {
-    const text = await readFile(file, 'utf8').catch(() => '');
-    if (text.trim()) out.push({path: file, text: text.slice(0, MAX_AGENTS_BYTES).trim()});
+    const text = (await readFile(file, 'utf8').catch(() => '')).slice(0, MAX_AGENTS_BYTES).trim();
+    if (!text || seen.has(text)) continue;
+    seen.add(text);
+    out.push({path: file, text});
   }
   return out;
 }
@@ -70,7 +82,7 @@ export async function systemPrompt(opts: {tools?: boolean; scratch?: string} = {
     sections.push('If an advisor tool is available, it consults a stronger, expensive model: use it sparingly for important decisions or when stuck.');
   }
   for (const f of await agentsFiles()) {
-    sections.push(`# Project instructions (${f.path})\nFollow these instructions from AGENTS.md:\n\n${f.text}`);
+    sections.push(`# Project instructions (${f.path})\nFollow these instructions from ${path.basename(f.path)}:\n\n${f.text}`);
   }
   return sections.join('\n\n');
 }

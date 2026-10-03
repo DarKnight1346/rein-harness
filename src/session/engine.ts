@@ -3,12 +3,13 @@ import type {Account, ChatEvent, ImageInput, ModelRef, ProviderSession, TokenCou
 import type {ToolActivity} from '../tools/host.js';
 import {EventQueue} from '../util/proc.js';
 import {refKey} from '../providers/types.js';
-import {catalog, toRef} from '../router/catalog.js';
+import {BUSY_PENALTY, catalog, toRef} from '../router/catalog.js';
 import type {Config} from '../store/config.js';
-import {usageStore} from '../store/usage.js';
+import {DANGER_HEADROOM, headroom, usageStore} from '../store/usage.js';
 import {compactableCount, compactTranscript, type CompactReason, type CompactResult} from './compactor.js';
 import {systemPrompt} from './prompt.js';
-import {buildCarry, estimateTokens, newTranscript, saveTranscript, scratchDir, type Message, type Transcript} from './transcript.js';
+import {buildCarry, carryStart, estimateTokens, newTranscript, saveTranscript, scratchDir, type Message, type Transcript} from './transcript.js';
+import {carriedTools, selectCarriedTools, type CarrySelector} from './carry.js';
 
 export type Route = {ref: ModelRef; reason: 'fixed' | 'auto' | 'sticky' | 'default' | 'failover'; confidence?: number};
 
@@ -33,10 +34,19 @@ export type EngineDeps = {
   compact: (t: Transcript, reason: CompactReason) => Promise<CompactResult>;
   /** Rein's tools for chat sessions, plus their activity feed (tool lines in the transcript). */
   tools?: {binding: ToolBinding; forkBinding?: ToolBinding; onActivity(fn: (a: ToolActivity) => void): () => void};
+  /** Picks which tool results a new session needs when the conversation moves (compaction model). */
+  selectCarry?: CarrySelector;
 };
 
 /** Context carried into a fresh native session before compaction kicks in. */
 const CARRY_BUDGET_TOKENS = 24_000;
+/**
+ * How long a provider keeps a conversation's prompt cache after a request. Claude: Rein's sessions
+ * get the 1-hour cache (`ephemeral_1h` cache writes, verified). Codex: measured — see PLAN.md §22.
+ */
+const CACHE_WARM_MS: Record<string, number> = {claude: 60 * 60_000, codex: 5 * 60_000};
+/** A cold switch needs the other account to be at least this much better (no flip-flopping). */
+const BALANCE_MARGIN = 15;
 const MAX_ATTEMPTS = 5;
 
 /**
@@ -66,6 +76,23 @@ export class Engine {
 
   /** Tokens the provider reported for the last completed request (for /context). */
   lastUsage: {ref: ModelRef; input: number; output: number; at: number} | undefined;
+  /** When each account last served this conversation (its prompt cache is warm for a few minutes). */
+  private readonly lastUsed = new Map<string, number>();
+  /** Compaction replaced the history since the last turn: no cache left to protect. */
+  private cacheBroken = false;
+  /** Account that served the last turn (survives compaction, which drops the native sessions). */
+  private lastAccountId: string | undefined;
+
+  /**
+   * An account is being removed: drop its session now if idle, otherwise right after the running
+   * turn (the reply isn't cut off). The next turn picks another account and carries the context.
+   */
+  releaseAccount(accountId: string): void {
+    if (this.active?.session.accountId !== accountId) return;
+    if (this.running) this.releaseAfterTurn = accountId;
+    else this.closeActive();
+  }
+  private releaseAfterTurn: string | undefined;
 
   constructor(private readonly deps: EngineDeps, transcript?: Transcript) {
     this.transcript = transcript ?? newTranscript();
@@ -122,7 +149,10 @@ export class Engine {
   /** `/compact`: summarize now; the next turn starts a fresh native session from the summary. */
   async compactNow(): Promise<CompactResult> {
     const res = await compactTranscript(this.transcript, this.deps.config(), {keepRecent: 2});
-    if (!('skipped' in res)) this.closeActive();
+    if (!('skipped' in res)) {
+      this.closeActive();
+      this.cacheBroken = true;
+    }
     return res;
   }
 
@@ -132,6 +162,7 @@ export class Engine {
     this.transcript = t;
     this.lastUsage = undefined;
     this.callTokens = undefined;
+    this.forgetAccounts();
   }
 
   /**
@@ -152,6 +183,7 @@ export class Engine {
     this.closeActive();
     this.transcript = newTranscript();
     this.lastUsage = undefined;
+    this.forgetAccounts();
   }
 
   shutdown(): void {
@@ -180,7 +212,9 @@ export class Engine {
         yield {type: 'done', interrupted: true};
         return;
       }
-      const account = this.pickAccount(route.ref, excluded, cfg.maxUsedPct);
+      const picked = this.pickAccount(route.ref, excluded, cfg, userIndex);
+      const account = picked?.account;
+      if (picked?.note) yield {type: 'notice', text: picked.note};
       if (!account) {
         const alt = await this.deps.alternative(text, t, route.ref, excluded).catch(() => undefined);
         if (!alt || refKey(alt) === refKey(route.ref)) {
@@ -194,8 +228,9 @@ export class Engine {
 
       let session: ProviderSession;
       let prompt: string;
+      let carried: string | undefined;
       try {
-        ({session, prompt} = await this.prepare(route.ref, account, userIndex));
+        ({session, prompt, carried} = await this.prepare(route.ref, account, userIndex));
       } catch (err) {
         catalog.authFailed.add(account.id);
         excluded.add(account.id);
@@ -205,8 +240,9 @@ export class Engine {
       if (estimateTokens(prompt) > CARRY_BUDGET_TOKENS + estimateTokens(text) && !compacted) {
         compacted = true;
         yield* this.compactWithEvents('handoff');
-        ({prompt} = await this.prepare(route.ref, account, userIndex));
+        ({prompt, carried} = await this.prepare(route.ref, account, userIndex));
       }
+      if (carried) yield {type: 'notice', text: carried};
 
       yield {type: 'route', route, account};
       let reply = '';
@@ -232,6 +268,13 @@ export class Engine {
         } else if (ev.type === 'done') {
           this.running = undefined;
           this.commitCallTokens();
+          this.lastUsed.set(account.id, Date.now());
+          if (this.releaseAfterTurn === account.id) {
+            this.releaseAfterTurn = undefined;
+            this.closeActive();
+          }
+          this.lastAccountId = account.id;
+          this.cacheBroken = false;
           t.messages.push({
             role: 'assistant',
             text: reply,
@@ -299,15 +342,63 @@ export class Engine {
     return q;
   }
 
-  private pickAccount(ref: ModelRef, excluded: ReadonlySet<string>, maxUsedPct: number): Account | undefined {
-    const healthy = catalog.healthyAccounts(ref, maxUsedPct, excluded);
-    // Stay on the active account while it's healthy: keeps the native session (and its cache) warm.
-    const activeId = this.active?.session.accountId;
-    return healthy.find((a) => a.id === activeId) ?? healthy[0];
+  /**
+   * Which account serves this turn. Healthy accounts come best-first (catalog.score: usage weighted
+   * by time to reset, minus load). A new conversation starts on the best one. An active one
+   * ("balanced") only moves when its cache can't be saved anyway or the account can't continue:
+   * 1. the account is out of usage — rejected (unhealthy) or within DANGER_HEADROOM of a limit,
+   *    so it moves before the rejection;
+   * 2. the conversation was just compacted (the cache is gone);
+   * 3. the prompt cache expired (idle ≥ the provider's CACHE_WARM_MS).
+   * In cases 2–3 it moves only to a clearly better account (≥ BALANCE_MARGIN) and never if
+   * carrying the history over would itself force a compaction.
+   * "sticky" (the old behavior) stays until the account is unhealthy.
+   */
+  private pickAccount(ref: ModelRef, excluded: ReadonlySet<string>, cfg: Config, userIndex: number): {account?: Account; note?: string} | undefined {
+    const healthy = catalog.healthyAccounts(ref, cfg.maxUsedPct, excluded);
+    const best = healthy[0];
+    if (!best) return undefined;
+    // The account this conversation is on: the live session, else the one it last used.
+    const currentId = this.active?.session.accountId ?? this.lastAccountId ?? this.lastAccount(ref.provider);
+    const current = healthy.find((a) => a.id === currentId);
+    if (!current) {
+      // The conversation's account was removed: continue on the best one, context carried over.
+      const removed = currentId && (catalog.retired.has(currentId) || !catalog.account(currentId));
+      return {account: best, note: removed ? `Continuing on ${best.email ?? best.id} (the previous account was removed)` : undefined};
+    }
+    if (best.id === current.id || (cfg.loadBalancing ?? 'balanced') === 'sticky') return {account: current};
+    const name = (a: Account) => a.email ?? a.id;
+    if (headroom(usageStore.get(current.id)) < DANGER_HEADROOM) {
+      return {account: best, note: `Load balancing: ${name(current)} is near its limit — switching to ${name(best)} before it's rejected`};
+    }
+    const lastUsed = this.lastUsed.get(current.id) ?? 0;
+    const cacheWarm = !this.cacheBroken && Date.now() - lastUsed < (CACHE_WARM_MS[ref.provider] ?? 5 * 60_000);
+    if (cacheWarm) return {account: current};
+    // This conversation's own live session shouldn't count against the account it's on.
+    const currentScore = catalog.score(current.id) + (this.active?.session.accountId === current.id ? BUSY_PENALTY : 0);
+    const gain = catalog.score(best.id) - currentScore;
+    if (gain < BALANCE_MARGIN) return {account: current};
+    const covers = this.transcript.native[`${ref.provider}:${best.id}`]?.coversUpTo ?? 0;
+    if (buildCarry(this.transcript, covers, userIndex, CARRY_BUDGET_TOKENS).overBudget) return {account: current};
+    return {account: best, note: `Load balancing: switching to ${name(best)} (${this.cacheBroken ? 'after compaction' : 'cache was cold'}; balance score ${Math.round(catalog.score(best.id))} vs ${Math.round(currentScore)})`};
+  }
+
+  /** A different conversation: no account history or warm cache carries over. */
+  private forgetAccounts(): void {
+    this.lastUsed.clear();
+    this.lastAccountId = undefined;
+    this.cacheBroken = false;
+  }
+
+  /** Account of the native session this conversation used most recently for a provider. */
+  private lastAccount(provider: string): string | undefined {
+    return Object.values(this.transcript.native)
+      .filter((n) => n.provider === provider)
+      .sort((a, b) => (b.coversUpTo ?? 0) - (a.coversUpTo ?? 0))[0]?.accountId;
   }
 
   /** Reuse or open the native session for (provider, account) and build the prompt with carry. */
-  private async prepare(ref: ModelRef, account: Account, userIndex: number): Promise<{session: ProviderSession; prompt: string}> {
+  private async prepare(ref: ModelRef, account: Account, userIndex: number): Promise<{session: ProviderSession; prompt: string; carried?: string}> {
     const t = this.transcript;
     const key = `${ref.provider}:${account.id}`;
     const text = t.messages[userIndex]!.text;
@@ -316,7 +407,7 @@ export class Engine {
       const known = t.native[key];
       // Resume the native session only if it saw everything up to now; otherwise carry context.
       const resumeId = known && known.coversUpTo === userIndex ? known.nativeId : undefined;
-      const session = await adapters[ref.provider].openSession({account, model: ref.model, systemPrompt: await systemPrompt({tools: !!this.deps.tools, scratch: this.scratch}), resumeId, tools: this.deps.tools?.binding});
+      const session = catalog.track(await adapters[ref.provider].openSession({account, model: ref.model, systemPrompt: await systemPrompt({tools: !!this.deps.tools, scratch: this.scratch}), resumeId, tools: this.deps.tools?.binding}));
       this.active = {session, key, ref};
       if (!resumeId) t.native[key] = {provider: ref.provider, accountId: account.id, nativeId: '', coversUpTo: 0};
     }
@@ -325,8 +416,15 @@ export class Engine {
       this.active.ref = ref;
     }
     const covers = t.native[key]?.coversUpTo ?? 0;
-    const carry = buildCarry(t, covers, userIndex, CARRY_BUDGET_TOKENS);
-    return {session: this.active.session, prompt: carry.text + text};
+    // Tool results the new session needs (all if they fit, else the compaction model's picks).
+    const tools = carriedTools(t, carryStart(t, covers), userIndex);
+    const picked = await selectCarriedTools(tools, text, this.deps.selectCarry);
+    const carry = buildCarry(t, covers, userIndex, CARRY_BUDGET_TOKENS, picked.keys);
+    const carried =
+      picked.how === 'selected' || picked.how === 'recent'
+        ? `Context carried over: ${picked.keys.size} of ${tools.length} tool results${picked.how === 'selected' ? ' (chosen by the compaction model)' : ' (most recent)'}, the rest as one-line traces`
+        : undefined;
+    return {session: this.active.session, prompt: carry.text + text, carried};
   }
 
   private markCovered(account: Account, session: ProviderSession, upTo: number): void {
@@ -353,6 +451,7 @@ export class Engine {
     yield {type: 'compact', phase: 'start', reason, messages};
     try {
       const result = await this.deps.compact(this.transcript, reason);
+      if (!('skipped' in result)) this.cacheBroken = true;
       yield {type: 'compact', phase: 'end', reason, result};
     } catch (err) {
       yield {type: 'notice', text: `Compaction failed: ${(err as Error).message}`};

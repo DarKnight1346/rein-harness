@@ -86,7 +86,16 @@ class AppServerPool {
     for (const p of this.clients.values()) void p.then((c) => c.close(), () => {});
     this.clients.clear();
   }
+
+  /** Stop one account's app-server (the account was removed). */
+  release(accountId: string): void {
+    void this.clients.get(accountId)?.then((c) => c.close(), () => {});
+    this.clients.delete(accountId);
+  }
 }
+
+/** Stop the app-server of a removed Codex account. */
+export const releaseCodexAccount = (accountId: string) => pool.release(accountId);
 
 const pool = new AppServerPool();
 

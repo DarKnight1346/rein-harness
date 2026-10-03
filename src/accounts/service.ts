@@ -81,13 +81,19 @@ export async function abandonAdd(account: Account): Promise<void> {
 }
 
 /** Imported logins are only unregistered — never logged out (they belong to the user's normal CLI). */
-export async function removeAccount(account: Account): Promise<void> {
+/**
+ * Remove an account. It's unregistered at once (never picked again); logging out and deleting a
+ * Rein-owned home waits for `idle` — sessions still running on it finish first. Imported accounts
+ * are only unregistered: the user's own CLI login is never touched.
+ */
+export async function removeAccount(account: Account, idle: () => Promise<void> = async () => {}): Promise<void> {
+  await unregister(account.id);
+  usageStore.forget(account.id);
   if (!account.imported && account.home !== null) {
+    await idle();
     await auth[account.provider].logout(account).catch(() => {});
     await deleteOwnedHome(account);
   }
-  await unregister(account.id);
-  usageStore.forget(account.id);
 }
 
 /** Re-run login for an existing account (expired tokens). Imported accounts re-auth in place. */

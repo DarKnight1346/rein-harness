@@ -812,3 +812,24 @@ tool calls, completion check shown → follow-up message answered in the subagen
 - Privacy (/configure → Privacy, default on): accounts render as "Claude Account N" / "Codex
   Account N" (saved order); history/window lines pass through redact() (known emails → names, home
   → ~, username → user). Live: no email/username anywhere on screen or in /usage.
+
+## 22. Load balancing (2026-10-03, built — pending Codex cache numbers)
+
+- Score = tightest window's headroom, each window's usage weighted by time left to reset; within 10%
+  of a limit the real headroom counts. Unusable if any window is exhausted. Live sessions count
+  against their account (spreads subagents); forks stay on the parent's account.
+- An active conversation switches only when: (1) out of usage (rejected / <10% left — moves before
+  the rejection), (2) just compacted, (3) prompt cache expired, (4) its account was removed. 2–3
+  need a ≥15-point better account and no carry-forced compaction.
+- Cache lifetime, measured through Rein's own sessions: Claude writes `ephemeral_1h` (1 h);
+  Codex ≥ 8 min (16/31/61 min pending).
+- Account removal: retired at once, running turns/subagents finish, next message continues on
+  another account; logout + file cleanup once idle.
+
+## 23. Replacing a daily harness — plan (2026-10-03)
+
+Phases, one PR each: A load balancing · B smart context carry (compaction model picks which tool
+results a new session needs) + CLAUDE.md · C permission rules ("always allow" à la Claude Code) +
+checkpoints/rewind · D task list + effort per model (auto via decision model) · E image/PDF reading
++ @file mentions · F headless `rein -p` + Claude-Code-compatible hooks · G MCP client (.mcp.json) ·
+H Windows support + Windows CI.

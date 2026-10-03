@@ -1,12 +1,12 @@
 import React, {useCallback, useEffect, useRef, useState} from 'react';
 import {Box, Text, useInput} from 'ink';
 import {accountName, hidingIdentity} from './privacy.js';
+import {runtime} from '../runtime.js';
 import {
   abandonAdd,
   finishAdd,
   listAccounts,
   reauth,
-  removeAccount,
   saveIdentity,
   startAdd,
   type AccountRow,
@@ -151,7 +151,7 @@ export function LoginScreen({onLog, onClose, bare}: Props) {
   const confirmRemove = (row: AccountRow) => {
     const {account} = row;
     setBusy('Removing…');
-    void removeAccount(account).then(async () => {
+    void runtime.removeAccount(account).then(async () => {
       onLog('info', `Removed ${accountName(account)}${account.imported ? ' (unregistered; your CLI login is untouched)' : ''}`);
       await reload();
       setCursor(0);
