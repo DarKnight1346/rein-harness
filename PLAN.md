@@ -821,8 +821,9 @@ tool calls, completion check shown → follow-up message answered in the subagen
 - An active conversation switches only when: (1) out of usage (rejected / <10% left — moves before
   the rejection), (2) just compacted, (3) prompt cache expired, (4) its account was removed. 2–3
   need a ≥15-point better account and no carry-forced compaction.
-- Cache lifetime, measured through Rein's own sessions: Claude writes `ephemeral_1h` (1 h);
-  Codex ≥ 8 min (16/31/61 min pending).
+- Cache lifetime, measured through Rein's own sessions (~13k-token prefix, second request after a
+  gap): Claude 99% cached at 4/8/31/58 min, 0% at 65 min (writes `ephemeral_1h`); Codex 93–98%
+  cached at 4/8/16/31/61 min. Warm window = 60 min for both.
 - Account removal: retired at once, running turns/subagents finish, next message continues on
   another account; logout + file cleanup once idle.
 
