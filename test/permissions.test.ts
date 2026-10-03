@@ -66,12 +66,12 @@ describe('rules in the tool host', () => {
 
   it('"always allow" saves a project rule; the next matching call runs without asking', async () => {
     const h = host('always');
-    expect((await h.call('shell', {command: 'echo one'})).ok).toBe(true);
-    expect(asked[0]?.suggestion).toBe('shell(echo:*)');
+    expect((await h.call('shell', {command: 'touch one.txt'})).ok).toBe(true);
+    expect(asked[0]?.suggestion).toBe('shell(touch:*)');
     const saved = JSON.parse(readFileSync(path.join(root, '.rein/settings.json'), 'utf8'));
-    expect(saved.permissions.allow).toEqual(['shell(echo:*)']);
-    const res = await h.call('shell', {command: 'echo two'});
-    expect(res.text).toContain('two');
+    expect(saved.permissions.allow).toEqual(['shell(touch:*)']);
+    const res = await h.call('shell', {command: 'touch two.txt'});
+    expect(res.ok).toBe(true);
     expect(asked).toHaveLength(1);
     h.close();
   });

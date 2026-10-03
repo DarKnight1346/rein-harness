@@ -14,8 +14,8 @@ const MAX_PREVIEW_LINES = 14;
 export function ApprovalPrompt({req, onDecide, bare}: {req: ApprovalRequest; onDecide(d: ApprovalDecision): void; bare?: boolean}) {
   useInput((input, key) => {
     if (input === '1' || input === 'y' || key.return) onDecide('once');
-    else if ((input === '2' || input === 'a') && !req.sensitive) onDecide('session');
-    else if (input === '3' && req.suggestion) onDecide('always');
+    else if ((input === '2' || input === 'a') && !req.sensitive && !req.planMode) onDecide('session');
+    else if (input === '3' && req.suggestion && !req.planMode) onDecide('always');
     else if (input === '4' || input === 'n' || key.escape) onDecide('deny');
   });
   const lines = req.preview ? req.preview.split('\n') : [];
@@ -30,7 +30,7 @@ export function ApprovalPrompt({req, onDecide, bare}: {req: ApprovalRequest; onD
     : '2 Allow all changes & commands this session';
   const options: [ApprovalDecision, string][] = [
     ['once', '1 Allow'],
-    ...(req.sensitive ? [] : [['session', sessionLabel] as [ApprovalDecision, string]]),
+    ...(req.sensitive || req.planMode ? [] : [['session', sessionLabel] as [ApprovalDecision, string]]),
     ...(req.suggestion ? [['always', `3 Always allow ${req.suggestion} (this project)`] as [ApprovalDecision, string]] : []),
     ['deny', '4 Deny'],
   ];
@@ -39,6 +39,7 @@ export function ApprovalPrompt({req, onDecide, bare}: {req: ApprovalRequest; onD
       <Text>
         {req.origin ? <Text color="magenta">Subagent {req.origin.name}</Text> : 'Rein'} wants to <Text bold color="yellow">{req.tool.label}</Text> <Text bold>{redact(req.summary)}</Text>
       </Text>
+      {req.planMode ? <Text color="yellow">⏸ Plan mode: this command isn't known to be read-only — allow it only if it just looks things up.</Text> : null}
       {outside ? (
         <Text color={req.sensitive ? 'red' : 'yellow'}>
           {req.sensitive ? '⚠ Sensitive location (credentials/secrets) outside the project: ' : 'Outside the project: '}

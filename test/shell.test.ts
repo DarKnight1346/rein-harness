@@ -43,11 +43,11 @@ describe('shell tools via ToolHost', () => {
     const root = await mkdtemp(path.join(os.tmpdir(), 'rein-proj-'));
     const asked: string[] = [];
     const host = new ToolHost({root, mode: () => 'ask', approve: async (r) => (asked.push(r.summary), 'once')});
-    const fg = await host.call('shell', {command: 'pwd; echo ok'});
+    const fg = await host.call('shell', {command: 'pwd; touch made.txt; echo ok'});
     expect(fg.ok).toBe(true);
     expect(fg.text).toContain('[exit 0');
     expect(fg.text).toContain('ok');
-    expect(asked).toEqual(['$ pwd; echo ok']);
+    expect(asked).toEqual(['$ pwd; touch made.txt; echo ok']);
     const fail = await host.call('shell', {command: 'exit 2'});
     expect(fail.ok).toBe(false);
     const bg = await host.call('shell', {command: 'echo started; sleep 30', background: true});
