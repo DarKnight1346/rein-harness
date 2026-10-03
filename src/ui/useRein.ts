@@ -877,26 +877,6 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
     else setOverlay({name: 'shells'});
   };
 
-  // Foreground commands: pop the live output window (fullscreen), close it shortly after they end.
-  useEffect(() => {
-    if (!windowed) return;
-    const shells = runtime.tools.shells;
-    const onForeground = (s: Shell) =>
-      // Subagent commands show in the subagent's view, not as a popup over the main agent.
-      !s.origin &&
-      setOverlay((o) => (o.name === 'none' || o.name === 'shells' || o.name === 'shell' ? {name: 'shell', id: s.id, auto: true} : o));
-    const onChange = (s: Shell) => {
-      if (s.background || s.status === 'running') return;
-      setTimeout(() => setOverlay((o) => (o.name === 'shell' && o.id === s.id && o.auto ? {name: 'none'} : o)), 1500);
-    };
-    shells.on('foreground', onForeground);
-    shells.on('change', onChange);
-    return () => {
-      shells.off('foreground', onForeground);
-      shells.off('change', onChange);
-    };
-  }, [windowed]);
-
   const closeOverlay = () => {
     setOverlay({name: 'none'});
     void refresh();

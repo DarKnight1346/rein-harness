@@ -83,3 +83,39 @@ export function ShellsWindow({width, onOpen, onClose}: {width: number; onOpen(id
     </Window>
   );
 }
+
+const LIVE_LINES = 10;
+
+/**
+ * The running foreground command's output, inline at the bottom of the chat (last 10 lines, like
+ * Claude Code) instead of a popup window. `agentId` picks a subagent's commands when viewing one.
+ * Click to open the full output.
+ */
+export function LiveShell({width, agentId, onOpen}: {width: number; agentId?: number; onOpen(id: number): void}) {
+  useShellsTick();
+  const shell = runtime.tools.shells
+    .running({background: false})
+    .filter((s) => (agentId === undefined ? !s.origin : s.origin?.agentId === agentId))
+    .at(-1);
+  if (!shell) return null;
+  const lines = shell.lines.slice(-LIVE_LINES);
+  const hidden = shell.dropped + shell.lines.length - lines.length;
+  const inner = Math.max(10, width - 6);
+  return (
+    <Clickable onClick={() => onOpen(shell.id)}>
+      <Box flexDirection="column" paddingLeft={3}>
+        {hidden > 0 ? <Text dimColor>⎿ … {hidden} earlier line{hidden === 1 ? '' : 's'} (click for all)</Text> : null}
+        {lines.length ? (
+          lines.map((l, i) => (
+            <Text key={i} dimColor wrap="truncate">
+              {i === 0 && !hidden ? '⎿ ' : '  '}
+              {l.slice(0, inner) || ' '}
+            </Text>
+          ))
+        ) : (
+          <Text dimColor>⎿ (no output yet)</Text>
+        )}
+      </Box>
+    </Clickable>
+  );
+}
