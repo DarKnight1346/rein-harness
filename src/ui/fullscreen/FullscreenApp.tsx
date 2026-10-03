@@ -15,6 +15,7 @@ import {Clickable, useClickable} from '../terminal/clicks.js';
 import {TextInput} from '../TextInput.js';
 import {goalSummary, useRein} from '../useRein.js';
 import {RewindScreen} from '../RewindScreen.js';
+import {McpScreen} from '../McpScreen.js';
 import {todoLine} from '../../tools/todo.js';
 import {hidingIdentity, redact} from '../privacy.js';
 import {contextPct, enabledItems, statusInfo} from '../layout.js';
@@ -174,6 +175,12 @@ export function FullscreenApp({resume}: {resume: Resume}) {
                   : [chalk.dim('Forking the agent to answer… the main agent keeps working.')]
             }
           />
+        );
+      case 'mcp':
+        return (
+          <Window title="MCP servers" width={windowWidth} onClose={r.closeOverlay}>
+            <McpScreen onClose={r.closeOverlay} />
+          </Window>
         );
       case 'rewind':
         return (

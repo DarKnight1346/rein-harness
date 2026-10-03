@@ -87,13 +87,19 @@ export class ToolHost extends EventEmitter {
     this.extra.push(...defs.filter((d) => !this.extra.some((e) => e.name === d.name)));
   }
 
+  /** Tool sources that change at runtime (MCP servers connecting, adding or dropping tools). */
+  private dynamic: (() => ToolDef[])[] = [];
+  addSource(fn: () => ToolDef[]): void {
+    this.dynamic.push(fn);
+  }
+
   get tools(): ToolDef[] {
-    return [...TOOLS, ...this.extra];
+    return [...TOOLS, ...this.extra, ...this.dynamic.flatMap((f) => f())];
   }
 
   private find(name: string): ToolDef | undefined {
     const n = name.replace(/^mcp__rein__/, '');
-    return toolByName(n) ?? this.extra.find((t) => t.name === n);
+    return toolByName(n) ?? this.extra.find((t) => t.name === n) ?? this.dynamic.flatMap((f) => f()).find((t) => t.name === n);
   }
 
   /** Definitions as the model sees them right now (dynamic descriptions resolved). */

@@ -46,6 +46,7 @@ export type Overlay =
   | {name: 'shells'}
   | {name: 'resume'; sessions: SessionInfo[]}
   | {name: 'rewind'; points: RewindPoint[]}
+  | {name: 'mcp'}
   | {name: 'agents'}
   | {name: 'goal'}
   | {name: 'btw'; question: string; answer?: string; model?: string; mode?: 'fork' | 'context'; done?: boolean; error?: string}
@@ -113,6 +114,11 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
       const shadowed = shadowedSkills(loadSkills());
       if (shadowed.length) log('info', `Skill${shadowed.length > 1 ? 's' : ''} ${shadowed.map((s) => `"${s.name}"`).join(', ')} hidden by built-in command${shadowed.length > 1 ? 's' : ''}; rename to use ${shadowed.length > 1 ? 'them' : 'it'}.`);
       setReady(true);
+      // Project MCP servers wait for approval (a repo shouldn't launch commands on its own).
+      setTimeout(() => {
+        const waiting = runtime.mcp.list().filter((s) => s.status === 'needs-approval').map((s) => s.name);
+        if (waiting.length) log('info', `This project's .mcp.json has MCP server${waiting.length > 1 ? 's' : ''} waiting for your approval: ${waiting.join(', ')} — /mcp to review.`);
+      }, 1500);
       // Launch-time self-update check (background; never delays startup).
       if (runtime.config.autoUpdate !== false) void autoUpdate((text) => log('info', text)).catch(() => {});
     })().catch((err) => log('error', `startup failed: ${(err as Error).message}`));
@@ -418,6 +424,9 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
     const opensWindow = ['login', 'usage', 'context', 'help', 'update', 'configure', 'shells', 'btw', 'resume', 'agents', 'agent'].includes(parsed.name) || (parsed.name === 'model' && !parsed.args);
     if (!(windowed && opensWindow)) log('user', raw.trim());
     switch (parsed.name) {
+      case 'mcp':
+        setOverlay({name: 'mcp'});
+        break;
       case 'rewind':
         if (chat.busy) {
           log('info', 'The agent is working — press esc to stop it first, then /rewind.');
