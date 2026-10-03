@@ -14,12 +14,16 @@ import type {Resume} from './runtime.js';
 const args = process.argv.slice(2);
 if (args.includes('--help') || args.includes('-h')) {
   console.log(`Usage: rein [--continue|-c] [--classic|--fullscreen]
+       rein -p "<prompt>" [--model m] [--output-format text|json|stream-json]
        rein --update | --version
 
   -c, --continue [id]   pick a saved conversation from this project to continue (or continue <id>)
   --classic        inline renderer (native scrollback, no mouse)
   --fullscreen     app-style renderer: top bar, sidebar, mouse clicks (default)
   --add-dir <path> also let the agent use this folder without asking (repeatable)
+  -p, --print      headless: run one prompt (or stdin) and print the result; also --model,
+                   --effort, --output-format, --permission-mode ask|auto|bypass,
+                   --allowedTools "shell(npm test:*),edit(src/**)", --disallowedTools, --verbose
   --update         update Rein (latest from npm) and the claude / codex CLIs, then exit
   -v, --version    print Rein's version`);
   process.exit(0);
@@ -42,8 +46,13 @@ if (args.includes('--update')) {
   }
   process.exit(failed ? 1 : 0);
 }
+if (args.includes('-p') || args.includes('--print')) {
+  // Headless: one prompt, printed result, no UI (scripts/CI).
+  const {runHeadless} = await import('./headless.js');
+  process.exit(await runHeadless(args));
+}
 if (!process.stdin.isTTY) {
-  console.error('rein needs an interactive terminal.');
+  console.error('rein needs an interactive terminal (or use rein -p "…" for headless mode).');
   process.exit(1);
 }
 

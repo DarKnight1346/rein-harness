@@ -6,7 +6,8 @@ import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {resolveInRoot, resolvePath, ToolError, workingDirs, type Origin, type ToolContext, type ToolResult} from './fs.js';
 import {TOOLS, toolByName, type ToolDef} from './registry.js';
-import {addProjectRule, check, loadRules, ruleTool, suggestRule, type Subject} from './permissions.js';
+import {addProjectRule, check, loadRules, ruleTool, suggestRule, type Rules, type Subject} from './permissions.js';
+import {hasHooks, runHooks} from '../hooks.js';
 import {ShellManager} from './shells.js';
 import type {DiffLine} from './diff.js';
 import {skillDirs} from '../skills/index.js';
@@ -27,7 +28,7 @@ export type ApprovalRequest = {
 export type ApprovalDecision = 'once' | 'session' | 'always' | 'deny';
 export type ApprovalMode = 'ask' | 'auto' | 'bypass';
 /** How a file change got approved (shown in the transcript). */
-export type ApprovedBy = 'user' | 'session' | 'auto' | 'bypass' | 'scratchpad' | 'rule';
+export type ApprovedBy = 'user' | 'session' | 'auto' | 'bypass' | 'scratchpad' | 'rule' | 'hook';
 export type ToolActivity =
   | {phase: 'start'; id: number; label: string; summary: string; origin?: Origin}
   | {phase: 'end'; id: number; label: string; summary: string; ok: boolean; result: string; approvedBy?: ApprovedBy; judge?: string; origin?: Origin; diff?: DiffLine[]};
@@ -49,6 +50,8 @@ export type ToolHostOptions = {
   judge?: (req: ApprovalRequest) => Promise<{allow: boolean; note: string}>;
   /** Extra working directories from config (`additionalDirectories`). */
   configDirs?: () => string[];
+  /** Extra rules for this run only (headless --allowedTools / --disallowedTools). */
+  extraRules?: () => Rules;
   /** Save a file's state before a tool changes it (checkpoints for /rewind). */
   checkpoint?: (file: string) => Promise<void>;
 };
@@ -116,8 +119,15 @@ export class ToolHost extends EventEmitter {
       // Permission rules (Claude Code format, .rein/.claude settings): deny blocks outright,
       // allow skips the prompt. Every call is checked — even ones that wouldn't ask.
       const subject = this.subject(ctx, tool, args);
-      const verdict = check(loadRules(this.opts.root), subject, (p) => this.pathForms(p));
+      const fileRules = loadRules(this.opts.root);
+      const extra = this.opts.extraRules?.() ?? {allow: [], deny: []};
+      const verdict = check({allow: [...fileRules.allow, ...extra.allow], deny: [...fileRules.deny, ...extra.deny]}, subject, (p) => this.pathForms(p));
       if (verdict === 'deny') throw new ToolError(`blocked by a permission rule (deny) in the user's settings; ask the user instead of retrying`);
+      // PreToolUse hooks (Claude Code format) may block, approve, or force the prompt.
+      const hookInput = {session_id: this.opts.sessionId?.(), tool: tool.name, tool_input: args ?? {}};
+      const pre = hasHooks('PreToolUse', this.opts.root) ? await runHooks('PreToolUse', this.opts.root, hookInput) : undefined;
+      if (pre?.block) throw new ToolError(`blocked by a PreToolUse hook: ${pre.block}`);
+      if (pre?.allow && !pre.ask) approvedBy = 'hook';
       const suggestion = suggestRule(subject, (p) => this.ruleRel(p));
       const remember = (decision: ApprovalDecision) => {
         if (decision === 'always' && suggestion) addProjectRule(this.opts.root, suggestion);
@@ -125,7 +135,8 @@ export class ToolHost extends EventEmitter {
       // Paths outside the working directories: ask first, like Claude Code ("allow this read
       // outside the working directories?"). Writes there always need an explicit yes.
       const outside = this.outsidePaths(ctx, tool, args);
-      if (outside.length) {
+      if (outside.length && approvedBy === 'hook') ctx.outsideAllowed = outside;
+      if (outside.length && !approvedBy) {
         const mode = this.opts.mode();
         const sensitive = outside.some(isSensitivePath);
         const req = {tool, args, summary, preview: preview(tool, args), origin, outside, sensitive, suggestion: sensitive ? undefined : suggestion};
@@ -153,7 +164,10 @@ export class ToolHost extends EventEmitter {
       if (tool.mutating && !approvedBy) {
         const mode = this.opts.mode();
         const req = {tool, args, summary, preview: preview(tool, args), origin, suggestion};
-        if (verdict === 'allow') approvedBy = 'rule';
+        const forceAsk = !!pre?.ask; // a PreToolUse hook asked for the prompt
+        if (forceAsk) {
+          // fall through to the prompt
+        } else if (verdict === 'allow') approvedBy = 'rule';
         else if (mode === 'bypass') approvedBy = 'bypass';
         else if (this.sessionAllowed) approvedBy = 'session';
         else if (mode === 'auto' && this.opts.judge) {
@@ -175,6 +189,12 @@ export class ToolHost extends EventEmitter {
         for (const p of subject.paths ?? []) await this.opts.checkpoint(p).catch(() => {});
       }
       result = await tool.run(ctx, args ?? {});
+      // PostToolUse hooks: feedback (exit 2 / decision "block") and context go back to the model.
+      if (hasHooks('PostToolUse', this.opts.root)) {
+        const post = await runHooks('PostToolUse', this.opts.root, {...hookInput, tool_response: {ok: result.ok, text: result.text.slice(0, 20_000)}});
+        const notes = [post.block && `[PostToolUse hook] ${post.block}`, post.context && `[PostToolUse hook context] ${post.context}`].filter(Boolean);
+        if (notes.length) result = {...result, text: `${result.text}\n\n${notes.join('\n')}`};
+      }
     } catch (err) {
       result = {ok: false, text: err instanceof ToolError ? err.message : `error: ${(err as Error).message}`};
     }

@@ -16,6 +16,7 @@ import {advisorRef, advisorTool} from './agents/advisor.js';
 import {GoalManager} from './goals/manager.js';
 import {Checkpoints} from './session/checkpoints.js';
 import {startUsageRefresh} from './accounts/usage.js';
+import {hasHooks, runHooks} from './hooks.js';
 import {goalDoneTool} from './goals/tool.js';
 import {webTools} from './tools/web.js';
 import {todoTool} from './tools/todo.js';
@@ -42,11 +43,14 @@ export class Runtime {
   auto: AutoRouter = makeAutoRouter({config: () => this.config, onDecision: (d) => (this.lastDecision = d)});
   compact = (t: Transcript, _reason: CompactReason): Promise<CompactResult> => compactTranscript(t, this.config);
 
+  /** Rules for this run only (headless --allowedTools / --disallowedTools). */
+  extraRules: {allow: string[]; deny: string[]} = {allow: [], deny: []};
   /** Set by the UI: shows the approval prompt for a file-changing tool call. */
   approver: ((req: ApprovalRequest) => Promise<ApprovalDecision>) | undefined;
   readonly tools = new ToolHost({
     root: process.cwd(),
     approve: (req) => (this.approver ? this.approver(req) : Promise.resolve('deny')),
+    extraRules: () => this.extraRules,
     mode: () => this.config.toolApproval,
     shellMaxMs: () => this.config.shellMaxMinutes * 60_000,
     scratch: () => this.engine?.scratch,
@@ -204,6 +208,29 @@ Drop superseded reads of the same file, routine listings, and output that no lon
     return parseIndices(reply);
   }
 
+  /** SessionStart hook context, added to the first message of the session. */
+  private sessionContext: string | undefined;
+
+  private async beforePrompt(text: string): Promise<{block?: string; context?: string}> {
+    const root = process.cwd();
+    const session_id = this.engine?.transcript.id;
+    const out = hasHooks('UserPromptSubmit', root) ? await runHooks('UserPromptSubmit', root, {session_id, prompt: text}) : {errors: []};
+    const context = [this.sessionContext, out.context].filter(Boolean).join('\n');
+    if (!out.block) this.sessionContext = undefined;
+    return {block: out.block, context: context || undefined};
+  }
+
+  /**
+   * Stop hooks after a reply: exit 2 / decision "block" keeps the agent going with the reason as
+   * its next instruction. `active` is true while continuing because of a Stop hook (as in Claude Code).
+   */
+  async stopHook(active: boolean): Promise<string | undefined> {
+    const root = process.cwd();
+    if (!hasHooks('Stop', root)) return undefined;
+    const out = await runHooks('Stop', root, {session_id: this.engine?.transcript.id, stop_hook_active: active});
+    return out.block;
+  }
+
   /** Auto effort: one decision-model question (Jev or the cheap model) about how hard the message is. */
   private async pickEffort(text: string, levels: string[]): Promise<string | undefined> {
     const meaning: Record<string, string> = {
@@ -276,6 +303,11 @@ Drop superseded reads of the same file, routine listings, and output that no lon
       imageTool(() => this.config),
     );
     this.config = await loadConfig();
+    // SessionStart hooks: their output becomes context for the first message.
+    if (hasHooks('SessionStart', process.cwd())) {
+      const out = await runHooks('SessionStart', process.cwd(), {source: typeof opts.resume === 'string' ? 'resume' : 'startup'}).catch(() => undefined);
+      this.sessionContext = out?.context;
+    }
     this.stopUsageRefresh = startUsageRefresh({balancing: () => this.config.loadBalancing !== 'sticky', busy: (id) => catalog.busy.get(id) ?? 0});
     setExtraWorkingDirs(() => this.tools.extraWorkingDirs());
     await usageStore.load();
@@ -290,6 +322,7 @@ Drop superseded reads of the same file, routine listings, and output that no lon
         compact: (t, reason) => this.compact(t, reason),
         selectCarry: (input) => this.selectCarry(input),
         pickEffort: (text, levels) => this.pickEffort(text, levels),
+        beforePrompt: (text) => this.beforePrompt(text),
         tools: {
           binding: {
             // Resolved when a session opens: the agent tool lists the models signed in right now.

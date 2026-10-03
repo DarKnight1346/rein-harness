@@ -18,6 +18,8 @@ export type ChatEntry =
 export type NewEntry<T> = T extends unknown ? Omit<T, 'id'> : never;
 
 const FLUSH_MS = 33;
+/** Most times in a row a Stop hook may send the agent back to work. */
+const MAX_STOP_CONTINUATIONS = 10;
 const GUTTER = 2;
 
 /**
@@ -73,7 +75,8 @@ export function useChat(commit: (e: NewEntry<ChatEntry>) => void, notice: (kind:
   }, [busy, flush]);
 
   const send = useCallback(
-    async (text: string, images?: ImageInput[]) => {
+    async (text: string, images?: ImageInput[], stopDepth = 0): Promise<void> => {
+      let finished = false;
       setBusy(true);
       setStartedAt(Date.now());
       setPhase(runtime.config.chatModel === 'auto' ? 'routing' : 'thinking');
@@ -128,6 +131,7 @@ export function useChat(commit: (e: NewEntry<ChatEntry>) => void, notice: (kind:
           } else if (ev.type === 'done') {
             flush(true);
             if (route) commit({kind: 'route', ...route, interrupted: ev.interrupted});
+            finished = !ev.interrupted;
           } else if (ev.type === 'error') {
             flush(true);
             notice('error', ev.message);
@@ -138,6 +142,14 @@ export function useChat(commit: (e: NewEntry<ChatEntry>) => void, notice: (kind:
         notice('error', (err as Error).message);
       } finally {
         setBusy(false);
+      }
+      // A Stop hook may keep the agent working (bounded, like Claude Code's stop_hook_active).
+      if (finished && stopDepth < MAX_STOP_CONTINUATIONS) {
+        const reason = await runtime.stopHook(stopDepth > 0).catch(() => undefined);
+        if (reason) {
+          notice('info', `Stop hook: ${reason}`);
+          await send(`<stop_hook>\n${reason}\n</stop_hook>\nContinue working.`, undefined, stopDepth + 1);
+        }
       }
     },
     [commit, flush, notice],
