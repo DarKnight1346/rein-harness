@@ -23,8 +23,11 @@ export function hueHex(h: number, s = 0.85, l = 0.62): string {
   return '#' + [f(0), f(8), f(4)].map((x) => Math.round(x * 255).toString(16).padStart(2, '0')).join('');
 }
 
+/** Degrees wrapped into [0, 360) — JS `%` keeps the sign, so long animations went negative. */
+const wrapHue = (h: number) => ((h % 360) + 360) % 360;
+
 /** Hue for character `i` at `tick`: a rainbow that flows left→right across bar + label. */
-export const rainbow = (i: number, tick: number) => hueHex((i * 24 - tick * 20 + 3600) % 360);
+export const rainbow = (i: number, tick: number) => hueHex(wrapHue(i * 24 - tick * 20));
 
 /**
  * Animated status line: sliding bar wave + a rainbow flowing through the bar and the label, with a
@@ -52,7 +55,7 @@ export function Working({startedAt, phase, tool, tokens, queued = 0}: {startedAt
       {[...label].map((ch, i) => {
         const lit = Math.abs(i - band) <= 1;
         return (
-          <Text key={i} color={lit ? hueHex((i * 24 - tick * 20 + 3600 + 96) % 360, 1, 0.8) : rainbow(i + 5, tick)} bold={lit}>
+          <Text key={i} color={lit ? hueHex(wrapHue(i * 24 - tick * 20 + 96), 1, 0.8) : rainbow(i + 5, tick)} bold={lit}>
             {ch}
           </Text>
         );

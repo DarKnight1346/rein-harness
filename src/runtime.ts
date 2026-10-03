@@ -40,6 +40,8 @@ import {headTail} from './router/auto.js';
 
 /** `auto` approval mode: allow without asking only at this confidence or higher. */
 const AUTO_APPROVE_MIN = 0.85;
+/** Plan mode: how sure the decision model must be that an unlisted command only reads. */
+const READ_ONLY_MIN = 0.85;
 import {mcpProxyCommand, ToolHost, type ApprovalDecision, type ApprovalRequest, type ToolActivity} from './tools/host.js';
 
 /** Process-wide state shared by the UI and commands. */
@@ -75,6 +77,7 @@ export class Runtime {
     scratch: () => this.engine?.scratch,
     sessionId: () => this.engine?.transcript.id,
     judge: (req) => this.judgeChange(req),
+    readOnlyJudge: (command) => this.judgeReadOnly(command),
     configDirs: () => this.config?.additionalDirectories ?? [],
     checkpoint: (file) => this.checkpoints.snapshot(this.currentTurn(), file),
   });
@@ -99,6 +102,21 @@ export class Runtime {
    * latest request, the action and a clipped preview. Allows only confident "clearly requested and
    * safe" verdicts; everything else is shown to the user.
    */
+  /** Plan mode: is a shell command purely a lookup (changes nothing on disk, in git, packages or services)? */
+  private async judgeReadOnly(command: string): Promise<{readOnly: boolean; note: string}> {
+    const decision = await decide(this.config, {shell_command: command.slice(0, 2000)}, {
+      read_only: {
+        type: 'noul',
+        instructions:
+          'Does this shell command only READ — inspect files, print information, query package managers or the system — without changing anything? Any write counts as a change: creating, modifying or deleting files (including > redirects and tee), installing/upgrading/removing packages, git commits/checkouts/resets, starting or stopping services, network uploads.',
+        criteria: {true: 'only reads / prints information', false: 'changes something, or unclear'},
+      },
+    });
+    const a = decision.answers.read_only;
+    const p = a?.type === 'noul' ? a.noul : 0;
+    return {readOnly: p >= READ_ONLY_MIN, note: `${p.toFixed(2)} via ${decision.backend}`};
+  }
+
   private async judgeChange(req: ApprovalRequest): Promise<{allow: boolean; note: string}> {
     const lastUser = [...(this.engine?.transcript.messages ?? [])].reverse().find((m) => m.role === 'user');
     const state = {

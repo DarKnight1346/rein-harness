@@ -76,15 +76,29 @@ describe('read-only commands and plan mode in the tool host', async () => {
     host.close();
   });
 
-  it('plan mode: read-only runs, other commands ask (allow once / deny), even in bypass; edits are refused', async () => {
+  it('plan mode (ask mode): read-only runs, other commands ask (allow once / deny); edits are refused', async () => {
     const asked: {command: string; planMode?: boolean}[] = [];
-    const host = new ToolHost({root, mode: () => 'bypass', planMode: () => true, approve: async (r) => (asked.push({command: r.args.command, planMode: r.planMode}), 'deny')});
+    const host = new ToolHost({root, mode: () => 'ask', planMode: () => true, approve: async (r) => (asked.push({command: r.args.command, planMode: r.planMode}), 'deny')});
     expect((await host.call('shell', {command: 'uname -m'})).ok).toBe(true);
     const r = await host.call('shell', {command: 'brew install qemu'});
     expect(r.ok).toBe(false);
     expect(r.text).toMatch(/plan mode is on and the user declined/);
     expect(asked).toEqual([{command: 'brew install qemu', planMode: true}]);
     expect((await host.call('write', {path: 'x.txt', content: 'x'})).text).toMatch(/plan mode is on/);
+    host.close();
+  });
+
+  it('plan mode: unlisted commands go to the decision model; bypass never prompts', async () => {
+    const asked: string[] = [];
+    const judged: string[] = [];
+    const judge = async (c: string) => (judged.push(c), {readOnly: c.includes('brew deps'), note: 'test'});
+    const host = new ToolHost({root, mode: () => 'bypass', planMode: () => true, readOnlyJudge: judge, approve: async (r) => (asked.push(r.args.command), 'once')});
+    expect((await host.call('shell', {command: 'for f in $(echo a b); do echo "brew deps $f"; done'})).ok).toBe(true);
+    const r = await host.call('shell', {command: 'make install'});
+    expect(r.ok).toBe(false);
+    expect(r.text).toMatch(/waits for the plan's approval/);
+    expect(asked).toEqual([]);
+    expect(judged).toHaveLength(2);
     host.close();
   });
 });

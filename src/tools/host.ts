@@ -58,6 +58,8 @@ export type ToolHostOptions = {
   /** Extra rules for this run only (headless --allowedTools / --disallowedTools). */
   extraRules?: () => Rules;
   /** Plan mode: file changes and non-read-only commands are refused until the plan is approved. */
+  /** Plan mode: does this command only read? (decision model) — lets unlisted queries run. */
+  readOnlyJudge?: (command: string) => Promise<{readOnly: boolean; note: string}>;
   planMode?: () => boolean;
   /** Save a file's state before a tool changes it (checkpoints for /rewind). */
   checkpoint?: (file: string) => Promise<void>;
@@ -147,8 +149,20 @@ export class ToolHost extends EventEmitter {
       // Read-only shell commands (ls, git status, brew info, --version…) run without asking, like
       // Claude Code — unless they name paths outside the working directories.
       const readOnly = tool.name === 'shell' && typeof (args as any)?.command === 'string' && readOnlyCommand((args as any).command) && !this.namesOutside(ctx, (args as any).command);
-      // Plan mode: file changes are refused; a command not known to be read-only asks the user.
-      const planAsk = !!this.opts.planMode?.() && this.checkPlanMode(ctx, tool, args, readOnly);
+      // Plan mode: file changes are refused. A command not on the read-only list goes to the
+      // decision model ("does this only read?"); if it can't say yes, bypass mode refuses it and the
+      // other modes ask the user.
+      let planAsk = !!this.opts.planMode?.() && this.checkPlanMode(ctx, tool, args, readOnly);
+      if (planAsk && this.opts.readOnlyJudge) {
+        const v = await this.opts.readOnlyJudge(String((args as any)?.command ?? '')).catch(() => undefined);
+        if (v?.readOnly) {
+          planAsk = false;
+          approvedBy = 'auto';
+          judge = `read-only, ${v.note}`;
+        }
+      }
+      if (planAsk && this.opts.mode() === 'bypass')
+        throw new ToolError('plan mode is on — this command may change things, so it waits for the plan\'s approval. Use plain read-only commands (one per call, no loops or substitutions) to explore, then call present_plan.');
       if (pre?.allow && !pre.ask) approvedBy = 'hook';
       const suggestion = suggestRule(subject, (p) => this.ruleRel(p));
       const remember = (decision: ApprovalDecision) => {
