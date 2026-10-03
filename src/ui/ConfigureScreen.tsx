@@ -1,5 +1,6 @@
 import React, {useState} from 'react';
 import {Box, Text, useInput} from 'ink';
+import {TabBar} from './TabBar.js';
 import {runtime} from '../runtime.js';
 import {DEFAULT_SIDEBAR, DEFAULT_STATUS, enabledItems, SIDEBAR_ITEMS, STATUS_ITEMS, type LayoutItem} from './layout.js';
 import {Clickable} from './terminal/clicks.js';
@@ -93,18 +94,7 @@ export function ConfigureScreen({onClose, onChange, bare}: {onClose(): void; onC
     setTabIndex((i + TAB_TITLES.length) % TAB_TITLES.length);
     setCursor(0);
   };
-  const tabs = (
-    <Box>
-      {TAB_TITLES.map((title, i) => (
-        <Clickable key={title} onClick={() => switchTab(i)}>
-          <Text color={i === tabIndex ? 'cyan' : undefined} bold={i === tabIndex} dimColor={i !== tabIndex}>
-            {i === tabIndex ? `[${title}]` : ` ${title} `}
-            {'  '}
-          </Text>
-        </Clickable>
-      ))}
-    </Box>
-  );
+  const tabs = <TabBar titles={TAB_TITLES} active={tabIndex} onSelect={switchTab} />;
   const frame = bare ? {} : {borderStyle: 'round' as const, borderColor: 'cyan', paddingX: 1};
   if (tabIndex >= TABS.length) {
     const def = CHOICE_TABS[tabIndex - TABS.length]!;
