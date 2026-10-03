@@ -8,9 +8,9 @@ import {autoUpdate, reinVersion, runUpdate, type UpdateLine} from '../commands/u
 import {runtime, type Resume} from '../runtime.js';
 import {listTranscripts, loadTranscript, type SessionInfo} from '../session/transcript.js';
 import {catalog} from '../router/catalog.js';
-import {contextReport, type ContextReport} from '../session/context.js';
+import {subagentContextReport, contextReport, type ContextReport} from '../session/context.js';
 import {compactableCount} from '../session/compactor.js';
-import {btw} from '../session/btw.js';
+import {askBtwSubagent, btw} from '../session/btw.js';
 import type {Transcript} from '../session/transcript.js';
 import type {AddEntry, Entry} from './entries.js';
 import type {ApprovalDecision, ApprovalRequest} from '../tools/host.js';
@@ -44,7 +44,7 @@ export type Overlay =
   | {name: 'import'; rows: AccountRow[]}
   // Fullscreen-only info windows (classic prints these into the transcript instead).
   | {name: 'usage'; data?: {rows: UsageRow[]; jev: boolean}}
-  | {name: 'context'; report?: ContextReport}
+  | {name: 'context'; report?: ContextReport; agent?: string}
   | {name: 'help'}
   | {name: 'shells'}
   | {name: 'resume'; sessions: SessionInfo[]}
@@ -98,6 +98,7 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
     setEntries((list) => [...list, {...e, id: nextId.current++} as Entry]);
   }, []);
   const log = useCallback((kind: 'info' | 'error' | 'user', text: string) => add({kind, text}), [add]);
+  const logMain = log;
 
   const chat = useChat(add, log, {split: opts.renderer === 'classic'});
 
@@ -444,6 +445,9 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
   );
 
   const runCommand = (raw: string) => {
+    // Viewing a subagent: command feedback shows in its view (the main history isn't on screen).
+    const shown = viewing;
+    const log = shown ? (kind: 'info' | 'error' | 'user', text: string) => kind !== 'user' && runtime.agents.note(shown.id, kind === 'error' ? `✗ ${text}` : text) : logMain;
     const parsed = parseInput(raw, skills);
     if (!parsed) return;
     if (parsed.kind === 'skill') {
@@ -461,6 +465,12 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
       if (parsed.skill.planMode && !runtime.planMode) {
         runtime.planMode = true;
         log('info', 'Plan mode on — nothing changes until you approve the plan (shift+tab turns it off).');
+      }
+      if (viewing) {
+        // Viewing a subagent: the skill runs there, like a message would.
+        if (args.images.length) log('info', 'Images can only be sent to the main agent; the subagent gets the text.');
+        void runtime.agents.message(viewing.id, skillPrompt(parsed.skill, args.text)).catch((err) => log('error', (err as Error).message));
+        return;
       }
       void chat.send(skillPrompt(parsed.skill, args.text), args.images).then(bump);
       return;
@@ -489,6 +499,18 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
     }
     if (parsed.kind === 'unknown') {
       log('error', `Unknown command /${parsed.name}. Try /help.`);
+      return;
+    }
+    // Commands about the main conversation itself: say so instead of silently acting on main while
+    // a subagent is on screen.
+    const MAIN_ONLY: Record<string, string> = {
+      compact: 'Subagents can\'t be compacted — /compact works on the main conversation',
+      rewind: 'Rewind works on the main conversation (subagents keep no checkpoints)',
+      clear: '/clear clears the main conversation and stops every subagent',
+      resume: '/resume replaces the main conversation',
+    };
+    if (viewing && MAIN_ONLY[parsed.name]) {
+      log('info', `${MAIN_ONLY[parsed.name]}. Switch back first: /agent main, or click ◂ main at the top.`);
       return;
     }
     if (chat.busy && ['clear', 'compact', 'tui', 'update', 'resume'].includes(parsed.name)) {
@@ -600,7 +622,15 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
           let info: {mode?: 'fork' | 'context'; model?: string} = {};
           let last = 0;
           try {
-            for await (const ev of btw(runtime.engine, runtime.config, question)) {
+            const about = viewing;
+            const stream = about
+              ? (async function* () {
+                  const r = await askBtwSubagent(about, runtime.config, question);
+                  yield {type: 'mode' as const, mode: 'context' as const, model: `${r.model} · about ${about.name}`};
+                  yield {type: 'text' as const, delta: r.answer};
+                })()
+              : btw(runtime.engine, runtime.config, question);
+            for await (const ev of stream) {
               if (ev.type === 'mode') info = {mode: ev.mode, model: ev.model};
               else answer += ev.delta;
               // Stream into the window, ~15 updates/s.
@@ -632,7 +662,7 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
           break;
         }
         void runtime.setConfig({chatModel: value}).then(() => {
-          log('info', `Chat model: ${describeChatModel(value)}`);
+          log('info', `Chat model: ${describeChatModel(value)}${viewing ? ` (the main agent's; ${viewing.name} keeps ${viewing.modelLabel ?? 'its model'})` : ''}`);
           bump();
         });
         break;
@@ -654,20 +684,26 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
         });
         break;
       }
-      case 'context':
+      case 'context': {
+        // The agent on screen: a subagent's own context, or the main conversation's.
+        const report = viewing
+          ? subagentContextReport(viewing, runtime.config, runtime.tools.specs({subagent: true, includeMainOnly: viewing.mode === 'fork'}))
+          : contextReport(runtime.engine, runtime.config, runtime.tools.specs({includeMainOnly: true}));
         if (windowed) {
-          setOverlay({name: 'context'});
-          void contextReport(runtime.engine, runtime.config, runtime.tools.specs({includeMainOnly: true})).then(
-            (report) => setOverlay((o) => (o.name === 'context' ? {name: 'context', report} : o)),
+          const agent = viewing?.name;
+          setOverlay({name: 'context', agent});
+          void report.then(
+            (r) => setOverlay((o) => (o.name === 'context' ? {name: 'context', report: r, agent} : o)),
             (err) => log('error', `Context unavailable: ${(err as Error).message}`),
           );
           break;
         }
-        void contextReport(runtime.engine, runtime.config, runtime.tools.specs({includeMainOnly: true})).then(
+        void report.then(
           (report) => add({kind: 'context', report}),
           (err) => log('error', `Context unavailable: ${(err as Error).message}`),
         );
         break;
+      }
       case 'compact': {
         if (!runtime.engine.transcript.messages.length) {
           log('info', 'Nothing to compact yet.');
@@ -767,7 +803,8 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
         void openResume();
         break;
       case 'shells': {
-        const shells = runtime.tools.shells.list();
+        // The viewed agent's commands (main: its own; a subagent: the ones it started).
+        const shells = runtime.tools.shells.list().filter((s) => (viewing ? s.origin?.agentId === viewing.id : !s.origin));
         const id = Number(parsed.args.replace('#', ''));
         if (windowed) {
           if (parsed.args && shells.some((s) => s.id === id)) setOverlay({name: 'shell', id});
@@ -815,9 +852,11 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
       return;
     }
     // Enter while the command list is showing fills in the highlighted one ("/name ") so arguments
-    // can follow; the list closes at the space, so Enter again runs it.
+    // can follow; the list closes at the space, so Enter again runs it. A command typed out in full
+    // (and not changed with the arrows) runs right away.
     const partial = suggestCommands(typed, skills);
-    if (partial.length) {
+    const typedExact = suggestIndex === 0 && partial[0] && `/${partial[0].name}` === typed.trim().toLowerCase();
+    if (partial.length && !typedExact) {
       const pick = partial[Math.min(suggestIndex, partial.length - 1)] ?? partial[0]!;
       const filled = `/${pick.name} `;
       prevDraft.current = filled;
@@ -870,7 +909,7 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
 
   /** Status-line click / `/shells`: one background process → its logs directly, else the list. */
   const openShells = () => {
-    const bg = runtime.tools.shells.list().filter((s) => s.background);
+    const bg = runtime.tools.shells.list().filter((s) => s.background && (viewing ? s.origin?.agentId === viewing.id : !s.origin));
     const running = bg.filter((s) => s.status === 'running');
     if (running.length === 1) setOverlay({name: 'shell', id: running[0]!.id});
     else if (!running.length && bg.length === 1) setOverlay({name: 'shell', id: bg[0]!.id});
