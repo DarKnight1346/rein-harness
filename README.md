@@ -19,8 +19,16 @@ and a compaction model. No OAuth tokens are extracted: all traffic goes through 
 
 ```sh
 npm install -g rein-harness
+```
+
+**Run it** from the project folder you want to work in — Rein's tools are limited to that folder:
+
+```sh
+cd ~/code/my-project
 rein
 ```
+
+Or try it without installing: `npx rein-harness`.
 
 If npm fails with `EACCES` (a root-owned global folder), either use `sudo npm install -g rein-harness`
 or point npm at a folder you own once, then install again:
@@ -54,7 +62,7 @@ npm install && npm run build && npm link   # then: rein   (or: npm run dev)
 ## Usage
 
 ```sh
-rein                     # start (fullscreen UI)
+rein                     # start in the current folder (fullscreen UI)
 rein --continue [id]     # pick a saved conversation from this project to continue
 rein --classic           # inline renderer (native scrollback, no mouse)
 rein --update            # update Rein and the CLIs, then exit
