@@ -1,5 +1,6 @@
 import React, {useRef, useState} from 'react';
-import {Text, useInput, usePaste} from 'ink';
+import {Box, Text, useInput, usePaste} from 'ink';
+import wrapAnsi from 'wrap-ansi';
 import {TRAILING_TOKEN_RE} from './attachments.js';
 
 type Props = {
@@ -16,7 +17,19 @@ type Props = {
   onPaste?(text: string): string | Promise<string>;
   /** Ctrl+V → an `[Image #n]` placeholder for the clipboard's image, if any. */
   onImagePaste?(): Promise<string | undefined>;
+  /** Columns available: text word-wraps to fit (instead of running off-screen). */
+  width?: number;
+  /** With width: show at most this many lines (the last ones, where the cursor is). */
+  maxLines?: number;
 };
+
+/** The input as displayed: word-wrapped to `width`, with room for the cursor after the last character. */
+export function wrapInput(value: string, width: number): string[] {
+  const w = Math.max(1, width);
+  return wrapAnsi(`${value} `, w, {hard: true, trim: false, wordWrap: true})
+    .split('\n')
+    .map((l) => (l.length > w && l.endsWith(' ') ? l.slice(0, w) : l));
+}
 
 /**
  * Minimal input; kept tiny on purpose since it lives in the dynamic region.
@@ -24,7 +37,7 @@ type Props = {
  * protocol), Option/Meta+Enter, Ctrl+J, or `\` then Enter. Plain Enter submits. Pasted text keeps
  * its newlines.
  */
-export function TextInput({placeholder = '', mask = false, isActive = true, value: controlled, onChange, onSubmit, onCancel, onPaste, onImagePaste}: Props) {
+export function TextInput({placeholder = '', mask = false, isActive = true, value: controlled, onChange, onSubmit, onCancel, onPaste, onImagePaste, width, maxLines}: Props) {
   const [own, setOwn] = useState('');
   const value = controlled ?? own;
   // Keystrokes can arrive faster than re-renders; always edit the latest value.
@@ -83,10 +96,32 @@ export function TextInput({placeholder = '', mask = false, isActive = true, valu
 
   if (!value) {
     return (
-      <Text>
+      <Text wrap="truncate">
         <Text inverse> </Text>
         <Text dimColor>{placeholder}</Text>
       </Text>
+    );
+  }
+  if (width && !mask) {
+    // Wrap ourselves so the caller can size the box to the line count; the cursor sits after the
+    // last character (the trailing space wrapInput leaves room for).
+    let lines = wrapInput(value, width);
+    if (maxLines && lines.length > maxLines) lines = lines.slice(-maxLines);
+    return (
+      <Box flexDirection="column" width={width}>
+        {lines.map((l, i) =>
+          i < lines.length - 1 ? (
+            <Text key={i} wrap="truncate">
+              {l || ' '}
+            </Text>
+          ) : (
+            <Text key={i} wrap="truncate">
+              {l.slice(0, -1)}
+              <Text inverse> </Text>
+            </Text>
+          ),
+        )}
+      </Box>
     );
   }
   return (

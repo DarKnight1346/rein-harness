@@ -12,7 +12,7 @@ import {ImportPrompt} from '../ImportPrompt.js';
 import {LoginScreen} from '../LoginScreen.js';
 import {ModelScreen} from '../ModelScreen.js';
 import {Clickable, useClickable} from '../terminal/clicks.js';
-import {TextInput} from '../TextInput.js';
+import {TextInput, wrapInput} from '../TextInput.js';
 import {goalSummary, useRein} from '../useRein.js';
 import {RewindScreen} from '../RewindScreen.js';
 import {McpScreen} from '../McpScreen.js';
@@ -135,7 +135,9 @@ export function FullscreenApp({resume}: {resume: Resume}) {
     if (delta > 0) setScroll((s) => (s > 0 ? s + delta : 0));
   }, [lines.length]);
 
-  const draftLines = Math.min(MAX_INPUT_LINES, Math.max(1, r.draft.split('\n').length));
+  // Input box: full terminal width; inside it the border (2), padding (2) and the "> " prompt (2).
+  const inputWidth = Math.max(10, cols - 6);
+  const draftLines = Math.min(MAX_INPUT_LINES, Math.max(1, r.draft ? wrapInput(r.draft, inputWidth).length : 1));
   const mainHeight = Math.max(3, rows - 1 /* top */ - 1 /* activity */ - (draftLines + 2) /* input */ - 1 /* footer */);
 
   const scrollBy = (n: number, viewport: number) =>
@@ -340,7 +342,7 @@ export function FullscreenApp({resume}: {resume: Resume}) {
 
   return (
     <Box flexDirection="column" height={rows}>
-      <TopBar tick={r.statusTick} sidebarOpen={showSidebar} onToggleSidebar={toggleSidebar} togglePlanMode={r.togglePlanMode} run={r.runCommand} openModel={() => r.setOverlay({name: 'model'})} openShells={r.openShells} viewing={viewing} setView={r.setView} />
+      <TopBar cols={cols} tick={r.statusTick} sidebarOpen={showSidebar} onToggleSidebar={toggleSidebar} togglePlanMode={r.togglePlanMode} run={r.runCommand} openModel={() => r.setOverlay({name: 'model'})} openShells={r.openShells} viewing={viewing} setView={r.setView} />
       <Box flexDirection="row" height={mainHeight}>
         <Box flexDirection="column" flexGrow={1} flexShrink={1} flexBasis={0} minWidth={0} height={mainHeight} overflow="hidden">
           <History
@@ -389,10 +391,10 @@ export function FullscreenApp({resume}: {resume: Resume}) {
           <Text> </Text>
         )}
       </Box>
-      <Box borderStyle="round" borderColor={r.inputActive ? 'cyan' : 'gray'} paddingX={1} height={draftLines + 2} overflow="hidden">
+      <Box borderStyle="round" borderColor={r.inputActive ? 'cyan' : 'gray'} paddingX={1} width={cols} height={draftLines + 2} flexShrink={0} overflow="hidden">
         <Text color="cyan">{'> '}</Text>
-        <Box flexDirection="column" flexGrow={1} justifyContent="flex-end" overflow="hidden">
-          <TextInput isActive={r.inputActive} value={r.draft} onChange={r.onDraft} onPaste={r.onPaste} onImagePaste={r.onImagePaste} placeholder={!r.ready ? 'starting…' : viewing ? `message ${viewing.name} (subagent)…` : chat.busy ? 'queue a message, or /btw <question>' : 'message, / for commands'} onSubmit={r.onSubmit} />
+        <Box flexDirection="column" width={inputWidth} justifyContent="flex-end" overflow="hidden">
+          <TextInput width={inputWidth} maxLines={MAX_INPUT_LINES} isActive={r.inputActive} value={r.draft} onChange={r.onDraft} onPaste={r.onPaste} onImagePaste={r.onImagePaste} placeholder={!r.ready ? 'starting…' : viewing ? `message ${viewing.name} (subagent)…` : chat.busy ? 'queue a message, or /btw <question>' : 'message, / for commands'} onSubmit={r.onSubmit} />
         </Box>
       </Box>
       <Box height={1} paddingX={1}>
@@ -516,7 +518,7 @@ function History({width, lines, scroll, onScroll, selection, onSelect, onCopy, s
   );
 }
 
-function TopBar(props: {tick: number; sidebarOpen: boolean; onToggleSidebar(): void; togglePlanMode(): void; run(cmd: string): void; openModel(): void; openShells(): void; viewing?: Subagent; setView(v: 'main' | number): void}) {
+function TopBar(props: {cols: number; tick: number; sidebarOpen: boolean; onToggleSidebar(): void; togglePlanMode(): void; run(cmd: string): void; openModel(): void; openShells(): void; viewing?: Subagent; setView(v: 'main' | number): void}) {
   useShellsTick();
   useAgentsTick();
   const background = runtime.tools.shells.running({background: true}).length;
@@ -527,6 +529,29 @@ function TopBar(props: {tick: number; sidebarOpen: boolean; onToggleSidebar(): v
   void props.tick;
   const info = statusInfo();
   const items = enabledItems('status', runtime.config);
+  /** Each status segment's plain text (for fitting the bar to the terminal width). */
+  const segText = (id: string): string | undefined => {
+    switch (id) {
+      case 'model':
+        return info.model;
+      case 'account':
+        return info.account;
+      case 'usage':
+        return info.usage || undefined;
+      case 'context':
+        return `ctx ${info.context}%`;
+      case 'decider':
+        return `decides: ${info.decider}`;
+      case 'advisor':
+        return `advisor: ${info.advisor}`;
+      case 'approvals':
+        return `edits: ${info.approvals}`;
+      case 'messages':
+        return `${info.messages} msgs`;
+      default:
+        return undefined;
+    }
+  };
   const segment = (id: string): ReactNode => {
     switch (id) {
       case 'model':
@@ -585,8 +610,94 @@ function TopBar(props: {tick: number; sidebarOpen: boolean; onToggleSidebar(): v
         return null;
     }
   };
+  // Segments in display order with their widths (" │ " + text) and drop priority: when the bar is
+  // wider than the terminal, the least important go first — configured items from the end of the
+  // list, then background/agents/goal/plan; nothing ever wraps or runs off-screen.
+  type Part = {key: string; width: number; drop: number; node: ReactNode};
+  const parts: Part[] = [];
+  if (props.viewing)
+    parts.push({
+      key: 'viewing',
+      width: 3 + `◂ main · viewing ${props.viewing.name}`.length,
+      drop: 1000,
+      node: (
+        <Seg key="viewing" onClick={() => props.setView('main')}>
+          <Text color="cyan">◂ main</Text>
+          <Text dimColor> · viewing </Text>
+          <Text color="magenta" bold>
+            {props.viewing.name}
+          </Text>
+        </Seg>
+      ),
+    });
+  const configured = items.filter((id) => id !== 'sidebarToggle');
+  configured.forEach((id, i) => {
+    const text = segText(id);
+    const node = segment(id);
+    if (text && node) parts.push({key: id, width: 3 + stringWidth(text), drop: configured.length - i, node});
+  });
+  if (runtime.planMode)
+    parts.push({
+      key: 'plan',
+      width: 3 + 11,
+      drop: 900,
+      node: (
+        <Seg key="plan" onClick={props.togglePlanMode}>
+          <Text color="yellow" bold>
+            ⏸ plan mode
+          </Text>
+        </Seg>
+      ),
+    });
+  const goal = runtime.goals.goal;
+  if (goal)
+    parts.push({
+      key: 'goal',
+      width: 3 + `◎ goal · ${goal.status}`.length,
+      drop: 800,
+      node: (
+        <Seg key="goal" onClick={() => props.run('/goal')}>
+          <Text color={goal.status === 'active' ? 'cyan' : goal.status === 'done' ? 'green' : 'yellow'}>◎ goal · {goal.status}</Text>
+        </Seg>
+      ),
+    });
+  if (activeAgents.length) {
+    const t = `● ${activeAgents.length} agent${activeAgents.length === 1 ? '' : 's'}`;
+    parts.push({
+      key: 'agents',
+      width: 3 + t.length,
+      drop: 700,
+      node: (
+        <Seg key="agents" onClick={openAgents}>
+          <Text color="magenta">{t}</Text>
+        </Seg>
+      ),
+    });
+  }
+  if (background) {
+    const t = `● ${background} background${background === 1 ? '' : ' processes'}`;
+    parts.push({
+      key: 'background',
+      width: 3 + t.length,
+      drop: 600,
+      node: (
+        <Seg key="background" onClick={props.openShells}>
+          <Text color="yellow">{t}</Text>
+        </Seg>
+      ),
+    });
+  }
+  const toggle = items.includes('sidebarToggle');
+  const room = props.cols - 'XXXX Rein '.length - (toggle ? 4 : 0);
+  const shown = new Set(parts.map((p) => p.key));
+  let used = parts.reduce((n, p) => n + p.width, 0);
+  for (const p of [...parts].sort((x, y) => x.drop - y.drop)) {
+    if (used <= room) break;
+    shown.delete(p.key);
+    used -= p.width;
+  }
   return (
-    <Box height={1}>
+    <Box height={1} width={props.cols} overflow="hidden">
       <Text bold>
         {[...'▁▃▅▇'].map((c, i) => (
           <Text key={i} color={rainbow(i * 2, 0)}>
@@ -595,48 +706,11 @@ function TopBar(props: {tick: number; sidebarOpen: boolean; onToggleSidebar(): v
         ))}{' '}
         Rein{' '}
       </Text>
-      {props.viewing ? (
-        <Seg onClick={() => props.setView('main')}>
-          <Text color="cyan">◂ main</Text>
-          <Text dimColor> · viewing </Text>
-          <Text color="magenta" bold>
-            {props.viewing.name}
-          </Text>
-        </Seg>
-      ) : null}
-      {items.filter((id) => id !== 'sidebarToggle').map(segment)}
-      {runtime.planMode ? (
-        <Seg onClick={props.togglePlanMode}>
-          <Text color="yellow" bold>
-            ⏸ plan mode
-          </Text>
-        </Seg>
-      ) : null}
-      {runtime.goals.goal ? (
-        <Seg onClick={() => props.run('/goal')}>
-          <Text color={runtime.goals.goal.status === 'active' ? 'cyan' : runtime.goals.goal.status === 'done' ? 'green' : 'yellow'}>
-            ◎ goal · {runtime.goals.goal.status}
-          </Text>
-        </Seg>
-      ) : null}
-      {activeAgents.length ? (
-        <Seg onClick={openAgents}>
-          <Text color="magenta">
-            ● {activeAgents.length} agent{activeAgents.length === 1 ? '' : 's'}
-          </Text>
-        </Seg>
-      ) : null}
-      {background ? (
-        <Seg onClick={props.openShells}>
-          <Text color="yellow">
-            ● {background} background{background === 1 ? '' : ' processes'}
-          </Text>
-        </Seg>
-      ) : null}
+      {parts.filter((p) => shown.has(p.key)).map((p) => p.node)}
       <Box flexGrow={1} />
-      {items.includes('sidebarToggle') ? (
+      {toggle ? (
         <Clickable onClick={props.onToggleSidebar}>
-          <Text color={props.sidebarOpen ? 'cyan' : 'gray'}>[≡]</Text>
+          <Text color={props.sidebarOpen ? 'cyan' : 'gray'}> [≡]</Text>
         </Clickable>
       ) : null}
     </Box>
