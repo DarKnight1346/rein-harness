@@ -14,7 +14,8 @@ and a compaction model. No OAuth tokens are extracted: all traffic goes through 
 ## Install
 
 **Requirements**
-- macOS or Linux, and **Node.js 22+** (`node --version`)
+- macOS, Linux or **Windows**, and **Node.js 22+** (`node --version`)
+- Windows: [Git for Windows](https://git-scm.com/download/win) is recommended — the agent's shell and hooks then use Git Bash (as in Claude Code); without it they fall back to PowerShell. Use Windows Terminal.
 - At least one of the official CLIs, installed and signed in:
   - **Claude Code** — `curl -fsSL https://claude.ai/install.sh | bash` (or `npm install -g @anthropic-ai/claude-code`), then run `claude` once to sign in
   - **Codex** — `npm install -g @openai/codex`, then `codex login`
@@ -136,3 +137,14 @@ Design, findings and status: [PLAN.md](PLAN.md). Tests: `npm test`. License: [MI
 
 ### Updates
 - Auto-update on launch can be turned off in /configure → Updates.
+
+### Getting the most out of a project
+- **Permissions:** "Always allow" in an approval prompt saves a rule (`shell(npm test:*)`, `edit(src/**)`) to
+  `.rein/settings.json`; `/permissions` lists them. Existing `.claude/settings.json` rules apply too.
+- **Undo:** `/rewind` (or esc twice) restores files and/or the conversation to before one of your messages.
+- **Tasks and effort:** the agent keeps a task list in the sidebar for multi-step work; pick an effort level (or
+  auto) after choosing a model in `/model`.
+- **Context:** `@path` attaches a file; `read` shows images and PDFs to the model.
+- **MCP:** servers in `.mcp.json`, `~/.rein/mcp.json` or added with `claude mcp add` — `/mcp` to review.
+- **Hooks:** Claude Code's `hooks` block in `.rein/settings.json` or `.claude/settings.json`.
+- **Scripts/CI:** `rein -p "…"` (`--output-format json`, `--permission-mode`, `--allowedTools`).
