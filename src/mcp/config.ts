@@ -1,7 +1,8 @@
-import {existsSync, mkdirSync, readFileSync, writeFileSync} from 'node:fs';
+import {readFileSync} from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import {reinHome} from '../store/paths.js';
+import {updateJsonFileSync} from '../store/json.js';
 
 /**
  * MCP server configs in Claude Code's format (`{"mcpServers": {name: {command, args, env} |
@@ -50,16 +51,9 @@ function approvedProjectServers(root: string): Set<string> {
 }
 
 export function approveProjectServer(root: string, name: string): void {
-  const file = localSettings(root);
-  let data: any = {};
-  if (existsSync(file)) {
-    try {
-      data = JSON.parse(readFileSync(file, 'utf8'));
-    } catch {}
-  }
-  data.enabledMcpjsonServers = [...new Set([...(data.enabledMcpjsonServers ?? []), name])];
-  mkdirSync(path.dirname(file), {recursive: true});
-  writeFileSync(file, JSON.stringify(data, null, 2) + '\n');
+  updateJsonFileSync(localSettings(root), (data) => {
+    data.enabledMcpjsonServers = [...new Set([...(data.enabledMcpjsonServers ?? []), name])];
+  });
 }
 
 /** Every configured server; later sources don't override earlier names (project → rein → claude). */

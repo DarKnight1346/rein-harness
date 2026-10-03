@@ -1,7 +1,8 @@
-import {existsSync, mkdirSync, readFileSync, writeFileSync} from 'node:fs';
+import {readFileSync} from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import {reinHome} from '../store/paths.js';
+import {updateJsonFileSync} from '../store/json.js';
 
 /**
  * Permission rules, in Claude Code's format: `Tool` or `Tool(specifier)` in `allow` / `deny` lists.
@@ -200,17 +201,9 @@ export function suggestRule(s: Subject, rel: (p: string) => string): string | un
 /** Save an allow rule to the project's .rein/settings.json (created if needed). */
 export function addProjectRule(root: string, rule: string, list: 'allow' | 'deny' = 'allow'): string {
   const file = path.join(root, '.rein', 'settings.json');
-  let data: any = {};
-  if (existsSync(file)) {
-    try {
-      data = JSON.parse(readFileSync(file, 'utf8'));
-    } catch {
-      data = {};
-    }
-  }
-  data.permissions ??= {};
-  data.permissions[list] = [...new Set([...(data.permissions[list] ?? []), rule])];
-  mkdirSync(path.dirname(file), {recursive: true});
-  writeFileSync(file, JSON.stringify(data, null, 2) + '\n');
+  updateJsonFileSync(file, (data) => {
+    data.permissions ??= {};
+    data.permissions[list] = [...new Set([...(data.permissions[list] ?? []), rule])];
+  });
   return file;
 }

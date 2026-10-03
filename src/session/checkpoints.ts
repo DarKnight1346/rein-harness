@@ -1,5 +1,5 @@
 import {createHash} from 'node:crypto';
-import {existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync} from 'node:fs';
+import {closeSync, fstatSync, mkdirSync, openSync, readdirSync, readFileSync, rmSync, writeFileSync} from 'node:fs';
 import {appendFile} from 'node:fs/promises';
 import path from 'node:path';
 import {reinHome} from '../store/paths.js';
@@ -37,8 +37,12 @@ export class Checkpoints {
     if (this.snaps) return this.snaps;
     this.loadedFor = this.sessionId();
     const file = path.join(this.dir(), 'index.jsonl');
-    this.snaps = existsSync(file)
-      ? readFileSync(file, 'utf8')
+    let text = '';
+    try {
+      text = readFileSync(file, 'utf8');
+    } catch {}
+    this.snaps = text
+      ? text
           .split('\n')
           .filter(Boolean)
           .flatMap((l) => {
@@ -56,28 +60,45 @@ export class Checkpoints {
   /** Save `file`'s current state (or its absence) before turn `turn` changes it — once per turn. */
   async snapshot(turn: number, file: string): Promise<void> {
     const snaps = this.load();
-    let st: ReturnType<typeof statSync> | undefined;
+    // One open: whether it exists, its size and its contents all come from the same file.
+    let fd: number | undefined;
+    let isDir = false;
     try {
-      st = statSync(file);
-    } catch {}
-    if (st?.isDirectory()) {
+      fd = openSync(file, 'r');
+      isDir = fstatSync(fd).isDirectory();
+    } catch (err) {
+      isDir = (err as NodeJS.ErrnoException).code === 'EISDIR'; // Windows can't open directories
+    }
+    if (isDir) {
+      if (fd !== undefined) closeSync(fd);
       const files = listFiles(file);
       if (files.length <= MAX_DIR_FILES) for (const f of files) await this.snapshot(turn, f);
       return;
     }
     const key = `${turn}\u0000${file}`;
-    if (this.seen.has(key)) return;
+    if (this.seen.has(key)) {
+      if (fd !== undefined) closeSync(fd);
+      return;
+    }
     this.seen.add(key);
-    let snap: Snapshot = {turn, file, existed: !!st};
-    if (st && st.size <= MAX_FILE_BYTES) {
-      const data = readFileSync(file);
-      const blob = createHash('sha256').update(data).digest('hex');
-      const blobFile = path.join(this.dir(), 'blobs', blob);
-      if (!existsSync(blobFile)) {
-        mkdirSync(path.dirname(blobFile), {recursive: true, mode: 0o700});
-        writeFileSync(blobFile, data, {mode: 0o600});
+    let snap: Snapshot = {turn, file, existed: fd !== undefined};
+    if (fd !== undefined) {
+      try {
+        if (fstatSync(fd).size <= MAX_FILE_BYTES) {
+          const data = readFileSync(fd);
+          const blob = createHash('sha256').update(data).digest('hex');
+          const blobFile = path.join(this.dir(), 'blobs', blob);
+          mkdirSync(path.dirname(blobFile), {recursive: true, mode: 0o700});
+          try {
+            writeFileSync(blobFile, data, {mode: 0o600, flag: 'wx'}); // content-addressed: exists = same data
+          } catch (err) {
+            if ((err as NodeJS.ErrnoException).code !== 'EEXIST') throw err;
+          }
+          snap = {...snap, blob};
+        }
+      } finally {
+        closeSync(fd);
       }
-      snap = {...snap, blob};
     }
     snaps.push(snap);
     mkdirSync(this.dir(), {recursive: true, mode: 0o700});
@@ -101,11 +122,17 @@ export class Checkpoints {
       if (!s.existed) {
         rmSync(s.file, {force: true});
         out.removed.push(s.file);
-      } else if (s.blob && existsSync(path.join(this.dir(), 'blobs', s.blob))) {
-        mkdirSync(path.dirname(s.file), {recursive: true});
-        writeFileSync(s.file, readFileSync(path.join(this.dir(), 'blobs', s.blob)));
-        out.restored.push(s.file);
-      } else out.skipped.push(s.file);
+      } else {
+        let data: Buffer | undefined;
+        try {
+          data = s.blob ? readFileSync(path.join(this.dir(), 'blobs', s.blob)) : undefined;
+        } catch {}
+        if (data) {
+          mkdirSync(path.dirname(s.file), {recursive: true});
+          writeFileSync(s.file, data);
+          out.restored.push(s.file);
+        } else out.skipped.push(s.file);
+      }
     }
     // Later changes are now undone; forget them so a new turn N snapshots afresh.
     this.snaps = this.load().filter((s) => s.turn < turn);
