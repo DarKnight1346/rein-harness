@@ -16,6 +16,7 @@ import {advisorRef, advisorTool} from './agents/advisor.js';
 import {GoalManager} from './goals/manager.js';
 import {goalDoneTool} from './goals/tool.js';
 import {webTools} from './tools/web.js';
+import {imageGenRef, imageTool} from './tools/image.js';
 import {newTranscript, saveTranscript} from './session/transcript.js';
 import {setExtraWorkingDirs, systemPrompt} from './session/prompt.js';
 import {parseRef, refKey, type ModelRef, type TokenCount, type ToolBinding} from './providers/types.js';
@@ -209,6 +210,7 @@ export class Runtime {
       advisorTool({config: () => this.config, engine: () => this.engine, agents: this.agents}),
       goalDoneTool(this.goals),
       ...webTools(() => this.config),
+      imageTool(() => this.config),
     );
     this.config = await loadConfig();
     setExtraWorkingDirs(() => this.tools.extraWorkingDirs());
@@ -254,11 +256,15 @@ export class Runtime {
 
   /** Reload accounts/models (after /login changes). */
   async refreshCatalog(): Promise<void> {
+    const hadImages = !!imageGenRef(this.config);
     await catalog.refresh();
+    // image_generate exists only while a Codex account is signed in: reload tool lists on change.
+    if (hadImages !== !!imageGenRef(this.config)) this.engine?.refreshTools();
   }
 
   async setConfig(patch: Partial<Config>): Promise<void> {
-    const toolsChanged = patch.advisorModel !== undefined && patch.advisorModel !== this.config.advisorModel;
+    // These change what tools exist or their schemas: reload the agent's tool list.
+    const toolsChanged = (['advisorModel', 'subagentModel', 'subagentPriority'] as const).some((k) => patch[k] !== undefined && patch[k] !== this.config[k]);
     this.config = {...this.config, ...patch};
     if (toolsChanged) this.engine?.refreshTools();
     await saveConfig(this.config);

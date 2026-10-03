@@ -1,4 +1,4 @@
-import {refKey} from '../providers/types.js';
+import {parseRef, refKey} from '../providers/types.js';
 import {catalog, toRef} from '../router/catalog.js';
 import type {Config} from '../store/config.js';
 import {ToolError} from '../tools/fs.js';
@@ -10,6 +10,29 @@ const COST = ['', 'very low', 'low', 'medium', 'high', 'very high', 'highest'];
 /** Models the user is signed into right now (healthy accounts only). */
 function availableModels(cfg: Config) {
   return catalog.available(cfg.maxUsedPct).map((m) => ({value: refKey(toRef(m)), line: `- ${refKey(toRef(m))}: ${m.label} — ${m.description ?? 'general model'} (cost: ${COST[Math.min(6, m.tier)]})`}));
+}
+
+/** The user's subagent model from /model (undefined = auto, or that model isn't signed in). */
+function userModel(cfg: Config): {value: string; label: string} | undefined {
+  if (!cfg.subagentModel || cfg.subagentModel === 'auto') return undefined;
+  const ref = parseRef(cfg.subagentModel);
+  const m = ref ? catalog.get(ref) : undefined;
+  return ref && m && catalog.healthyAccounts(ref, cfg.maxUsedPct).length ? {value: refKey(ref), label: m.label} : undefined;
+}
+
+/** "Your model first" with a model set: the agent's choice can't matter, so it isn't offered. */
+const forced = (cfg: Config) => (cfg.subagentPriority ?? 'user') === 'user' ? userModel(cfg) : undefined;
+
+/**
+ * Model for a new-mode subagent, in the user's priority order:
+ * 'user'  → your model → the agent's choice → auto
+ * 'agent' → the agent's choice → your model → auto
+ */
+export function subagentModelFor(cfg: Config, requested: unknown): string {
+  const asked = typeof requested === 'string' && requested && requested !== 'auto' ? requested : undefined;
+  const mine = userModel(cfg)?.value;
+  const order = (cfg.subagentPriority ?? 'user') === 'agent' ? [asked, mine] : [mine, asked];
+  return order.find(Boolean) ?? 'auto';
 }
 
 export function report(a: Subagent): string {
@@ -29,30 +52,37 @@ export function agentTools(agents: SubagentManager, config: () => Config): ToolD
       describe: () => {
         const cfg = config();
         const models = availableModels(cfg);
+        const fixed = forced(cfg);
+        const preferred = !fixed ? userModel(cfg) : undefined;
         return [
           'Delegate a task to a subagent that works autonomously with the same tools and returns a report.',
           '- mode "fork": branches your current session — it keeps the full conversation history and uses your current model/account (good for parallel work that needs context).',
           '- mode "new": a fresh session with no history on any model below — the task must be self-contained (good for independent work, or to use a cheaper/stronger model).',
-          `- model "auto" lets the decision model pick the best model for the task (new mode). Fork mode ignores model.`,
+          fixed
+            ? `- New-mode subagents run on ${fixed.label} (set by the user in /model). Fork mode keeps your current model.`
+            : preferred
+              ? `- model: pick one for new mode, or leave it out to use the user's default, ${preferred.label}. "auto" lets the decision model pick. Fork mode ignores model.`
+              : `- model "auto" lets the decision model pick the best model for the task (new mode). Fork mode ignores model.`,
           '- background: true returns an id at once; otherwise this call waits and returns the report.',
           'Two ways to work with subagents — pick per task:',
           '  • Orchestrate: spawn several in the background, then collect each with agent_result {id, wait: true} (you wait while they work).',
           '  • Work alongside: spawn in the background and keep doing your own part with your tools; collect with agent_result when you need the results.',
           '  If you end your turn while background subagents are still running, each report is delivered to you as a message when it finishes.',
           `- A decision model checks each subagent's work and makes it continue if it isn't complete. At most ${cfg.subagentLimit} subagents run at once.`,
-          'Models available now:',
-          ...models.map((m) => m.line),
+          ...(fixed ? [] : ['Models available now:', ...models.map((m) => m.line)]),
         ].join('\n');
       },
       inputSchema: {},
       schema: () => {
-        const models = availableModels(config()).map((m) => m.value);
+        const cfg = config();
+        const models = availableModels(cfg).map((m) => m.value);
         return {
           type: 'object',
           properties: {
             task: {type: 'string', description: 'Complete, self-contained instructions for the subagent (what to do, where, what to report)'},
             mode: {type: 'string', enum: ['new', 'fork'], description: 'fork = keep this conversation history; new = fresh session'},
-            model: {type: 'string', enum: ['auto', ...models], description: 'Model for new mode ("auto" = decision model picks)'},
+            // A user-fixed subagent model removes the choice entirely.
+            ...(forced(cfg) ? {} : {model: {type: 'string', enum: ['auto', ...models], description: 'Model for new mode ("auto" = decision model picks)'}}),
             name: {type: 'string', description: 'Short name shown to the user (e.g. "test-writer")'},
             background: {type: 'boolean', description: 'Return immediately; collect later with agent_result'},
           },
@@ -65,7 +95,7 @@ export function agentTools(agents: SubagentManager, config: () => Config): ToolD
       async run(_ctx, args) {
         if (typeof args?.task !== 'string' || !args.task.trim()) throw new ToolError('task is required');
         const mode = args.mode === 'fork' ? 'fork' : 'new';
-        const model = typeof args.model === 'string' && args.model ? args.model : 'auto';
+        const model = subagentModelFor(config(), args.model);
         let spawned;
         try {
           spawned = agents.spawn({task: args.task, mode, model, name: args.name, background: !!args.background});
