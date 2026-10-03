@@ -276,6 +276,20 @@ export function FullscreenApp({resume}: {resume: Resume}) {
         </Box>
       );
     }
+    if (r.inputActive && r.fileSuggestions.length > 0) {
+      return (
+        <Box flexDirection="column" borderStyle="round" borderColor="gray" paddingX={1}>
+          {r.fileSuggestions.map((f) => (
+            <Clickable key={f} onClick={() => r.acceptFile(f)}>
+              <Text color={f === r.fileSelected ? 'cyan' : undefined} dimColor={f !== r.fileSelected} wrap="truncate">
+                {f === r.fileSelected ? '❯ ' : '  '}@{f}
+              </Text>
+            </Clickable>
+          ))}
+          <Text dimColor>tab/enter insert · ↑↓ select — the file's contents go with your message</Text>
+        </Box>
+      );
+    }
     return null;
   })();
 

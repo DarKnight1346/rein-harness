@@ -5,6 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import {promisify} from 'node:util';
 import type {ImageInput} from '../providers/types.js';
+import {dirListing, isDirectory, mentionedPaths} from './mentions.js';
 
 const exec = promisify(execFile);
 
@@ -83,9 +84,17 @@ export class Attachments {
    * Expand placeholders for sending: pasted text inline, files as `<file>` blocks (or a note when
    * binary/too big), images kept as `[Image #n]` in the text and returned separately.
    */
-  expand(text: string): {text: string; images: ImageInput[]} {
+  expand(text: string, root = process.cwd()): {text: string; images: ImageInput[]} {
     const images: ImageInput[] = [];
     const files: string[] = [];
+    // @mentions: the file's contents (text), the image itself, or a folder's listing.
+    for (const abs of mentionedPaths(text, root)) {
+      const display = path.relative(root, abs).startsWith('..') ? abs : path.relative(root, abs);
+      const mime = IMAGE_MIME[path.extname(abs).toLowerCase()];
+      if (isDirectory(abs)) files.push(dirListing(abs, display));
+      else if (mime) images.push({path: abs, mime});
+      else files.push(fileBlock(abs).replace(`<file path="${abs}">`, `<file path="${display}">`));
+    }
     const out = text.replace(TOKEN_RE, (token, n: string) => {
       const a = this.items.get(Number(n));
       if (!a) return token;

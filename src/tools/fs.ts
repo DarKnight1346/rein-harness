@@ -6,9 +6,12 @@ import {mkdir, open, readdir, rename, rm, rmdir, stat, type FileHandle} from 'no
 import os from 'node:os';
 import path from 'node:path';
 import {run} from '../util/proc.js';
+import {isImage, isPdf, readImage, readPdf} from './media.js';
 
 /** `diff`: shown to the user under the tool line (never sent to the model). */
-export type ToolResult = {ok: boolean; text: string; diff?: DiffLine[]};
+/** `images` go to the model as real images (read on a PNG/JPEG/GIF/WebP). */
+export type ToolImage = {mime: string; base64: string};
+export type ToolResult = {ok: boolean; text: string; diff?: DiffLine[]; images?: ToolImage[]};
 export type ToolContext = {
   root: string;
   /** Other working directories (scratchpad, global skills, /add-dir and config additions). */
@@ -79,7 +82,7 @@ export const rel = (ctx: ToolContext, abs: string) => path.relative(realpathSync
  * huge file (or a slice of it) never loads the whole thing. Only the first 8 KB are inspected for
  * binary content.
  */
-export async function readTool(ctx: ToolContext, args: {path: string; offset?: number; limit?: number}): Promise<ToolResult> {
+export async function readTool(ctx: ToolContext, args: {path: string; offset?: number; limit?: number; pages?: string}): Promise<ToolResult> {
   const file = resolveInRoot(ctx, args.path);
   const st = await stat(file).catch(() => undefined);
   if (!st) throw new ToolError(`${args.path} does not exist`);
@@ -88,6 +91,8 @@ export async function readTool(ctx: ToolContext, args: {path: string; offset?: n
     const list = entries.map((e) => (e.isDirectory() ? `${e.name}/` : e.name)).sort();
     return {ok: true, text: `${rel(ctx, file)}/ is a directory:\n${list.join('\n') || '(empty)'}`};
   }
+  if (isImage(file)) return readImage(file, rel(ctx, file));
+  if (isPdf(file)) return readPdf(file, rel(ctx, file), args.pages);
   if (await looksBinary(file)) return {ok: true, text: `${rel(ctx, file)} is a binary file (${st.size} bytes)`};
   const start = Math.max(1, Math.floor(args.offset ?? 1));
   const limit = Math.max(1, Math.min(MAX_READ_LINES, Math.floor(args.limit ?? MAX_READ_LINES)));

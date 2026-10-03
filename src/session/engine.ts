@@ -36,6 +36,8 @@ export type EngineDeps = {
   tools?: {binding: ToolBinding; forkBinding?: ToolBinding; onActivity(fn: (a: ToolActivity) => void): () => void};
   /** Picks which tool results a new session needs when the conversation moves (compaction model). */
   selectCarry?: CarrySelector;
+  /** UserPromptSubmit / SessionStart hooks: block the message, or add context to it. */
+  beforePrompt?: (text: string) => Promise<{block?: string; context?: string}>;
   /** Auto effort: the decision model picks a level for this message from `levels`. */
   pickEffort?: (text: string, levels: string[]) => Promise<string | undefined>;
 };
@@ -206,9 +208,16 @@ export class Engine {
     this.closeActive();
   }
 
-  async *send(text: string, images: ImageInput[] = []): AsyncGenerator<EngineEvent> {
+  async *send(typed: string, images: ImageInput[] = []): AsyncGenerator<EngineEvent> {
     const t = this.transcript;
     const cfg = this.deps.config();
+    let text = typed;
+    const hook = await this.deps.beforePrompt?.(text).catch(() => undefined);
+    if (hook?.block) {
+      yield {type: 'error', message: `Blocked by a UserPromptSubmit hook: ${hook.block}`};
+      return;
+    }
+    if (hook?.context) text = `${text}\n\n<hook_context>\n${hook.context}\n</hook_context>`;
     t.messages.push({role: 'user', text, at: Date.now(), ...(images.length ? {images} : {})});
     const userIndex = t.messages.length - 1;
     this.interruptRequested = false;

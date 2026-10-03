@@ -117,7 +117,7 @@ export interface ProviderSession {
 /** Rein's tool runtime as seen by providers (implemented by tools/host.ts). */
 export type ToolBinding = {
   tools: {name: string; description: string; inputSchema: Record<string, unknown>}[];
-  call(name: string, args: unknown): Promise<{ok: boolean; text: string}>;
+  call(name: string, args: unknown): Promise<{ok: boolean; text: string; images?: {mime: string; base64: string}[]}>;
   /** Unix socket for out-of-process callers (Claude's MCP proxy). */
   listen(): Promise<string>;
   /** Tool names the model may call (default: all). Forks allow only read-only tools. */

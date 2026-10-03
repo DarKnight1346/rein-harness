@@ -1,0 +1,132 @@
+import {fstatSync} from 'node:fs';
+import {loadAccounts} from './store/accounts.js';
+import type {ApprovalMode} from './tools/host.js';
+import {runtime} from './runtime.js';
+import {redact} from './ui/privacy.js';
+
+/**
+ * `rein -p "…"`: one prompt, no UI — for scripts and CI (like `claude -p`). The prompt can also come
+ * from stdin (`git diff | rein -p "review this"`). Anything that would need an approval is refused
+ * unless --permission-mode auto|bypass, an --allowedTools rule or a settings rule allows it.
+ *
+ *   --model <ref|auto>             --effort <level|auto|default>
+ *   --output-format text|json|stream-json
+ *   --permission-mode ask|auto|bypass   (ask = refuse what would need a yes)
+ *   --allowedTools "shell(npm test:*),edit(src/**)"   --disallowedTools "…"
+ *   -c, --continue [id]            continue the latest (or a given) conversation in this project
+ *   --verbose                      tool calls on stderr (text mode)
+ */
+export async function runHeadless(argv: string[]): Promise<number> {
+  const opt = (name: string, short?: string) => {
+    const i = argv.findIndex((a) => a === name || (short !== undefined && a === short));
+    return i >= 0 && argv[i + 1] && !argv[i + 1]!.startsWith('-') ? argv[i + 1] : undefined;
+  };
+  const has = (...names: string[]) => argv.some((a) => names.includes(a));
+  const format = (opt('--output-format') ?? 'text') as 'text' | 'json' | 'stream-json';
+  const write = (s: string) => process.stdout.write(s);
+  const fail = (message: string) => {
+    if (format === 'text') process.stderr.write(`rein: ${message}\n`);
+    else write(JSON.stringify({type: 'result', is_error: true, error: message}) + '\n');
+    return 1;
+  };
+
+  let prompt = opt('--print', '-p') ?? '';
+  // Read stdin only when something is actually piped or redirected in (not merely "not a terminal").
+  let piped = false;
+  try {
+    const st = fstatSync(0);
+    piped = st.isFIFO() || st.isFile();
+  } catch {}
+  if (piped) {
+    const piped = (await new Promise<string>((resolve) => {
+      let data = '';
+      process.stdin.setEncoding('utf8');
+      process.stdin.on('data', (d) => (data += d));
+      process.stdin.on('end', () => resolve(data));
+    })).trim();
+    if (piped) prompt = prompt ? `${prompt}\n\n${piped}` : piped;
+  }
+  if (!prompt.trim()) return fail('no prompt (rein -p "…", or pipe one in)');
+  if (!(await loadAccounts()).accounts.length) return fail('no accounts yet — run `rein` once to import or add one');
+
+  const ci = argv.findIndex((a) => a === '--continue' || a === '-c');
+  const resume = ci < 0 ? false : argv[ci + 1] && !argv[ci + 1]!.startsWith('-') ? argv[ci + 1]! : true;
+  const {listTranscripts} = await import('./session/transcript.js');
+  const resumeId = resume === true ? (await listTranscripts({cwd: process.cwd()}))[0]?.id : resume || undefined;
+  await runtime.init({resume: resumeId ?? false});
+  await runtime.refreshCatalog();
+
+  // Per-run settings: never saved to config.json.
+  const model = opt('--model');
+  const effort = opt('--effort');
+  const mode = opt('--permission-mode') as ApprovalMode | undefined;
+  if (mode && !['ask', 'auto', 'bypass'].includes(mode)) return fail(`--permission-mode must be ask, auto or bypass`);
+  runtime.config = {...runtime.config, ...(model ? {chatModel: model} : {}), ...(effort ? {chatEffort: effort} : {}), ...(mode ? {toolApproval: mode} : {})};
+  const list = (s: string | undefined) => (s ?? '').split(/,(?![^(]*\))/).map((r) => r.trim()).filter(Boolean);
+  runtime.extraRules = {allow: list(opt('--allowedTools')), deny: list(opt('--disallowedTools'))};
+  runtime.approver = undefined; // no one to ask: anything needing a yes is refused
+
+  const verbose = has('--verbose');
+  const started = Date.now();
+  let reply = '';
+  let route: {model: string; account: string; effort?: string} | undefined;
+  const tools: {tool: string; summary: string; ok: boolean}[] = [];
+  let error: string | undefined;
+
+  const turn = async (text: string) => {
+    for await (const ev of runtime.engine.send(text)) {
+      if (format === 'stream-json') {
+        const out = ev.type === 'route' ? {type: 'route', model: `${ev.route.ref.provider}:${ev.route.ref.model}`, effort: ev.effort} : ev.type === 'tool' ? {type: 'tool', phase: ev.activity.phase, tool: ev.activity.label, summary: ev.activity.summary, ...(ev.activity.phase === 'end' ? {ok: ev.activity.ok} : {})} : ev;
+        write(redact(JSON.stringify(out)) + '\n');
+      }
+      if (ev.type === 'text') {
+        reply += ev.delta;
+        if (format === 'text') write(ev.delta);
+      } else if (ev.type === 'route') {
+        route = {model: `${ev.route.ref.provider}:${ev.route.ref.model}`, account: ev.account.id, effort: ev.effort};
+      } else if (ev.type === 'tool' && ev.activity.phase === 'end' && !ev.activity.origin) {
+        tools.push({tool: ev.activity.label, summary: ev.activity.summary, ok: ev.activity.ok});
+        if (verbose && format === 'text') process.stderr.write(`⏺ ${ev.activity.label}(${redact(ev.activity.summary)}) ${ev.activity.ok ? '✓' : '✗'}\n`);
+      } else if (ev.type === 'notice' && verbose && format === 'text') {
+        process.stderr.write(`${redact(ev.text)}\n`);
+      } else if (ev.type === 'error') {
+        error = ev.message;
+      }
+    }
+  };
+
+  try {
+    await turn(prompt);
+    // Stop hooks may send the agent back to work (bounded, as in the UI).
+    for (let depth = 0; !error && depth < 10; depth++) {
+      const reason = await runtime.stopHook(depth > 0).catch(() => undefined);
+      if (!reason) break;
+      reply += '\n\n';
+      await turn(`<stop_hook>\n${reason}\n</stop_hook>\nContinue working.`);
+    }
+  } catch (err) {
+    error = (err as Error).message;
+  }
+  if (format === 'text' && reply && !reply.endsWith('\n')) write('\n');
+  if (format !== 'text') {
+    const t = runtime.engine.sessionTokens;
+    write(
+      redact(
+        JSON.stringify({
+          type: 'result',
+          is_error: !!error,
+          ...(error ? {error} : {}),
+          result: reply.trim(),
+          session_id: runtime.engine.transcript.id,
+          model: route?.model,
+          effort: route?.effort,
+          tools,
+          tokens: t,
+          duration_ms: Date.now() - started,
+        }),
+      ) + '\n',
+    );
+  } else if (error) process.stderr.write(`rein: ${redact(error)}\n`);
+  runtime.shutdown();
+  return error ? 1 : 0;
+}

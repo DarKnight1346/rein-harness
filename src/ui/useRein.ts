@@ -20,6 +20,7 @@ import {report as agentReport} from '../agents/tools.js';
 import {describeChatModel, resolveModelQuery} from './ModelScreen.js';
 import {useChat} from './useChat.js';
 import {Attachments} from './attachments.js';
+import {mentionAt, primeFiles, suggestFiles} from './mentions.js';
 import type {RewindMode, RewindPoint} from './RewindScreen.js';
 import {settingsFiles} from '../tools/permissions.js';
 import {readFileSync} from 'node:fs';
@@ -246,6 +247,17 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
 
   const suggestions = suggestCommands(draft, skills);
   const selected = suggestions[Math.min(suggestIndex, suggestions.length - 1)];
+  // @file mentions: project files matching what follows the `@` being typed.
+  const mention = suggestions.length ? undefined : mentionAt(draft);
+  const fileSuggestions = mention ? suggestFiles(process.cwd(), mention.query) : [];
+  const fileSelected = fileSuggestions[Math.min(suggestIndex, fileSuggestions.length - 1)];
+  const acceptFile = (file: string) => {
+    if (!mention) return;
+    const next = `${draft.slice(0, mention.start)}@${file}${file.endsWith('/') ? '' : ' '}`;
+    prevDraft.current = next;
+    setDraft(next);
+    setSuggestIndex(0);
+  };
   // The input stays live while the agent works: /btw and info commands run at once, plain messages queue.
   const inputActive = overlay.name === 'none' && ready && (!updating || windowed);
   const [queued, setQueued] = useState<string[]>([]);
@@ -329,6 +341,7 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
     return token;
   };
   const onDraft = useCallback((v: string) => {
+    if (mentionAt(v) && !mentionAt(prevDraft.current)) void primeFiles(process.cwd()).then(bump);
     // Rescan skills whenever a slash command is started, so new/edited skills show up without restarting.
     if (v.startsWith('/') && !prevDraft.current.startsWith('/')) setSkills(loadSkills());
     prevDraft.current = v;
@@ -343,6 +356,14 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
       else if (key.tab && selected) onDraft(`/${selected.name} `);
     },
     {isActive: inputActive && suggestions.length > 0},
+  );
+  useInput(
+    (_input, key) => {
+      if (key.upArrow) setSuggestIndex((i) => (i - 1 + fileSuggestions.length) % fileSuggestions.length);
+      else if (key.downArrow) setSuggestIndex((i) => (i + 1) % fileSuggestions.length);
+      else if (key.tab && fileSelected) acceptFile(fileSelected);
+    },
+    {isActive: inputActive && fileSuggestions.length > 0},
   );
 
   const runCommand = (raw: string) => {
@@ -699,6 +720,11 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
   runRef.current = runCommand;
 
   const onSubmit = (typed: string) => {
+    // Enter while picking an @file accepts it (unless it's already typed out in full).
+    if (fileSelected && mention && mention.query !== fileSelected) {
+      acceptFile(fileSelected);
+      return;
+    }
     prevDraft.current = '';
     setDraft('');
     setSuggestIndex(0);
@@ -781,7 +807,7 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
 
   return {
     entries, add, log, overlay, setOverlay, closeOverlay, finishImport, ready, updating, updateLog, statusTick, bump,
-    draft, onDraft, onSubmit, onPaste, onImagePaste, doRewind, runCommand, suggestions, selected, setSuggestIndex, inputActive, chat, skills, openShells, queued, exitArmed, compacting, pickSession,
+    draft, onDraft, onSubmit, onPaste, onImagePaste, doRewind, fileSuggestions, fileSelected, acceptFile, runCommand, suggestions, selected, setSuggestIndex, inputActive, chat, skills, openShells, queued, exitArmed, compacting, pickSession,
     view, setView, viewing, goalNote,
   };
 }
