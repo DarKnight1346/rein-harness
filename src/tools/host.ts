@@ -27,11 +27,13 @@ export type ApprovalRequest = {
   sensitive?: boolean;
   /** Rule offered as "always allow …" (saved to the project's .rein/settings.json). */
   suggestion?: string;
+  /** Plan mode: a command not known to be read-only — only "allow once" or deny. */
+  planMode?: boolean;
 };
 export type ApprovalDecision = 'once' | 'session' | 'always' | 'deny';
 export type ApprovalMode = 'ask' | 'auto' | 'bypass';
 /** How a file change got approved (shown in the transcript). */
-export type ApprovedBy = 'user' | 'session' | 'auto' | 'bypass' | 'scratchpad' | 'rule' | 'hook';
+export type ApprovedBy = 'user' | 'session' | 'auto' | 'bypass' | 'scratchpad' | 'rule' | 'hook' | 'read-only';
 export type ToolActivity =
   | {phase: 'start'; id: number; label: string; summary: string; origin?: Origin}
   | {phase: 'end'; id: number; label: string; summary: string; ok: boolean; result: string; approvedBy?: ApprovedBy; judge?: string; origin?: Origin; diff?: DiffLine[]};
@@ -142,7 +144,11 @@ export class ToolHost extends EventEmitter {
       const hookInput = {session_id: this.opts.sessionId?.(), tool: tool.name, tool_input: args ?? {}};
       const pre = hasHooks('PreToolUse', this.opts.root) ? await runHooks('PreToolUse', this.opts.root, hookInput) : undefined;
       if (pre?.block) throw new ToolError(`blocked by a PreToolUse hook: ${pre.block}`);
-      if (this.opts.planMode?.()) this.checkPlanMode(ctx, tool, args);
+      // Read-only shell commands (ls, git status, brew info, --version…) run without asking, like
+      // Claude Code — unless they name paths outside the working directories.
+      const readOnly = tool.name === 'shell' && typeof (args as any)?.command === 'string' && readOnlyCommand((args as any).command) && !this.namesOutside(ctx, (args as any).command);
+      // Plan mode: file changes are refused; a command not known to be read-only asks the user.
+      const planAsk = !!this.opts.planMode?.() && this.checkPlanMode(ctx, tool, args, readOnly);
       if (pre?.allow && !pre.ask) approvedBy = 'hook';
       const suggestion = suggestRule(subject, (p) => this.ruleRel(p));
       const remember = (decision: ApprovalDecision) => {
@@ -177,10 +183,12 @@ export class ToolHost extends EventEmitter {
         ctx.outsideAllowed = outside;
       }
       if (tool.mutating && tool.name !== 'shell' && this.inScratch(ctx, tool, args)) approvedBy = 'scratchpad';
+      // (After the outside-path check: a read-only command in an outside cwd still asks about access.)
+      if (readOnly && !pre?.ask && !approvedBy) approvedBy = 'read-only';
       if (tool.mutating && !approvedBy) {
         const mode = this.opts.mode();
-        const req = {tool, args, summary, preview: preview(tool, args), origin, suggestion};
-        const forceAsk = !!pre?.ask; // a PreToolUse hook asked for the prompt
+        const req = planAsk ? {tool, args, summary, preview: preview(tool, args), origin, planMode: true} : {tool, args, summary, preview: preview(tool, args), origin, suggestion};
+        const forceAsk = !!pre?.ask || planAsk; // a PreToolUse hook asked for the prompt, or plan mode
         if (forceAsk) {
           // fall through to the prompt
         } else if (verdict === 'allow') approvedBy = 'rule';
@@ -194,8 +202,9 @@ export class ToolHost extends EventEmitter {
         }
         if (!approvedBy) {
           const decision = await this.opts.approve(req);
+          if (decision === 'deny' && planAsk) throw new ToolError('plan mode is on and the user declined this command (it may change things). Stick to read-only exploration, then call present_plan.');
           if (decision === 'deny') throw new ToolError('the user denied this action; ask them how to proceed instead of retrying');
-          if (decision === 'session') this.sessionAllowed = true;
+          if (decision === 'session' && !planAsk) this.sessionAllowed = true;
           remember(decision);
           approvedBy = decision === 'session' ? 'session' : decision === 'always' ? 'rule' : 'user';
         }
@@ -243,13 +252,26 @@ export class ToolHost extends EventEmitter {
   }
 
   /** Plan mode: only reading. Scratchpad notes and read-only shell commands are fine. */
-  private checkPlanMode(ctx: ToolContext, tool: ToolDef, args: any): void {
-    const blocked = 'plan mode is on — nothing can be changed until the user approves your plan. Keep exploring read-only, then call present_plan.';
-    if (tool.name === 'shell') {
-      if (!readOnlyCommand(String(args?.command ?? ''))) throw new ToolError(`${blocked} (only read-only commands like ls, grep, git status/log/diff run now)`);
-      return;
+  /** Plan mode: throws for file changes; returns true when a shell command needs the user's OK. */
+  private checkPlanMode(ctx: ToolContext, tool: ToolDef, args: any, readOnly: boolean): boolean {
+    if (tool.name === 'shell') return !readOnly && !readOnlyCommand(String(args?.command ?? ''));
+    if (tool.mutating && !this.inScratch(ctx, tool, args)) throw new ToolError('plan mode is on — nothing can be changed until the user approves your plan. Keep exploring read-only, then call present_plan.');
+    return false;
+  }
+
+  /** Does a command name an absolute or ~ path outside the working directories? */
+  private namesOutside(ctx: ToolContext, command: string): boolean {
+    for (const m of command.matchAll(/(?:^|[\s='"])((?:~|\/)[^\s'";|&)]*)/g)) {
+      const raw = m[1]!;
+      if (/^\/dev\/(null|stdin|stdout|stderr)$/.test(raw)) continue;
+      const abs = raw.startsWith('~') ? path.join(os.homedir(), raw.slice(1)) : raw;
+      try {
+        if (!resolvePath(ctx, abs).inside) return true;
+      } catch {
+        return true;
+      }
     }
-    if (tool.mutating && !this.inScratch(ctx, tool, args)) throw new ToolError(blocked);
+    return /(^|[\s/])\.\.(\/|\s|$)/.test(command);
   }
 
   /** What permission rules look at for this call: the command, the paths it touches, the URL. */

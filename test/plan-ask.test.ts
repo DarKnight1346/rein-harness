@@ -9,6 +9,13 @@ describe('plan mode', () => {
     for (const c of ['rm -rf dist', 'npm install', 'git commit -m x', 'echo hi > out.txt', 'cat a >> b', 'find . -delete', 'git config user.name x', 'sed -i s/a/b/ f', 'ls $(rm x)']) expect(readOnlyCommand(c)).toBe(false);
   });
 
+  it('knows the common read-only queries (versions, package info, system info)', () => {
+    for (const c of ['sw_vers', 'uname -m', 'clang++ --version', 'brew list --formula', 'brew info --json=v2 qemu', 'which brew qemu-system-x86_64', 'df -h ~', 'sysctl -n machdep.cpu.brand_string', 'xcode-select -p', 'pip3 list', 'cargo tree', 'go env GOPATH', 'docker ps -a', 'git branch -a', 'git branch --list "feat*"', 'git tag', 'git tag -l', 'git remote -v', 'git stash list', 'git config --get user.name', 'npm config get registry', 'gcc -v', 'ls /usr/local/opt | head'])
+      expect(readOnlyCommand(c), c).toBe(true);
+    for (const c of ['brew install qemu', 'brew upgrade', 'pip3 install x', 'git branch feature', 'git branch -D old', 'git tag -a v1 -m x', 'git tag v1', 'git remote add o url', 'git stash', 'git stash pop', 'env rm -rf x', 'sort -o out.txt in.txt', 'tree -o out.txt', 'find . -fprint out', 'xxd a b', 'npm audit fix', 'sysctl -w kern.x=1', 'date -s 2020', 'docker run x', 'cargo build', 'go build', 'kubectl delete pod x', 'make --version-check'])
+      expect(readOnlyCommand(c), c).toBe(false);
+  });
+
   it('present_plan returns the decision and turns plan mode off when approved', async () => {
     let active = true;
     let decided = '';
@@ -47,5 +54,37 @@ describe('ask_user', () => {
     expect((await askUserTool(() => async () => undefined).run({} as any, {questions: qs})).text).toMatch(/dismissed/);
     expect((await askUserTool(() => undefined).run({} as any, {questions: qs})).text).toMatch(/headless/);
     await expect(askUserTool(() => undefined).run({} as any, {questions: [{question: 'x?', options: ['only']}]})).rejects.toThrow(/at least 2 options/);
+  });
+});
+
+describe('read-only commands and plan mode in the tool host', async () => {
+  const {mkdtempSync, realpathSync} = await import('node:fs');
+  const os = await import('node:os');
+  const path = await import('node:path');
+  const {ToolHost} = await import('../src/tools/host.js');
+  const root = realpathSync(mkdtempSync(path.join(os.tmpdir(), 'rein-plan-')));
+
+  it('read-only commands run without asking; outside paths and other commands still ask', async () => {
+    const asked: string[] = [];
+    const host = new ToolHost({root, mode: () => 'ask', approve: async (r) => (asked.push(r.args.command), 'once')});
+    expect((await host.call('shell', {command: 'echo hi'})).ok).toBe(true);
+    expect((await host.call('shell', {command: 'git --version'})).ok).toBe(true);
+    expect(asked).toEqual([]);
+    await host.call('shell', {command: 'ls ~/.ssh'});
+    await host.call('shell', {command: 'touch made.txt'});
+    expect(asked).toEqual(['ls ~/.ssh', 'touch made.txt']);
+    host.close();
+  });
+
+  it('plan mode: read-only runs, other commands ask (allow once / deny), even in bypass; edits are refused', async () => {
+    const asked: {command: string; planMode?: boolean}[] = [];
+    const host = new ToolHost({root, mode: () => 'bypass', planMode: () => true, approve: async (r) => (asked.push({command: r.args.command, planMode: r.planMode}), 'deny')});
+    expect((await host.call('shell', {command: 'uname -m'})).ok).toBe(true);
+    const r = await host.call('shell', {command: 'brew install qemu'});
+    expect(r.ok).toBe(false);
+    expect(r.text).toMatch(/plan mode is on and the user declined/);
+    expect(asked).toEqual([{command: 'brew install qemu', planMode: true}]);
+    expect((await host.call('write', {path: 'x.txt', content: 'x'})).text).toMatch(/plan mode is on/);
+    host.close();
   });
 });
