@@ -56,7 +56,8 @@ readline.createInterface({input: process.stdin}).on('line', async (line) => {
     }
     case 'tools/call': {
       const reply = await host({method: 'call', name: msg.params?.name, args: msg.params?.arguments ?? {}});
-      return send({id: msg.id, result: {content: [{type: 'text', text: reply.text ?? reply.error ?? ''}], isError: !reply.ok}});
+      const images = (reply.images ?? []).map((i: {mime: string; base64: string}) => ({type: 'image', data: i.base64, mimeType: i.mime}));
+      return send({id: msg.id, result: {content: [{type: 'text', text: reply.text ?? reply.error ?? ''}, ...images], isError: !reply.ok}});
     }
     case 'ping':
       return send({id: msg.id, result: {}});

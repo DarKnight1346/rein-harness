@@ -35,7 +35,8 @@ async function declineServerRequest(method: string, params?: any): Promise<unkno
     const tools = toolsByThread.get(params?.threadId);
     if (!tools) return {contentItems: [{type: 'inputText', text: 'tools are not available in this thread'}], success: false};
     const res = await tools.call(String(params.tool), params.arguments);
-    return {contentItems: [{type: 'inputText', text: res.text}], success: res.ok};
+    const images = (res.images ?? []).map((i) => ({type: 'inputImage', imageUrl: `data:${i.mime};base64,${i.base64}`}));
+    return {contentItems: [{type: 'inputText', text: res.text}, ...images], success: res.ok};
   }
   if (method.endsWith('requestApproval') || method === 'applyPatchApproval' || method === 'execCommandApproval') {
     return {decision: 'decline'};

@@ -35,10 +35,15 @@ export const TOOLS: ToolDef[] = [
     paths: (args) => [args?.path].filter((x): x is string => typeof x === 'string'),
     label: 'Read',
     description:
-      'Read a file in the project. Returns lines prefixed with their 1-based line number and a tab (like `cat -n`); the prefix is not part of the file. Use offset/limit for large files. Reading a directory lists its entries.',
+      'Read a file in the project. Returns lines prefixed with their 1-based line number and a tab (like `cat -n`); the prefix is not part of the file. Use offset/limit for large files. Reading a directory lists its entries. Images (PNG/JPEG/GIF/WebP) are shown to you as images; PDFs return their text page by page (use pages, e.g. "3-8", for long ones).',
     inputSchema: {
       type: 'object',
-      properties: {path: str('File path, relative to the project root'), offset: {type: 'integer', description: 'First line to read (1-based)'}, limit: {type: 'integer', description: 'Max lines (default 2000)'}},
+      properties: {
+        path: str('File path, relative to the project root'),
+        offset: {type: 'integer', description: 'First line to read (1-based)'},
+        limit: {type: 'integer', description: 'Max lines (default 2000)'},
+        pages: str('PDF pages to read, e.g. "1-5" (max 20 per read)'),
+      },
       required: ['path'],
     },
     mutating: false,

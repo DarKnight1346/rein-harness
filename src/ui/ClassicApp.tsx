@@ -94,6 +94,14 @@ export function ClassicApp({resume}: {resume: Resume}) {
               </Text>
             ))}
           </Box>
+        ) : r.inputActive && r.fileSuggestions.length > 0 ? (
+          <Box flexDirection="column" paddingLeft={2}>
+            {r.fileSuggestions.map((f) => (
+              <Text key={f} color={f === r.fileSelected ? 'cyan' : undefined} dimColor={f !== r.fileSelected}>
+                @{f}
+              </Text>
+            ))}
+          </Box>
         ) : r.exitArmed ? (
           <Text color="yellow">{'  '}Press Ctrl+C again to exit</Text>
         ) : (

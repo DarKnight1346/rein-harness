@@ -180,7 +180,7 @@ export class ToolHost extends EventEmitter {
     }
     if (result.text.length > MAX_RESULT_CHARS) result = {...result, text: result.text.slice(0, MAX_RESULT_CHARS) + '\n… [output truncated]'};
     this.emit('activity', {phase: 'end', id, label: tool.label, summary, ok: result.ok, result: result.text, approvedBy, judge, origin, diff: result.diff} satisfies ToolActivity);
-    return {ok: result.ok, text: result.text}; // the diff is for the user, not the model
+    return {ok: result.ok, text: result.text, ...(result.images?.length ? {images: result.images} : {})}; // the diff is for the user, not the model
   }
 
   /** What permission rules look at for this call: the command, the paths it touches, the URL. */
