@@ -176,8 +176,8 @@ export class ToolHost extends EventEmitter {
           // fall through to the prompt
         } else if (verdict === 'allow') approvedBy = 'rule';
         else if (mode === 'bypass') approvedBy = 'bypass';
-        else if (this.sessionAllowed) approvedBy = 'session';
-        else if (mode === 'auto' && this.opts.judge) {
+        else if (this.sessionAllowed && !tool.alwaysAsk) approvedBy = 'session';
+        else if (mode === 'auto' && this.opts.judge && !tool.alwaysAsk) {
           // Never auto-deny: a doubtful verdict (or a judge failure) goes to the user.
           const verdict = await this.opts.judge(req).catch((err) => ({allow: false, note: `judge failed: ${(err as Error).message}`}));
           judge = verdict.note;
@@ -414,6 +414,11 @@ function preview(tool: ToolDef, args: any): string {
   if (tool.name === 'write') return clip(args?.content);
   if (tool.name === 'edit') return `- ${clip(args?.old_string, 300).replace(/\n/g, '\n- ')}\n+ ${clip(args?.new_string, 300).replace(/\n/g, '\n+ ')}`;
   if (tool.name === 'delete') return args?.recursive ? 'Deletes the directory and everything in it.' : '';
+  if (tool.name === 'mcp_add') {
+    return args?.url
+      ? `Connect to MCP server "${args?.name}" at ${args.url}${args.headers ? ` (headers: ${Object.keys(args.headers).join(', ')})` : ''}`
+      : `Run MCP server "${args?.name}":\n$ ${[args?.command, ...(args?.args ?? [])].join(' ')}${args?.env ? `\n(env: ${Object.keys(args.env).join(', ')})` : ''}\nsaved to ${args?.scope === 'user' ? '~/.rein/mcp.json' : '.mcp.json'}`;
+  }
   if (tool.name === 'shell') return `${args?.background ? 'background ' : ''}$ ${clip(args?.command, 800)}${args?.cwd ? `\n(in ${args.cwd})` : ''}`;
   return '';
 }

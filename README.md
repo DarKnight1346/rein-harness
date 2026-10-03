@@ -145,6 +145,7 @@ Design, findings and status: [PLAN.md](PLAN.md). Tests: `npm test`. License: [MI
 - **Tasks and effort:** the agent keeps a task list in the sidebar for multi-step work; pick an effort level (or
   auto) after choosing a model in `/model`.
 - **Context:** `@path` attaches a file; `read` shows images and PDFs to the model.
-- **MCP:** servers in `.mcp.json`, `~/.rein/mcp.json` or added with `claude mcp add` — `/mcp` to review.
+- **MCP:** just ask — the agent can add, list and remove servers itself (adding always asks you first, showing
+  the command). They live in `.mcp.json` / `~/.rein/mcp.json`; servers from `claude mcp add` work too. `/mcp` to review.
 - **Hooks:** Claude Code's `hooks` block in `.rein/settings.json` or `.claude/settings.json`.
 - **Scripts/CI:** `rein -p "…"` (`--output-format json`, `--permission-mode`, `--allowedTools`).

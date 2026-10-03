@@ -16,6 +16,7 @@ import {advisorRef, advisorTool} from './agents/advisor.js';
 import {GoalManager} from './goals/manager.js';
 import {Checkpoints} from './session/checkpoints.js';
 import {McpManager} from './mcp/manager.js';
+import {mcpTools} from './mcp/tools.js';
 import {startUsageRefresh} from './accounts/usage.js';
 import {hasHooks, runHooks} from './hooks.js';
 import {goalDoneTool} from './goals/tool.js';
@@ -298,6 +299,7 @@ Drop superseded reads of the same file, routine listings, and output that no lon
       advisorTool({config: () => this.config, engine: () => this.engine, agents: this.agents}),
       goalDoneTool(this.goals),
       ...webTools(() => this.config),
+      ...mcpTools({mcp: this.mcp, root: () => process.cwd(), call: (name, args, origin) => this.tools.call(name, args, origin)}),
       todoTool({
         transcript: () => this.engine?.transcript,
         changed: () => {
@@ -314,12 +316,12 @@ Drop superseded reads of the same file, routine listings, and output that no lon
     }
     // MCP servers connect in the background; their tools appear as they come up.
     this.tools.addSource(() => this.mcp.tools());
-    let mcpTools = '';
+    let mcpToolSet = '';
     this.mcp.on('change', () => {
       // Only a different tool list needs new sessions (status changes alone don't).
       const now = this.mcp.tools().map((t) => t.name).sort().join(',');
-      if (now !== mcpTools) {
-        mcpTools = now;
+      if (now !== mcpToolSet) {
+        mcpToolSet = now;
         this.engine?.refreshTools();
       }
     });

@@ -117,14 +117,16 @@ export class McpManager extends EventEmitter {
     await this.start();
   }
 
-  list(): {name: string; source: string; status: ServerStatus; error?: string; tools: number; transport: string}[] {
+  list(): {name: string; source: string; status: ServerStatus; error?: string; tools: number; toolNames: string[]; transport: string; target: string}[] {
     return [...this.servers.values()].map((s) => ({
       name: s.name,
       source: s.source,
       status: s.status,
       error: s.error,
       tools: s.tools.length,
+      toolNames: s.tools.map((t) => t.name),
       transport: 'url' in s.config ? s.config.type : 'stdio',
+      target: 'url' in s.config ? s.config.url : [s.config.command, ...(s.config.args ?? [])].join(' '),
     }));
   }
 
