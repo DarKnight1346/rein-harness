@@ -1,8 +1,10 @@
 import type {Skill} from '../skills/index.js';
 
-export type CommandName = 'add-dir' | 'goal' | 'btw' | 'agents' | 'agent' | 'resume' | 'login' | 'usage' | 'model' | 'context' | 'compact' | 'shells' | 'configure' | 'update' | 'tui' | 'clear' | 'help' | 'exit';
+export type CommandName = 'rewind' | 'permissions' | 'add-dir' | 'goal' | 'btw' | 'agents' | 'agent' | 'resume' | 'login' | 'usage' | 'model' | 'context' | 'compact' | 'shells' | 'configure' | 'update' | 'tui' | 'clear' | 'help' | 'exit';
 
 export const COMMANDS: {name: CommandName; description: string}[] = [
+  {name: 'rewind', description: 'Undo: restore files and/or the conversation to before one of your messages (also esc twice)'},
+  {name: 'permissions', description: 'Show the allow/deny rules in effect and where they come from'},
   {name: 'add-dir', description: 'Add a working directory the agent can use without asking: /add-dir <path> (no path: list them)'},
   {name: 'goal', description: 'Keep the agent on a goal until verified done: /goal <text> · pause · resume · clear'},
   {name: 'btw', description: 'Ask a side question without interrupting the agent (/btw <question>)'},
@@ -11,7 +13,7 @@ export const COMMANDS: {name: CommandName; description: string}[] = [
   {name: 'resume', description: 'Continue a saved conversation from this project'},
   {name: 'login', description: 'List signed-in accounts, add or remove accounts'},
   {name: 'usage', description: 'Usage windows (5h / weekly / …) and resets per account (/usage refresh)'},
-  {name: 'model', description: 'Chat, decision and compaction models (/model auto, /model sonnet)'},
+  {name: 'model', description: 'Chat, decision and compaction models (/model auto, /model <name>)'},
   {name: 'context', description: 'Show what the current context holds and how full it is'},
   {name: 'compact', description: 'Summarize the conversation with the compaction model'},
   {name: 'shells', description: 'Shell commands the agent started; open one to see its logs (/shells <id>)'},

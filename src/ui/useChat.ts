@@ -12,7 +12,7 @@ export type ChatEntry =
   | {id: number; kind: 'assistant'; text: string; first: boolean}
   | {id: number; kind: 'tool'; label: string; summary: string; ok: boolean; result: string; approvedBy?: string; judge?: string; diff?: DiffLine[]}
   | {id: number; kind: 'compact'; reason: CompactReason; result: Extract<CompactResult, {summarized: number}>}
-  | {id: number; kind: 'route'; route: Route; account: Account; interrupted: boolean};
+  | {id: number; kind: 'route'; route: Route; account: Account; effort?: string; interrupted: boolean};
 
 /** Omit that distributes over a union (plain Omit collapses it). */
 export type NewEntry<T> = T extends unknown ? Omit<T, 'id'> : never;
@@ -82,7 +82,7 @@ export function useChat(commit: (e: NewEntry<ChatEntry>) => void, notice: (kind:
       let responding = false;
       pending.current = '';
       firstSegment.current = true;
-      let route: {route: Route; account: Account} | undefined;
+      let route: {route: Route; account: Account; effort?: string} | undefined;
       try {
         for await (const ev of runtime.engine.send(text, images)) {
           if (ev.type === 'route') {

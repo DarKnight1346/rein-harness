@@ -21,6 +21,11 @@ export type Config = {
   autoUpdate: boolean;
   /** Show accounts as "Claude Account 1" and redact emails/home paths in the UI (screenshot-safe). */
   hidePersonalInfo: boolean;
+  /**
+   * Effort for the chat model: 'auto' = the decision model picks (only when the prompt cache is
+   * cold — changing effort invalidates it), 'default' = the model's own default, or a level.
+   */
+  chatEffort: string;
   /** The user's subagent model ('auto' = none chosen) for new-mode subagents. */
   subagentModel: string;
   /**
@@ -68,6 +73,7 @@ export const DEFAULT_CONFIG: Config = {
   advisorModel: 'off',
   webModel: 'cheapest',
   subagentModel: 'auto',
+  chatEffort: 'auto',
   subagentPriority: 'user',
   hidePersonalInfo: true,
   autoUpdate: true,

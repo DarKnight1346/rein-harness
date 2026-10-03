@@ -14,9 +14,11 @@ import {SubagentManager, SUBAGENT_PROMPT, type Subagent} from './agents/manager.
 import {agentTools} from './agents/tools.js';
 import {advisorRef, advisorTool} from './agents/advisor.js';
 import {GoalManager} from './goals/manager.js';
+import {Checkpoints} from './session/checkpoints.js';
 import {startUsageRefresh} from './accounts/usage.js';
 import {goalDoneTool} from './goals/tool.js';
 import {webTools} from './tools/web.js';
+import {todoTool} from './tools/todo.js';
 import {imageGenRef, imageTool} from './tools/image.js';
 import {newTranscript, saveTranscript} from './session/transcript.js';
 import {setExtraWorkingDirs, systemPrompt} from './session/prompt.js';
@@ -51,7 +53,18 @@ export class Runtime {
     sessionId: () => this.engine?.transcript.id,
     judge: (req) => this.judgeChange(req),
     configDirs: () => this.config?.additionalDirectories ?? [],
+    checkpoint: (file) => this.checkpoints.snapshot(this.currentTurn(), file),
   });
+
+  /** File checkpoints for /rewind, per conversation. */
+  readonly checkpoints = new Checkpoints(() => this.engine?.transcript.id ?? 'none');
+
+  /** Index of the user message the agent is working on (checkpoints are grouped by it). */
+  currentTurn(): number {
+    const m = this.engine?.transcript.messages ?? [];
+    for (let i = m.length - 1; i >= 0; i--) if (m[i]!.role === 'user') return i;
+    return 0;
+  }
 
   /**
    * `auto` approvals: one decision-model call (Jev or the cheap LLM) with minimal state — the user's
@@ -191,6 +204,25 @@ Drop superseded reads of the same file, routine listings, and output that no lon
     return parseIndices(reply);
   }
 
+  /** Auto effort: one decision-model question (Jev or the cheap model) about how hard the message is. */
+  private async pickEffort(text: string, levels: string[]): Promise<string | undefined> {
+    const meaning: Record<string, string> = {
+      low: 'simple questions, lookups, small mechanical edits',
+      medium: 'typical coding tasks and explanations',
+      high: 'tricky bugs, careful refactors, design decisions',
+      xhigh: 'very hard, long multi-step problems that need deep reasoning',
+    };
+    const d = await decide(this.config, {user_message: headTail(text)}, {
+      effort: {
+        type: 'choice',
+        instructions: 'How much reasoning effort does the assistant need for this message? Pick the lowest level that will do it well.',
+        criteria: Object.fromEntries(levels.map((l) => [l, meaning[l] ?? l])),
+      },
+    });
+    const a = d.answers.effort;
+    return a?.type === 'choice' ? a.choice : undefined;
+  }
+
   /** Decision model: is the subagent's task actually complete? (noul; ≥ 0.5 = yes) */
   private async judgeCompletion(agent: Subagent) {
     const tools = agent.events.flatMap((e) => (e.kind === 'tool' ? [`${e.label}(${e.summary})${e.ok === false ? ' ✗' : ''}`] : []));
@@ -235,6 +267,12 @@ Drop superseded reads of the same file, routine listings, and output that no lon
       advisorTool({config: () => this.config, engine: () => this.engine, agents: this.agents}),
       goalDoneTool(this.goals),
       ...webTools(() => this.config),
+      todoTool({
+        transcript: () => this.engine?.transcript,
+        changed: () => {
+          if (this.engine) void saveTranscript(this.engine.transcript).catch(() => {});
+        },
+      }),
       imageTool(() => this.config),
     );
     this.config = await loadConfig();
@@ -251,6 +289,7 @@ Drop superseded reads of the same file, routine listings, and output that no lon
         alternative: router.alternative,
         compact: (t, reason) => this.compact(t, reason),
         selectCarry: (input) => this.selectCarry(input),
+        pickEffort: (text, levels) => this.pickEffort(text, levels),
         tools: {
           binding: {
             // Resolved when a session opens: the agent tool lists the models signed in right now.

@@ -40,12 +40,27 @@ export function ModelScreen({onClose, onLog, bare}: {onClose(): void; onLog(kind
   const options = optionsFor(sec.id, hasJev, cfg);
   const current = currentValue(sec.id, cfg);
 
+  // Choosing a chat model continues to its effort level (auto, the model's default, or a level).
+  const [effortStep, setEffortStep] = useState<{label: string; options: Option[]} | undefined>();
   const choose = (idx: number) => {
     const opt = options[idx];
     if (!opt || opt.disabled) return;
     void runtime.setConfig({[sec.key]: opt.value}).then(() => {
       onLog('info', `${sec.title}: ${opt.label}`);
       setTick((t) => t + 1);
+      if (sec.id === 'chat') {
+        setEffortStep({label: opt.label, options: effortOptions(opt.value)});
+        setCursor(Math.max(0, effortOptions(opt.value).findIndex((o) => o.value === (cfg.chatEffort ?? 'auto'))));
+      }
+    });
+  };
+  const chooseEffort = (idx: number) => {
+    const opt = effortStep?.options[idx];
+    if (!opt) return;
+    void runtime.setConfig({chatEffort: opt.value}).then(() => {
+      onLog('info', `Effort: ${opt.label}`);
+      setEffortStep(undefined);
+      setCursor(0);
     });
   };
   const showSection = (i: number) => {
@@ -54,6 +69,13 @@ export function ModelScreen({onClose, onLog, bare}: {onClose(): void; onLog(kind
   };
 
   useInput((input, key) => {
+    if (effortStep) {
+      if (key.escape) return setEffortStep(undefined);
+      if (key.upArrow) setCursor((c) => Math.max(0, c - 1));
+      else if (key.downArrow) setCursor((c) => Math.min(effortStep.options.length - 1, c + 1));
+      else if (key.return) chooseEffort(cursor);
+      return;
+    }
     if (key.escape || input === 'q') return onClose();
     if (key.tab || key.rightArrow) showSection(section + 1);
     else if (key.leftArrow) showSection(section - 1);
@@ -62,6 +84,28 @@ export function ModelScreen({onClose, onLog, bare}: {onClose(): void; onLog(kind
     else if (key.return) choose(cursor);
   });
   const wheel = (dir: 1 | -1) => setCursor((c) => Math.max(0, Math.min(options.length - 1, c + dir)));
+
+  if (effortStep) {
+    return (
+      <Box flexDirection="column" {...(bare ? {} : {borderStyle: 'round' as const, borderColor: 'cyan', paddingX: 1})}>
+        <Text bold>Effort for {effortStep.label}</Text>
+        <Text dimColor>How hard the model thinks. Changing it mid-conversation discards the prompt cache, so auto only changes it when the cache is cold anyway.</Text>
+        <Box flexDirection="column" marginY={1}>
+          {effortStep.options.map((o, i) => (
+            <Clickable key={o.value} onHover={() => setCursor(i)} onClick={() => chooseEffort(i)}>
+              <Text color={i === cursor ? 'cyan' : undefined} wrap="truncate">
+                {i === cursor ? '❯ ' : '  '}
+                {o.value === (cfg.chatEffort ?? 'auto') ? '● ' : '○ '}
+                {o.label}
+                {o.hint ? <Text dimColor>  {o.hint}</Text> : null}
+              </Text>
+            </Clickable>
+          ))}
+        </Box>
+        <Text dimColor>enter choose · esc keep current</Text>
+      </Box>
+    );
+  }
 
   const start = Math.max(0, Math.min(cursor - Math.floor(MAX_ROWS / 2), options.length - MAX_ROWS));
   const visible = options.slice(start, start + MAX_ROWS);
@@ -108,6 +152,27 @@ export function ModelScreen({onClose, onLog, bare}: {onClose(): void; onLog(kind
       <Text dimColor>click or ←→/tab section · ↑↓ select · enter choose · esc close</Text>
     </Box>
   );
+}
+
+const EFFORT_HINTS: Record<string, string> = {
+  low: 'fastest, cheapest',
+  medium: 'balanced',
+  high: 'harder problems',
+  xhigh: 'very hard problems',
+  max: 'may use excessive tokens — hardest tasks only',
+  ultra: 'maximum reasoning (Codex)',
+};
+
+/** Effort choices for a chat model value (a ref, or 'auto' → the union of common levels). */
+function effortOptions(value: string): Option[] {
+  const ref = value === 'auto' ? undefined : parseRef(value);
+  const m = ref ? catalog.get(ref) : undefined;
+  const levels = m?.efforts ?? ['low', 'medium', 'high', 'xhigh', 'max'];
+  return [
+    {value: 'auto', label: 'Auto', hint: 'the decision model picks per task (when the cache is cold)'},
+    {value: 'default', label: 'Model default', hint: m?.defaultEffort ? `currently ${m.defaultEffort}` : 'whatever the model uses by default'},
+    ...levels.map((l) => ({value: l, label: l, hint: EFFORT_HINTS[l]})),
+  ];
 }
 
 function describe(s: Section): string {

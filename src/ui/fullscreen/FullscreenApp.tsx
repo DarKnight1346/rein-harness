@@ -14,6 +14,8 @@ import {ModelScreen} from '../ModelScreen.js';
 import {Clickable, useClickable} from '../terminal/clicks.js';
 import {TextInput} from '../TextInput.js';
 import {goalSummary, useRein} from '../useRein.js';
+import {RewindScreen} from '../RewindScreen.js';
+import {todoLine} from '../../tools/todo.js';
 import {hidingIdentity, redact} from '../privacy.js';
 import {contextPct, enabledItems, statusInfo} from '../layout.js';
 import {ConfigureScreen} from '../ConfigureScreen.js';
@@ -172,6 +174,12 @@ export function FullscreenApp({resume}: {resume: Resume}) {
                   : [chalk.dim('Forking the agent to answer… the main agent keeps working.')]
             }
           />
+        );
+      case 'rewind':
+        return (
+          <Window title="Rewind" width={windowWidth} onClose={r.closeOverlay}>
+            <RewindScreen points={overlay.points} onPick={(i, m) => void r.doRewind(i, m)} onCancel={r.closeOverlay} />
+          </Window>
         );
       case 'resume':
         return (
@@ -578,9 +586,13 @@ function Sidebar({width, height, tick, run, view, setView}: {width: number; heig
   useEffect(() => usageStore.subscribe(() => setUsageTick((t) => t + 1)), []);
   void tick;
   const inner = width - 3;
-  const sections = enabledItems('sidebar', runtime.config);
+  // The task list shows up first whenever the agent keeps one (like Claude Code's todo list).
+  const todos = runtime.engine?.transcript.todos ?? [];
+  const sections = [...(todos.length && todos.some((t) => t.status !== 'completed') ? ['tasks'] : []), ...enabledItems('sidebar', runtime.config)];
   const render = (id: string): ReactNode => {
     switch (id) {
+      case 'tasks':
+        return <TasksSection inner={inner} />;
       case 'agents':
         return <AgentsSection inner={inner} view={view} setView={setView} />;
       case 'accounts':
@@ -735,6 +747,22 @@ function RoutingSection({inner}: {inner: number}) {
         decides: {truncate(info.decider, inner - 9)}
       </Text>
       <Text wrap="wrap">{runtime.lastDecision ? truncate(runtime.lastDecision, inner * 2) : <Text dimColor>no decisions yet{runtime.config.chatModel === 'auto' ? '' : ' (chat model is fixed)'}</Text>}</Text>
+    </>
+  );
+}
+
+function TasksSection({inner}: {inner: number}) {
+  const todos = runtime.engine?.transcript.todos ?? [];
+  const done = todos.filter((t) => t.status === 'completed').length;
+  return (
+    <>
+      <Heading>{`TASKS ${done}/${todos.length}`}</Heading>
+      {todos.slice(0, 12).map((t, i) => (
+        <Text key={i} wrap="truncate" color={t.status === 'in_progress' ? 'cyan' : undefined} dimColor={t.status === 'completed'} strikethrough={t.status === 'completed'}>
+          {truncate(todoLine(t), inner)}
+        </Text>
+      ))}
+      {todos.length > 12 && <Text dimColor>… {todos.length - 12} more</Text>}
     </>
   );
 }

@@ -59,7 +59,7 @@ export function entryLines(entry: Entry, width: number): string[] {
       ];
     }
     case 'route':
-      return wrap(chalk.dim(`→ ${routeLabel(entry.route, entry.account)}`) + (entry.interrupted ? chalk.yellow(' · interrupted') : ''), width, '  ', '    ');
+      return wrap(chalk.dim(`→ ${routeLabel(entry.route, entry.account, entry.effort)}`) + (entry.interrupted ? chalk.yellow(' · interrupted') : ''), width, '  ', '    ');
     case 'info':
       return gutter(entry.text, width, chalk.dim);
     case 'error':

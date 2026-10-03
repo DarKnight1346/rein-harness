@@ -3,28 +3,90 @@ import readline from 'node:readline';
 import {usageStore} from '../../store/usage.js';
 import {EventQueue, run} from '../../util/proc.js';
 import {accountEnv} from '../env.js';
-import type {ModelInfo, ProviderAdapter} from '../types.js';
+import path from 'node:path';
+import {readJson, writeJson} from '../../store/json.js';
+import {paths} from '../../store/paths.js';
+import {tierFrom} from '../tier.js';
+import type {Account, ModelInfo, ProviderAdapter} from '../types.js';
 import {claudeAuth} from './auth.js';
 import {ClaudeSession, claudeBin, claudeOneShot} from './session.js';
 
+/** Context window until the real one is learned from a result's `modelUsage.contextWindow`. */
+const UNKNOWN_WINDOW = 200_000;
+/** The model list is asked of the CLI at most this often per account. */
+const MODELS_TTL_MS = 24 * 60 * 60_000;
+
+type CliModel = {value: string; resolvedModel?: string; displayName?: string; description?: string; supportedEffortLevels?: string[]};
+
 /**
- * Context windows are defaults; the real value is learned from each result's
- * `modelUsage.contextWindow` (verified: haiku 4.5 = 200k, sonnet 5.5 = 1M).
- * Claude Code has no model-list command; these are its documented aliases (always the latest
- * model of each family). Tier = relative cost (1 = cheapest).
+ * The account's models, as the claude CLI itself reports them (the `initialize` control request —
+ * what the Agent SDK's supportedModels() uses): names, descriptions, effort levels, the default.
+ * Nothing is hardcoded; the cost tier comes from each description.
  */
-export const CLAUDE_MODELS: ModelInfo[] = [
-  {provider: 'claude', id: 'haiku', label: 'Haiku', description: 'Fastest and cheapest; simple questions, short edits, classification.', tier: 1, contextWindow: 200_000},
-  {provider: 'claude', id: 'sonnet', label: 'Sonnet', description: 'Balanced; everyday coding, writing and analysis.', tier: 3, contextWindow: 1_000_000, isDefault: true},
-  {provider: 'claude', id: 'opus', label: 'Opus', description: 'Deep reasoning; hard bugs, architecture, long multi-step work.', tier: 5, contextWindow: 1_000_000},
-  {provider: 'claude', id: 'fable', label: 'Fable', description: 'Most capable; the hardest, highest-stakes problems.', tier: 6, contextWindow: 1_000_000},
-];
+export async function fetchClaudeModels(account: Account): Promise<ModelInfo[]> {
+  const child = spawn(claudeBin(), ['-p', '--input-format', 'stream-json', '--output-format', 'stream-json', '--verbose', '--system-prompt', 'Model list.', '--tools', '', '--strict-mcp-config', '--mcp-config', '{"mcpServers":{}}', '--setting-sources', '', '--disable-slash-commands', '--no-session-persistence'], {
+    env: accountEnv(account),
+    stdio: ['pipe', 'pipe', 'ignore'],
+  });
+  try {
+    const models = await new Promise<CliModel[]>((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error('claude did not report its models')), 30_000);
+      child.on('error', reject);
+      readline.createInterface({input: child.stdout}).on('line', (line) => {
+        try {
+          const e = JSON.parse(line);
+          if (e.type !== 'control_response') return;
+          clearTimeout(timer);
+          resolve((e.response?.response ?? e.response)?.models ?? []);
+        } catch {}
+      });
+      child.stdin.write(JSON.stringify({type: 'control_request', request_id: 'rein-models', request: {subtype: 'initialize'}}) + '\n');
+    });
+    const def = models.find((m) => m.value === 'default')?.resolvedModel;
+    let defaultMarked = false;
+    return models
+      .filter((m) => m.value && m.value !== 'default')
+      .map((m): ModelInfo => {
+        const isDefault = !defaultMarked && !!def && m.resolvedModel === def;
+        if (isDefault) defaultMarked = true;
+        return {
+          provider: 'claude',
+          id: m.value,
+          label: m.displayName ?? m.value,
+          description: m.description,
+          tier: tierFrom(m.description),
+          contextWindow: UNKNOWN_WINDOW,
+          isDefault,
+          efforts: m.supportedEffortLevels?.length ? m.supportedEffortLevels : undefined,
+        };
+      });
+  } finally {
+    child.kill();
+  }
+}
+
+const modelsCache = (account: Account) => path.join(paths.state(), `claude-models-${account.id}.json`);
+
+/** Cached per account; refreshed in the background once a day (and fetched on first use). */
+async function listClaudeModels(account: Account): Promise<ModelInfo[]> {
+  const cached = await readJson<{at: number; models: ModelInfo[]} | undefined>(modelsCache(account), undefined).catch(() => undefined);
+  const refresh = async () => {
+    const models = await fetchClaudeModels(account);
+    if (models.length) await writeJson(modelsCache(account), {at: Date.now(), models});
+    return models;
+  };
+  if (cached?.models?.length) {
+    if (Date.now() - cached.at > MODELS_TTL_MS) void refresh().catch(() => {});
+    return cached.models;
+  }
+  return refresh();
+}
 
 export const claudeAdapter: ProviderAdapter = {
   ...claudeAuth,
 
-  async listModels() {
-    return CLAUDE_MODELS;
+  async listModels(account) {
+    return listClaudeModels(account);
   },
 
   async readUsage(account) {
@@ -34,7 +96,10 @@ export const claudeAdapter: ProviderAdapter = {
 
   async refreshUsage(account) {
     // A tiny haiku request in a fresh process always yields one rate_limit_event.
-    await claudeOneShot({account, model: 'haiku', system: 'Reply with exactly: ok', prompt: 'ok', timeoutMs: 45_000});
+    // The cheapest model this account offers (from the CLI's own list).
+    const cheapest = [...(await listClaudeModels(account))].sort((a, b) => a.tier - b.tier)[0];
+    if (!cheapest) return usageStore.get(account.id);
+    await claudeOneShot({account, model: cheapest.id, system: 'Reply with exactly: ok', prompt: 'ok', timeoutMs: 45_000});
     return usageStore.get(account.id);
   },
 

@@ -52,6 +52,9 @@ export type ModelInfo = {
   tier: number;
   contextWindow: number;
   isDefault?: boolean;
+  /** Effort levels the model accepts, lowest first, and its default. */
+  efforts?: string[];
+  defaultEffort?: string;
 };
 
 /** `provider:model`, e.g. `claude:sonnet`, `codex:gpt-6-luna`. */
@@ -100,6 +103,10 @@ export interface ProviderSession {
   model: string;
   /** Native session/thread id, for resume. */
   nativeId(): string | undefined;
+  /** Effort the session runs at (undefined = model default). */
+  readonly effort?: string;
+  /** Change effort in place (Codex: per turn). Absent = fixed per process (Claude: reopen). */
+  setEffort?(effort: string | undefined): void;
   /** One turn. Ends with exactly one `done` or `error`. */
   send(text: string, images?: ImageInput[]): AsyncIterable<ChatEvent>;
   interrupt(): void;
@@ -126,6 +133,8 @@ export type SessionOpts = {
   resumeId?: string;
   /** Give the model Rein's tools (chat sessions only; one-shots never get tools). */
   tools?: ToolBinding;
+  /** Effort level (undefined = the model's default). */
+  effort?: string;
 };
 
 /** `fast`: latency over depth (decider calls): no extended thinking / low reasoning effort. */
