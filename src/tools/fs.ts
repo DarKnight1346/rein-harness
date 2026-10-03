@@ -130,7 +130,7 @@ async function looksBinary(file: string): Promise<boolean> {
     const {bytesRead} = await fh.read(buf, 0, buf.length, 0);
     return buf.subarray(0, bytesRead).includes(0);
   } finally {
-    await fh.close();
+    await fh.close().catch(() => {}); // may already be closed (streaming edit)
   }
 }
 
@@ -186,7 +186,7 @@ export async function writeTool(ctx: ToolContext, args: {path: string; content: 
     if (existed && st.size <= 1024 * 1024) before = await fh.readFile('utf8');
     await overwrite(fh, args.content);
   } finally {
-    await fh.close();
+    await fh.close().catch(() => {}); // may already be closed (streaming edit)
   }
   const diff = !existed ? createdDiff(args.content) : before !== undefined ? fileDiff(before, args.content) : undefined;
   const n = args.content ? args.content.split('\n').length - (args.content.endsWith('\n') ? 1 : 0) : 0;
@@ -221,7 +221,7 @@ export async function editTool(ctx: ToolContext, args: {path: string; old_string
     next = args.replace_all ? text.split(args.old_string).join(args.new_string) : text.replace(args.old_string, () => args.new_string);
     await overwrite(fh, next);
   } finally {
-    await fh.close();
+    await fh.close().catch(() => {}); // may already be closed (streaming edit)
   }
   const line = text.slice(0, text.indexOf(args.old_string)).split('\n').length;
   const diff = fileDiff(text, next) ?? regionDiff(line, args.old_string, args.new_string);
@@ -270,6 +270,8 @@ async function streamingEdit(ctx: ToolContext, file: string, fh: FileHandle, arg
   try {
     await scan((s) => void out.write(s));
     await new Promise<void>((resolve, reject) => out.end((err?: Error | null) => (err ? reject(err) : resolve())));
+    // Windows can't replace a file that's still open: release the original first.
+    await fh.close().catch(() => {});
     await rename(tmp, file);
   } catch (err) {
     await rm(tmp, {force: true});
