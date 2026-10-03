@@ -1,4 +1,4 @@
-import {spawn} from 'node:child_process';
+import {spawn} from '../../util/platform.js';
 import {mkdir} from 'node:fs/promises';
 import {accountEnv} from '../env.js';
 import type {Account, AccountStatus, LoginEvent, LoginFlow, ProviderAuth} from '../types.js';

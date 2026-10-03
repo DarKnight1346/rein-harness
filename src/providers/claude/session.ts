@@ -1,4 +1,5 @@
-import {spawn, type ChildProcessWithoutNullStreams} from 'node:child_process';
+import {spawn} from '../../util/platform.js';
+import type {ChildProcessWithoutNullStreams} from 'node:child_process';
 import {readFileSync} from 'node:fs';
 import readline from 'node:readline';
 import {usageStore} from '../../store/usage.js';

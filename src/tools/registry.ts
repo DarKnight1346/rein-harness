@@ -1,5 +1,7 @@
+import path from 'node:path';
 import {deleteTool, editTool, listTool, readTool, resolveInRoot, searchTool, ToolError, writeTool, type ToolContext, type ToolResult} from './fs.js';
 import {DEFAULT_TIMEOUT_MS, shellStatusText} from './shells.js';
+import {shellFor} from '../util/platform.js';
 import {sessionRead, sessionsSearch} from './sessions.js';
 
 export type ToolDef = {
@@ -134,7 +136,7 @@ export const TOOLS: ToolDef[] = [
     paths: (args) => [args?.cwd ?? '.'].filter((x): x is string => typeof x === 'string'),
     label: 'Shell',
     description:
-      `Run a shell command in the project (${process.env.SHELL || '/bin/sh'} -c). Foreground (default) waits and returns the output and exit code; ` +
+      `Run a shell command in the project (${shellFor('').kind === 'powershell' ? 'PowerShell' : `${path.basename(shellFor('').file)} -c`}). Foreground (default) waits and returns the output and exit code; ` +
       `the user watches it live. Timeout ${DEFAULT_TIMEOUT_MS / 1000}s by default; raise it with timeout_ms for long builds/tests (capped by the user's limit, 120 min by default). ` +
       'Use background: true for long-running processes (dev servers, watchers): it returns an id at once; read output with shell_logs and stop it with shell_kill. ' +
       'No stdin/TTY: interactive commands will fail — pass flags like --yes instead.',

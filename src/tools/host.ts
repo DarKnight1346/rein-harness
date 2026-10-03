@@ -8,6 +8,7 @@ import {resolveInRoot, resolvePath, ToolError, workingDirs, type Origin, type To
 import {TOOLS, toolByName, type ToolDef} from './registry.js';
 import {addProjectRule, check, loadRules, ruleTool, suggestRule, type Rules, type Subject} from './permissions.js';
 import {hasHooks, runHooks} from '../hooks.js';
+import {ipcPath, isWindows} from '../util/platform.js';
 import {ShellManager} from './shells.js';
 import type {DiffLine} from './diff.js';
 import {skillDirs} from '../skills/index.js';
@@ -356,9 +357,10 @@ export class ToolHost extends EventEmitter {
   }
 
   private async serve(call: (name: string, args: unknown) => Promise<ToolResult>): Promise<string> {
-    // Socket paths are limited to ~104 bytes on macOS: keep it short, in the per-user tmpdir.
-    const sock = path.join(os.tmpdir(), `rein-${process.pid}-${Math.random().toString(36).slice(2, 8)}.sock`);
-    if (existsSync(sock)) rmSync(sock);
+    // A unix socket (paths are limited to ~104 bytes on macOS: short, in the per-user tmpdir), or a
+    // named pipe on Windows.
+    const sock = ipcPath(`rein-${process.pid}-${Math.random().toString(36).slice(2, 8)}`);
+    if (!isWindows && existsSync(sock)) rmSync(sock);
     const server = net.createServer((conn) => {
       let buf = '';
       conn.on('data', (d) => {
@@ -397,7 +399,7 @@ export class ToolHost extends EventEmitter {
   close(): void {
     this.shells.killAll();
     for (const s of this.servers) s.close();
-    for (const sock of this.sockets) if (existsSync(sock)) rmSync(sock, {force: true});
+    if (!isWindows) for (const sock of this.sockets) if (existsSync(sock)) rmSync(sock, {force: true});
     this.servers = [];
     this.sockets = [];
     this.mainSocket = this.readOnlySocket = undefined;

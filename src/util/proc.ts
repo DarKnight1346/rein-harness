@@ -1,4 +1,4 @@
-import {spawn} from 'node:child_process';
+import {spawn} from './platform.js';
 
 export type RunResult = {code: number | null; stdout: string; stderr: string};
 

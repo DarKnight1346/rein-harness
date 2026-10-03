@@ -1,4 +1,4 @@
-import {spawn} from 'node:child_process';
+import {spawn} from '../../util/platform.js';
 import readline from 'node:readline';
 import {usageStore} from '../../store/usage.js';
 import {EventQueue, run} from '../../util/proc.js';

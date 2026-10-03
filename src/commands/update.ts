@@ -1,4 +1,4 @@
-import {spawn} from 'node:child_process';
+import {spawn} from '../util/platform.js';
 import {existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync} from 'node:fs';
 import {reinHome} from '../store/paths.js';
 import path from 'node:path';

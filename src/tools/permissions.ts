@@ -63,7 +63,8 @@ export function loadRules(root: string): Rules {
 
 /** Glob → RegExp: `**` any depth, `*` within a segment, `?` one char. */
 function globRe(glob: string): RegExp {
-  const g = glob.replace(/^~(?=\/|$)/, os.homedir());
+  // Rules use forward slashes; Windows paths are normalized to match (see check()).
+  const g = glob.replace(/^~(?=\/|$)/, os.homedir().replace(/\\/g, '/')).replace(/\\/g, '/');
   let re = '';
   for (let i = 0; i < g.length; i++) {
     const c = g[i]!;
@@ -141,7 +142,7 @@ function ruleCovers(rule: Parsed, s: Subject, forms: (p: string) => string[], pa
   }
   if (!s.paths?.length) return false;
   const re = globRe(rule.spec);
-  return s.paths.every((p) => forms(p).some((f) => re.test(f)));
+  return s.paths.every((p) => forms(p).some((f) => re.test(f.replace(/\\/g, '/'))));
 }
 
 /**

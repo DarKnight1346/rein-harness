@@ -208,6 +208,10 @@ async function readClipboardImage(file: string): Promise<boolean> {
         'close access f',
       ];
       await exec('osascript', script.flatMap((l) => ['-e', l]), {timeout: 5000});
+    } else if (process.platform === 'win32') {
+      // -STA: the Windows clipboard API needs a single-threaded apartment.
+      const ps = `Add-Type -AssemblyName System.Windows.Forms; Add-Type -AssemblyName System.Drawing; $img = [Windows.Forms.Clipboard]::GetImage(); if ($img) { $img.Save($env:REIN_OUT, [Drawing.Imaging.ImageFormat]::Png) }`;
+      await exec('powershell.exe', ['-NoProfile', '-NonInteractive', '-STA', '-Command', ps], {timeout: 10_000, env: {...process.env, REIN_OUT: file}});
     } else if (process.platform === 'linux') {
       const {stdout} = await exec('sh', ['-c', `(wl-paste --type image/png 2>/dev/null || xclip -selection clipboard -t image/png -o 2>/dev/null) > ${JSON.stringify(file)}`]);
       void stdout;
