@@ -1,7 +1,9 @@
 #!/usr/bin/env node
-// Next version to publish: one patch past the latest on npm, unless package.json's version is
+// Next version to publish: one patch past the newest release, unless package.json's version is
 // already higher (a manual minor/major bump), in which case that version is used as-is.
-// Usage: node scripts/next-version.mjs <package.json version> [latest npm version]
+// "Newest release" is the highest of the given candidates — npm's latest *and* the newest vX.Y.Z
+// git tag, because npm's registry can lag a minute behind a publish while tags show up at once.
+// Usage: node scripts/next-version.mjs <package.json version> [released version …]
 
 const parse = (v) => {
   const m = /^v?(\d+)\.(\d+)\.(\d+)(?:-([\w.-]+))?$/.exec(String(v ?? '').trim());
@@ -14,12 +16,12 @@ export function compare(a, b) {
   return a.pre === undefined ? 1 : b.pre === undefined ? -1 : a.pre.localeCompare(b.pre);
 }
 
-export function nextVersion(base, latest) {
+export function nextVersion(base, ...released) {
   const b = parse(base);
   if (!b) throw new Error(`invalid package.json version: ${base}`);
-  const l = parse(latest);
+  const l = released.map(parse).filter(Boolean).sort(compare).at(-1);
   if (!l || compare(b, l) > 0) return `${b.major}.${b.minor}.${b.patch}${b.pre ? `-${b.pre}` : ''}`;
   return `${l.major}.${l.minor}.${l.patch + (l.pre ? 0 : 1)}`;
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) console.log(nextVersion(process.argv[2], process.argv[3]));
+if (import.meta.url === `file://${process.argv[1]}`) console.log(nextVersion(process.argv[2], ...process.argv.slice(3)));

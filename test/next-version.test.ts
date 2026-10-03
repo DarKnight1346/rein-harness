@@ -11,6 +11,11 @@ describe('release version', () => {
     expect(nextVersion('0.2.0', '0.1.9')).toBe('0.2.0');
     expect(nextVersion('1.0.0', '0.9.3')).toBe('1.0.0');
   });
+  it('takes the newest of npm and the git tags (the registry can lag behind a publish)', () => {
+    expect(nextVersion('0.1.0', '0.1.0', 'v0.1.1')).toBe('0.1.2');
+    expect(nextVersion('0.1.0', '0.1.3', 'v0.1.1', 'v0.1.0')).toBe('0.1.4');
+    expect(nextVersion('0.1.0', '', 'v0.1.0')).toBe('0.1.1');
+  });
   it('first publish, and pre-release on npm', () => {
     expect(nextVersion('0.1.0', '')).toBe('0.1.0');
     expect(nextVersion('0.1.0', '0.2.0-beta.1')).toBe('0.2.0');

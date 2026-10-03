@@ -53,11 +53,13 @@ jobs:
           NAME=$(node -p "require('./package.json').name")
           BASE=$(node -p "require('./package.json').version")
           LATEST=$(npm view "$NAME" version 2>/dev/null || true)
-          VERSION=$(node scripts/next-version.mjs "$BASE" "$LATEST")
+          # Newest release tag too: npm can lag a minute behind the previous run's publish.
+          TAG=$(git ls-remote --tags --refs origin 'v*' | sed 's#.*refs/tags/##' | sort -V | tail -1)
+          VERSION=$(node scripts/next-version.mjs "$BASE" "$LATEST" "$TAG")
           npm version "$VERSION" --no-git-tag-version --allow-same-version >/dev/null
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "publish=true" >> "$GITHUB_OUTPUT"
-          echo "::notice::Publishing $NAME@$VERSION (npm had ${LATEST:-nothing})"
+          echo "::notice::Publishing $NAME@$VERSION (npm had ${LATEST:-nothing}, newest tag ${TAG:-none})"
 
       - name: Publish
         if: steps.check.outputs.publish == 'true'
