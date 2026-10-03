@@ -15,7 +15,7 @@ function find(skills: Skill[], name: string): Skill | undefined {
  * project's (.rein/skills) and global (~/.rein/skills) — in this tool's description, and loads one
  * when the task matches. The result is the skill's instructions (and its folder) to follow.
  */
-export function skillTool(cwd: () => string): ToolDef {
+export function skillTool(cwd: () => string, onPlanMode: () => void = () => {}): ToolDef {
   return {
     name: 'skill',
     label: 'Skill',
@@ -43,6 +43,7 @@ export function skillTool(cwd: () => string): ToolDef {
       const skills = loadSkills(cwd());
       const skill = find(skills, String(args?.name ?? ''));
       if (!skill) throw new ToolError(`no skill "${args?.name}"; available: ${skills.map((s) => s.name).join(', ') || 'none'}`);
+      if (skill.planMode) onPlanMode();
       return {ok: true, text: `Skill "${skill.name}" loaded — follow these instructions:\n\n${skillPrompt(skill, typeof args.args === 'string' ? args.args : '', cwd())}`};
     },
   };

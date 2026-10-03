@@ -18,6 +18,8 @@ export type Skill = {
   files: string[];
   /** Extra slash names from config.json (`/sc` → skill:create). */
   aliases: string[];
+  /** config.json "planMode": true — running the skill turns plan mode on (/plan, /plan:deep). */
+  planMode?: boolean;
 };
 
 /**
@@ -25,7 +27,7 @@ export type Skill = {
  * Each field falls back: config.json → the main file's frontmatter → defaults (main `SKILL.md`, the
  * folder name, the first line of the instructions). A missing `main` file falls back to SKILL.md.
  */
-type SkillConfig = {name?: string; description?: string; main?: string; aliases?: string[]};
+type SkillConfig = {name?: string; description?: string; main?: string; aliases?: string[]; planMode?: boolean};
 
 /** Rein's own skills ship in `<install>/skills` (works from src/ via tsx and from dist/). */
 export const builtinSkillsDir = () => path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', 'skills');
@@ -101,6 +103,7 @@ function scan(root: string, source: SkillSource): Skill[] {
       body,
       files: [main, ...listFiles(dir).filter((f) => f !== main)].slice(0, MAX_FILES),
       aliases: (Array.isArray(config.aliases) ? config.aliases : []).map((a) => skillName(String(a))).filter((a) => a && a !== name),
+      ...(config.planMode === true ? {planMode: true} : {}),
     });
   }
   return out;

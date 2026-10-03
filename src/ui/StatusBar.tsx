@@ -39,6 +39,7 @@ export function StatusBar({tick}: {tick: number}) {
     <Text dimColor>
       {'  '}rein{parts.length ? ` · ${parts.join(' · ')}` : ''}
       {background ? <Text color="yellow"> · ● {background} background (/shells)</Text> : null}
+      {runtime.planMode ? <Text color="yellow"> · ⏸ plan mode</Text> : null}
       {runtime.goals.goal ? <Text color="cyan"> · ◎ goal {runtime.goals.goal.status}</Text> : null}
     </Text>
   );
