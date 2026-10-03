@@ -22,7 +22,8 @@ import {useChat} from './useChat.js';
 import {Attachments} from './attachments.js';
 import {mentionAt, primeFiles, suggestFiles} from './mentions.js';
 import type {RewindMode, RewindPoint} from './RewindScreen.js';
-import type {PlanDecision} from '../tools/plan.js';
+import type {PlanDecision, PresentedPlan} from '../tools/plan.js';
+import {listPlans, type SavedPlan} from '../plans/store.js';
 import type {AskAnswer, AskQuestion} from '../tools/ask.js';
 import {settingsFiles} from '../tools/permissions.js';
 import {memoryFacts, memoryFile} from '../tools/memory.js';
@@ -50,7 +51,8 @@ export type Overlay =
   | {name: 'resume'; sessions: SessionInfo[]}
   | {name: 'rewind'; points: RewindPoint[]}
   | {name: 'mcp'}
-  | {name: 'plan'; plan: string; resolve(d: PlanDecision): void}
+  | {name: 'plan'; plan: PresentedPlan; resolve(d: PlanDecision): void}
+  | {name: 'plans'; plans: SavedPlan[]}
   | {name: 'ask'; questions: AskQuestion[]; resolve(a: AskAnswer[] | undefined): void}
   | {name: 'agents'}
   | {name: 'goal'}
@@ -257,7 +259,7 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
           plan,
           resolve: (d) => {
             setOverlay({name: 'none'});
-            log('info', d === 'revise' ? 'Keep planning — type your feedback.' : `Plan approved${d === 'approve-all' ? ' (all changes allowed this session)' : ''} — plan mode off.`);
+            log('info', {revise: 'Keep planning — type your feedback.', implement: 'Plan saved — implementing it now (plan mode off).', goal: '◎ Plan saved and started as a goal — milestones in the sidebar (plan mode off).', save: 'Plan saved to .rein/plans/ — start it any time with /plan:goal (plan mode off).'}[d]);
             bump();
             resolve(d);
           },
@@ -362,7 +364,6 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
     if (g?.status === 'done' && g.doneAt && announced.current !== g.doneAt) {
       announced.current = g.doneAt;
       log('info', `◎ Goal achieved and verified: ${g.text}\n${g.checks.at(-1)?.verdict ?? ''}`);
-      runtime.engine.refreshTools(); // goal_done goes away
     }
     if (!ready || chat.busy || goalBusy.current || queued.length || overlay.name === 'approval' || g?.status !== 'active') return;
     // Background subagents still working: wait for their reports instead of nudging the agent.
@@ -518,7 +519,7 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
       return;
     }
     // In fullscreen, commands that open a window don't echo into the history.
-    const opensWindow = ['login', 'usage', 'context', 'help', 'update', 'configure', 'shells', 'btw', 'resume', 'agents', 'agent'].includes(parsed.name) || (parsed.name === 'model' && !parsed.args);
+    const opensWindow = ['plan:goal', 'login', 'usage', 'context', 'help', 'update', 'configure', 'shells', 'btw', 'resume', 'agents', 'agent'].includes(parsed.name) || (parsed.name === 'model' && !parsed.args);
     if (!(windowed && opensWindow)) log('user', raw.trim());
     switch (parsed.name) {
       case 'mcp':
@@ -567,6 +568,11 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
         }
         break;
       }
+      case 'plan:goal': {
+        const plans = listPlans(process.cwd()).filter((p) => !p.complete);
+        setOverlay({name: 'plans', plans});
+        break;
+      }
       case 'goal': {
         const arg = parsed.args.trim();
         const g = runtime.goals.goal;
@@ -586,14 +592,12 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
             log('info', g ? `The goal is ${g.status}.` : 'No goal set.');
             break;
           }
-          runtime.engine.refreshTools();
           log('info', `Goal resumed: ${g!.text}`);
           bump(); // wakes the goal loop
           break;
         }
         if (sub === 'clear') {
           log('info', runtime.goals.clear() ? 'Goal cleared.' : 'No goal set.');
-          runtime.engine.refreshTools();
           bump();
           break;
         }
@@ -601,10 +605,7 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
         log('info', `◎ Goal set: ${arg}\nThe agent keeps working until the decision model verifies it's done (evidence required). /goal pause · resume · clear`);
         const kick = runtime.goals.kickoff(goal);
         if (chat.busy) setQueued((q) => [...q, kick]);
-        else {
-          runtime.engine.refreshTools(); // goal_done becomes available
-          void chat.send(kick).then(bump);
-        }
+        else void chat.send(kick).then(bump);
         break;
       }
       case 'btw': {
@@ -916,6 +917,23 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
     else setOverlay({name: 'shells'});
   };
 
+  /** /plan:goal → a saved plan: make it the goal and start working on it. */
+  const startPlanGoal = (p: SavedPlan) => {
+    setOverlay({name: 'none'});
+    if (viewing) setView('main');
+    const goal = runtime.goals.set(`Carry out the plan "${p.title}"`, p.file);
+    logMain('info', `◎ Goal: carry out the plan "${p.title}" — ${p.milestones.filter((m) => m.done).length}/${p.milestones.length} milestones done. Progress shows in the sidebar; /goal pause · resume · clear`);
+    const kick = runtime.goals.kickoff(goal);
+    if (chat.busy) setQueued((q) => [...q, kick]);
+    else void chat.send(kick).then(bump);
+  };
+  /** /plan:goal → "start a new plan": put /plan in the input for the task description. */
+  const startNewPlan = () => {
+    setOverlay({name: 'none'});
+    prevDraft.current = '/plan ';
+    setDraft('/plan ');
+  };
+
   const closeOverlay = () => {
     setOverlay({name: 'none'});
     void refresh();
@@ -923,7 +941,7 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
 
   return {
     entries, add, log, overlay, setOverlay, closeOverlay, finishImport, ready, updating, updateLog, statusTick, bump,
-    draft, onDraft, onSubmit, onPaste, onImagePaste, doRewind, togglePlanMode, fileSuggestions, fileSelected, acceptFile, runCommand, suggestions, selected, setSuggestIndex, inputActive, chat, skills, openShells, queued, exitArmed, compacting, pickSession,
+    startPlanGoal, startNewPlan, draft, onDraft, onSubmit, onPaste, onImagePaste, doRewind, togglePlanMode, fileSuggestions, fileSelected, acceptFile, runCommand, suggestions, selected, setSuggestIndex, inputActive, chat, skills, openShells, queued, exitArmed, compacting, pickSession,
     view, setView, viewing, goalNote,
   };
 }

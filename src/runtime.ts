@@ -20,12 +20,12 @@ import {McpManager} from './mcp/manager.js';
 import {mcpTools} from './mcp/tools.js';
 import {skillTool} from './skills/tool.js';
 import {memoryTools} from './tools/memory.js';
-import {PLAN_MODE_CONTEXT, presentPlanTool, type PlanDecision} from './tools/plan.js';
+import {PLAN_MODE_CONTEXT, presentPlanTool, type PlanDecision, type PresentedPlan} from './tools/plan.js';
 import {askUserTool, type AskAnswer, type AskQuestion} from './tools/ask.js';
 import {decideTool} from './decider/tool.js';
 import {startUsageRefresh} from './accounts/usage.js';
 import {hasHooks, runHooks} from './hooks.js';
-import {goalDoneTool} from './goals/tool.js';
+import {goalDoneTool, milestoneDoneTool} from './goals/tool.js';
 import {webTools} from './tools/web.js';
 import {todoTool} from './tools/todo.js';
 import {imageGenRef, imageTool} from './tools/image.js';
@@ -60,7 +60,7 @@ export class Runtime {
   /** Plan mode (/plan, Shift+Tab, --permission-mode plan): read-only until a plan is approved. */
   planMode = false;
   /** Set by the UI: shows a presented plan and resolves with the user's decision. */
-  planPresenter: ((plan: string) => Promise<PlanDecision | undefined>) | undefined;
+  planPresenter: ((plan: PresentedPlan) => Promise<PlanDecision | undefined>) | undefined;
   /** Set by the UI: shows the agent's questions and resolves with the answers (undefined = dismissed). */
   askPresenter: ((questions: AskQuestion[]) => Promise<AskAnswer[] | undefined>) | undefined;
   /** Rules for this run only (headless --allowedTools / --disallowedTools). */
@@ -337,18 +337,21 @@ Drop superseded reads of the same file, routine listings, and output that no lon
       ...agentTools(this.agents, () => this.config),
       advisorTool({config: () => this.config, engine: () => this.engine, agents: this.agents}),
       goalDoneTool(this.goals),
+      milestoneDoneTool(this.goals),
       ...webTools(() => this.config),
       skillTool(() => process.cwd(), () => (this.planMode = true)),
       ...memoryTools(() => process.cwd()),
       askUserTool(() => this.askPresenter),
       presentPlanTool({
         active: () => this.planMode,
-        scratch: () => this.engine?.scratch,
+        root: () => process.cwd(),
         present: async (plan) => (this.planPresenter ? this.planPresenter(plan) : undefined),
-        done: (decision) => {
+        done: (decision, file, title) => {
           if (decision === 'revise') return;
           this.planMode = false;
-          if (decision === 'approve-all') this.tools.allowSession();
+          if (decision === 'goal') {
+            this.goals.set(`Carry out the plan "${title}"`, file);
+          }
         },
       }),
       decideTool(() => this.config),

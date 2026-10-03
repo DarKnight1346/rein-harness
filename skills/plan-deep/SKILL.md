@@ -13,5 +13,6 @@ Plan mode is on: Rein blocks every change until the user approves your plan. Thi
    - **Risks & mitigations**, including what to watch for in review.
    - **Verification** — tests to add or update, commands to run, manual checks.
    - **Rollback** — how to undo it if needed.
-6. **Have the advisor review the draft plan** (if available) and fold in what holds up.
-7. **Call `present_plan`.** Revise until approved, then carry it out step by step with a `todo_write` task list, verifying as you go.
+6. **Define the milestones**: 3–10 ordered, independently verifiable outcomes, each provable with a command or check (they track progress when the plan runs as a goal).
+7. **Have the advisor review the draft plan and milestones** (if available) and fold in what holds up.
+8. **Call `present_plan`** with a short title, the plan and the milestones. Revise until the user saves it. When implementing, go step by step with a `todo_write` task list, verifying as you go; as a goal, call `milestone_done` with evidence after each milestone.

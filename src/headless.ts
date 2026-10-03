@@ -64,7 +64,7 @@ export async function runHeadless(argv: string[]): Promise<number> {
   // plan: read-only exploration; the plan the agent presents is the result (nothing is changed).
   runtime.planMode = mode === 'plan';
   let presented: string | undefined;
-  runtime.planPresenter = async (plan) => ((presented = plan), undefined);
+  runtime.planPresenter = async (plan) => ((presented = `# ${plan.title}\n\n${plan.plan.replace(/^#\s+.*\n+/, '')}\n\n## Milestones\n${plan.milestones.map((m, i) => `${i + 1}. ${m}`).join('\n')}`), undefined);
   runtime.config = {...runtime.config, ...(model ? {chatModel: model} : {}), ...(effort ? {chatEffort: effort} : {}), ...(mode && mode !== 'plan' ? {toolApproval: mode as ApprovalMode} : {})};
   const list = (s: string | undefined) => (s ?? '').split(/,(?![^(]*\))/).map((r) => r.trim()).filter(Boolean);
   runtime.extraRules = {allow: list(opt('--allowedTools')), deny: list(opt('--disallowedTools'))};
