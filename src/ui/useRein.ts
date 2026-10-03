@@ -272,7 +272,7 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
     const points: RewindPoint[] = runtime.engine.transcript.messages
       .map((m, index) => ({m, index}))
       .filter(({m}) => m.role === 'user')
-      .map(({m, index}) => ({index, at: m.at, text: displayText(m.text), files: runtime.checkpoints.changedSince(index).length}))
+      .map(({m, index}) => ({index, at: m.at, text: displayText(m.text), files: runtime.checkpoints.changedSince(index).length, whole: runtime.snapshots.has(index)}))
       .reverse();
     setOverlay({name: 'rewind', points});
   }
@@ -283,9 +283,25 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
     const t = runtime.engine.transcript;
     const text = t.messages[index]?.text ?? '';
     if (mode !== 'conversation') {
+      // The whole-tree snapshot first (covers shell-made changes), then Rein's per-file checkpoints
+      // for anything outside it (e.g. .gitignore'd files the agent edited).
+      const changed = new Set<string>();
+      let removedCount = 0;
+      if (runtime.snapshots.has(index)) {
+        try {
+          const t = await runtime.snapshots.restore(index);
+          t.restored.forEach((f) => changed.add(f));
+          removedCount += t.removed.length;
+          t.removed.forEach((f) => changed.add(f));
+        } catch (err) {
+          log('error', `Couldn't restore the project snapshot: ${(err as Error).message}`);
+        }
+      }
       const r = runtime.checkpoints.restore(index);
-      const n = r.restored.length + r.removed.length;
-      log('info', `Rewound ${n} file${n === 1 ? '' : 's'}${r.removed.length ? ` (${r.removed.length} created since were removed)` : ''}${r.skipped.length ? ` · ${r.skipped.length} too large to restore: ${r.skipped.join(', ')}` : ''}.`);
+      for (const f of [...r.restored, ...r.removed]) changed.add(nodePath.relative(process.cwd(), f));
+      removedCount += r.removed.filter((f) => !changed.has(nodePath.relative(process.cwd(), f))).length;
+      const n = changed.size;
+      log('info', `Rewound ${n} file${n === 1 ? '' : 's'}${removedCount ? ` (files created since were removed)` : ''}${r.skipped.length ? ` · ${r.skipped.length} too large to restore: ${r.skipped.join(', ')}` : ''}.`);
     }
     if (mode !== 'code') {
       await runtime.engine.rewind(index);

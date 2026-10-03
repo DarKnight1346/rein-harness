@@ -3,7 +3,8 @@ import {Box, Text, useInput} from 'ink';
 import {age} from './format.js';
 import {Clickable} from './terminal/clicks.js';
 
-export type RewindPoint = {index: number; text: string; at: number; files: number};
+/** `whole`: a project snapshot exists, so shell-made changes are restored too. */
+export type RewindPoint = {index: number; text: string; at: number; files: number; whole?: boolean};
 export type RewindMode = 'both' | 'conversation' | 'code';
 
 const ROWS = 10;
@@ -21,7 +22,7 @@ export function RewindScreen({points, onPick, onCancel}: {points: RewindPoint[];
   const [cursor, setCursor] = useState(0);
   const [chosen, setChosen] = useState<RewindPoint | undefined>();
   const [mode, setMode] = useState(0);
-  const modes = chosen && chosen.files === 0 ? MODES.filter(([m]) => m === 'conversation') : MODES;
+  const modes = chosen && chosen.files === 0 && !chosen.whole ? MODES.filter(([m]) => m === 'conversation') : MODES;
   useInput((input, key) => {
     if (key.escape || input === 'q') return chosen ? setChosen(undefined) : onCancel();
     if (!chosen) {
@@ -49,7 +50,13 @@ export function RewindScreen({points, onPick, onCancel}: {points: RewindPoint[];
         <Text wrap="truncate">
           Rewind to before: <Text bold>{chosen.text.replace(/\s+/g, ' ').slice(0, 80)}</Text>
         </Text>
-        <Text dimColor>{chosen.files ? `${chosen.files} file${chosen.files === 1 ? '' : 's'} changed since by Rein's tools (shell changes aren't tracked)` : 'No file changes since by Rein’s tools'}</Text>
+        <Text dimColor>
+          {chosen.whole
+            ? 'Restores every file changed since — including changes made by shell commands (files ignored by .gitignore are left alone).'
+            : chosen.files
+              ? `${chosen.files} file${chosen.files === 1 ? '' : 's'} changed since by Rein's tools (shell changes weren't snapshotted for this message)`
+              : 'No file changes since by Rein’s tools'}
+        </Text>
         <Box flexDirection="column" marginY={1}>
           {modes.map(([m, label, hint], i) => (
             <Clickable key={m} onHover={() => setMode(i)} onClick={() => onPick(chosen.index, m)}>

@@ -8,12 +8,12 @@ export type RunResult = {code: number | null; stdout: string; stderr: string};
 export function run(
   cmd: string,
   args: string[],
-  opts: {env?: NodeJS.ProcessEnv; timeoutMs?: number; input?: string} = {},
+  opts: {env?: NodeJS.ProcessEnv; timeoutMs?: number; input?: string; cwd?: string} = {},
 ): Promise<RunResult> {
   return new Promise((resolve, reject) => {
     // stdin is only a pipe when there's input: a closed pipe the child never reads (ripgrep exits
     // fast) makes the write fail with EPIPE on Linux.
-    const child = spawn(cmd, args, {env: opts.env, stdio: [opts.input === undefined ? 'ignore' : 'pipe', 'pipe', 'pipe']});
+    const child = spawn(cmd, args, {env: opts.env, cwd: opts.cwd, stdio: [opts.input === undefined ? 'ignore' : 'pipe', 'pipe', 'pipe']});
     let stdout = '';
     let stderr = '';
     child.stdout!.on('data', (d) => (stdout += d));

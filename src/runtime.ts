@@ -15,6 +15,7 @@ import {agentTools} from './agents/tools.js';
 import {advisorRef, advisorTool} from './agents/advisor.js';
 import {GoalManager} from './goals/manager.js';
 import {Checkpoints} from './session/checkpoints.js';
+import {TreeSnapshots} from './session/snapshots.js';
 import {McpManager} from './mcp/manager.js';
 import {mcpTools} from './mcp/tools.js';
 import {skillTool} from './skills/tool.js';
@@ -81,8 +82,10 @@ export class Runtime {
   /** MCP servers (project .mcp.json, ~/.rein/mcp.json, Claude Code's ~/.claude.json). */
   readonly mcp = new McpManager(process.cwd());
 
-  /** File checkpoints for /rewind, per conversation. */
+  /** File checkpoints for /rewind, per conversation (Rein's own file changes, ignored files too). */
   readonly checkpoints = new Checkpoints(() => this.engine?.transcript.id ?? 'none');
+  /** Whole-tree snapshots for /rewind (covers shell-made changes); see snapshots.ts. */
+  readonly snapshots = new TreeSnapshots(process.cwd(), () => this.engine?.transcript.id ?? 'none');
 
   /** Index of the user message the agent is working on (checkpoints are grouped by it). */
   currentTurn(): number {
@@ -234,6 +237,8 @@ Drop superseded reads of the same file, routine listings, and output that no lon
 
   private async beforePrompt(text: string): Promise<{block?: string; context?: string}> {
     const root = process.cwd();
+    // Snapshot the project before this message runs, so /rewind can undo everything it causes.
+    if (this.engine) await this.snapshots.snapshot(this.engine.transcript.messages.length);
     const session_id = this.engine?.transcript.id;
     const out = hasHooks('UserPromptSubmit', root) ? await runHooks('UserPromptSubmit', root, {session_id, prompt: text}) : {errors: []};
     const context = [this.sessionContext, out.context, this.planMode ? PLAN_MODE_CONTEXT : undefined].filter(Boolean).join('\n');
