@@ -917,6 +917,23 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
     else setOverlay({name: 'shells'});
   };
 
+  // The /context window refreshes live while open (the agent keeps working underneath).
+  const contextOpen = overlay.name === 'context';
+  useEffect(() => {
+    if (!contextOpen) return;
+    const timer = setInterval(() => {
+      const a = viewing;
+      const report = a
+        ? subagentContextReport(a, runtime.config, runtime.tools.specs({subagent: true, includeMainOnly: a.mode === 'fork'}))
+        : contextReport(runtime.engine, runtime.config, runtime.tools.specs({includeMainOnly: true}));
+      void report.then(
+        (r) => setOverlay((o) => (o.name === 'context' ? {...o, report: r} : o)),
+        () => {},
+      );
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [contextOpen, viewing]);
+
   /** /plan:goal → a saved plan: make it the goal and start working on it. */
   const startPlanGoal = (p: SavedPlan) => {
     setOverlay({name: 'none'});
