@@ -45,7 +45,11 @@ export class Runtime {
   /** Last auto-routing decision, for the status line / debugging. */
   lastDecision: string | undefined;
   auto: AutoRouter = makeAutoRouter({config: () => this.config, onDecision: (d) => (this.lastDecision = d)});
-  compact = (t: Transcript, _reason: CompactReason): Promise<CompactResult> => compactTranscript(t, this.config);
+  compact = (t: Transcript, _reason: CompactReason): Promise<CompactResult> => {
+    // The summary may not keep subfolder instructions word for word: deliver them again as needed.
+    this.tools.deliveredInstructions.clear();
+    return compactTranscript(t, this.config);
+  };
 
   /** Rules for this run only (headless --allowedTools / --disallowedTools). */
   extraRules: {allow: string[]; deny: string[]} = {allow: [], deny: []};
@@ -345,7 +349,10 @@ Drop superseded reads of the same file, routine listings, and output that no lon
         selectCarry: (input) => this.selectCarry(input),
         pickEffort: (text, levels) => this.pickEffort(text, levels),
         beforePrompt: (text) => this.beforePrompt(text),
-        onConversationChange: () => this.tools.reads.clear(),
+        onConversationChange: () => {
+          this.tools.reads.clear();
+          this.tools.deliveredInstructions.clear();
+        },
         tools: {
           binding: {
             // Resolved when a session opens: the agent tool lists the models signed in right now.

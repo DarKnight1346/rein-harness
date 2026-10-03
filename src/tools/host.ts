@@ -8,6 +8,7 @@ import {resolveInRoot, resolvePath, toPosix, ToolError, workingDirs, type FileSt
 import {TOOLS, toolByName, type ToolDef} from './registry.js';
 import {addProjectRule, check, loadRules, ruleTool, suggestRule, type Rules, type Subject} from './permissions.js';
 import {hasHooks, runHooks} from '../hooks.js';
+import {renderScoped, scopedInstructions} from '../session/prompt.js';
 import {ipcPath, isWindows} from '../util/platform.js';
 import {ShellManager} from './shells.js';
 import type {DiffLine} from './diff.js';
@@ -71,6 +72,8 @@ export class ToolHost extends EventEmitter {
   private addedDirs: string[] = [];
   /** Files read in this conversation (stale-file protection); cleared when the conversation changes. */
   readonly reads = new Map<string, FileStamp>();
+  /** Subfolder instruction files already given to the agent (cleared on new conversation / compaction). */
+  readonly deliveredInstructions = new Set<string>();
   /** Processes started by the shell tool (foreground + background). */
   readonly shells = new ShellManager();
   private nextId = 1;
@@ -208,8 +211,31 @@ export class ToolHost extends EventEmitter {
       result = {ok: false, text: err instanceof ToolError ? err.message : `error: ${(err as Error).message}`};
     }
     if (result.text.length > MAX_RESULT_CHARS) result = {...result, text: result.text.slice(0, MAX_RESULT_CHARS) + '\n… [output truncated]'};
+    // A subfolder's own AGENTS.md / CLAUDE.md, the first time the agent works in it (scoped to it).
+    if (result.ok) {
+      const scoped = this.scopedFor(name, args);
+      if (scoped) result = {...result, text: `${result.text}\n\n${scoped}`};
+    }
     this.emit('activity', {phase: 'end', id, label: tool.label, summary, ok: result.ok, result: result.text, approvedBy, judge, origin, diff: result.diff} satisfies ToolActivity);
     return {ok: result.ok, text: result.text, ...(result.images?.length ? {images: result.images} : {})}; // the diff is for the user, not the model
+  }
+
+  private scopedFor(name: string, args: any): string | undefined {
+    const tool = this.find(name);
+    if (!tool?.paths) return undefined;
+    const root = realpathSync(this.opts.root);
+    const items = [];
+    for (const p of tool.paths(args)) {
+      let real: string;
+      try {
+        real = resolvePath(this.context(), p).real;
+      } catch {
+        continue;
+      }
+      const dir = existsSync(real) && statSync(real).isDirectory() ? real : path.dirname(real);
+      items.push(...scopedInstructions(root, dir, this.deliveredInstructions));
+    }
+    return items.length ? renderScoped(items) : undefined;
   }
 
   /** What permission rules look at for this call: the command, the paths it touches, the URL. */

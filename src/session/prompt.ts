@@ -1,4 +1,5 @@
 import {existsSync} from 'node:fs';
+import {readFileSync} from 'node:fs';
 import {readFile} from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -88,3 +89,39 @@ export async function systemPrompt(opts: {tools?: boolean; scratch?: string} = {
   }
   return sections.join('\n\n');
 }
+
+/**
+ * Instruction files for a subfolder the agent just worked in, below the launch folder (those
+ * above it are in the system prompt). Each comes with its scope: it applies only to files under
+ * its own folder. `delivered` (absolute paths) keeps each file to once per conversation.
+ */
+export function scopedInstructions(root: string, dir: string, delivered: Set<string>): {path: string; scope: string; text: string}[] {
+  const rel = path.relative(root, dir);
+  if (!rel || rel.startsWith('..') || path.isAbsolute(rel)) return [];
+  const out: {path: string; scope: string; text: string}[] = [];
+  const parts = rel.split(path.sep);
+  for (let i = 1; i <= parts.length; i++) {
+    const d = path.join(root, ...parts.slice(0, i));
+    for (const f of PROJECT_FILES) {
+      const file = path.join(d, f);
+      if (delivered.has(file)) continue;
+      let text = '';
+      try {
+        text = readFileSync(file, 'utf8').slice(0, MAX_AGENTS_BYTES).trim();
+      } catch {
+        continue;
+      }
+      delivered.add(file);
+      if (!text || out.some((o) => o.text === text)) continue;
+      const scope = parts.slice(0, i).join('/') + '/';
+      out.push({path: path.relative(root, file).split(path.sep).join('/'), scope, text});
+    }
+  }
+  return out;
+}
+
+/** How scoped instructions are shown to the model (appended to the tool result that found them). */
+export const renderScoped = (items: {path: string; scope: string; text: string}[]) =>
+  items
+    .map((i) => `<scoped_instructions file="${i.path}" applies_to="${i.scope}">\nThese instructions apply ONLY to files under ${i.scope} — follow them when working there, not elsewhere.\n\n${i.text}\n</scoped_instructions>`)
+    .join('\n\n');
