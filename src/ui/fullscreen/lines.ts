@@ -1,3 +1,4 @@
+import {planPreview, planPreviewLines} from '../planPreview.js';
 import chalk from 'chalk';
 import cliTruncate from 'cli-truncate';
 import {diffWordsWithSpace} from 'diff';
@@ -44,7 +45,7 @@ export function entryLines(entry: Entry, width: number): string[] {
         // Long commands/paths wrap with a hanging indent instead of overflowing the pane.
         ...wrap(chalk.bold(entry.label) + chalk.dim(`(${entry.summary})${approvalNote(entry.approvedBy, entry.judge)}`) + diffStatText(entry.diff), width, entry.ok ? chalk.green('⏺ ') : chalk.red('⏺ '), '  '),
         ...gutter(toolResultSummary(entry.label, entry.result), width, entry.ok ? chalk.dim : chalk.red).slice(0, 1),
-        ...diffLines(entry.diff, width, entry.summary),
+        ...(entry.plan ? planPreviewLines(entry.plan, width) : diffLines(entry.diff, width, entry.summary)),
       ];
     case 'compact': {
       const {stats, why} = compactText(entry.reason, entry.result, runtime.config.autoCompactPct);
@@ -90,7 +91,8 @@ export function agentLines(a: Subagent, width: number): string[] {
       const dot = e.ok === undefined ? chalk.yellow('⏺ ') : e.ok ? chalk.green('⏺ ') : chalk.red('⏺ ');
       out.push('', ...wrap(chalk.bold(e.label) + chalk.dim(`(${e.summary})`) + diffStatText(e.diff), width, dot, '  '));
       if (e.result !== undefined) out.push(...gutter(toolResultSummary(e.label, e.result), width, e.ok ? chalk.dim : chalk.red).slice(0, 1));
-      out.push(...diffLines(e.diff, width, e.summary));
+      const plan = e.result !== undefined ? planPreview(e.label, e.summary, !!e.ok, e.result) : undefined;
+      out.push(...(plan ? planPreviewLines(plan, width) : diffLines(e.diff, width, e.summary)));
     } else if (e.kind === 'check') out.push(...gutter(`completion check: ${e.note}${e.complete ? '' : ' → continuing'}`, width, e.complete ? chalk.green : chalk.yellow));
     else out.push(...gutter(e.text, width, chalk.dim));
   }

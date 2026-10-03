@@ -24,6 +24,7 @@ import {mentionAt, primeFiles, suggestFiles} from './mentions.js';
 import type {RewindMode, RewindPoint} from './RewindScreen.js';
 import type {PlanDecision, PresentedPlan} from '../tools/plan.js';
 import {listPlans, type SavedPlan} from '../plans/store.js';
+import {planPreview} from './planPreview.js';
 import type {AskAnswer, AskQuestion} from '../tools/ask.js';
 import {settingsFiles} from '../tools/permissions.js';
 import {memoryFacts, memoryFile} from '../tools/memory.js';
@@ -973,7 +974,10 @@ function replay(t: Transcript, add: AddEntry): void {
   for (const m of recent) {
     if (m.role === 'user') add({kind: 'user', text: displayText(m.text)});
     else {
-      for (const tool of m.tools ?? []) add({kind: 'tool', ...tool});
+      for (const tool of m.tools ?? []) {
+        const plan = planPreview(tool.label, tool.summary, tool.ok, tool.result);
+        add({kind: 'tool', ...tool, ...(plan ? {plan} : {})});
+      }
       add({kind: 'assistant', text: m.text, first: true});
     }
   }
