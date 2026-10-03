@@ -19,8 +19,13 @@ export type Config = {
   autoUpdate: boolean;
   /** Show accounts as "Claude Account 1" and redact emails/home paths in the UI (screenshot-safe). */
   hidePersonalInfo: boolean;
-  /** New-mode subagents: 'auto' = the agent picks (or the decision model), else a fixed model ref. */
+  /** The user's subagent model ('auto' = none chosen) for new-mode subagents. */
   subagentModel: string;
+  /**
+   * Who wins for new-mode subagents: 'user' = your model → the agent's choice → auto;
+   * 'agent' = the agent's choice → your model → auto. Forks always keep the current model.
+   */
+  subagentPriority: 'user' | 'agent';
   /** Model that runs web_search (with its provider's native search) and reads pages for web_fetch. */
   webModel: string;
   /** Auto routing: switch models mid-conversation only when P(switch) ≥ this. */
@@ -61,6 +66,7 @@ export const DEFAULT_CONFIG: Config = {
   advisorModel: 'off',
   webModel: 'cheapest',
   subagentModel: 'auto',
+  subagentPriority: 'user',
   hidePersonalInfo: true,
   autoUpdate: true,
   additionalDirectories: [],

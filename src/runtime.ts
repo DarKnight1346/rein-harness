@@ -264,7 +264,7 @@ export class Runtime {
 
   async setConfig(patch: Partial<Config>): Promise<void> {
     // These change what tools exist or their schemas: reload the agent's tool list.
-    const toolsChanged = (['advisorModel', 'subagentModel'] as const).some((k) => patch[k] !== undefined && patch[k] !== this.config[k]);
+    const toolsChanged = (['advisorModel', 'subagentModel', 'subagentPriority'] as const).some((k) => patch[k] !== undefined && patch[k] !== this.config[k]);
     this.config = {...this.config, ...patch};
     if (toolsChanged) this.engine?.refreshTools();
     await saveConfig(this.config);

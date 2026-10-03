@@ -1,5 +1,5 @@
 import {beforeEach, describe, expect, it} from 'vitest';
-import {agentTools} from '../src/agents/tools.js';
+import {agentTools, subagentModelFor} from '../src/agents/tools.js';
 import {catalog} from '../src/router/catalog.js';
 import {DEFAULT_CONFIG, type Config} from '../src/store/config.js';
 import {usageStore} from '../src/store/usage.js';
@@ -46,6 +46,32 @@ describe('/model → Subagents', () => {
     config.subagentModel = 'codex:gpt-x';
     const [agent] = agentTools(manager, () => config);
     expect((agent!.schema!() as any).properties.model).toBeDefined();
+  });
+});
+
+describe('subagent priority', () => {
+  it('"your model first": yours → the agent\'s → auto', async () => {
+    await signIn(true);
+    config.subagentPriority = 'user';
+    config.subagentModel = 'codex:gpt-x';
+    expect(subagentModelFor(config, 'claude:haiku')).toBe('codex:gpt-x');
+    config.subagentModel = 'auto';
+    expect(subagentModelFor(config, 'claude:haiku')).toBe('claude:haiku');
+    expect(subagentModelFor(config, undefined)).toBe('auto');
+  });
+
+  it('"agent\'s choice first": the agent\'s → yours → auto, and the choice stays offered', async () => {
+    await signIn(true);
+    config.subagentPriority = 'agent';
+    config.subagentModel = 'codex:gpt-x';
+    expect(subagentModelFor(config, 'claude:haiku')).toBe('claude:haiku');
+    expect(subagentModelFor(config, 'auto')).toBe('codex:gpt-x');
+    expect(subagentModelFor(config, undefined)).toBe('codex:gpt-x');
+    const [agent] = agentTools({} as any, () => config);
+    expect((agent!.schema!() as any).properties.model).toBeDefined();
+    expect(agent!.describe!()).toContain("leave it out to use the user's default, GPT-X");
+    config.subagentModel = 'auto';
+    expect(subagentModelFor(config, undefined)).toBe('auto');
   });
 });
 
