@@ -18,6 +18,8 @@ import {RewindScreen} from '../RewindScreen.js';
 import {McpScreen} from '../McpScreen.js';
 import {PlanScreen} from '../PlanScreen.js';
 import {AskScreen} from '../AskScreen.js';
+import {progress} from '../../plans/store.js';
+import {PlansScreen} from '../PlansScreen.js';
 import {todoLine} from '../../tools/todo.js';
 import {splashLines} from './splash.js';
 
@@ -203,6 +205,12 @@ export function FullscreenApp({resume}: {resume: Resume}) {
                   : [chalk.dim('Forking the agent to answer… the main agent keeps working.')]
             }
           />
+        );
+      case 'plans':
+        return (
+          <Window title="Start a plan as a goal" width={windowWidth} onClose={r.closeOverlay}>
+            <PlansScreen plans={overlay.plans} onPick={r.startPlanGoal} onNew={r.startNewPlan} onCancel={r.closeOverlay} />
+          </Window>
         );
       case 'ask':
         return (
@@ -650,14 +658,16 @@ function TopBar(props: {cols: number; tick: number; sidebarOpen: boolean; onTogg
       ),
     });
   const goal = runtime.goals.goal;
+  const goalPlan = goal?.plan ? runtime.goals.plan() : undefined;
+  const goalText = goal ? `◎ goal · ${goal.status}${goalPlan ? ` · ${progress(goalPlan).done}/${progress(goalPlan).total}` : ''}` : '';
   if (goal)
     parts.push({
       key: 'goal',
-      width: 3 + `◎ goal · ${goal.status}`.length,
+      width: 3 + goalText.length,
       drop: 800,
       node: (
         <Seg key="goal" onClick={() => props.run('/goal')}>
-          <Text color={goal.status === 'active' ? 'cyan' : goal.status === 'done' ? 'green' : 'yellow'}>◎ goal · {goal.status}</Text>
+          <Text color={goal.status === 'active' ? 'cyan' : goal.status === 'done' ? 'green' : 'yellow'}>{goalText}</Text>
         </Seg>
       ),
     });
@@ -738,13 +748,22 @@ function Heading({children}: {children: string}) {
 function Sidebar({width, height, tick, run, view, setView}: {width: number; height: number; tick: number; run(cmd: string): void; view: 'main' | number; setView(v: 'main' | number): void}) {
   const [, setUsageTick] = useState(0);
   useEffect(() => usageStore.subscribe(() => setUsageTick((t) => t + 1)), []);
+  useEffect(() => {
+    const on = () => setUsageTick((t) => t + 1); // milestones ticked off
+    runtime.goals.on('change', on);
+    return () => void runtime.goals.off('change', on);
+  }, []);
   void tick;
   const inner = width - 3;
-  // The task list shows up first whenever the agent keeps one (like Claude Code's todo list).
+  // A goal working from a plan shows its milestones first; then the task list whenever the agent
+  // keeps one (like Claude Code's todo list).
   const todos = runtime.engine?.transcript.todos ?? [];
-  const sections = [...(todos.length && todos.some((t) => t.status !== 'completed') ? ['tasks'] : []), ...enabledItems('sidebar', runtime.config)];
+  const planGoal = runtime.goals.goal?.plan ? ['plan'] : [];
+  const sections = [...planGoal, ...(todos.length && todos.some((t) => t.status !== 'completed') ? ['tasks'] : []), ...enabledItems('sidebar', runtime.config)];
   const render = (id: string): ReactNode => {
     switch (id) {
+      case 'plan':
+        return <PlanSection inner={inner} run={run} />;
       case 'tasks':
         return <TasksSection inner={inner} />;
       case 'agents':
@@ -901,6 +920,36 @@ function RoutingSection({inner}: {inner: number}) {
         decides: {truncate(info.decider, inner - 9)}
       </Text>
       <Text wrap="wrap">{runtime.lastDecision ? truncate(runtime.lastDecision, inner * 2) : <Text dimColor>no decisions yet{runtime.config.chatModel === 'auto' ? '' : ' (chat model is fixed)'}</Text>}</Text>
+    </>
+  );
+}
+
+/** The goal's plan: progress bar and milestones (✓ done, ▸ next, ○ later). */
+function PlanSection({inner, run}: {inner: number; run(cmd: string): void}) {
+  const g = runtime.goals.goal;
+  const p = runtime.goals.plan();
+  if (!g || !p) return null;
+  const {done, total, pct} = progress(p);
+  const b = miniBar(pct, Math.max(4, inner - 5));
+  const next = p.milestones.findIndex((m) => !m.done);
+  return (
+    <>
+      <Clickable onClick={() => run('/goal')}>
+        <Heading>{`GOAL · ${done}/${total}${g.status === 'active' ? '' : ` · ${g.status}`}`}</Heading>
+      </Clickable>
+      <Text wrap="truncate" bold>
+        {truncate(p.title, inner)}
+      </Text>
+      <Text>
+        <Text color={pct === 100 ? 'green' : 'cyan'}>{b.fill}</Text>
+        <Text dimColor>{b.rest}</Text> {`${pct}%`.padStart(4)}
+      </Text>
+      {p.milestones.slice(0, 12).map((m, i) => (
+        <Text key={i} wrap="truncate" color={i === next ? 'cyan' : m.done ? 'green' : undefined} dimColor={!m.done && i !== next}>
+          {truncate(`${m.done ? '✓' : i === next ? '▸' : '○'} ${m.text}`, inner)}
+        </Text>
+      ))}
+      {p.milestones.length > 12 && <Text dimColor>… {p.milestones.length - 12} more</Text>}
     </>
   );
 }

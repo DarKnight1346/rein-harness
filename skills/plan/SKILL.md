@@ -11,4 +11,5 @@ Plan mode is on: Rein blocks every change (file edits, non-read-only commands) u
    - **Steps** — numbered; each names the files and what changes.
    - **Risks** — what could break and how you'll avoid it.
    - **Verification** — the tests / commands / checks that will prove it works.
-5. **Call `present_plan`** with it. If the user wants changes, revise and present again. Once approved, carry it out step by step (keep a task list with `todo_write`).
+5. **Pick the milestones**: 2–10 ordered, checkable outcomes ("`make` builds an empty kernel", "tests for X pass") — each something you can prove done with a command or check. They track progress if the user starts the plan as a goal.
+6. **Call `present_plan`** with a short title, the plan and the milestones. The user saves it and then has you implement it now, starts it as a tracked goal, or keeps it for later; if they want changes, revise and present again. When implementing, go step by step (keep a task list with `todo_write`); as a goal, call `milestone_done` with evidence after each milestone.

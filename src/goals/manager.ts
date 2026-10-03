@@ -1,6 +1,7 @@
 import {EventEmitter} from 'node:events';
 import type {Decision, Entry, Questions} from '../decider/types.js';
 import type {Transcript} from '../session/transcript.js';
+import {readPlan, setMilestone, type SavedPlan} from '../plans/store.js';
 
 export type GoalStatus = 'active' | 'paused' | 'done';
 
@@ -18,6 +19,8 @@ export type Goal = {
   escalations: number;
   checks: GoalCheck[];
   doneAt?: number;
+  /** Saved plan this goal carries out (.rein/plans/…md); its milestones track progress. */
+  plan?: string;
 };
 
 
@@ -63,11 +66,23 @@ export class GoalManager extends EventEmitter {
     return t;
   }
 
-  set(text: string): Goal {
+  set(text: string, plan?: string): Goal {
     const t = this.t();
-    t.goal = {text, status: 'active', createdAt: Date.now(), since: t.messages.length, rounds: 0, escalations: 0, checks: []};
+    t.goal = {text, status: 'active', createdAt: Date.now(), since: t.messages.length, rounds: 0, escalations: 0, checks: [], ...(plan ? {plan} : {})};
     this.persist();
     return t.goal;
+  }
+
+  /** The goal's plan as it is on disk now (milestones ticked so far). */
+  plan(): SavedPlan | undefined {
+    const file = this.goal?.plan;
+    return file ? readPlan(file) : undefined;
+  }
+
+  /** Milestones as a checklist for the agent: "✓ 1. …", "→ 2. …" (next), "  3. …". */
+  private milestoneList(p: SavedPlan): string {
+    const next = p.milestones.findIndex((m) => !m.done);
+    return p.milestones.map((m, i) => `${m.done ? '✓' : i === next ? '→' : ' '} ${i + 1}. ${m.text}`).join('\n');
   }
 
   pause(): boolean {
@@ -98,6 +113,16 @@ export class GoalManager extends EventEmitter {
 
   /** The first message that starts work on a new goal. */
   kickoff(g: Goal): string {
+    const p = this.plan();
+    if (p)
+      return [
+        `<goal>${g.text}</goal>`,
+        `<plan file="${p.file}">Read the plan file first: it has the approach and steps. Milestones:\n${this.milestoneList(p)}\n</plan>`,
+        'Work through the milestones in order and keep going until all are done. Rein will keep you on it across turns.',
+        '- After finishing each milestone, call milestone_done with its number and concrete evidence (what you ran/checked and what it showed). It is verified before it is ticked off.',
+        '- When every milestone is done, call goal_done with evidence for the whole goal.',
+        '- "Impossible" or "can\'t be done" is not a way to finish: look for another approach, consult the advisor tool if available, or break the problem down.',
+      ].join('\n');
     return [
       `<goal>${g.text}</goal>`,
       'Work toward this goal now and keep going until it is fully achieved. Rein will keep you on it across turns.',
@@ -122,6 +147,8 @@ export class GoalManager extends EventEmitter {
   async reviewClaim(summary: string, evidence: string): Promise<{accepted: boolean; note: string}> {
     const g = this.goal;
     if (!g || g.status === 'done') return {accepted: false, note: 'there is no active goal'};
+    const open = this.plan()?.milestones.map((m, i) => ({...m, n: i + 1})).filter((m) => !m.done) ?? [];
+    if (open.length) return {accepted: false, note: `milestones not done yet: ${open.map((m) => `${m.n}. ${m.text}`).join('; ')} — finish them (milestone_done each) first`};
     const lastAssistant = [...this.t().messages].reverse().find((m) => m.role === 'assistant')?.text ?? '';
     const d = await this.deps.decide(
       {goal: g.text, agent_summary: clip(summary, 2000), agent_evidence: clip(evidence, 3000), tool_results_since_goal_started: this.evidence(), last_message: clip(lastAssistant, 1500)},
@@ -176,9 +203,12 @@ export class GoalManager extends EventEmitter {
     const gaveUp = gu?.type === 'noul' && gu.noul >= GAVE_UP_AT;
     if (!gaveUp) {
       this.persist();
+      const p = this.plan();
       return {
         note: `goal: continuing (round ${g.rounds})`,
-        message: `<goal_reminder>Goal: ${g.text}\nKeep working toward it. If it's achieved, call goal_done with evidence; otherwise take the next concrete step.</goal_reminder>`,
+        message: p
+          ? `<goal_reminder>Goal: ${g.text}\nPlan: ${p.file}\nMilestones:\n${this.milestoneList(p)}\nKeep going on the next milestone (→). Call milestone_done with evidence when one is finished; goal_done once all are.</goal_reminder>`
+          : `<goal_reminder>Goal: ${g.text}\nKeep working toward it. If it's achieved, call goal_done with evidence; otherwise take the next concrete step.</goal_reminder>`,
       };
     }
     // "Impossible" is not completion: get outside input and continue.
@@ -198,6 +228,34 @@ export class GoalManager extends EventEmitter {
       note: `goal: the agent said it's impossible — asked ${source} for a way forward`,
       message: `<goal_escalation>"Impossible" is not a completion. Input from ${source}:\n${help}\n</goal_escalation>\nGoal: ${g.text}\nUse this to continue. Call goal_done only with evidence that the goal is achieved.`,
     };
+  }
+
+  /** `milestone_done`: tick milestone `n` (1-based) if the evidence in context shows it's achieved. */
+  async reviewMilestone(n: number, evidence: string): Promise<{accepted: boolean; note: string; remaining: number}> {
+    const g = this.goal;
+    const p = this.plan();
+    if (!g || g.status !== 'active' || !p) return {accepted: false, note: 'no active goal with a plan', remaining: 0};
+    const m = p.milestones[n - 1];
+    if (!m) return {accepted: false, note: `there is no milestone ${n} (1–${p.milestones.length})`, remaining: p.milestones.filter((x) => !x.done).length};
+    if (m.done) return {accepted: true, note: 'already done', remaining: p.milestones.filter((x) => !x.done).length};
+    const d = await this.deps.decide(
+      {goal: g.text, milestone: m.text, agent_evidence: clip(evidence, 3000), tool_results_since_goal_started: this.evidence()},
+      {
+        achieved: {
+          type: 'noul',
+          instructions: 'Do the tool results and evidence in context concretely show that this milestone is achieved? A bare claim, a plan, or partial progress is NOT achieved.',
+          criteria: {true: 'achieved, demonstrated by evidence in context', false: 'not demonstrated, partial, or only claimed'},
+        },
+      },
+    );
+    const a = d.answers.achieved;
+    const prob = a?.type === 'noul' ? a.noul : 0;
+    const accepted = prob >= ACCEPT_AT;
+    const note = `${accepted ? 'accepted' : 'rejected'} (${prob.toFixed(2)} via ${d.backend})`;
+    g.checks.push({at: Date.now(), kind: 'claim', verdict: `milestone ${n}: ${note}`});
+    if (accepted) setMilestone(p.file, n - 1, true);
+    this.persist();
+    return {accepted, note, remaining: p.milestones.filter((x, i) => !x.done && !(accepted && i === n - 1)).length};
   }
 
   private persist(): void {

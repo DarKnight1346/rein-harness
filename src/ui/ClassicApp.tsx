@@ -11,6 +11,7 @@ import {RewindScreen} from './RewindScreen.js';
 import {McpScreen} from './McpScreen.js';
 import {PlanScreen} from './PlanScreen.js';
 import {AskScreen} from './AskScreen.js';
+import {PlansScreen} from './PlansScreen.js';
 import {StatusBar} from './StatusBar.js';
 import {UsageReport} from './UsageReport.js';
 import {TextInput} from './TextInput.js';
@@ -81,6 +82,7 @@ export function ClassicApp({resume}: {resume: Resume}) {
         {overlay.name === 'model' && <ModelScreen onLog={r.log} onClose={r.closeOverlay} />}
         {overlay.name === 'resume' && <ResumeScreen sessions={overlay.sessions} onPick={(id) => void r.pickSession(id)} onCancel={r.closeOverlay} />}
         {overlay.name === 'mcp' && <McpScreen onClose={r.closeOverlay} />}
+        {overlay.name === 'plans' && <PlansScreen plans={overlay.plans} onPick={r.startPlanGoal} onNew={r.startNewPlan} onCancel={r.closeOverlay} />}
         {overlay.name === 'ask' && <AskScreen questions={overlay.questions} onDone={overlay.resolve} />}
         {overlay.name === 'plan' && <PlanScreen plan={overlay.plan} width={(process.stdout.columns ?? 100) - 4} onDecide={overlay.resolve} />}
         {overlay.name === 'rewind' && <RewindScreen points={overlay.points} onPick={(i, m) => void r.doRewind(i, m)} onCancel={r.closeOverlay} />}

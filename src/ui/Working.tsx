@@ -5,6 +5,17 @@ export type Phase = 'routing' | 'thinking' | 'responding' | 'tool';
 
 const LABEL: Record<Phase, string> = {routing: 'Routing', thinking: 'Thinking', responding: 'Responding', tool: 'Running'};
 
+/** 59s · 2m 05s · 1h 04m · 2d 3h */
+export function elapsedText(ms: number): string {
+  const s = Math.max(0, Math.floor(ms / 1000));
+  if (s < 60) return `${s}s`;
+  const m = Math.floor(s / 60);
+  if (m < 60) return `${m}m ${String(s % 60).padStart(2, '0')}s`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h ${String(m % 60).padStart(2, '0')}m`;
+  return `${Math.floor(h / 24)}d ${h % 24}h`;
+}
+
 /** 1234 → 1.2k */
 export const kTokens = (n: number) => (n >= 1_000_000 ? `${(n / 1_000_000).toFixed(1)}M` : n >= 1000 ? `${(n / 1000).toFixed(n >= 10_000 ? 0 : 1)}k` : String(n));
 const TICK_MS = 110;
@@ -43,7 +54,7 @@ export function Working({startedAt, phase, tool, tokens, queued = 0}: {startedAt
   const bar = barFrame(tick);
   const label = phase === 'tool' && tool ? `${tool}…` : `${LABEL[phase]}…`;
   const band = tick % (label.length + 8);
-  const seconds = Math.floor((Date.now() - startedAt) / 1000);
+  const elapsed = elapsedText(Date.now() - startedAt);
   return (
     <Text>
       {bar.map((ch, i) => (
@@ -62,7 +73,7 @@ export function Working({startedAt, phase, tool, tokens, queued = 0}: {startedAt
       })}
       <Text dimColor>
         {' '}
-        ({seconds}s{tokens ? ` · ↑ ${kTokens(tokens.input)} ↓ ${kTokens(tokens.output)}` : ''}{queued ? ` · ${queued} queued` : ''} · esc to interrupt · /btw to ask)
+        ({elapsed}{tokens ? ` · ↑ ${kTokens(tokens.input)} ↓ ${kTokens(tokens.output)}` : ''}{queued ? ` · ${queued} queued` : ''} · esc to interrupt · /btw to ask)
       </Text>
     </Text>
   );

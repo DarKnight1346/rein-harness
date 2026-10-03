@@ -1,7 +1,7 @@
-import {mkdirSync, writeFileSync} from 'node:fs';
 import path from 'node:path';
 import {splitCommand} from './permissions.js';
 import {ToolError} from './fs.js';
+import {savePlan} from '../plans/store.js';
 import type {ToolDef} from './registry.js';
 
 /**
@@ -9,7 +9,8 @@ import type {ToolDef} from './registry.js';
  * approve before anything changes. While it's on, file changes are refused and `shell` runs only
  * read-only commands.
  */
-export type PlanDecision = 'approve' | 'approve-all' | 'revise';
+/** implement: carry it out now · goal: start a tracked goal from it · save: keep it for later · revise: keep planning. */
+export type PlanDecision = 'implement' | 'goal' | 'save' | 'revise';
 
 /** Programs that only read (whatever their arguments). */
 const READ_ONLY = new Set([
@@ -85,40 +86,54 @@ export function readOnlyCommand(command: string): boolean {
   });
 }
 
+export type PresentedPlan = {title: string; plan: string; milestones: string[]};
+
 export function presentPlanTool(deps: {
   active(): boolean;
-  scratch(): string | undefined;
-  present(plan: string): Promise<PlanDecision | undefined>;
-  done(decision: PlanDecision): void;
+  /** Project root (plans are saved to <root>/.rein/plans/). */
+  root(): string;
+  present(plan: PresentedPlan): Promise<PlanDecision | undefined>;
+  /** After a decision other than "revise": plan mode ends; "goal" starts a goal from the saved file. */
+  done(decision: PlanDecision, file: string, title: string): void;
 }): ToolDef {
   return {
     name: 'present_plan',
     label: 'Plan',
     description: 'Present your plan for approval.',
     describe: () =>
-      'Only in plan mode (the user turns it on): present your finished plan to the user for approval. Write it in markdown — the goal, the steps (files to change and how), risks and how you will verify. If approved, plan mode ends and you carry it out; otherwise wait for the user\'s feedback.',
-
-    inputSchema: {type: 'object', properties: {plan: {type: 'string', description: 'The plan, in markdown'}}, required: ['plan']},
+      'Only in plan mode (the user turns it on): present your finished plan to the user. Write it in markdown — the goal, the approach, the steps (files to change and how), risks and how you will verify — and list its milestones: 2–10 concrete, checkable outcomes in order (each one something you can prove done, e.g. "toolchain installed and `make` builds an empty kernel"). The user saves it and either has you carry it out now, starts it as a tracked goal, or saves it for later.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        title: {type: 'string', description: 'Short title (a few words)'},
+        plan: {type: 'string', description: 'The plan, in markdown'},
+        milestones: {type: 'array', items: {type: 'string'}, description: 'Ordered, checkable milestones (2–10)'},
+      },
+      required: ['title', 'plan', 'milestones'],
+    },
     mutating: false,
     mainOnly: true,
-    summarize: (a) => String(a?.plan ?? '').split('\n').find((l) => l.trim())?.replace(/^#+\s*/, '').slice(0, 80) ?? '',
+    summarize: (a) => String(a?.title ?? '') || (String(a?.plan ?? '').split('\n').find((l) => l.trim())?.replace(/^#+\s*/, '').slice(0, 80) ?? ''),
     async run(_ctx, args) {
       if (!deps.active()) throw new ToolError('plan mode is off — just do the work (no approval needed for the plan)');
       const plan = String(args?.plan ?? '').trim();
       if (plan.length < 20) throw new ToolError('write the plan out in full (goal, steps, verification)');
-      const scratch = deps.scratch();
-      let saved = '';
-      if (scratch) {
-        const file = path.join(scratch, 'plans', `plan-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')}.md`);
-        mkdirSync(path.dirname(file), {recursive: true});
-        writeFileSync(file, plan + '\n');
-        saved = ` (saved to ${file})`;
-      }
-      const decision = await deps.present(plan);
-      if (!decision) return {ok: true, text: `Plan presented${saved}. Nobody is here to approve it (headless run), so nothing will be changed — stop here.`};
-      deps.done(decision);
-      if (decision === 'revise') return {ok: true, text: `The user wants to refine the plan${saved}. Stop and wait for their feedback; stay in plan mode.`};
-      return {ok: true, text: `The user approved the plan${saved}${decision === 'approve-all' ? ' and allowed all changes for this session' : ''}. Plan mode is off — carry it out now, step by step.`};
+      const title = String(args?.title ?? '').trim() || plan.split('\n').find((l) => l.trim())!.replace(/^#+\s*/, '').slice(0, 60);
+      const milestones = (Array.isArray(args?.milestones) ? args.milestones : []).map((m: unknown) => String(m).trim()).filter(Boolean);
+      if (milestones.length < 1) throw new ToolError('list the milestones: 2–10 concrete, checkable outcomes in order');
+      if (milestones.length > 12) throw new ToolError('at most 12 milestones — merge some');
+      const decision = await deps.present({title, plan, milestones});
+      if (decision === 'revise') return {ok: true, text: 'The user wants to refine the plan. Stop and wait for their feedback; stay in plan mode.'};
+      const file = savePlan(deps.root(), {title, plan, milestones});
+      if (!decision) return {ok: true, text: `Plan saved to ${file}. Nobody is here to approve it (headless run), so nothing will be changed — stop here.`};
+      deps.done(decision, file, title);
+      if (decision === 'save') return {ok: true, text: `Plan saved to ${file}; the user will start it later (/plan:goal). Plan mode is off. Don't start the work — briefly confirm it's saved and stop.`};
+      if (decision === 'goal')
+        return {
+          ok: true,
+          text: `Plan saved to ${file} and started as a goal. Plan mode is off. Work through the milestones in order: after each, call milestone_done with its number and concrete evidence; when all are done, call goal_done.`,
+        };
+      return {ok: true, text: `Plan saved to ${file}. The user approved it — plan mode is off; carry it out now, step by step (keep a todo_write task list).`};
     },
   };
 }

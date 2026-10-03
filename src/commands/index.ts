@@ -1,6 +1,6 @@
 import type {Skill} from '../skills/index.js';
 
-export type CommandName = 'memory' | 'mcp' | 'rewind' | 'permissions' | 'add-dir' | 'goal' | 'btw' | 'agents' | 'agent' | 'resume' | 'login' | 'usage' | 'model' | 'context' | 'compact' | 'shells' | 'configure' | 'update' | 'tui' | 'clear' | 'help' | 'exit';
+export type CommandName = 'memory' | 'mcp' | 'rewind' | 'permissions' | 'add-dir' | 'goal' | 'plan:goal' | 'btw' | 'agents' | 'agent' | 'resume' | 'login' | 'usage' | 'model' | 'context' | 'compact' | 'shells' | 'configure' | 'update' | 'tui' | 'clear' | 'help' | 'exit';
 
 export const COMMANDS: {name: CommandName; description: string}[] = [
   {name: 'memory', description: "This project's memory (.rein/MEMORY.md) — what Rein has learned here"},
@@ -8,6 +8,7 @@ export const COMMANDS: {name: CommandName; description: string}[] = [
   {name: 'rewind', description: 'Undo: restore files and/or the conversation to before one of your messages (also esc twice)'},
   {name: 'permissions', description: 'Show the allow/deny rules in effect and where they come from'},
   {name: 'add-dir', description: 'Add a working directory the agent can use without asking: /add-dir <path> (no path: list them)'},
+  {name: 'plan:goal', description: 'Start a saved plan as a goal (milestones tracked in the sidebar), or start planning a new one'},
   {name: 'goal', description: 'Keep the agent on a goal until verified done: /goal <text> · pause · resume · clear'},
   {name: 'btw', description: 'Ask a side question without interrupting the agent (/btw <question>)'},
   {name: 'agents', description: 'Subagents the agent spawned; pick one to view and message it'},

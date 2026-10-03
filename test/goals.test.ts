@@ -39,14 +39,14 @@ describe('goals', () => {
     g.set('tests pass');
     t.messages.push({role: 'assistant', text: 'done', at: 1, tools: [{label: 'Shell', summary: '$ npm test', ok: true, result: '42 passed'}]});
     const tool = goalDoneTool(g);
-    expect(tool.enabled!()).toBe(true);
+    expect(tool.enabled).toBeUndefined(); // always listed (stable tool list); errors without a goal
     const first = await tool.run({root: '/'}, {summary: 'fixed', evidence: 'trust me'});
     expect(first.ok).toBe(false);
     expect(g.goal?.status).toBe('active');
     const second = await tool.run({root: '/'}, {summary: 'fixed', evidence: 'npm test: 42 passed'});
     expect(second.ok).toBe(true);
     expect(g.goal?.status).toBe('done');
-    expect(tool.enabled!()).toBe(false); // no more goal_done once done
+    await expect(tool.run({root: '/'} as any, {summary: 'again', evidence: 'x'})).rejects.toThrow(/no active goal/); // done: no more claims
     expect(g.goal?.checks.map((c) => c.verdict)).toEqual(['rejected (0.30 via test)', 'accepted (0.90 via test)']);
   });
 

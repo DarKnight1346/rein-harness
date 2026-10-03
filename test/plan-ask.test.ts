@@ -16,14 +16,24 @@ describe('plan mode', () => {
       expect(readOnlyCommand(c), c).toBe(false);
   });
 
-  it('present_plan returns the decision and turns plan mode off when approved', async () => {
+  it('present_plan saves the plan with its milestones and reports the decision', async () => {
+    const {mkdtempSync, realpathSync} = await import('node:fs');
+    const os = await import('node:os');
+    const path = await import('node:path');
+    const root = realpathSync(mkdtempSync(path.join(os.tmpdir(), 'rein-plans-')));
     let active = true;
-    let decided = '';
-    const t = presentPlanTool({active: () => active, scratch: () => undefined, present: async () => 'approve-all', done: (d) => ((decided = d), (active = false))});
-    const r = await t.run({} as any, {plan: '## Goal\nAdd a flag.\n1. Edit cli.ts\n2. Test'});
-    expect(r.text).toMatch(/approved .* allowed all changes .* carry it out/);
-    expect(decided).toBe('approve-all');
-    await expect(t.run({} as any, {plan: 'x'.repeat(40)})).rejects.toThrow(/plan mode is off/);
+    const decided: string[] = [];
+    let shown: any;
+    const t = presentPlanTool({root: () => root, active: () => active, present: async (p) => ((shown = p), 'goal'), done: (d, file) => (decided.push(d, file), (active = false))});
+    const r = await t.run({} as any, {title: 'Shout flag', plan: '## Goal\nAdd a flag.\n1. Edit cli.ts\n2. Test', milestones: ['flag parsed', 'tests pass']});
+    expect(shown.milestones).toEqual(['flag parsed', 'tests pass']);
+    expect(r.text).toMatch(/started as a goal/);
+    expect(decided[0]).toBe('goal');
+    const {readPlan} = await import('../src/plans/store.js');
+    const saved = readPlan(decided[1]!)!;
+    expect(saved.title).toBe('Shout flag');
+    expect(saved.milestones).toEqual([{text: 'flag parsed', done: false}, {text: 'tests pass', done: false}]);
+    await expect(t.run({} as any, {title: 'x', plan: 'x'.repeat(40), milestones: ['a']})).rejects.toThrow(/plan mode is off/);
   });
 
   it('/plan and /plan:deep are built-in skills that turn plan mode on', () => {
