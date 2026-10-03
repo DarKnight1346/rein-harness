@@ -2,6 +2,10 @@
 
 [![npm](https://img.shields.io/npm/v/rein-harness)](https://www.npmjs.com/package/rein-harness)
 [![CI](https://github.com/DarKnight1346/rein-harness/actions/workflows/publish.yml/badge.svg)](https://github.com/DarKnight1346/rein-harness/actions/workflows/publish.yml)
+[![CodeQL](https://github.com/DarKnight1346/rein-harness/actions/workflows/codeql.yml/badge.svg)](https://github.com/DarKnight1346/rein-harness/actions/workflows/codeql.yml)
+[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/DarKnight1346/rein-harness/badge)](https://scorecard.dev/viewer/?uri=github.com/DarKnight1346/rein-harness)
+[![npm provenance](https://img.shields.io/badge/npm-provenance-blue)](https://www.npmjs.com/package/rein-harness#provenance)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
 A terminal chat harness that looks like Claude Code and drives the official `claude` and `codex`
 CLIs across one or more subscription accounts, with per-task model routing (Jev or a cheap model)
@@ -106,7 +110,7 @@ optional `config.json` (`name`, `description`, `main`, `aliases`). Name clashes:
 global. Run as `/name args`; `/skill:create` and `/skill:edit` (built in) have the agent write them for you.
 AGENTS.md: `~/.rein/AGENTS.md` plus the project's AGENTS.md files are added to the system prompt.
 
-Design, findings and status: [PLAN.md](PLAN.md). Tests: `npm test`. License: [MIT](LICENSE).
+Design, findings and status: [PLAN.md](PLAN.md). Tests: `npm test`. License: [MIT](LICENSE). Security: [SECURITY.md](SECURITY.md).
 
 ### Input
 - Big pastes collapse to `[Pasted text #1 +42 lines]`; Ctrl+V pastes a clipboard image; drag a file
