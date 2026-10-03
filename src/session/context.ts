@@ -36,7 +36,9 @@ export async function contextReport(engine: Engine, cfg: Config, toolSpecs: Tool
   const info = model ? catalog.get(model) : undefined;
   const window = info?.contextWindow ?? 200_000;
   const from = t.summary?.coversUpTo ?? 0;
-  const recent = t.messages.slice(from);
+  // Plus the turn in progress (its reply and tool calls are saved to the transcript when it ends).
+  const live = engine.inFlight;
+  const recent = [...t.messages.slice(from), ...(live ? [{role: 'assistant' as const, text: live.reply, at: Date.now(), tools: live.tools}] : [])];
   const calls = recent.flatMap((m) => m.tools ?? []).map((x) => `${x.label} ${x.summary}\n${x.result}`).join('\n');
   const categories: ContextCategory[] = [
     {key: 'system', label: 'System prompt', tokens: estimateTokens(await systemPrompt({tools: true}))},
