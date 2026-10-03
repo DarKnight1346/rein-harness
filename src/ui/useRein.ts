@@ -814,11 +814,10 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
       acceptFile(fileSelected);
       return;
     }
-    // Enter on a partial command fills in the highlighted suggestion ("/name ") so arguments can
-    // follow; Enter again runs it. A command typed out in full runs right away.
+    // Enter while the command list is showing fills in the highlighted one ("/name ") so arguments
+    // can follow; the list closes at the space, so Enter again runs it.
     const partial = suggestCommands(typed, skills);
-    const exact = partial.some((c) => `/${c.name}` === typed.trim().toLowerCase());
-    if (partial.length && !exact) {
+    if (partial.length) {
       const pick = partial[Math.min(suggestIndex, partial.length - 1)] ?? partial[0]!;
       const filled = `/${pick.name} `;
       prevDraft.current = filled;
