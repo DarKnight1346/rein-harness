@@ -28,7 +28,7 @@ import {contextPct, enabledItems, statusInfo} from '../layout.js';
 import {ConfigureScreen} from '../ConfigureScreen.js';
 import {ApprovalPrompt} from '../ApprovalPrompt.js';
 import {ResumeScreen} from '../ResumeScreen.js';
-import {ShellsWindow, ShellWindow, useShellsTick} from './Shells.js';
+import {LiveShell, ShellsWindow, ShellWindow, useShellsTick} from './Shells.js';
 import {AgentsWindow, agentGlyph, useAgentsTick} from './Agents.js';
 import {subagentStatusText, type Subagent} from '../../agents/manager.js';
 import {kTokens, rainbow, Working} from '../Working.js';
@@ -357,7 +357,7 @@ export function FullscreenApp({resume}: {resume: Resume}) {
               void copyToClipboard(text).then((ok) => setFlash(ok ? `Copied ${text.length} characters` : 'Copy failed (no clipboard tool)'));
             }}
           />
-          {panel ? <Box flexShrink={0}>{panel}</Box> : null}
+          {panel ? <Box flexShrink={0}>{panel}</Box> : <Box flexShrink={0}><LiveShell width={textWidth} agentId={viewing?.id} onOpen={(id) => r.setOverlay({name: 'shell', id})} /></Box>}
         </Box>
         {showSidebar ? <Sidebar width={SIDEBAR_WIDTH} height={mainHeight} tick={r.statusTick} run={r.runCommand} view={r.view} setView={r.setView} /> : null}
       </Box>
