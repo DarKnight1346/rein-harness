@@ -205,22 +205,43 @@ export function renderMessages(messages: Message[]): string {
     .join('\n\n');
 }
 
+/** First message a carry for a session covering messages[0, coversUpTo) starts from. */
+export function carryStart(t: Transcript, coversUpTo: number): number {
+  return t.summary && coversUpTo < t.summary.coversUpTo ? t.summary.coversUpTo : coversUpTo;
+}
+
+/**
+ * Messages with their tool calls: results whose key (`message:index`) is in `keep` are included in
+ * full, the rest as one-line traces, so a new session knows what was read, run and changed.
+ */
+function renderWithTools(messages: Message[], from: number, keep: ReadonlySet<string>): string {
+  return messages
+    .map((m, i) => {
+      const tools = (m.tools ?? []).map((x, j) =>
+        keep.has(`${from + i}:${j}`) ? `[tool ${x.label}(${x.summary}) ${x.ok ? 'result' : 'FAILED'}:\n${x.result}\n]` : `[tool ${x.label}(${x.summary}) ${x.ok ? '✓' : '✗ failed'}]`,
+      );
+      const body = [...tools, m.text].filter(Boolean).join('\n');
+      return `${m.role === 'user' ? 'User' : 'Assistant'}: ${body}${m.images?.length ? `\n[attached image${m.images.length > 1 ? 's' : ''}: ${m.images.map((im) => im.path).join(', ')}]` : ''}${m.interrupted ? ' [interrupted]' : ''}`;
+    })
+    .join('\n\n');
+}
+
 /**
  * Context to prepend when a native session hasn't seen part of the conversation (new session,
- * account failover, provider switch). Returns '' when nothing is missing.
+ * account failover, provider switch). `keep` = tool results to include in full (see carry.ts);
+ * `overBudget` is judged on the conversation text alone. Returns '' when nothing is missing.
  */
-export function buildCarry(t: Transcript, coversUpTo: number, upTo: number, budgetTokens: number): {text: string; overBudget: boolean} {
+export function buildCarry(t: Transcript, coversUpTo: number, upTo: number, budgetTokens: number, keep: ReadonlySet<string> = new Set()): {text: string; overBudget: boolean} {
   const summary = t.summary && coversUpTo < t.summary.coversUpTo ? t.summary : undefined;
-  const from = summary ? summary.coversUpTo : coversUpTo;
+  const from = carryStart(t, coversUpTo);
   const missing = t.messages.slice(from, upTo);
   if (!summary && !missing.length) return {text: '', overBudget: false};
-  const parts = [
+  const head = [
     '<earlier_conversation>',
-    'This conversation started before you joined it (another model or session). Continue it naturally; do not mention the handoff.',
+    'This conversation started before you joined it (another model or session). Continue it naturally; do not mention the handoff. Tool calls you see here were made by you earlier; results not shown in full can be re-read if needed.',
     summary ? `<summary>\n${summary.text}\n</summary>` : '',
-    missing.length ? renderMessages(missing) : '',
-    '</earlier_conversation>',
   ].filter(Boolean);
-  const text = parts.join('\n\n') + '\n\n';
-  return {text, overBudget: estimateTokens(text) > budgetTokens};
+  const textOnly = [...head, missing.length ? renderWithTools(missing, from, new Set()) : '', '</earlier_conversation>'].filter(Boolean).join('\n\n');
+  const text = [...head, missing.length ? renderWithTools(missing, from, keep) : '', '</earlier_conversation>'].filter(Boolean).join('\n\n') + '\n\n';
+  return {text, overBudget: estimateTokens(textOnly) > budgetTokens};
 }

@@ -14,13 +14,17 @@ import {SubagentManager, SUBAGENT_PROMPT, type Subagent} from './agents/manager.
 import {agentTools} from './agents/tools.js';
 import {advisorRef, advisorTool} from './agents/advisor.js';
 import {GoalManager} from './goals/manager.js';
+import {startUsageRefresh} from './accounts/usage.js';
 import {goalDoneTool} from './goals/tool.js';
 import {webTools} from './tools/web.js';
 import {imageGenRef, imageTool} from './tools/image.js';
 import {newTranscript, saveTranscript} from './session/transcript.js';
 import {setExtraWorkingDirs, systemPrompt} from './session/prompt.js';
-import {parseRef, refKey, type ModelRef, type TokenCount, type ToolBinding} from './providers/types.js';
-import {decide} from './decider/index.js';
+import {parseRef, refKey, type Account, type ModelRef, type TokenCount, type ToolBinding} from './providers/types.js';
+import {removeAccount} from './accounts/service.js';
+import {releaseCodexAccount} from './providers/codex/adapter.js';
+import {completeWith, decide, resolveUtilityModel} from './decider/index.js';
+import {parseIndices} from './session/carry.js';
 import {headTail} from './router/auto.js';
 
 /** `auto` approval mode: allow without asking only at this confidence or higher. */
@@ -122,6 +126,7 @@ export class Runtime {
   });
 
   private folded = new Map<number, TokenCount>();
+  private stopUsageRefresh: () => void = () => {};
 
   /** `/goal`: keeps the agent on an objective until the decision model accepts the evidence. */
   readonly goals = new GoalManager({
@@ -146,7 +151,8 @@ export class Runtime {
 
   private async openSubagent(agent: Subagent, tools: ToolBinding) {
     if (agent.mode === 'fork') {
-      const session = await this.engine.openFork(tools);
+      // A fork continues the parent's native session, so it runs on the parent's account.
+      const session = catalog.track(await this.engine.openFork(tools));
       const ref = this.engine.current!.ref;
       return {session, ref, accountId: this.engine.current!.accountId, label: catalog.get(ref)?.label ?? ref.model};
     }
@@ -162,8 +168,27 @@ export class Runtime {
     const account = catalog.healthyAccounts(ref, this.config.maxUsedPct)[0];
     if (!account) throw new Error(`no healthy account for ${ref.model}`);
     const prompt = `${await systemPrompt({tools: true, scratch: this.engine.scratch})}\n\n${SUBAGENT_PROMPT(agent.name)}`;
-    const session = await adapters[ref.provider].openSession({account, model: ref.model, systemPrompt: prompt, tools});
+    const session = catalog.track(await adapters[ref.provider].openSession({account, model: ref.model, systemPrompt: prompt, tools}));
     return {session, ref, accountId: account.id, label: catalog.get(ref)?.label ?? ref.model};
+  }
+
+  /**
+   * Carry selection: the compaction model sees a one-line index of the tool calls (never their
+   * full results) and returns the ones a new session needs to continue.
+   */
+  private async selectCarry({index, request, budgetTokens}: {index: string; request: string; budgetTokens: number}): Promise<number[]> {
+    const ref = resolveUtilityModel(this.config.compactionModel, this.config);
+    if (!ref) throw new Error('no compaction model available');
+    const reply = await completeWith(
+      ref,
+      this.config,
+      `You decide what context an AI coding agent keeps when its conversation moves to a new session.
+Keep the tool results its next steps depend on: the latest contents of files it is working on (only the most recent read/edit of each file), recent errors and test/build output, command results and search results it is still using.
+Drop superseded reads of the same file, routine listings, and output that no longer matters. Reply with only a JSON array of # indices, most important first.`,
+      `The user's latest message:\n${request.slice(0, 2000)}\n\nTool calls so far (#index Tool(args) status · size · first line of the result):\n${index}\n\nThe full results you pick must fit in about ${budgetTokens} tokens. JSON array of indices:`,
+      {timeoutMs: 45_000, fast: true},
+    );
+    return parseIndices(reply);
   }
 
   /** Decision model: is the subagent's task actually complete? (noul; ≥ 0.5 = yes) */
@@ -213,6 +238,7 @@ export class Runtime {
       imageTool(() => this.config),
     );
     this.config = await loadConfig();
+    this.stopUsageRefresh = startUsageRefresh({balancing: () => this.config.loadBalancing !== 'sticky', busy: (id) => catalog.busy.get(id) ?? 0});
     setExtraWorkingDirs(() => this.tools.extraWorkingDirs());
     await usageStore.load();
     const router = makeRouter(() => this.config, (...a) => this.auto(...a));
@@ -224,6 +250,7 @@ export class Runtime {
         route: router.route,
         alternative: router.alternative,
         compact: (t, reason) => this.compact(t, reason),
+        selectCarry: (input) => this.selectCarry(input),
         tools: {
           binding: {
             // Resolved when a session opens: the agent tool lists the models signed in right now.
@@ -254,6 +281,29 @@ export class Runtime {
     return {resumed};
   }
 
+  /**
+   * Remove an account without interrupting anything: it's retired at once (no new turns or
+   * subagents use it), the conversation and subagents release their sessions on it (running turns
+   * finish first), and the next message continues on another account with the context carried
+   * over. Logout and file cleanup happen when nothing uses the account any more.
+   */
+  async removeAccount(account: Account): Promise<void> {
+    catalog.retired.add(account.id);
+    this.engine?.releaseAccount(account.id);
+    this.agents.releaseAccount(account.id);
+    const idle = async () => {
+      while (catalog.busy.get(account.id)) await new Promise((r) => setTimeout(r, 1000));
+      if (account.provider === 'codex') releaseCodexAccount(account.id);
+    };
+    const done = removeAccount(account, idle).finally(() => {
+      catalog.retired.delete(account.id);
+      this.pendingRemovals.delete(done);
+    });
+    this.pendingRemovals.add(done);
+    await this.refreshCatalog(); // unregistered: gone from /login, /usage and model lists
+  }
+  private pendingRemovals = new Set<Promise<void>>();
+
   /** Reload accounts/models (after /login changes). */
   async refreshCatalog(): Promise<void> {
     const hadImages = !!imageGenRef(this.config);
@@ -271,6 +321,7 @@ export class Runtime {
   }
 
   shutdown(): void {
+    this.stopUsageRefresh();
     this.agents.closeAll();
     this.engine?.shutdown();
     this.tools.close();

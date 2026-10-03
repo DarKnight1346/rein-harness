@@ -81,6 +81,32 @@ export function headroom(snap: UsageSnapshot | undefined, now = Date.now()): num
   return Math.min(...live.map((w) => 100 - w.usedPct));
 }
 
+/** Below this real headroom (%) an account is "near its limit": no discount, switch away early. */
+export const DANGER_HEADROOM = 10;
+/** Score for an account with no usage data yet: worth trying (it gets data on first use). */
+const UNKNOWN_SCORE = 70;
+
+/**
+ * Load-balancing score (0–100, higher = better to use now). Like headroom, but each window's usage
+ * counts in proportion to the time left before it resets — 80% used with 10 minutes to go is
+ * nearly free capacity ("use it or lose it"), 60% of a week with 6 days left is real pressure.
+ * Within DANGER_HEADROOM of a limit the real headroom counts, so a nearly-full account never looks good.
+ */
+export function balanceScore(snap: UsageSnapshot | undefined, now = Date.now()): number {
+  if (!snap) return UNKNOWN_SCORE;
+  const live = snap.windows.filter((w) => !w.resetsAt || w.resetsAt > now);
+  if (!live.length) return 100;
+  return Math.min(
+    ...live.map((w) => {
+      const real = 100 - w.usedPct;
+      if (real < DANGER_HEADROOM) return real;
+      const len = w.windowMins * 60_000;
+      const left = w.resetsAt && len > 0 ? Math.min(1, Math.max(0, (w.resetsAt - now) / len)) : 1;
+      return 100 - w.usedPct * left;
+    }),
+  );
+}
+
 export function windowLabel(mins: number): string {
   if (Math.abs(mins - 300) <= 10) return '5h';
   if (Math.abs(mins - 10080) <= 60) return 'weekly';

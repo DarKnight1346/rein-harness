@@ -2,7 +2,10 @@ import {adapters} from '../providers/index.js';
 import type {Account, ModelInfo, ModelRef} from '../providers/types.js';
 import {refKey} from '../providers/types.js';
 import {loadAccounts} from '../store/accounts.js';
-import {headroom, usageStore} from '../store/usage.js';
+import {balanceScore, headroom, usageStore} from '../store/usage.js';
+
+/** Score points per live session already on an account. */
+export const BUSY_PENALTY = 15;
 
 export type CatalogModel = ModelInfo & {accountIds: string[]};
 export const toRef = (m: ModelInfo): ModelRef => ({provider: m.provider, model: m.id});
@@ -75,12 +78,39 @@ export class ModelCatalog {
     return this.accounts.filter((a) => ids.includes(a.id));
   }
 
-  /** Healthy = not cooling down, not auth-failed, under the used-% ceiling. */
+  /** Accounts being removed: never picked again; their live sessions finish and are then closed. */
+  readonly retired = new Set<string>();
+
+  /** Live sessions per account (main chat, subagents): spreads parallel work across accounts. */
+  readonly busy = new Map<string, number>();
+
+  /** Count a live session against its account until it's closed. */
+  track<S extends {accountId: string; close(): void}>(session: S): S {
+    const id = session.accountId;
+    this.busy.set(id, (this.busy.get(id) ?? 0) + 1);
+    const close = session.close.bind(session);
+    let open = true;
+    session.close = () => {
+      if (open) {
+        open = false;
+        this.busy.set(id, Math.max(0, (this.busy.get(id) ?? 1) - 1));
+      }
+      close();
+    };
+    return session;
+  }
+
+  /** Balance score minus a penalty per live session on the account (see balanceScore). */
+  score(accountId: string): number {
+    return balanceScore(usageStore.get(accountId)) - BUSY_PENALTY * (this.busy.get(accountId) ?? 0);
+  }
+
+  /** Healthy = not cooling down, not auth-failed, under the used-% ceiling. Best to use first. */
   healthyAccounts(ref: ModelRef, maxUsedPct: number, exclude: ReadonlySet<string> = new Set()): Account[] {
     return this.accountsFor(ref)
-      .filter((a) => !exclude.has(a.id) && !this.authFailed.has(a.id) && !usageStore.cooldownUntil(a.id))
+      .filter((a) => !exclude.has(a.id) && !this.retired.has(a.id) && !this.authFailed.has(a.id) && !usageStore.cooldownUntil(a.id))
       .filter((a) => headroom(usageStore.get(a.id)) > 100 - maxUsedPct)
-      .sort((a, b) => headroom(usageStore.get(b.id)) - headroom(usageStore.get(a.id)));
+      .sort((a, b) => this.score(b.id) - this.score(a.id));
   }
 
   /** Models with at least one healthy account. */
@@ -90,7 +120,7 @@ export class ModelCatalog {
 
   /** "Cheapest available": lowest cost tier with a healthy account; ties → most headroom. */
   cheapest(maxUsedPct: number, exclude: ReadonlySet<string> = new Set()): CatalogModel | undefined {
-    const best = (m: CatalogModel) => Math.max(...this.healthyAccounts(toRef(m), maxUsedPct, exclude).map((a) => headroom(usageStore.get(a.id))));
+    const best = (m: CatalogModel) => Math.max(...this.healthyAccounts(toRef(m), maxUsedPct, exclude).map((a) => this.score(a.id)));
     return this.available(maxUsedPct, exclude).sort((a, b) => a.tier - b.tier || best(b) - best(a))[0];
   }
 

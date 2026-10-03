@@ -168,10 +168,18 @@ export class SubagentManager extends EventEmitter {
       if (agent.status === 'failed') agent.events.push({kind: 'note', text: `Failed: ${(err as Error).message}`});
     } finally {
       agent.endedAt = Date.now();
+      if (agent.accountId && this.retiredAccounts.has(agent.accountId)) this.release(id);
       this.deps.finished(agent);
       this.changed();
     }
   }
+
+  /** An account is being removed: close idle subagent sessions on it now, running ones when they finish. */
+  releaseAccount(accountId: string): void {
+    this.retiredAccounts.add(accountId);
+    for (const a of this.agents.values()) if (a.accountId === accountId && !this.isActive(a)) this.release(a.id);
+  }
+  private retiredAccounts = new Set<string>();
 
   /** Close every subagent session (exit, /clear). */
   closeAll(): void {
@@ -252,8 +260,9 @@ export class SubagentManager extends EventEmitter {
         agent.events.push({kind: 'note', text: `Failed: ${agent.error}`});
       }
     } finally {
-      // Finished sessions stay open for follow-up messages from the user; others are released.
-      if (agent.status !== 'done') this.release(agent.id);
+      // Finished sessions stay open for follow-up messages from the user; others are released —
+      // and so is any session on an account that's being removed.
+      if (agent.status !== 'done' || (agent.accountId && this.retiredAccounts.has(agent.accountId))) this.release(agent.id);
       agent.endedAt = Date.now();
       this.deps.finished(agent);
       this.changed();

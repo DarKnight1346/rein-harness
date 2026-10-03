@@ -13,6 +13,8 @@ export type Config = {
   compactionModel: string;
   /** Advisor the agents can consult (`advisor` tool): `off` (default) or a model ref — never auto. */
   advisorModel: string;
+  /** Account choice: 'balanced' spreads use across subscriptions at cache-cold moments; 'sticky' stays until limited. */
+  loadBalancing: 'balanced' | 'sticky';
   /** Extra working directories (like Claude Code's additionalDirectories): tools use them without asking. */
   additionalDirectories: string[];
   /** Check npm on launch and install a newer Rein in the background. */
@@ -70,6 +72,7 @@ export const DEFAULT_CONFIG: Config = {
   hidePersonalInfo: true,
   autoUpdate: true,
   additionalDirectories: [],
+  loadBalancing: 'balanced',
   autoSwitchThreshold: 0.7,
   autoMinConfidence: 0.45,
   maxUsedPct: 98,

@@ -10,7 +10,7 @@ const TABS: Tab[] = [
   {id: 'sidebar', title: 'Sidebar', items: SIDEBAR_ITEMS, defaults: DEFAULT_SIDEBAR, key: 'sidebarSections'},
 ];
 type Choice = {value: string | number | boolean; label: string};
-type ChoiceTabDef = {title: string; key: 'autoCompactPct' | 'toolApproval' | 'shellMaxMinutes' | 'subagentLimit' | 'goalMaxRounds' | 'hidePersonalInfo' | 'autoUpdate'; description: string; choices: Choice[]};
+type ChoiceTabDef = {title: string; key: 'autoCompactPct' | 'toolApproval' | 'shellMaxMinutes' | 'subagentLimit' | 'goalMaxRounds' | 'hidePersonalInfo' | 'autoUpdate' | 'loadBalancing'; description: string; choices: Choice[]};
 const CHOICE_TABS: ChoiceTabDef[] = [
   {
     title: 'Approvals',
@@ -42,6 +42,15 @@ const CHOICE_TABS: ChoiceTabDef[] = [
     key: 'goalMaxRounds',
     description: 'How many automatic continuations a /goal may take before it pauses itself (/goal resume continues).',
     choices: [0, 10, 25, 50, 100, 250].map((v) => ({value: v, label: v === 0 ? 'Unlimited  (default)' : `${v} continuations`})),
+  },
+  {
+    title: 'Load balancing',
+    key: 'loadBalancing',
+    description: 'How Rein spreads work across your subscriptions. Balanced moves a conversation to the account with the most room only when its prompt cache has gone cold (idle 5+ min) or the account is near its limit; new chats and subagents start on the least-used account.',
+    choices: [
+      {value: 'balanced', label: 'Balanced  (default) — cache-aware'},
+      {value: 'sticky', label: 'Sticky — stay on one account until it hits a limit'},
+    ],
   },
   {
     title: 'Updates',

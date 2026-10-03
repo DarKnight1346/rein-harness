@@ -71,6 +71,23 @@ describe('AGENTS.md', () => {
     const files = await agentsFiles(path.join(proj, 'pkg'));
     expect(files.map((f) => f.text)).toEqual(['global rules', 'repo rules', 'package rules']);
   });
+
+  it("also reads Claude Code's CLAUDE.md files, once each", async () => {
+    const claudeGlobal = path.join(home, 'claude-global.md');
+    process.env.REIN_CLAUDE_GLOBAL = claudeGlobal;
+    await writeFile(claudeGlobal, 'claude user rules');
+    await writeFile(path.join(home, 'AGENTS.md'), 'global rules');
+    await mkdir(path.join(proj, '.git'));
+    await writeFile(path.join(proj, 'AGENTS.md'), 'repo rules');
+    await mkdir(path.join(proj, 'pkg'));
+    await writeFile(path.join(proj, 'pkg/AGENTS.md'), 'package rules');
+    await writeFile(path.join(proj, 'CLAUDE.md'), 'claude repo rules');
+    await mkdir(path.join(proj, 'pkg/.claude'), {recursive: true});
+    await writeFile(path.join(proj, 'pkg/.claude/CLAUDE.md'), 'package rules'); // same text as pkg/AGENTS.md
+    const files = await agentsFiles(path.join(proj, 'pkg'));
+    expect(files.map((f) => f.text)).toEqual(['global rules', 'claude user rules', 'repo rules', 'claude repo rules', 'package rules']);
+    delete process.env.REIN_CLAUDE_GLOBAL;
+  });
 });
 
 describe('approval modes', () => {
