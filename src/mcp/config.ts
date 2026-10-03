@@ -74,3 +74,40 @@ export function loadServers(root: string): ServerEntry[] {
   }
   return out;
 }
+
+export type ServerScope = 'project' | 'user';
+
+/** Where a scope's servers live: the project's shared .mcp.json, or the user's ~/.rein/mcp.json. */
+export const scopeFile = (root: string, scope: ServerScope) => (scope === 'project' ? path.join(root, '.mcp.json') : path.join(reinHome(), 'mcp.json'));
+
+export const validServerName = (name: string) => /^[A-Za-z0-9_-]{1,40}$/.test(name);
+
+/**
+ * Add (or replace) a server in a scope's file. A project server added through the agent's tool
+ * is approved at the same time — the user approved the call that showed its command.
+ */
+export function addServer(root: string, scope: ServerScope, name: string, config: ServerConfig): string {
+  const file = scopeFile(root, scope);
+  updateJsonFileSync(file, (data) => {
+    data.mcpServers = {...(data.mcpServers ?? {}), [name]: config};
+  });
+  if (scope === 'project') approveProjectServer(root, name);
+  return file;
+}
+
+/** Remove a server from whichever Rein-managed file defines it; undefined if none does. */
+export function removeServer(root: string, name: string): string | undefined {
+  for (const scope of ['project', 'user'] as const) {
+    const file = scopeFile(root, scope);
+    let found = false;
+    try {
+      found = !!JSON.parse(readFileSync(file, 'utf8'))?.mcpServers?.[name];
+    } catch {}
+    if (!found) continue;
+    updateJsonFileSync(file, (data) => {
+      delete data.mcpServers[name];
+    });
+    return file;
+  }
+  return undefined;
+}
