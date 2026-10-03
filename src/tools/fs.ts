@@ -1,7 +1,8 @@
-import {createReadStream, createWriteStream, existsSync, realpathSync} from 'node:fs';
+import {constants, createReadStream, createWriteStream, existsSync, realpathSync} from 'node:fs';
+import {randomBytes} from 'node:crypto';
 import readline from 'node:readline';
 import {createdDiff, fileDiff, regionDiff, type DiffLine} from './diff.js';
-import {mkdir, open, readdir, readFile, rename, rm, rmdir, stat, writeFile} from 'node:fs/promises';
+import {mkdir, open, readdir, rename, rm, rmdir, stat, type FileHandle} from 'node:fs/promises';
 import path from 'node:path';
 import {run} from '../util/proc.js';
 
@@ -99,14 +100,52 @@ async function looksBinary(file: string): Promise<boolean> {
   }
 }
 
+/**
+ * Open a file that resolveInRoot already confined, without following a symlink at the last path
+ * component: if the file was swapped for a symlink after the check (e.g. by a background shell),
+ * the open fails instead of writing outside the project. All later reads/writes use the handle.
+ */
+export async function openConfined(file: string, display: string, flags: number): Promise<FileHandle> {
+  try {
+    return await open(file, flags | constants.O_NOFOLLOW, 0o666);
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code === 'ELOOP' || code === 'EMLINK') throw new ToolError(`${display} became a symlink after it was checked; refusing to follow it`);
+    if (code === 'EISDIR') throw new ToolError(`${display} is a directory`);
+    throw err;
+  }
+}
+
+/** Replace the whole content behind a handle. */
+async function overwrite(fh: FileHandle, text: string): Promise<void> {
+  const buf = Buffer.from(text, 'utf8');
+  await fh.truncate(0);
+  for (let off = 0; off < buf.length; ) off += (await fh.write(buf, off, buf.length - off, off)).bytesWritten;
+}
+
 export async function writeTool(ctx: ToolContext, args: {path: string; content: string}): Promise<ToolResult> {
   if (typeof args.content !== 'string') throw new ToolError('content is required');
   const file = resolveInRoot(ctx, args.path);
-  const existed = existsSync(file);
-  if (existed && (await stat(file)).isDirectory()) throw new ToolError(`${args.path} is a directory`);
-  const before = existed && (await stat(file)).size <= 1024 * 1024 ? await readFile(file, 'utf8') : undefined;
-  await mkdir(path.dirname(file), {recursive: true});
-  await writeFile(file, args.content);
+  let fh: FileHandle;
+  let existed = true;
+  try {
+    fh = await openConfined(file, args.path, constants.O_RDWR);
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err;
+    existed = false;
+    await mkdir(path.dirname(file), {recursive: true});
+    // O_EXCL: if something appeared at this path meanwhile, fail rather than reuse it.
+    fh = await openConfined(file, args.path, constants.O_RDWR | constants.O_CREAT | constants.O_EXCL);
+  }
+  let before: string | undefined;
+  try {
+    const st = await fh.stat();
+    if (st.isDirectory()) throw new ToolError(`${args.path} is a directory`);
+    if (existed && st.size <= 1024 * 1024) before = await fh.readFile('utf8');
+    await overwrite(fh, args.content);
+  } finally {
+    await fh.close();
+  }
   const diff = !existed ? createdDiff(args.content) : before !== undefined ? fileDiff(before, args.content) : undefined;
   const n = args.content ? args.content.split('\n').length - (args.content.endsWith('\n') ? 1 : 0) : 0;
   return {ok: true, text: `${existed ? 'Overwrote' : 'Created'} ${rel(ctx, file)} (${n} line${n === 1 ? '' : 's'})`, diff};
@@ -120,14 +159,28 @@ export async function editTool(ctx: ToolContext, args: {path: string; old_string
   if (typeof args.old_string !== 'string' || typeof args.new_string !== 'string') throw new ToolError('old_string and new_string are required');
   if (!args.old_string) throw new ToolError('old_string is empty; use write to create a file');
   if (args.old_string === args.new_string) throw new ToolError('old_string and new_string are identical');
-  const st = await stat(file).catch(() => undefined);
-  if (!st || st.isDirectory()) throw new ToolError(`${args.path} does not exist`);
-  if (st.size > STREAM_EDIT_BYTES) return streamingEdit(ctx, file, args);
-  const text = await readFile(file, 'utf8');
-  const count = text.split(args.old_string).length - 1;
-  checkCount(ctx, file, count, args.replace_all);
-  const next = args.replace_all ? text.split(args.old_string).join(args.new_string) : text.replace(args.old_string, () => args.new_string);
-  await writeFile(file, next);
+  let fh: FileHandle;
+  try {
+    fh = await openConfined(file, args.path, constants.O_RDWR);
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT') throw new ToolError(`${args.path} does not exist`);
+    throw err;
+  }
+  let text: string;
+  let next: string;
+  let count: number;
+  try {
+    const st = await fh.stat();
+    if (st.isDirectory()) throw new ToolError(`${args.path} does not exist`);
+    if (st.size > STREAM_EDIT_BYTES) return await streamingEdit(ctx, file, fh, args);
+    text = await fh.readFile('utf8');
+    count = text.split(args.old_string).length - 1;
+    checkCount(ctx, file, count, args.replace_all);
+    next = args.replace_all ? text.split(args.old_string).join(args.new_string) : text.replace(args.old_string, () => args.new_string);
+    await overwrite(fh, next);
+  } finally {
+    await fh.close();
+  }
   const line = text.slice(0, text.indexOf(args.old_string)).split('\n').length;
   const diff = fileDiff(text, next) ?? regionDiff(line, args.old_string, args.new_string);
   return {ok: true, text: `Edited ${rel(ctx, file)}: ${args.replace_all ? `${count} replacements` : `1 replacement at line ${line}`}`, diff};
@@ -142,12 +195,13 @@ function checkCount(ctx: ToolContext, file: string, count: number, replaceAll?: 
  * Large files: one streaming pass counts matches (matches spanning chunk boundaries included),
  * a second streams the replaced content into a temp file that is renamed over the original.
  */
-async function streamingEdit(ctx: ToolContext, file: string, args: {old_string: string; new_string: string; replace_all?: boolean}): Promise<ToolResult> {
+async function streamingEdit(ctx: ToolContext, file: string, fh: FileHandle, args: {old_string: string; new_string: string; replace_all?: boolean}): Promise<ToolResult> {
   const old = args.old_string;
   const scan = async (onOut?: (s: string) => void): Promise<number> => {
     let carry = '';
     let count = 0;
-    for await (const chunk of createReadStream(file, {encoding: 'utf8', highWaterMark: 1024 * 1024})) {
+    // Both passes read through the already-open handle (never re-opened by path).
+    for await (const chunk of fh.createReadStream({encoding: 'utf8', highWaterMark: 1024 * 1024, start: 0, autoClose: false})) {
       const buf = carry + (chunk as string);
       let i = 0;
       let j: number;
@@ -167,8 +221,10 @@ async function streamingEdit(ctx: ToolContext, file: string, args: {old_string: 
   };
   const count = await scan();
   checkCount(ctx, file, count, args.replace_all);
-  const tmp = `${file}.rein-${process.pid}.tmp`;
-  const out = createWriteStream(tmp);
+  // Unpredictable name, created exclusively (`wx`) with the original file's permissions, so a
+  // pre-planted file or symlink at the temp path can't be written through.
+  const tmp = `${file}.rein-${randomBytes(8).toString('hex')}.tmp`;
+  const out = createWriteStream(tmp, {flags: 'wx', mode: (await fh.stat()).mode & 0o777});
   try {
     await scan((s) => void out.write(s));
     await new Promise<void>((resolve, reject) => out.end((err?: Error | null) => (err ? reject(err) : resolve())));
