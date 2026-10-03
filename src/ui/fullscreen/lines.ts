@@ -97,12 +97,31 @@ export function agentLines(a: Subagent, width: number): string[] {
   return out;
 }
 
-// Claude Code's dark-theme diff colors: line bars, plus brighter bars on the changed words.
+// Dark diff backgrounds (line bars, plus slightly brighter bars on the changed words). Picked per
+// color depth: chalk rounds RGB to the nearest 256-color cube entry, which turns these dark
+// greens/reds into bright pastels (e.g. 34,92,43 → #5f875f) — so 256-color terminals (macOS
+// Terminal) get hand-picked dark palette entries, and 16-color ones colored text instead.
+type DiffColors = Record<'add' | 'del' | 'addWord' | 'delWord', (s: string) => string>;
+// Built lazily for the current color depth (chalk fixes a builder's codes when it's created).
+const byLevel = new Map<number, DiffColors>();
+const diffColors = (): DiffColors => {
+  let c = byLevel.get(chalk.level);
+  if (!c) {
+    c =
+      chalk.level >= 3
+        ? {add: chalk.bgRgb(22, 60, 30), del: chalk.bgRgb(78, 26, 34), addWord: chalk.bgRgb(36, 110, 58), delWord: chalk.bgRgb(130, 44, 58)}
+        : chalk.level === 2
+          ? {add: chalk.bgAnsi256(22), del: chalk.bgAnsi256(52), addWord: chalk.bgAnsi256(28), delWord: chalk.bgAnsi256(88)} // #005f00 #5f0000 #008700 #870000
+          : {add: chalk.green, del: chalk.red, addWord: chalk.green.bold.underline, delWord: chalk.red.bold.underline};
+    byLevel.set(chalk.level, c);
+  }
+  return c;
+};
 const DIFF = {
-  add: chalk.bgRgb(34, 92, 43),
-  del: chalk.bgRgb(122, 41, 54),
-  addWord: chalk.bgRgb(56, 166, 96),
-  delWord: chalk.bgRgb(179, 89, 107),
+  add: (s: string) => diffColors().add(s),
+  del: (s: string) => diffColors().del(s),
+  addWord: (s: string) => diffColors().addWord(s),
+  delWord: (s: string) => diffColors().delWord(s),
 };
 
 /** Changed character ranges for a removed/added line pair (word-level), or undefined if mostly rewritten. */
@@ -171,8 +190,8 @@ export function diffLines(diff: DiffLine[] | undefined, width: number, file?: st
     }
     i = a;
   }
-  return diff.map((d, idx) => {
-    if (d.kind === 'gap' || d.kind === 'note') return chalk.dim(`    ${' '.repeat(gutterW)} ${d.text}`);
+  return diff.flatMap((d, idx) => {
+    if (d.kind === 'gap' || d.kind === 'note') return [chalk.dim(`    ${' '.repeat(gutterW)} ${d.text}`)];
     const num = d.n === undefined ? ' '.repeat(gutterW) : String(d.n).padStart(gutterW);
     const sign = d.kind === 'add' ? '+' : d.kind === 'del' ? '-' : ' ';
     const prefix = `${num} ${sign} `;
@@ -180,12 +199,17 @@ export function diffLines(diff: DiffLine[] | undefined, width: number, file?: st
     let styled = highlight(code, lang);
     const emph = words.get(idx);
     if (emph) styled = emphasize(styled, emph, d.kind === 'add' ? DIFF.addWord : DIFF.delWord);
-    const room = inner - prefix.length;
-    if (stringWidth(styled) > room) styled = cliTruncate(styled, Math.max(1, room));
-    const fill = ' '.repeat(Math.max(0, room - stringWidth(styled)));
-    if (d.kind === 'add') return '    ' + DIFF.add(chalk.green(prefix) + styled + fill);
-    if (d.kind === 'del') return '    ' + DIFF.del(chalk.red(prefix) + styled + fill);
-    return '    ' + chalk.dim(prefix) + chalk.dim(styled) + fill;
+    // Long lines wrap (continuation rows indent past the gutter and keep the line's bar).
+    const room = Math.max(1, inner - prefix.length);
+    const rows = stringWidth(styled) > room ? wrapAnsi(styled, room, {hard: true, trim: false}).split('\n') : [styled];
+    const blank = ' '.repeat(prefix.length);
+    return rows.map((row, i) => {
+      const fill = ' '.repeat(Math.max(0, room - stringWidth(row)));
+      const pre = i === 0 ? prefix : blank;
+      if (d.kind === 'add') return '    ' + DIFF.add(chalk.green(pre) + row + fill);
+      if (d.kind === 'del') return '    ' + DIFF.del(chalk.red(pre) + row + fill);
+      return '    ' + chalk.dim(pre) + chalk.dim(row) + fill;
+    });
   });
 }
 

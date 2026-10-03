@@ -83,6 +83,8 @@ export class Engine {
 
   /** Tokens the provider reported for the last completed request (for /context). */
   lastUsage: {ref: ModelRef; input: number; output: number; at: number} | undefined;
+  /** The turn in progress: reply so far and finished tool calls (saved to the transcript at its end). */
+  inFlight: {reply: string; tools: NonNullable<Message['tools']>} | undefined;
   /** When each account last served this conversation (its prompt cache is warm for a few minutes). */
   private readonly lastUsed = new Map<string, number>();
   /** Compaction replaced the history since the last turn: no cache left to protect. */
@@ -173,6 +175,7 @@ export class Engine {
     if (t.summary && t.summary.coversUpTo > index) delete t.summary;
     t.native = {};
     this.lastUsage = undefined;
+    this.inFlight = undefined;
     this.cacheBroken = true;
     await truncateTranscript(t, index);
   }
@@ -182,6 +185,7 @@ export class Engine {
     this.closeActive();
     this.transcript = t;
     this.lastUsage = undefined;
+    this.inFlight = undefined;
     this.callTokens = undefined;
     this.forgetAccounts();
   }
@@ -204,6 +208,7 @@ export class Engine {
     this.closeActive();
     this.transcript = newTranscript();
     this.lastUsage = undefined;
+    this.inFlight = undefined;
     this.forgetAccounts();
   }
 
@@ -278,6 +283,8 @@ export class Engine {
       const replyTools: NonNullable<Message['tools']> = [];
       let failure: {kind: string; message: string; resetsAt?: number} | undefined;
       this.running = session;
+      this.inFlight = {reply: '', tools: replyTools};
+      let seenInput = 0; // token events are cumulative over the turn's requests
       for await (const ev of this.withToolActivity(session.send(prompt, images))) {
         if (ev.type === 'tool') {
           const a = ev.activity;
@@ -288,14 +295,21 @@ export class Engine {
         }
         if (ev.type === 'tokens') {
           this.callTokens = ev.call;
+          // Each jump in input is one request's full prompt: how full the context is right now.
+          if (ev.call.input > seenInput) {
+            this.lastUsage = {ref: route.ref, input: ev.call.input - seenInput, output: 0, at: Date.now()};
+            seenInput = ev.call.input;
+          }
           yield ev;
           continue;
         }
         if (ev.type === 'text') {
           reply += ev.delta;
+          if (this.inFlight) this.inFlight.reply = reply;
           yield {type: 'text', delta: ev.delta};
         } else if (ev.type === 'done') {
           this.running = undefined;
+          this.inFlight = undefined;
           this.commitCallTokens();
           this.lastUsed.set(account.id, Date.now());
           if (this.releaseAfterTurn === account.id) {
@@ -325,6 +339,7 @@ export class Engine {
         }
       }
       this.running = undefined;
+      this.inFlight = undefined;
       this.commitCallTokens();
       if (!failure) failure = {kind: 'other', message: 'turn ended without a result'};
 
