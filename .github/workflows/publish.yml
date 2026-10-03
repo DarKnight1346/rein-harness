@@ -30,8 +30,23 @@ jobs:
       - run: npm test
       - run: npm run build
 
+  # Every supported platform must pass before a PR can merge (test, test-macos and test-windows are
+  # all required checks on main) and before anything is published.
+  test-macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+
   # Windows: typecheck + tests on a real Windows runner (Git Bash is preinstalled there, as most
-  # Windows developers have it). Not yet a required check.
+  # Windows developers have it).
   test-windows:
     runs-on: windows-latest
     steps:
@@ -46,7 +61,7 @@ jobs:
       - run: npm run build
 
   publish:
-    needs: test
+    needs: [test, test-macos, test-windows]
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:
