@@ -145,6 +145,8 @@ class CodexSession implements ProviderSession {
 
   /** Reasoning effort per turn (`low` for decider calls); undefined = model default. */
   effort: string | undefined;
+  /** Images produced by Codex's image generation during this session's turns. */
+  readonly generated: GeneratedImage[] = [];
 
   private constructor(private readonly client: AppServerClient, private readonly account: Account, model: string) {
     this.accountId = account.id;
@@ -163,7 +165,7 @@ class CodexSession implements ProviderSession {
     return s;
   }
 
-  static async open(opts: SessionOpts & {ephemeral?: boolean; webSearch?: boolean}): Promise<CodexSession> {
+  static async open(opts: SessionOpts & {ephemeral?: boolean; webSearch?: boolean; imageGeneration?: boolean}): Promise<CodexSession> {
     const dynamicTools = opts.tools?.tools.map((t) => ({type: 'function', name: t.name, description: t.description, inputSchema: t.inputSchema}));
     const client = await pool.get(opts.account);
     const s = new CodexSession(client, opts.account, opts.model);
@@ -183,8 +185,11 @@ class CodexSession implements ProviderSession {
           ...common,
           ephemeral: opts.ephemeral ?? false,
           ...(dynamicTools ? {dynamicTools} : {}),
-          // Per-thread override: the app-server runs with web_search disabled for every other thread.
-          ...(opts.webSearch ? {config: {web_search: 'live'}} : {}),
+          // Per-thread overrides: the app-server runs with web search and image generation
+          // disabled for every other thread.
+          ...(opts.webSearch || opts.imageGeneration
+            ? {config: {...(opts.webSearch ? {web_search: 'live'} : {}), ...(opts.imageGeneration ? {features: {image_generation: true}} : {})}}
+            : {}),
         });
     s.threadId = res.thread?.id;
     if (s.threadId && opts.tools) toolsByThread.set(s.threadId, opts.tools);
@@ -234,7 +239,10 @@ class CodexSession implements ProviderSession {
   private onNotification(n: Notification): void {
     const p = n.params ?? {};
     if (!this.turn || p.threadId !== this.threadId) return;
-    if (n.method === 'item/started' && p.item?.type === 'agentMessage' && this.turn.hasText) {
+    if (n.method === 'item/completed' && p.item?.type === 'imageGeneration') {
+      const i = p.item;
+      this.generated.push({base64: i.result ?? '', revisedPrompt: i.revisedPrompt ?? undefined, savedPath: i.savedPath ?? undefined, failure: i.failure ?? undefined});
+    } else if (n.method === 'item/started' && p.item?.type === 'agentMessage' && this.turn.hasText) {
       this.turn.queue.push({type: 'text', delta: '\n\n'}); // new message after a tool call
     } else if (n.method === 'thread/tokenUsage/updated') {
       // `last` = the latest model request; a turn with tool calls makes several, so sum them.
@@ -346,3 +354,33 @@ export const codexAdapter: ProviderAdapter = {
     pool.shutdown();
   },
 };
+
+/** One image from Codex's image generation (base64 PNG; `failure` when a usage limit was hit). */
+export type GeneratedImage = {base64: string; revisedPrompt?: string; savedPath?: string; failure?: {type: string; resetsAt?: number | null}};
+
+/**
+ * Rein's image_generate tool: one ephemeral Codex thread with image generation switched on for
+ * that thread only. `inputImages` are reference/edit sources. Returns the images and the reply.
+ */
+export async function codexGenerateImage(opts: {account: Account; model: string; prompt: string; inputImages?: ImageInput[]; timeoutMs?: number}): Promise<{images: GeneratedImage[]; text: string}> {
+  const session = await CodexSession.open({
+    account: opts.account,
+    model: opts.model,
+    systemPrompt: 'You generate images with your image generation tool. Make exactly what is asked (one image unless told otherwise), then reply with one short sentence describing it.',
+    ephemeral: true,
+    imageGeneration: true,
+  });
+  const timer = setTimeout(() => session.interrupt(), opts.timeoutMs ?? 300_000);
+  try {
+    let text = '';
+    for await (const ev of session.send(opts.prompt, opts.inputImages ?? [])) {
+      if (ev.type === 'text') text += ev.delta;
+      else if (ev.type === 'error') throw Object.assign(new Error(ev.message), {kind: ev.kind});
+      else if (ev.type === 'done' && ev.interrupted) throw new Error('image generation timed out');
+    }
+    return {images: session.generated, text: text.trim()};
+  } finally {
+    clearTimeout(timer);
+    session.close();
+  }
+}

@@ -13,6 +13,8 @@ export type ToolContext = {
   root: string;
   /** Other working directories (scratchpad, global skills, /add-dir and config additions). */
   extraRoots?: string[];
+  /** This session's scratchpad (also one of extraRoots). */
+  scratch?: string;
   /** Paths outside the working directories the user approved for this one call. */
   outsideAllowed?: string[];
   shells?: import('./shells.js').ShellManager;

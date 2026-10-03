@@ -20,6 +20,8 @@ export type ToolDef = {
   mainOnly?: boolean;
   /** Hidden from models when false (e.g. advisor while it's off). */
   enabled?(): boolean;
+  /** A mutating tool that writes into the session scratchpad when no path is given (no approval then). */
+  defaultsToScratch?: boolean;
   /** Paths the call touches; any outside the working directories needs the user's approval first. */
   paths?(args: any): string[];
 };

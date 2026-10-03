@@ -133,7 +133,7 @@ export class ToolHost extends EventEmitter {
         }
         ctx.outsideAllowed = outside;
       }
-      if (tool.mutating && tool.name !== 'shell' && this.inScratch(ctx, args)) approvedBy = 'scratchpad';
+      if (tool.mutating && tool.name !== 'shell' && this.inScratch(ctx, tool, args)) approvedBy = 'scratchpad';
       if (tool.mutating && !approvedBy) {
         const mode = this.opts.mode();
         const req = {tool, args, summary, preview: preview(tool, args), origin};
@@ -210,6 +210,7 @@ export class ToolHost extends EventEmitter {
     const config = (this.opts.configDirs?.() ?? []).map((d) => (d.startsWith('~/') ? path.join(os.homedir(), d.slice(2)) : d));
     return {
       root: this.opts.root,
+      scratch,
       extraRoots: [...(scratch ? [scratch] : []), globalSkills, ...config, ...this.addedDirs],
       shells: this.shells,
       shellMaxMs: this.opts.shellMaxMs?.(),
@@ -218,9 +219,10 @@ export class ToolHost extends EventEmitter {
   }
 
   /** File-tool target inside the scratchpad (not the project) → no approval needed. */
-  private inScratch(ctx: ToolContext, args: any): boolean {
+  private inScratch(ctx: ToolContext, tool: ToolDef, args: any): boolean {
     const scratch = this.opts.scratch?.();
-    if (!scratch || typeof args?.path !== 'string') return false;
+    if (!scratch) return false;
+    if (typeof args?.path !== 'string') return !!tool.defaultsToScratch; // e.g. image_generate without a path
     try {
       const real = resolveInRoot(ctx, args.path);
       const root = realpathSync(scratch);

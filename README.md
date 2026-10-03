@@ -81,7 +81,7 @@ In Terminal.app make sure View → Allow Mouse Reporting is on.
 | Command | |
 |---|---|
 | `/login` | Accounts: list, add Claude/Codex accounts, re-authenticate, remove; Jev API key |
-| `/model` | Chat model (`auto` or a model), decision model, compaction model · `/model auto`, `/model sonnet` |
+| `/model` | Chat model (`auto` or a model), subagent model, decision, compaction, advisor and web models · `/model auto`, `/model sonnet` |
 | `/usage` | Usage windows (5h / weekly / 30-day) and reset times per account · `/usage refresh` |
 | `/agents` | Subagents; click to view and message one (`/agent <id|main>` switches) |
 | `/resume` | Continue a saved conversation from this project |
@@ -120,6 +120,11 @@ Design, findings and status: [PLAN.md](PLAN.md). Tests: `npm test`. License: [MI
 - Big pastes collapse to `[Pasted text #1 +42 lines]`; Ctrl+V pastes a clipboard image; drag a file
   onto the terminal to attach it (images go to the model as images). Backspace removes a token.
 - Fullscreen: drag over the history to select — releasing copies it.
+
+### Images
+- `image_generate` gives every chat model (Claude included) Codex's image generation: describe an image, or pass
+  reference images to edit. PNGs save to the scratchpad or a path you give. Shown only while a Codex account
+  that can generate images is signed in.
 
 ### Web
 - `web_search` and `web_fetch` work with any chat model: searches run on the /model → Web model with

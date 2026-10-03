@@ -19,6 +19,8 @@ export type Config = {
   autoUpdate: boolean;
   /** Show accounts as "Claude Account 1" and redact emails/home paths in the UI (screenshot-safe). */
   hidePersonalInfo: boolean;
+  /** New-mode subagents: 'auto' = the agent picks (or the decision model), else a fixed model ref. */
+  subagentModel: string;
   /** Model that runs web_search (with its provider's native search) and reads pages for web_fetch. */
   webModel: string;
   /** Auto routing: switch models mid-conversation only when P(switch) ≥ this. */
@@ -58,6 +60,7 @@ export const DEFAULT_CONFIG: Config = {
   compactionModel: 'cheapest',
   advisorModel: 'off',
   webModel: 'cheapest',
+  subagentModel: 'auto',
   hidePersonalInfo: true,
   autoUpdate: true,
   additionalDirectories: [],

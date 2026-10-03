@@ -9,9 +9,10 @@ import type {Config} from '../store/config.js';
 import {modelLabel} from './format.js';
 import {Clickable} from './terminal/clicks.js';
 
-type Section = 'chat' | 'decision' | 'compaction' | 'advisor' | 'web';
+type Section = 'chat' | 'subagent' | 'decision' | 'compaction' | 'advisor' | 'web';
 const SECTIONS: {id: Section; title: string; key: keyof Config}[] = [
   {id: 'chat', title: 'Chat model', key: 'chatModel'},
+  {id: 'subagent', title: 'Subagents', key: 'subagentModel'},
   {id: 'decision', title: 'Decision model', key: 'decisionModel'},
   {id: 'compaction', title: 'Compaction model', key: 'compactionModel'},
   {id: 'advisor', title: 'Advisor', key: 'advisorModel'},
@@ -111,6 +112,7 @@ export function ModelScreen({onClose, onLog, bare}: {onClose(): void; onLog(kind
 function describe(s: Section): string {
   if (s === 'chat') return 'Model that answers you. auto = the decision model routes each task.';
   if (s === 'decision') return 'Routes auto mode and picks failover models. Jev if you have a key; else a cheap model with strict prompts.';
+  if (s === 'subagent') return 'Model for new subagents. auto = the agent picks per task (or the decision model). A fixed model is always used; forked subagents keep the current model.';
   if (s === 'web') return 'Runs web_search with its provider\'s built-in search, and reads fetched pages for web_fetch. Any signed-in Claude or Codex model works.';
   if (s === 'advisor') return 'A stronger (pricier) model agents can consult via the advisor tool for guidance at key moments. Off by default; never auto.';
   return 'Summarizes the conversation for /compact, long chats and handoffs between models.';
@@ -132,6 +134,9 @@ function optionsFor(s: Section, hasJev: boolean, cfg: Config): Option[] {
     const decider = cfg.decisionModel === 'jev' && hasJev ? 'Jev' : 'the decision model';
     return [{value: 'auto', label: 'auto', hint: `${decider} picks per task`}, ...modelOptions(models)];
   }
+  if (s === 'subagent') {
+    return [{value: 'auto', label: 'auto', hint: 'the agent picks per subagent, or the decision model'}, ...modelOptions(models)];
+  }
   if (s === 'decision') {
     return [
       {value: 'jev', label: 'Jev', hint: hasJev ? 'typesafe.ai · fast, ~free' : 'add a Jev API key in /login first', disabled: !hasJev},
@@ -152,6 +157,7 @@ function currentValue(s: Section, cfg: Config): string {
     const d = defaultRef(cfg);
     return d ? refKey(d) : '';
   }
+  if (s === 'subagent') return cfg.subagentModel ?? 'auto';
   return s === 'decision' ? cfg.decisionModel : s === 'advisor' ? cfg.advisorModel : s === 'web' ? cfg.webModel : cfg.compactionModel;
 }
 
