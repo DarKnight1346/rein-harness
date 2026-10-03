@@ -7,14 +7,16 @@ import {redact} from './privacy.js';
 const MAX_PREVIEW_LINES = 14;
 
 /**
- * Ask before a file change or shell command runs. 1/y = allow once, 2/a = allow file changes and
- * commands for the rest of this session, 3/n/esc = deny (the model is told to ask how to proceed).
+ * Ask before a file change or shell command runs. 1/y = allow once, 2/a = allow for the rest of
+ * this session, 3 = always allow calls like this (saves a rule to .rein/settings.json),
+ * n/4/esc = deny (the model is told to ask how to proceed).
  */
 export function ApprovalPrompt({req, onDecide, bare}: {req: ApprovalRequest; onDecide(d: ApprovalDecision): void; bare?: boolean}) {
   useInput((input, key) => {
     if (input === '1' || input === 'y' || key.return) onDecide('once');
     else if ((input === '2' || input === 'a') && !req.sensitive) onDecide('session');
-    else if (input === '3' || input === 'n' || key.escape) onDecide('deny');
+    else if (input === '3' && req.suggestion) onDecide('always');
+    else if (input === '4' || input === 'n' || key.escape) onDecide('deny');
   });
   const lines = req.preview ? req.preview.split('\n') : [];
   const shown = lines.slice(0, MAX_PREVIEW_LINES);
@@ -26,7 +28,12 @@ export function ApprovalPrompt({req, onDecide, bare}: {req: ApprovalRequest; onD
       ? `2 Allow ${outside.length === 1 ? 'this folder' : 'these folders'} this session`
       : '2 Allow reads outside the project this session'
     : '2 Allow all changes & commands this session';
-  const options: [ApprovalDecision, string][] = [['once', '1 Allow'], ...(req.sensitive ? [] : [['session', sessionLabel] as [ApprovalDecision, string]]), ['deny', '3 Deny']];
+  const options: [ApprovalDecision, string][] = [
+    ['once', '1 Allow'],
+    ...(req.sensitive ? [] : [['session', sessionLabel] as [ApprovalDecision, string]]),
+    ...(req.suggestion ? [['always', `3 Always allow ${req.suggestion} (this project)`] as [ApprovalDecision, string]] : []),
+    ['deny', '4 Deny'],
+  ];
   return (
     <Box flexDirection="column" {...(bare ? {} : {borderStyle: 'round' as const, borderColor: 'yellow', paddingX: 1})}>
       <Text>
@@ -59,7 +66,7 @@ export function ApprovalPrompt({req, onDecide, bare}: {req: ApprovalRequest; onD
           </Box>
         ))}
       </Box>
-      <Text dimColor>{req.sensitive ? 'enter/1 allow once · esc/3 deny' : 'enter/1 allow · 2 allow session · esc/3 deny'}</Text>
+      <Text dimColor>{req.sensitive ? 'enter/1 allow once · esc/4 deny' : `enter/1 allow · 2 allow session${req.suggestion ? ' · 3 always' : ''} · esc/4 deny`}</Text>
     </Box>
   );
 }

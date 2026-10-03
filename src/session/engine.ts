@@ -8,7 +8,7 @@ import type {Config} from '../store/config.js';
 import {DANGER_HEADROOM, headroom, usageStore} from '../store/usage.js';
 import {compactableCount, compactTranscript, type CompactReason, type CompactResult} from './compactor.js';
 import {systemPrompt} from './prompt.js';
-import {buildCarry, carryStart, estimateTokens, newTranscript, saveTranscript, scratchDir, type Message, type Transcript} from './transcript.js';
+import {buildCarry, carryStart, estimateTokens, newTranscript, saveTranscript, scratchDir, truncateTranscript, type Message, type Transcript} from './transcript.js';
 import {carriedTools, selectCarriedTools, type CarrySelector} from './carry.js';
 
 export type Route = {ref: ModelRef; reason: 'fixed' | 'auto' | 'sticky' | 'default' | 'failover'; confidence?: number};
@@ -154,6 +154,20 @@ export class Engine {
       this.cacheBroken = true;
     }
     return res;
+  }
+
+  /**
+   * /rewind: end the conversation just before message `index` (a user message). Native sessions
+   * no longer match the history, so the next turn starts fresh and carries what's left.
+   */
+  async rewind(index: number): Promise<void> {
+    const t = this.transcript;
+    this.closeActive();
+    if (t.summary && t.summary.coversUpTo > index) delete t.summary;
+    t.native = {};
+    this.lastUsage = undefined;
+    this.cacheBroken = true;
+    await truncateTranscript(t, index);
   }
 
   /** Switch to a saved conversation (`rein --continue` picker / `/resume`). */

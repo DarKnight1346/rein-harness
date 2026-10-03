@@ -6,6 +6,7 @@ import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {resolveInRoot, resolvePath, ToolError, workingDirs, type Origin, type ToolContext, type ToolResult} from './fs.js';
 import {TOOLS, toolByName, type ToolDef} from './registry.js';
+import {addProjectRule, check, loadRules, ruleTool, suggestRule, type Subject} from './permissions.js';
 import {ShellManager} from './shells.js';
 import type {DiffLine} from './diff.js';
 import {skillDirs} from '../skills/index.js';
@@ -20,11 +21,13 @@ export type ApprovalRequest = {
   outside?: string[];
   /** One of them is a credentials/secrets location: no "allow for the session" option. */
   sensitive?: boolean;
+  /** Rule offered as "always allow …" (saved to the project's .rein/settings.json). */
+  suggestion?: string;
 };
-export type ApprovalDecision = 'once' | 'session' | 'deny';
+export type ApprovalDecision = 'once' | 'session' | 'always' | 'deny';
 export type ApprovalMode = 'ask' | 'auto' | 'bypass';
 /** How a file change got approved (shown in the transcript). */
-export type ApprovedBy = 'user' | 'session' | 'auto' | 'bypass' | 'scratchpad';
+export type ApprovedBy = 'user' | 'session' | 'auto' | 'bypass' | 'scratchpad' | 'rule';
 export type ToolActivity =
   | {phase: 'start'; id: number; label: string; summary: string; origin?: Origin}
   | {phase: 'end'; id: number; label: string; summary: string; ok: boolean; result: string; approvedBy?: ApprovedBy; judge?: string; origin?: Origin; diff?: DiffLine[]};
@@ -46,6 +49,8 @@ export type ToolHostOptions = {
   judge?: (req: ApprovalRequest) => Promise<{allow: boolean; note: string}>;
   /** Extra working directories from config (`additionalDirectories`). */
   configDirs?: () => string[];
+  /** Save a file's state before a tool changes it (checkpoints for /rewind). */
+  checkpoint?: (file: string) => Promise<void>;
 };
 
 const MAX_RESULT_CHARS = 60_000;
@@ -108,14 +113,24 @@ export class ToolHost extends EventEmitter {
     let judge: string | undefined;
     try {
       const ctx: ToolContext = {...this.context(), origin};
+      // Permission rules (Claude Code format, .rein/.claude settings): deny blocks outright,
+      // allow skips the prompt. Every call is checked — even ones that wouldn't ask.
+      const subject = this.subject(ctx, tool, args);
+      const verdict = check(loadRules(this.opts.root), subject, (p) => this.pathForms(p));
+      if (verdict === 'deny') throw new ToolError(`blocked by a permission rule (deny) in the user's settings; ask the user instead of retrying`);
+      const suggestion = suggestRule(subject, (p) => this.ruleRel(p));
+      const remember = (decision: ApprovalDecision) => {
+        if (decision === 'always' && suggestion) addProjectRule(this.opts.root, suggestion);
+      };
       // Paths outside the working directories: ask first, like Claude Code ("allow this read
       // outside the working directories?"). Writes there always need an explicit yes.
       const outside = this.outsidePaths(ctx, tool, args);
       if (outside.length) {
         const mode = this.opts.mode();
         const sensitive = outside.some(isSensitivePath);
-        const req = {tool, args, summary, preview: preview(tool, args), origin, outside, sensitive};
-        if (mode === 'bypass' && !sensitive) approvedBy = 'bypass';
+        const req = {tool, args, summary, preview: preview(tool, args), origin, outside, sensitive, suggestion: sensitive ? undefined : suggestion};
+        if (verdict === 'allow') approvedBy = 'rule';
+        else if (mode === 'bypass' && !sensitive) approvedBy = 'bypass';
         else if (!tool.mutating && this.outsideReadsAllowed && !sensitive) approvedBy = 'session';
         else if (mode === 'auto' && !tool.mutating && !sensitive && this.opts.judge) {
           const verdict = await this.opts.judge(req).catch((err) => ({allow: false, note: `judge failed: ${(err as Error).message}`}));
@@ -125,19 +140,21 @@ export class ToolHost extends EventEmitter {
         if (!approvedBy) {
           const decision = await this.opts.approve(req);
           if (decision === 'deny') throw new ToolError(`the user denied access to ${outside.join(', ')} (outside the project); ask them how to proceed instead of retrying`);
+          remember(decision);
           if (decision === 'session' && !sensitive) {
             if (tool.mutating) this.addDirs(outside.map((p) => (existsSync(p) && statSync(p).isDirectory() ? p : path.dirname(p))));
             else this.outsideReadsAllowed = true;
           }
-          approvedBy = decision === 'session' ? 'session' : 'user';
+          approvedBy = decision === 'session' ? 'session' : decision === 'always' ? 'rule' : 'user';
         }
         ctx.outsideAllowed = outside;
       }
       if (tool.mutating && tool.name !== 'shell' && this.inScratch(ctx, tool, args)) approvedBy = 'scratchpad';
       if (tool.mutating && !approvedBy) {
         const mode = this.opts.mode();
-        const req = {tool, args, summary, preview: preview(tool, args), origin};
-        if (mode === 'bypass') approvedBy = 'bypass';
+        const req = {tool, args, summary, preview: preview(tool, args), origin, suggestion};
+        if (verdict === 'allow') approvedBy = 'rule';
+        else if (mode === 'bypass') approvedBy = 'bypass';
         else if (this.sessionAllowed) approvedBy = 'session';
         else if (mode === 'auto' && this.opts.judge) {
           // Never auto-deny: a doubtful verdict (or a judge failure) goes to the user.
@@ -149,8 +166,13 @@ export class ToolHost extends EventEmitter {
           const decision = await this.opts.approve(req);
           if (decision === 'deny') throw new ToolError('the user denied this action; ask them how to proceed instead of retrying');
           if (decision === 'session') this.sessionAllowed = true;
-          approvedBy = decision === 'session' ? 'session' : 'user';
+          remember(decision);
+          approvedBy = decision === 'session' ? 'session' : decision === 'always' ? 'rule' : 'user';
         }
+      }
+      // Checkpoint every file this call may change (not scratchpad files) before it runs.
+      if (ruleTool(tool.name) === 'edit' && this.opts.checkpoint && approvedBy !== 'scratchpad') {
+        for (const p of subject.paths ?? []) await this.opts.checkpoint(p).catch(() => {});
       }
       result = await tool.run(ctx, args ?? {});
     } catch (err) {
@@ -159,6 +181,35 @@ export class ToolHost extends EventEmitter {
     if (result.text.length > MAX_RESULT_CHARS) result = {...result, text: result.text.slice(0, MAX_RESULT_CHARS) + '\n… [output truncated]'};
     this.emit('activity', {phase: 'end', id, label: tool.label, summary, ok: result.ok, result: result.text, approvedBy, judge, origin, diff: result.diff} satisfies ToolActivity);
     return {ok: result.ok, text: result.text}; // the diff is for the user, not the model
+  }
+
+  /** What permission rules look at for this call: the command, the paths it touches, the URL. */
+  private subject(ctx: ToolContext, tool: ToolDef, args: any): Subject {
+    const paths: string[] = [];
+    for (const p of tool.paths?.(args) ?? []) {
+      try {
+        paths.push(resolvePath(ctx, p).real);
+      } catch {}
+    }
+    return {
+      tool: tool.name,
+      command: tool.name === 'shell' && typeof args?.command === 'string' ? args.command : undefined,
+      paths: paths.length ? paths : undefined,
+      url: typeof args?.url === 'string' ? args.url : undefined,
+    };
+  }
+
+  /** A path as rules may name it: project-relative and absolute (rules may use ~/ too). */
+  private pathForms(abs: string): string[] {
+    return [path.relative(realpathSync(this.opts.root), abs) || '.', abs];
+  }
+
+  /** How a suggested rule names a path: project-relative inside the project, else ~/… or absolute. */
+  private ruleRel(abs: string): string {
+    const rel = path.relative(realpathSync(this.opts.root), abs);
+    if (rel && !rel.startsWith('..') && !path.isAbsolute(rel)) return rel;
+    const home = os.homedir();
+    return abs.startsWith(home + path.sep) ? `~${abs.slice(home.length)}` : abs;
   }
 
   /** Add working directories for this session (must exist); returns the ones added. */

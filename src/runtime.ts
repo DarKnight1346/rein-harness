@@ -14,6 +14,7 @@ import {SubagentManager, SUBAGENT_PROMPT, type Subagent} from './agents/manager.
 import {agentTools} from './agents/tools.js';
 import {advisorRef, advisorTool} from './agents/advisor.js';
 import {GoalManager} from './goals/manager.js';
+import {Checkpoints} from './session/checkpoints.js';
 import {startUsageRefresh} from './accounts/usage.js';
 import {goalDoneTool} from './goals/tool.js';
 import {webTools} from './tools/web.js';
@@ -51,7 +52,18 @@ export class Runtime {
     sessionId: () => this.engine?.transcript.id,
     judge: (req) => this.judgeChange(req),
     configDirs: () => this.config?.additionalDirectories ?? [],
+    checkpoint: (file) => this.checkpoints.snapshot(this.currentTurn(), file),
   });
+
+  /** File checkpoints for /rewind, per conversation. */
+  readonly checkpoints = new Checkpoints(() => this.engine?.transcript.id ?? 'none');
+
+  /** Index of the user message the agent is working on (checkpoints are grouped by it). */
+  currentTurn(): number {
+    const m = this.engine?.transcript.messages ?? [];
+    for (let i = m.length - 1; i >= 0; i--) if (m[i]!.role === 'user') return i;
+    return 0;
+  }
 
   /**
    * `auto` approvals: one decision-model call (Jev or the cheap LLM) with minimal state — the user's

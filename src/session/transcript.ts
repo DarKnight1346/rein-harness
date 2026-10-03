@@ -126,6 +126,26 @@ async function appendNew(t: Transcript): Promise<void> {
   await writeJson(indexFile(t.id), indexOf(t));
 }
 
+/**
+ * /rewind: drop messages from `to` on. The log keeps every earlier line (history is never lost);
+ * a `truncate` marker makes loading stop there, and new messages reuse those indices.
+ */
+export function truncateTranscript(t: Transcript, to: number): Promise<void> {
+  t.messages.length = Math.min(t.messages.length, to);
+  const prev = writing.get(t.id) ?? Promise.resolve();
+  const next = prev
+    .then(async () => {
+      await mkdir(paths.sessions(), {recursive: true, mode: 0o700});
+      await appendFile(jsonlFile(t.id), JSON.stringify({t: 'truncate', to}) + '\n', {mode: 0o600});
+      const state = persisted.get(t);
+      persisted.set(t, {count: Math.min(state?.count ?? 0, to), meta: state?.meta ?? ''});
+    })
+    .then(() => appendNew(t))
+    .catch(() => {});
+  writing.set(t.id, next);
+  return next;
+}
+
 /** Stream a session's JSONL into a transcript (meta lines folded in order). */
 async function readJsonl(id: string): Promise<Transcript | undefined> {
   if (!existsSync(jsonlFile(id))) return undefined;
@@ -142,6 +162,8 @@ async function readJsonl(id: string): Promise<Transcript | undefined> {
     if (rec.t === 'msg') {
       const {t: _t, i, ...m} = rec;
       t.messages[i] = m;
+    } else if (rec.t === 'truncate') {
+      t.messages.length = Math.min(t.messages.length, rec.to); // /rewind (older lines stay in the log)
     } else if (rec.t === 'meta') {
       const {t: _t, ...meta} = rec;
       Object.assign(t, meta);

@@ -20,6 +20,9 @@ import {report as agentReport} from '../agents/tools.js';
 import {describeChatModel, resolveModelQuery} from './ModelScreen.js';
 import {useChat} from './useChat.js';
 import {Attachments} from './attachments.js';
+import type {RewindMode, RewindPoint} from './RewindScreen.js';
+import {settingsFiles} from '../tools/permissions.js';
+import {readFileSync} from 'node:fs';
 import {accountName, hidingIdentity} from './privacy.js';
 import nodePath from 'node:path';
 
@@ -41,6 +44,7 @@ export type Overlay =
   | {name: 'help'}
   | {name: 'shells'}
   | {name: 'resume'; sessions: SessionInfo[]}
+  | {name: 'rewind'; points: RewindPoint[]}
   | {name: 'agents'}
   | {name: 'goal'}
   | {name: 'btw'; question: string; answer?: string; model?: string; mode?: 'fork' | 'context'; done?: boolean; error?: string}
@@ -193,6 +197,52 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
     },
     {isActive: overlay.name === 'none' && (viewing ? runtime.agents.isActive(viewing) : chat.busy)},
   );
+
+  // Esc twice (idle, empty input): open /rewind, like Claude Code.
+  const lastEsc = useRef(0);
+  useInput(
+    (_input, key) => {
+      if (!key.escape) return;
+      const now = Date.now();
+      if (now - lastEsc.current < 600) {
+        lastEsc.current = 0;
+        openRewind();
+      } else lastEsc.current = now;
+    },
+    {isActive: overlay.name === 'none' && !viewing && !chat.busy && !draft},
+  );
+
+  /** /rewind: your messages, newest first, with how many files Rein changed since each. */
+  function openRewind() {
+    const points: RewindPoint[] = runtime.engine.transcript.messages
+      .map((m, index) => ({m, index}))
+      .filter(({m}) => m.role === 'user')
+      .map(({m, index}) => ({index, at: m.at, text: displayText(m.text), files: runtime.checkpoints.changedSince(index).length}))
+      .reverse();
+    setOverlay({name: 'rewind', points});
+  }
+
+  const doRewind = async (index: number, mode: RewindMode) => {
+    setOverlay({name: 'none'});
+    if (chat.busy) chat.interrupt();
+    const t = runtime.engine.transcript;
+    const text = t.messages[index]?.text ?? '';
+    if (mode !== 'conversation') {
+      const r = runtime.checkpoints.restore(index);
+      const n = r.restored.length + r.removed.length;
+      log('info', `Rewound ${n} file${n === 1 ? '' : 's'}${r.removed.length ? ` (${r.removed.length} created since were removed)` : ''}${r.skipped.length ? ` · ${r.skipped.length} too large to restore: ${r.skipped.join(', ')}` : ''}.`);
+    }
+    if (mode !== 'code') {
+      await runtime.engine.rewind(index);
+      opts.onClear();
+      setEntries([banner()]);
+      replay(runtime.engine.transcript, add);
+      prevDraft.current = displayText(text);
+      setDraft(displayText(text)); // edit and resend
+      log('info', 'Conversation rewound — your message is back in the input.');
+    }
+    bump();
+  };
 
   const suggestions = suggestCommands(draft, skills);
   const selected = suggestions[Math.min(suggestIndex, suggestions.length - 1)];
@@ -347,6 +397,30 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
     const opensWindow = ['login', 'usage', 'context', 'help', 'update', 'configure', 'shells', 'btw', 'resume', 'agents', 'agent'].includes(parsed.name) || (parsed.name === 'model' && !parsed.args);
     if (!(windowed && opensWindow)) log('user', raw.trim());
     switch (parsed.name) {
+      case 'rewind':
+        if (chat.busy) {
+          log('info', 'The agent is working — press esc to stop it first, then /rewind.');
+          break;
+        }
+        openRewind();
+        break;
+      case 'permissions': {
+        const lines: string[] = [];
+        for (const file of settingsFiles(process.cwd())) {
+          let p: any;
+          try {
+            p = JSON.parse(readFileSync(file, 'utf8'))?.permissions;
+          } catch {
+            continue;
+          }
+          if (!p?.allow?.length && !p?.deny?.length) continue;
+          lines.push(file);
+          for (const r of p.allow ?? []) lines.push(`  allow ${r}`);
+          for (const r of p.deny ?? []) lines.push(`  deny  ${r}`);
+        }
+        log('info', lines.length ? `Permission rules (deny wins):\n${lines.join('\n')}` : 'No permission rules yet. Choose "3 Always allow" in an approval prompt, or add "permissions": {"allow": [...], "deny": [...]} to .rein/settings.json (Claude Code format; .claude/settings.json rules apply too).');
+        break;
+      }
       case 'add-dir': {
         const arg = parsed.args.trim();
         if (!arg) {
@@ -707,17 +781,20 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
 
   return {
     entries, add, log, overlay, setOverlay, closeOverlay, finishImport, ready, updating, updateLog, statusTick, bump,
-    draft, onDraft, onSubmit, onPaste, onImagePaste, runCommand, suggestions, selected, setSuggestIndex, inputActive, chat, skills, openShells, queued, exitArmed, compacting, pickSession,
+    draft, onDraft, onSubmit, onPaste, onImagePaste, doRewind, runCommand, suggestions, selected, setSuggestIndex, inputActive, chat, skills, openShells, queued, exitArmed, compacting, pickSession,
     view, setView, viewing, goalNote,
   };
 }
 
 /** Show the last few turns of a resumed conversation. */
+/** A stored user message as the user typed it (skill prompts back to `/name args`). */
+export const displayText = (text: string) => text.replace(/^<skill name="([^"]+)"[\s\S]*?<\/skill>\s*/, '/$1 ');
+
 function replay(t: Transcript, add: AddEntry): void {
   const recent = t.messages.slice(-10);
   add({kind: 'info', text: t.messages.length > recent.length ? `Resumed conversation (${t.messages.length} messages; showing the last ${recent.length})` : 'Resumed conversation'});
   for (const m of recent) {
-    if (m.role === 'user') add({kind: 'user', text: m.text.replace(/^<skill name="([^"]+)"[\s\S]*?<\/skill>\s*/, '/$1 ')});
+    if (m.role === 'user') add({kind: 'user', text: displayText(m.text)});
     else {
       for (const tool of m.tools ?? []) add({kind: 'tool', ...tool});
       add({kind: 'assistant', text: m.text, first: true});

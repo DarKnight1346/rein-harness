@@ -35,6 +35,7 @@ export function approvalNote(approvedBy?: string, judge?: string): string {
   if (approvedBy === 'bypass') return ' · bypass';
   if (approvedBy === 'session') return ' · allowed for session';
   if (approvedBy === 'scratchpad') return ' · scratchpad';
+  if (approvedBy === 'rule') return ' · allowed by rule';
   if (approvedBy === 'user') return judge ? ` · you approved (judge ${judge})` : ' · you approved';
   return '';
 }

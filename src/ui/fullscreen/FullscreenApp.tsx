@@ -14,6 +14,7 @@ import {ModelScreen} from '../ModelScreen.js';
 import {Clickable, useClickable} from '../terminal/clicks.js';
 import {TextInput} from '../TextInput.js';
 import {goalSummary, useRein} from '../useRein.js';
+import {RewindScreen} from '../RewindScreen.js';
 import {hidingIdentity, redact} from '../privacy.js';
 import {contextPct, enabledItems, statusInfo} from '../layout.js';
 import {ConfigureScreen} from '../ConfigureScreen.js';
@@ -172,6 +173,12 @@ export function FullscreenApp({resume}: {resume: Resume}) {
                   : [chalk.dim('Forking the agent to answer… the main agent keeps working.')]
             }
           />
+        );
+      case 'rewind':
+        return (
+          <Window title="Rewind" width={windowWidth} onClose={r.closeOverlay}>
+            <RewindScreen points={overlay.points} onPick={(i, m) => void r.doRewind(i, m)} onCancel={r.closeOverlay} />
+          </Window>
         );
       case 'resume':
         return (
