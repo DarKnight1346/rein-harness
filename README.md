@@ -14,7 +14,7 @@ and a compaction model. No OAuth tokens are extracted: all traffic goes through 
 ## Install
 
 **Requirements**
-- macOS or Linux, and **Node.js 20+** (`node --version`)
+- macOS or Linux, and **Node.js 22+** (`node --version`)
 - At least one of the official CLIs, installed and signed in:
   - **Claude Code** — `curl -fsSL https://claude.ai/install.sh | bash` (or `npm install -g @anthropic-ai/claude-code`), then run `claude` once to sign in
   - **Codex** — `npm install -g @openai/codex`, then `codex login`

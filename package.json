@@ -33,7 +33,7 @@
     "LICENSE"
   ],
   "engines": {
-    "node": ">=20"
+    "node": ">=22"
   },
   "scripts": {
     "dev": "tsx src/cli.tsx",
@@ -58,7 +58,6 @@
     "wrap-ansi": "^10.0.2"
   },
   "devDependencies": {
-    "@types/diff": "^7.0.2",
     "@types/node": "^26.6.4",
     "@types/react": "^19.3.0",
     "@types/turndown": "^5.0.6",
