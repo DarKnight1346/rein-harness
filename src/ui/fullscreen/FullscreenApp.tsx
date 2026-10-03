@@ -17,6 +17,10 @@ import {goalSummary, useRein} from '../useRein.js';
 import {RewindScreen} from '../RewindScreen.js';
 import {McpScreen} from '../McpScreen.js';
 import {todoLine} from '../../tools/todo.js';
+import {splashLines} from './splash.js';
+
+const SPLASH_FADE_IN_MS = 700;
+const SPLASH_FADE_OUT_MS = 900;
 import {hidingIdentity, redact} from '../privacy.js';
 import {contextPct, enabledItems, statusInfo} from '../layout.js';
 import {ConfigureScreen} from '../ConfigureScreen.js';
@@ -92,6 +96,26 @@ export function FullscreenApp({resume}: {resume: Resume}) {
     if (chat.live) out.push(...assistantLines(chat.live, textWidth).map(redact));
     return out;
   }, [r.entries, chat.live, textWidth, hide]);
+  // Blank-state splash: fades in at launch and out once the first message is sent (and again after
+  // /clear). Animated at ~20 fps while fading, a slow color drift otherwise.
+  const hasUserMessage = r.entries.some((e) => e.kind === 'user');
+  const [splashPhase, setSplashPhase] = useState<{fadeIn: number; fadeOut?: number}>({fadeIn: Date.now()});
+  const [splashTick, setSplashTick] = useState(0);
+  useEffect(() => {
+    if (hasUserMessage && !splashPhase.fadeOut) setSplashPhase((p) => ({...p, fadeOut: Date.now()}));
+    if (!hasUserMessage && splashPhase.fadeOut) setSplashPhase({fadeIn: Date.now()}); // /clear
+  }, [hasUserMessage]);
+  const now = Date.now();
+  const splashOpacity = splashPhase.fadeOut ? 1 - (now - splashPhase.fadeOut) / SPLASH_FADE_OUT_MS : Math.min(1, (now - splashPhase.fadeIn) / SPLASH_FADE_IN_MS);
+  const splashVisible = !viewing && splashOpacity > 0;
+  const fading = splashVisible && (splashOpacity < 1 || !!splashPhase.fadeOut);
+  useEffect(() => {
+    if (!splashVisible) return;
+    const t = setInterval(() => setSplashTick((x) => x + 1), fading ? 50 : 150);
+    return () => clearInterval(t);
+  }, [splashVisible, fading]);
+  const splash = splashVisible ? splashLines(textWidth, splashOpacity, splashTick) : undefined;
+
   // Viewing a subagent: its conversation replaces the main history (recomputed on its updates).
   const lines = viewing ? agentLines(viewing, textWidth).map(redact) : mainLines;
 
@@ -307,6 +331,7 @@ export function FullscreenApp({resume}: {resume: Resume}) {
         <Box flexDirection="column" flexGrow={1} flexShrink={1} flexBasis={0} minWidth={0} height={mainHeight} overflow="hidden">
           <History
             width={textWidth}
+            splash={splash}
             lines={lines}
             scroll={scroll}
             onScroll={(n, vp) => scrollBy(n, vp)}
@@ -394,6 +419,8 @@ type HistoryProps = {
   selection: Selection | undefined;
   onSelect(sel: Selection | undefined): void;
   onCopy(text: string): void;
+  /** Blank-state graphic, drawn centered in the empty rows above the messages (if it fits). */
+  splash?: string[];
 };
 
 /**
@@ -401,7 +428,7 @@ type HistoryProps = {
  * terminal's own selection is unavailable while mouse reporting is on); release copies it.
  * Dragging past the top/bottom edge scrolls.
  */
-function History({width, lines, scroll, onScroll, selection, onSelect, onCopy}: HistoryProps) {
+function History({width, lines, scroll, onScroll, selection, onSelect, onCopy, splash}: HistoryProps) {
   const ref = useRef(null);
   const {height} = useBoxMetrics(ref);
   const viewport = Math.max(1, height);
@@ -438,8 +465,19 @@ function History({width, lines, scroll, onScroll, selection, onSelect, onCopy}: 
       if (text.trim()) onCopy(text);
     },
   });
+  // The splash sits in the empty space above the messages, vertically centered; skipped if cramped.
+  const showSplash = splash && topPad >= splash.length + 2;
   return (
     <Box ref={ref} flexDirection="column" flexGrow={1} flexShrink={1} overflow="hidden" justifyContent="flex-end" paddingX={1}>
+      {showSplash ? (
+        <Box flexDirection="column" height={topPad} justifyContent="center" flexShrink={0}>
+          {splash!.map((l, i) => (
+            <Text key={`s${i}`} wrap="truncate">
+              {l || ' '}
+            </Text>
+          ))}
+        </Box>
+      ) : null}
       {visible.map((line, i) => {
         const index = start + i;
         const plain = selection ? stripAnsi(line) : '';

@@ -1,3 +1,4 @@
+import {execFileSync} from 'node:child_process';
 import {spawn} from '../util/platform.js';
 import {existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync} from 'node:fs';
 import {reinHome} from '../store/paths.js';
@@ -16,9 +17,24 @@ export const TESTED_CODEX = '0.160';
 /** Rein's install folder. REIN_INSTALL_ROOT overrides it (tests: self-update must never touch the real install). */
 export const reinRoot = () => process.env.REIN_INSTALL_ROOT ?? path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 
+let cachedVersion: string | undefined;
+
+/**
+ * Rein's version. From npm it's package.json's; a source checkout's package.json never changes
+ * (CI picks the number when it publishes), so a checkout reports its newest release tag instead
+ * (`git describe`: e.g. 0.1.15, or 0.1.15-3-gabc1234 with local commits on top).
+ */
 export function reinVersion(): string {
+  if (cachedVersion) return cachedVersion;
+  const root = reinRoot();
+  if (existsSync(path.join(root, '.git'))) {
+    try {
+      const tag = execFileSync('git', ['-C', root, 'describe', '--tags', '--match', 'v[0-9]*'], {encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], timeout: 3000}).trim();
+      if (tag) return (cachedVersion = tag.replace(/^v/, ''));
+    } catch {}
+  }
   try {
-    return JSON.parse(readFileSync(path.join(reinRoot(), 'package.json'), 'utf8')).version;
+    return (cachedVersion = JSON.parse(readFileSync(path.join(root, 'package.json'), 'utf8')).version);
   } catch {
     return 'unknown';
   }
@@ -174,7 +190,8 @@ export async function autoUpdate(notify: (text: string) => void): Promise<void> 
   if (kind === 'other') return;
   const current = reinVersion();
   const latest = await latestVersion();
-  if (!latest || compareVersions(latest, current) <= 0) return;
+  // "0.1.15-3-gabc1234" (a checkout ahead of a tag) compares as its release 0.1.15.
+  if (!latest || compareVersions(latest, current.replace(/-\d+-g[0-9a-f]+$/, '')) <= 0) return;
   if (kind === 'checkout') {
     notify(`Rein ${latest} is on npm (this checkout is ${current}) — git pull to update.`);
     return;
