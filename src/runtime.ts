@@ -17,7 +17,7 @@ import {GoalManager} from './goals/manager.js';
 import {goalDoneTool} from './goals/tool.js';
 import {webTools} from './tools/web.js';
 import {newTranscript, saveTranscript} from './session/transcript.js';
-import {systemPrompt} from './session/prompt.js';
+import {setExtraWorkingDirs, systemPrompt} from './session/prompt.js';
 import {parseRef, refKey, type ModelRef, type TokenCount, type ToolBinding} from './providers/types.js';
 import {decide} from './decider/index.js';
 import {headTail} from './router/auto.js';
@@ -45,6 +45,7 @@ export class Runtime {
     scratch: () => this.engine?.scratch,
     sessionId: () => this.engine?.transcript.id,
     judge: (req) => this.judgeChange(req),
+    configDirs: () => this.config?.additionalDirectories ?? [],
   });
 
   /**
@@ -62,8 +63,9 @@ export class Runtime {
     const decision = await decide(this.config, state, {
       allow: {
         type: 'noul',
-        instructions:
-          req.tool.name === 'shell'
+        instructions: req.outside?.length
+          ? `The agent wants to ${req.tool.mutating ? 'change' : 'read'} ${req.outside.join(', ')}, which is outside the project folder. Is that clearly something the user asked for (directly or as a necessary step) and harmless — not credentials, secrets or private data unrelated to the task?`
+          : req.tool.name === 'shell'
             ? 'Is this shell command clearly something the user asked for (directly or as a necessary step, e.g. running tests/builds or a dev server they want), and safe — no deleting files, force-pushing, installing system software, touching credentials, or contacting unexpected hosts?'
             : 'Is this file change clearly something the user asked for (directly or as a necessary step), and safe — not deleting or overwriting unrelated work?',
         criteria: {true: 'clearly requested and safe', false: 'not requested, unclear, or risky'},
@@ -209,6 +211,7 @@ export class Runtime {
       ...webTools(() => this.config),
     );
     this.config = await loadConfig();
+    setExtraWorkingDirs(() => this.tools.extraWorkingDirs());
     await usageStore.load();
     const router = makeRouter(() => this.config, (...a) => this.auto(...a));
     const host = this.tools;

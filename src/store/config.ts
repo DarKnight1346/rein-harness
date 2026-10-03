@@ -13,6 +13,8 @@ export type Config = {
   compactionModel: string;
   /** Advisor the agents can consult (`advisor` tool): `off` (default) or a model ref — never auto. */
   advisorModel: string;
+  /** Extra working directories (like Claude Code's additionalDirectories): tools use them without asking. */
+  additionalDirectories: string[];
   /** Check npm on launch and install a newer Rein in the background. */
   autoUpdate: boolean;
   /** Show accounts as "Claude Account 1" and redact emails/home paths in the UI (screenshot-safe). */
@@ -58,6 +60,7 @@ export const DEFAULT_CONFIG: Config = {
   webModel: 'cheapest',
   hidePersonalInfo: true,
   autoUpdate: true,
+  additionalDirectories: [],
   autoSwitchThreshold: 0.7,
   autoMinConfidence: 0.45,
   maxUsedPct: 98,

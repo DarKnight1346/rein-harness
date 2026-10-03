@@ -20,6 +20,8 @@ export type ToolDef = {
   mainOnly?: boolean;
   /** Hidden from models when false (e.g. advisor while it's off). */
   enabled?(): boolean;
+  /** Paths the call touches; any outside the working directories needs the user's approval first. */
+  paths?(args: any): string[];
 };
 
 const str = (description: string) => ({type: 'string', description});
@@ -28,6 +30,7 @@ const str = (description: string) => ({type: 'string', description});
 export const TOOLS: ToolDef[] = [
   {
     name: 'read',
+    paths: (args) => [args?.path].filter((x): x is string => typeof x === 'string'),
     label: 'Read',
     description:
       'Read a file in the project. Returns lines prefixed with their 1-based line number and a tab (like `cat -n`); the prefix is not part of the file. Use offset/limit for large files. Reading a directory lists its entries.',
@@ -42,6 +45,7 @@ export const TOOLS: ToolDef[] = [
   },
   {
     name: 'list',
+    paths: (args) => [args?.path ?? '.'].filter((x): x is string => typeof x === 'string'),
     label: 'List',
     description:
       'List files and folders in a project directory as a tree (folders first, files with sizes). depth (1–5, default 1) recurses; hidden entries and .git/node_modules/dist/build are skipped unless all: true.',
@@ -59,6 +63,7 @@ export const TOOLS: ToolDef[] = [
   },
   {
     name: 'write',
+    paths: (args) => [args?.path].filter((x): x is string => typeof x === 'string'),
     label: 'Write',
     description: 'Create a file or overwrite it entirely with `content`. Creates parent directories. Prefer `edit` for changes to existing files.',
     inputSchema: {type: 'object', properties: {path: str('File path, relative to the project root'), content: str('Full file content')}, required: ['path', 'content']},
@@ -68,6 +73,7 @@ export const TOOLS: ToolDef[] = [
   },
   {
     name: 'edit',
+    paths: (args) => [args?.path].filter((x): x is string => typeof x === 'string'),
     label: 'Edit',
     description:
       'Replace an exact string in a file. `old_string` must match the file exactly (whitespace included, without read line-number prefixes) and be unique unless `replace_all` is true; include surrounding lines to make it unique. Read the file first.',
@@ -87,6 +93,7 @@ export const TOOLS: ToolDef[] = [
   },
   {
     name: 'delete',
+    paths: (args) => [args?.path].filter((x): x is string => typeof x === 'string'),
     label: 'Delete',
     description: 'Delete a file, or a directory (non-empty directories require recursive: true).',
     inputSchema: {type: 'object', properties: {path: str('Path, relative to the project root'), recursive: {type: 'boolean', description: 'Allow deleting a non-empty directory'}}, required: ['path']},
@@ -96,6 +103,7 @@ export const TOOLS: ToolDef[] = [
   },
   {
     name: 'search',
+    paths: (args) => [args?.path ?? '.'].filter((x): x is string => typeof x === 'string'),
     label: 'Search',
     description:
       'Search the project. Default: regex over file contents, returning `path:line:text` (respects .gitignore). With files_only: regex over file paths. Narrow with `path` (a directory or file) and `glob` (e.g. "*.ts", "src/**/*.tsx").',
@@ -116,6 +124,7 @@ export const TOOLS: ToolDef[] = [
   },
   {
     name: 'shell',
+    paths: (args) => [args?.cwd ?? '.'].filter((x): x is string => typeof x === 'string'),
     label: 'Shell',
     description:
       `Run a shell command in the project (${process.env.SHELL || '/bin/sh'} -c). Foreground (default) waits and returns the output and exit code; ` +

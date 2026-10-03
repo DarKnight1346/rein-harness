@@ -1,3 +1,4 @@
+import {realpathSync} from 'node:fs';
 import {mkdtemp} from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -55,7 +56,12 @@ describe('shell tools via ToolHost', () => {
     expect((await host.call('shell_logs', {id: 3})).text).toContain('started');
     expect((await host.call('shell_logs', {})).text).toMatch(/#3 background · running/);
     expect((await host.call('shell_kill', {id: 3})).text).toMatch(/Stopped #3/);
-    expect((await host.call('shell', {command: 'ls', cwd: '../'})).text).toMatch(/outside the project/);
     host.close();
+    // A cwd outside the project asks about the outside path; a denial blocks it.
+    const outsideAsks: string[][] = [];
+    const strict = new ToolHost({root, mode: () => 'ask', approve: async (r) => (outsideAsks.push(r.outside ?? []), 'deny')});
+    expect((await strict.call('shell', {command: 'ls', cwd: '../'})).text).toMatch(/denied access .*outside the project/);
+    expect(outsideAsks[0]?.[0]).toBe(realpathSync(path.dirname(root)));
+    strict.close();
   });
 });
