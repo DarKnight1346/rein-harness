@@ -190,8 +190,8 @@ export function suggestRule(s: Subject, rel: (p: string) => string): string | un
     }
   }
   if (s.paths?.length === 1) {
-    const r = rel(s.paths[0]!);
-    const dir = path.dirname(r);
+    const r = rel(s.paths[0]!).replace(/\\/g, '/');
+    const dir = path.posix.dirname(r);
     return `${tool}(${dir === '.' ? '**' : `${dir}/**`})`;
   }
   return tool === 'edit' || tool === 'read' ? undefined : tool;

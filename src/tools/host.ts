@@ -4,7 +4,7 @@ import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {resolveInRoot, resolvePath, ToolError, workingDirs, type Origin, type ToolContext, type ToolResult} from './fs.js';
+import {resolveInRoot, resolvePath, toPosix, ToolError, workingDirs, type Origin, type ToolContext, type ToolResult} from './fs.js';
 import {TOOLS, toolByName, type ToolDef} from './registry.js';
 import {addProjectRule, check, loadRules, ruleTool, suggestRule, type Rules, type Subject} from './permissions.js';
 import {hasHooks, runHooks} from '../hooks.js';
@@ -234,9 +234,9 @@ export class ToolHost extends EventEmitter {
   /** How a suggested rule names a path: project-relative inside the project, else ~/… or absolute. */
   private ruleRel(abs: string): string {
     const rel = path.relative(realpathSync(this.opts.root), abs);
-    if (rel && !rel.startsWith('..') && !path.isAbsolute(rel)) return rel;
+    if (rel && !rel.startsWith('..') && !path.isAbsolute(rel)) return toPosix(rel);
     const home = os.homedir();
-    return abs.startsWith(home + path.sep) ? `~${abs.slice(home.length)}` : abs;
+    return toPosix(abs.startsWith(home + path.sep) ? `~${abs.slice(home.length)}` : abs);
   }
 
   /** Add working directories for this session (must exist); returns the ones added. */

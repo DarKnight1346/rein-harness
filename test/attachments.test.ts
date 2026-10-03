@@ -10,8 +10,17 @@ writeFileSync(png, Buffer.from('89504e470d0a1a0a', 'hex'));
 const notes = path.join(dir, 'notes.md');
 writeFileSync(notes, '# hello\nworld\n');
 
+const win = process.platform === 'win32';
+/** How the terminal pastes a dropped path: quoted on Windows, spaces escaped elsewhere. */
+const dropped = (p: string) => (win ? `"${p}"` : p.replace(/ /g, '\\ '));
+
 describe('attachments', () => {
-  it('recognizes dropped paths: escaped, quoted, several', () => {
+  it.runIf(win)('recognizes dropped Windows paths (quoted, drive letters)', () => {
+    expect(droppedPaths(`"${png}" ${notes}`)).toEqual([png, notes]);
+    expect(droppedPaths('C:\\no\\such\\file.png')).toBeUndefined();
+  });
+
+  it.skipIf(win)('recognizes dropped paths: escaped, quoted, several', () => {
     expect(droppedPaths(png.replace(/ /g, '\\ '))).toEqual([png]);
     expect(droppedPaths(`'${png}' ${notes}`)).toEqual([png, notes]);
     expect(droppedPaths(`"${png}"`)).toEqual([png]);
@@ -30,7 +39,7 @@ describe('attachments', () => {
 
   it('dropped images and files', async () => {
     const a = new Attachments(() => path.join(dir, 'images'));
-    const tokens = await a.paste(`${png.replace(/ /g, '\\ ')} ${notes}`);
+    const tokens = await a.paste(`${dropped(png)} ${notes}`);
     expect(tokens).toBe('[Image #1] [File #2: notes.md] ');
     const out = a.expand(`what is this? ${tokens}`);
     expect(out.images).toHaveLength(1);

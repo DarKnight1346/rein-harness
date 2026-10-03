@@ -6,6 +6,7 @@ import path from 'node:path';
 import {promisify} from 'node:util';
 import type {ImageInput} from '../providers/types.js';
 import {dirListing, isDirectory, mentionedPaths} from './mentions.js';
+import {toPosix} from '../tools/fs.js';
 
 const exec = promisify(execFile);
 
@@ -89,7 +90,7 @@ export class Attachments {
     const files: string[] = [];
     // @mentions: the file's contents (text), the image itself, or a folder's listing.
     for (const abs of mentionedPaths(text, root)) {
-      const display = path.relative(root, abs).startsWith('..') ? abs : path.relative(root, abs);
+      const display = toPosix(path.relative(root, abs).startsWith('..') ? abs : path.relative(root, abs));
       const mime = IMAGE_MIME[path.extname(abs).toLowerCase()];
       if (isDirectory(abs)) files.push(dirListing(abs, display));
       else if (mime) images.push({path: abs, mime});
@@ -157,11 +158,13 @@ function fileBlock(file: string): string {
 
 /**
  * Terminals "drop" files by pasting their paths: quoted ('…' / "…"), or with backslash-escaped
- * spaces, separated by spaces. Returns the paths when the whole paste is existing files.
+ * spaces, separated by spaces. On Windows paths start with a drive (C:\) or \\server and the
+ * backslash is a separator, not an escape. Returns the paths when the whole paste is existing files.
  */
-export function droppedPaths(text: string): string[] | undefined {
+export function droppedPaths(text: string, windows = process.platform === 'win32'): string[] | undefined {
   const s = text.trim();
-  if (!s || s.includes('\n') || !/^['"]?(\/|~\/|file:\/\/)/.test(s)) return undefined;
+  const start = windows ? /^['"]?([A-Za-z]:[\\/]|\\\\|file:\/\/)/ : /^['"]?(\/|~\/|file:\/\/)/;
+  if (!s || s.includes('\n') || !start.test(s)) return undefined;
   const parts: string[] = [];
   let cur = '';
   let quote = '';
@@ -171,7 +174,7 @@ export function droppedPaths(text: string): string[] | undefined {
       if (c === quote) quote = '';
       else cur += c;
     } else if (c === '"' || c === "'") quote = c;
-    else if (c === '\\' && i + 1 < s.length) cur += s[++i];
+    else if (c === '\\' && !windows && i + 1 < s.length) cur += s[++i];
     else if (c === ' ') {
       if (cur) parts.push(cur);
       cur = '';
@@ -179,7 +182,7 @@ export function droppedPaths(text: string): string[] | undefined {
   }
   if (cur) parts.push(cur);
   const paths = parts.map((p) => {
-    const q = p.startsWith('file://') ? decodeURIComponent(p.slice(7)) : p;
+    const q = p.startsWith('file://') ? decodeURIComponent(p.slice(windows && /^file:\/\/\/[A-Za-z]:/.test(p) ? 8 : 7)) : p;
     return q.startsWith('~/') ? path.join(os.homedir(), q.slice(2)) : q;
   });
   const isFile = (p: string) => {
