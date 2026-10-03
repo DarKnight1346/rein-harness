@@ -13,6 +13,8 @@ export type Config = {
   compactionModel: string;
   /** Advisor the agents can consult (`advisor` tool): `off` (default) or a model ref — never auto. */
   advisorModel: string;
+  /** Check npm on launch and install a newer Rein in the background. */
+  autoUpdate: boolean;
   /** Show accounts as "Claude Account 1" and redact emails/home paths in the UI (screenshot-safe). */
   hidePersonalInfo: boolean;
   /** Model that runs web_search (with its provider's native search) and reads pages for web_fetch. */
@@ -55,6 +57,7 @@ export const DEFAULT_CONFIG: Config = {
   advisorModel: 'off',
   webModel: 'cheapest',
   hidePersonalInfo: true,
+  autoUpdate: true,
   autoSwitchThreshold: 0.7,
   autoMinConfidence: 0.45,
   maxUsedPct: 98,

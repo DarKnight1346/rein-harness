@@ -4,7 +4,7 @@ import {detectImports, importAccounts, skipImport, type AccountRow} from '../acc
 import {collectUsage, type UsageRow} from '../accounts/usage.js';
 import {COMMANDS, parseInput, shadowedSkills, suggestCommands} from '../commands/index.js';
 import {loadSkills, skillDirs, skillPrompt, type Skill} from '../skills/index.js';
-import {reinVersion, runUpdate, type UpdateLine} from '../commands/update.js';
+import {autoUpdate, reinVersion, runUpdate, type UpdateLine} from '../commands/update.js';
 import {runtime, type Resume} from '../runtime.js';
 import {listTranscripts, loadTranscript, type SessionInfo} from '../session/transcript.js';
 import {catalog} from '../router/catalog.js';
@@ -108,6 +108,8 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
       const shadowed = shadowedSkills(loadSkills());
       if (shadowed.length) log('info', `Skill${shadowed.length > 1 ? 's' : ''} ${shadowed.map((s) => `"${s.name}"`).join(', ')} hidden by built-in command${shadowed.length > 1 ? 's' : ''}; rename to use ${shadowed.length > 1 ? 'them' : 'it'}.`);
       setReady(true);
+      // Launch-time self-update check (background; never delays startup).
+      if (runtime.config.autoUpdate !== false) void autoUpdate((text) => log('info', text)).catch(() => {});
     })().catch((err) => log('error', `startup failed: ${(err as Error).message}`));
     return () => runtime.shutdown();
   }, [opts.resume, add, log, refresh]);

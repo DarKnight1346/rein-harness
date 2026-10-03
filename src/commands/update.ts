@@ -1,4 +1,6 @@
-import {existsSync, readFileSync} from 'node:fs';
+import {spawn} from 'node:child_process';
+import {existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync} from 'node:fs';
+import {reinHome} from '../store/paths.js';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {adapters} from '../providers/index.js';
@@ -11,7 +13,8 @@ import {run} from '../util/proc.js';
 /** Codex app-server is experimental; Rein was verified against this minor line. */
 export const TESTED_CODEX = '0.160';
 
-export const reinRoot = () => path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
+/** Rein's install folder. REIN_INSTALL_ROOT overrides it (tests: self-update must never touch the real install). */
+export const reinRoot = () => process.env.REIN_INSTALL_ROOT ?? path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 
 export function reinVersion(): string {
   try {
@@ -22,6 +25,33 @@ export function reinVersion(): string {
 }
 
 const minor = (v: string | undefined) => v?.split('.').slice(0, 2).join('.');
+
+export const PACKAGE = 'rein-harness';
+
+/** Latest published version from the npm registry (undefined if unreachable). */
+export async function latestVersion(): Promise<string | undefined> {
+  try {
+    const res = await fetch(`https://registry.npmjs.org/${PACKAGE}/latest`, {signal: AbortSignal.timeout(10_000), headers: {accept: 'application/json'}});
+    if (!res.ok) return undefined;
+    const v = ((await res.json()) as {version?: unknown}).version;
+    return typeof v === 'string' ? v : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/** Semver-ish compare of x.y.z (pre-release tags sort before the release). */
+export function compareVersions(a: string, b: string): number {
+  const parse = (v: string) => {
+    const [core = '', pre] = v.replace(/^v/, '').split('-', 2);
+    return {nums: core.split('.').map((n) => Number(n) || 0), pre};
+  };
+  const x = parse(a);
+  const y = parse(b);
+  for (let i = 0; i < 3; i++) if ((x.nums[i] ?? 0) !== (y.nums[i] ?? 0)) return (x.nums[i] ?? 0) - (y.nums[i] ?? 0);
+  if (x.pre === y.pre) return 0;
+  return x.pre === undefined ? 1 : y.pre === undefined ? -1 : x.pre.localeCompare(y.pre);
+}
 
 export type UpdateLine = {text: string; level?: 'info' | 'ok' | 'warn' | 'error' | 'output'};
 
@@ -97,15 +127,73 @@ async function* selfUpdate(): AsyncGenerator<UpdateLine> {
       if (failed) return;
     }
   } else if (root.includes(`${path.sep}node_modules${path.sep}`)) {
-    yield {text: 'rein: npm install -g rein-harness@latest', level: 'info'};
-    for await (const line of streamCommand('npm', ['install', '-g', 'rein-harness@latest'], process.env)) {
+    // Installed from npm: ask the registry for the latest release, install only if it's newer.
+    const latest = await latestVersion();
+    if (!latest) {
+      yield {text: `rein ${before}: couldn't get the latest version from npm (offline, or not published yet).`, level: 'warn'};
+      return;
+    }
+    if (compareVersions(latest, before) <= 0) {
+      yield {text: `rein ${before} (up to date — latest on npm is ${latest})`, level: 'ok'};
+      return;
+    }
+    yield {text: `rein: npm install -g ${PACKAGE}@${latest}`, level: 'info'};
+    let denied = false;
+    for await (const line of streamCommand('npm', ['install', '-g', `${PACKAGE}@${latest}`], process.env)) {
+      if (/EACCES|permission denied/i.test(line)) denied = true;
       if (line.startsWith('! ')) yield {text: `npm failed: ${line.slice(2)}`, level: 'error'};
       else if (line !== '✓ done' && line.trim()) yield {text: line, level: 'output'};
     }
+    if (denied) yield {text: `npm can't write to the global folder. Run \`sudo npm install -g ${PACKAGE}@latest\`, or set a user-owned npm prefix (npm config set prefix ~/.npm-global).`, level: 'warn'};
   } else {
     yield {text: `Rein ${before}: no update source configured.`, level: 'warn'};
     return;
   }
   const after = reinVersion();
   yield after !== before ? {text: `rein ${before} → ${after} — restart rein to use it`, level: 'ok'} : {text: `rein ${after} (up to date)`, level: 'ok'};
+}
+
+/** How Rein is installed: from npm (can self-update), a source checkout, or something else. */
+export function installKind(): 'npm' | 'checkout' | 'other' {
+  const root = reinRoot();
+  if (existsSync(path.join(root, '.git'))) return 'checkout';
+  return root.includes(`${path.sep}node_modules${path.sep}`) ? 'npm' : 'other';
+}
+
+const LOCK_MS = 10 * 60_000;
+
+/**
+ * Launch-time auto-update (config `autoUpdate`, on by default): one registry request in the
+ * background. An npm install with a newer release on npm installs it in a detached process (it
+ * finishes even if Rein exits) and reports back; a source checkout only hears that one exists.
+ * A lock file keeps several Rein windows from installing at once.
+ */
+export async function autoUpdate(notify: (text: string) => void): Promise<void> {
+  if (process.env.REIN_NO_AUTOUPDATE) return;
+  const kind = installKind();
+  if (kind === 'other') return;
+  const current = reinVersion();
+  const latest = await latestVersion();
+  if (!latest || compareVersions(latest, current) <= 0) return;
+  if (kind === 'checkout') {
+    notify(`Rein ${latest} is on npm (this checkout is ${current}) — git pull to update.`);
+    return;
+  }
+  const lock = path.join(reinHome(), 'update.lock');
+  try {
+    if (Date.now() - statSync(lock).mtimeMs < LOCK_MS) return; // another window is installing
+  } catch {}
+  mkdirSync(reinHome(), {recursive: true});
+  writeFileSync(lock, String(process.pid));
+  const child = spawn('npm', ['install', '-g', `${PACKAGE}@${latest}`], {detached: true, stdio: ['ignore', 'ignore', 'pipe']});
+  let stderr = '';
+  child.stderr?.on('data', (d) => (stderr += d));
+  child.unref();
+  child.on('error', () => rmSync(lock, {force: true}));
+  child.on('close', (code) => {
+    rmSync(lock, {force: true});
+    if (code === 0) notify(`Rein updated ${current} → ${latest} — restart rein to use it.`);
+    else if (/EACCES|permission denied/i.test(stderr)) notify(`Rein ${latest} is available, but npm can't write to the global folder. Run \`sudo npm install -g ${PACKAGE}@latest\` (or turn off auto-update in /configure).`);
+    else notify(`Rein ${latest} is available; the automatic install failed. Run \`rein --update\`.`);
+  });
 }

@@ -61,3 +61,8 @@ Design, findings and status: [PLAN.md](PLAN.md). Tests: `npm test`.
 ### Privacy
 - On by default: emails show as "Claude Account 1" / "Codex Account 1" and your home folder as `~`, so
   screenshots are shareable. Toggle in /configure → Privacy.
+
+### Updates
+- Rein checks npm on launch and installs a newer version in the background (restart to use it);
+  turn it off in /configure → Updates.
+- `/update` or `rein --update` updates Rein from npm plus the `claude` and `codex` CLIs.

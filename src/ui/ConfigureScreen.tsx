@@ -10,7 +10,7 @@ const TABS: Tab[] = [
   {id: 'sidebar', title: 'Sidebar', items: SIDEBAR_ITEMS, defaults: DEFAULT_SIDEBAR, key: 'sidebarSections'},
 ];
 type Choice = {value: string | number | boolean; label: string};
-type ChoiceTabDef = {title: string; key: 'autoCompactPct' | 'toolApproval' | 'shellMaxMinutes' | 'subagentLimit' | 'goalMaxRounds' | 'hidePersonalInfo'; description: string; choices: Choice[]};
+type ChoiceTabDef = {title: string; key: 'autoCompactPct' | 'toolApproval' | 'shellMaxMinutes' | 'subagentLimit' | 'goalMaxRounds' | 'hidePersonalInfo' | 'autoUpdate'; description: string; choices: Choice[]};
 const CHOICE_TABS: ChoiceTabDef[] = [
   {
     title: 'Approvals',
@@ -42,6 +42,15 @@ const CHOICE_TABS: ChoiceTabDef[] = [
     key: 'goalMaxRounds',
     description: 'How many automatic continuations a /goal may take before it pauses itself (/goal resume continues).',
     choices: [0, 10, 25, 50, 100, 250].map((v) => ({value: v, label: v === 0 ? 'Unlimited  (default)' : `${v} continuations`})),
+  },
+  {
+    title: 'Updates',
+    key: 'autoUpdate',
+    description: 'On launch, check npm for a newer Rein and install it in the background (takes effect next start). /update or rein --update also updates the claude and codex CLIs.',
+    choices: [
+      {value: true, label: 'Auto-update Rein  (default)'},
+      {value: false, label: 'Only when I run /update'},
+    ],
   },
   {
     title: 'Privacy',

@@ -1,3 +1,5 @@
+import {mkdtempSync} from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import {beforeAll, describe, expect, it} from 'vitest';
 import {runUpdate, type UpdateLine} from '../src/commands/update.js';
@@ -6,6 +8,8 @@ import {acct, tempHome} from './fakes.js';
 beforeAll(async () => {
   process.env.REIN_CLAUDE_BIN = path.resolve('test/fixtures/fake-claude.mjs');
   process.env.REIN_CODEX_BIN = path.resolve('test/fixtures/fake-codex.mjs');
+  // Self-update looks at a throwaway folder, never this checkout (it would git pull / npm install).
+  process.env.REIN_INSTALL_ROOT = mkdtempSync(path.join(os.tmpdir(), 'rein-install-'));
   const home = await tempHome([{...acct('codex', 'x1'), home: '/tmp/rein-fake-codex-home', imported: false}]);
   void home;
 });

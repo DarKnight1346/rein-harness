@@ -11,11 +11,13 @@ export function run(
   opts: {env?: NodeJS.ProcessEnv; timeoutMs?: number; input?: string} = {},
 ): Promise<RunResult> {
   return new Promise((resolve, reject) => {
-    const child = spawn(cmd, args, {env: opts.env, stdio: ['pipe', 'pipe', 'pipe']});
+    // stdin is only a pipe when there's input: a closed pipe the child never reads (ripgrep exits
+    // fast) makes the write fail with EPIPE on Linux.
+    const child = spawn(cmd, args, {env: opts.env, stdio: [opts.input === undefined ? 'ignore' : 'pipe', 'pipe', 'pipe']});
     let stdout = '';
     let stderr = '';
-    child.stdout.on('data', (d) => (stdout += d));
-    child.stderr.on('data', (d) => (stderr += d));
+    child.stdout!.on('data', (d) => (stdout += d));
+    child.stderr!.on('data', (d) => (stderr += d));
     const timer = opts.timeoutMs
       ? setTimeout(() => child.kill('SIGTERM'), opts.timeoutMs)
       : undefined;
@@ -27,7 +29,10 @@ export function run(
       clearTimeout(timer);
       resolve({code, stdout, stderr});
     });
-    child.stdin.end(opts.input ?? '');
+    if (child.stdin) {
+      child.stdin.on('error', () => {}); // the child may exit without reading its input
+      child.stdin.end(opts.input);
+    }
   });
 }
 

@@ -14,11 +14,32 @@ import type {Resume} from './runtime.js';
 const args = process.argv.slice(2);
 if (args.includes('--help') || args.includes('-h')) {
   console.log(`Usage: rein [--continue|-c] [--classic|--fullscreen]
+       rein --update | --version
 
   -c, --continue [id]   pick a saved conversation from this project to continue (or continue <id>)
   --classic        inline renderer (native scrollback, no mouse)
-  --fullscreen     app-style renderer: top bar, sidebar, mouse clicks (default)`);
+  --fullscreen     app-style renderer: top bar, sidebar, mouse clicks (default)
+  --update         update Rein (latest from npm) and the claude / codex CLIs, then exit
+  -v, --version    print Rein's version`);
   process.exit(0);
+}
+if (args.includes('--version') || args.includes('-v')) {
+  const {reinVersion} = await import('./commands/update.js');
+  console.log(reinVersion());
+  process.exit(0);
+}
+if (args.includes('--update')) {
+  // Same steps as /update, printed to the terminal (no UI, no TTY needed).
+  const {runUpdate} = await import('./commands/update.js');
+  const chalk = (await import('chalk')).default;
+  const color = {ok: chalk.green, warn: chalk.yellow, error: chalk.red, info: chalk.cyan, output: chalk.dim} as const;
+  let failed = false;
+  for await (const line of runUpdate(() => {})) {
+    if (line.level === 'error') failed = true;
+    const text = line.level === 'info' ? `$ ${line.text}` : line.level === 'output' ? `  ${line.text}` : line.text;
+    console.log(line.level ? color[line.level](text) : text);
+  }
+  process.exit(failed ? 1 : 0);
 }
 if (!process.stdin.isTTY) {
   console.error('rein needs an interactive terminal.');
