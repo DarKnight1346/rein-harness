@@ -11,7 +11,7 @@ const TABS: Tab[] = [
   {id: 'sidebar', title: 'Sidebar', items: SIDEBAR_ITEMS, defaults: DEFAULT_SIDEBAR, key: 'sidebarSections'},
 ];
 type Choice = {value: string | number | boolean; label: string};
-type ChoiceTabDef = {title: string; key: 'autoCompactPct' | 'toolApproval' | 'shellMaxMinutes' | 'subagentLimit' | 'goalMaxRounds' | 'hidePersonalInfo' | 'autoUpdate' | 'loadBalancing' | 'notifications' | 'sandbox' | 'apiAccounts'; description: string; choices: Choice[]};
+type ChoiceTabDef = {title: string; key: 'autoCompactPct' | 'toolApproval' | 'shellMaxMinutes' | 'subagentLimit' | 'goalMaxRounds' | 'hidePersonalInfo' | 'autoUpdate' | 'loadBalancing' | 'notifications' | 'sandbox' | 'apiAccounts' | 'worktrees'; description: string; choices: Choice[]};
 const CHOICE_TABS: ChoiceTabDef[] = [
   {
     title: 'Approvals',
@@ -71,6 +71,15 @@ const CHOICE_TABS: ChoiceTabDef[] = [
       {value: 'terminal', label: 'Terminal — bell + terminal notification (iTerm2, WezTerm, kitty, Ghostty…)  (default)'},
       {value: 'system', label: 'Desktop — also a macOS / Linux desktop notification'},
       {value: 'off', label: 'Off'},
+    ],
+  },
+  {
+    title: 'Worktrees',
+    key: 'worktrees',
+    description: "Subagents working at the same time as other work get their own copy of the project (a git worktree), so they can't trip over each other. Their changes merge back on their own when they finish; you never manage a worktree.",
+    choices: [
+      {value: 'auto', label: 'Automatic — only when subagents work in parallel  (default)'},
+      {value: 'off', label: 'Off — subagents always edit the project directly'},
     ],
   },
   {

@@ -66,6 +66,8 @@ export type Config = {
   jevModel: string;
   /** Get your attention when Rein needs you or finished a long task: terminal bell + OSC 9, also a desktop notification, or off. */
   notifications: 'terminal' | 'system' | 'off';
+  /** Subagents working alongside other work get their own git worktree, merged back when they finish ('auto'), or always share the project ('off'). */
+  worktrees: 'auto' | 'off';
   /** API accounts (pay per use): 'fallback' = only when no subscription can serve the model (default), 'always' = alongside subscriptions (after them). */
   apiAccounts: 'fallback' | 'always';
   /** OS sandbox for the agent's shell commands: 'write' (default: writes limited to the project), 'strict' (also no network), 'off'. */
@@ -100,6 +102,7 @@ export const DEFAULT_CONFIG: Config = {
   backgroundCheckMinutes: 60,
   sandbox: 'write',
   apiAccounts: 'fallback',
+  worktrees: 'auto',
 };
 
 export async function loadConfig(): Promise<Config> {

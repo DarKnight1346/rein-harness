@@ -106,6 +106,19 @@ Subagent parser-tests finished (done) — its report goes to the main agent.
 
 The agent receives it wrapped in `<subagent_report id="1" name="parser-tests" status="done">` with "Continue with this result." So the agent can fan out work, end its turn, and get woken up as results come in. A report it already collected with `agent_result` isn't delivered a second time.
 
+## Parallel subagents get their own worktree
+
+When subagents work at the same time, they could overwrite each other's edits. Rein prevents that without asking you to manage anything:
+
+- **Only when it's needed.** A subagent gets its own copy of the project (a git worktree) at its first change, and only if other work is going on: it runs in the background, or another subagent is running. A single foreground subagent edits the project directly, and one that only reads never gets a copy.
+- **It starts from your project as it is now,** including uncommitted changes and new files. Rein snapshots the working tree with a temporary index, so your staged changes and branches aren't touched. Dependency folders (`node_modules`, `.venv`, …) are linked and small ignored files like `.env` are copied, so builds and tests run there just as they do in the project.
+- **The subagent doesn't notice.** Paths to your project are pointed at its copy, and the [command sandbox](../permissions/#the-command-sandbox) lets it write there (and run git).
+- **Its changes come home on their own.** When it finishes (or is stopped), its changes are merged into your project file by file. If the main agent changed the same file meanwhile, both sets of edits are kept (a three-way merge), and the copy is deleted. Its report says which files were merged.
+- **Real conflicts go to the main agent.** If both changed the same lines, your project's version stays and the subagent's version is kept for the main agent, which is told which files to merge.
+- **Nothing is lost if Rein stops.** If Rein exits or crashes while a subagent still has a copy, the next start in that project merges the work in and says so.
+
+Copies live in `~/.rein/worktrees/`, never in your project. Outside a git repository, subagents always edit the project directly. To turn this off: `/settings` → **Worktrees** → **Off** (`worktrees` in the config).
+
 ## The completion check
 
 After each subagent turn, the [decision model](../../internals/decision-model/) gets the task, the final report and the last 40 tool calls, and answers one question: *has the subagent fully completed the task it was given? Actually done, not just planned, partially done, or blocked?*

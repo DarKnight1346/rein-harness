@@ -60,6 +60,8 @@ export type SubagentDeps = {
   onActivity(agentId: number, fn: (a: {phase: 'start' | 'end'; id: number; label: string; summary: string; ok?: boolean; result?: string; diff?: DiffLine[]}) => void): () => void;
   /** Called once when a subagent ends (fold tokens, persist the record). */
   finished(agent: Subagent): void;
+  /** The agent ended a run: bring its work home (merge its worktree); returns a note for its report. */
+  settle?(agent: Subagent): Promise<string | undefined>;
   /** Stop the subagent's own foreground shells. */
   killShells(agentId: number): void;
 };
@@ -174,6 +176,7 @@ export class SubagentManager extends EventEmitter {
       agent.status = err instanceof Cancelled || this.cancelled.has(id) ? 'cancelled' : 'failed';
       if (agent.status === 'failed') agent.events.push({kind: 'note', text: `Failed: ${(err as Error).message}`});
     } finally {
+      await this.settle(agent);
       agent.endedAt = Date.now();
       if (agent.accountId && this.retiredAccounts.has(agent.accountId)) this.release(id);
       this.deps.finished(agent);
@@ -273,11 +276,20 @@ export class SubagentManager extends EventEmitter {
       // Finished sessions stay open for follow-up messages from the user; others are released —
       // and so is any session on an account that's being removed.
       if (agent.status !== 'done' || (agent.accountId && this.retiredAccounts.has(agent.accountId))) this.release(agent.id);
+      await this.settle(agent);
       agent.endedAt = Date.now();
       this.deps.finished(agent);
       this.changed();
     }
     return agent;
+  }
+
+  /** Merge the agent's worktree (if it had one) before anyone reads its report. */
+  private async settle(agent: Subagent): Promise<void> {
+    const note = await this.deps.settle?.(agent).catch((err) => `[Its worktree couldn't be merged back: ${(err as Error).message}]`);
+    if (!note) return;
+    agent.output = agent.output ? `${agent.output}\n\n${note}` : note;
+    agent.events.push({kind: 'note', text: note.replace(/^\[|\]$/g, '')});
   }
 
   /** One provider turn: stream text into the agent's events, collect tokens. */

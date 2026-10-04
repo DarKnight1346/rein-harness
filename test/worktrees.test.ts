@@ -1,0 +1,123 @@
+import {execFileSync} from 'node:child_process';
+import {existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync} from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import {beforeEach, describe, expect, it} from 'vitest';
+import {retarget, Worktrees} from '../src/agents/worktrees.js';
+
+const git = (cwd: string, ...args: string[]) => execFileSync('git', args, {cwd, encoding: 'utf8', env: {...process.env, GIT_AUTHOR_NAME: 't', GIT_AUTHOR_EMAIL: 't@t', GIT_COMMITTER_NAME: 't', GIT_COMMITTER_EMAIL: 't@t'}});
+let repo: string;
+beforeEach(() => {
+  process.env.REIN_HOME = mkdtempSync(path.join(os.tmpdir(), 'rein-wt-home-'));
+  repo = mkdtempSync(path.join(os.tmpdir(), 'rein-wt-repo-'));
+  git(repo, 'init', '-q');
+  writeFileSync(path.join(repo, '.gitignore'), 'node_modules/\n.env\ndist/\n');
+  writeFileSync(path.join(repo, 'a.txt'), 'one\ntwo\nthree\nfour\nfive\n');
+  writeFileSync(path.join(repo, 'b.txt'), 'b\n');
+  git(repo, 'add', '-A');
+  git(repo, 'commit', '-q', '-m', 'init');
+  // Uncommitted and untracked work, ignored deps and secrets.
+  writeFileSync(path.join(repo, 'b.txt'), 'b edited, not committed\n');
+  writeFileSync(path.join(repo, 'new.txt'), 'untracked\n');
+  mkdirSync(path.join(repo, 'node_modules', 'left-pad'), {recursive: true});
+  writeFileSync(path.join(repo, 'node_modules', 'left-pad', 'index.js'), 'module.exports=1');
+  writeFileSync(path.join(repo, '.env'), 'TOKEN=x\n');
+  git(repo, 'add', 'b.txt'); // something staged: the user's index must survive untouched
+});
+
+describe('subagent worktrees', () => {
+  it('start from the project as it is, with deps linked and .env copied, without touching the index', async () => {
+    const status = git(repo, 'status', '--porcelain');
+    const wts = new Worktrees(repo, () => 's1');
+    const wt = (await wts.ensure(1))!;
+    expect(readFileSync(path.join(wt.root, 'b.txt'), 'utf8')).toBe('b edited, not committed\n');
+    expect(readFileSync(path.join(wt.root, 'new.txt'), 'utf8')).toBe('untracked\n');
+    expect(lstatSync(path.join(wt.root, 'node_modules')).isSymbolicLink()).toBe(true);
+    expect(readFileSync(path.join(wt.root, '.env'), 'utf8')).toBe('TOKEN=x\n');
+    expect(git(repo, 'status', '--porcelain')).toBe(status);
+    expect(await wts.ensure(1)).toBe(wt); // one per agent
+  });
+
+  it("merge the agent's changes back, keeping the project's own edits since, and delete the worktree", async () => {
+    const wts = new Worktrees(repo);
+    const wt = (await wts.ensure(1))!;
+    // The subagent edits line 1, adds a file, deletes one.
+    writeFileSync(path.join(wt.root, 'a.txt'), 'ONE\ntwo\nthree\nfour\nfive\n');
+    writeFileSync(path.join(wt.root, 'added.txt'), 'from the agent\n');
+    execFileSync('rm', [path.join(wt.root, 'new.txt')]);
+    // Meanwhile the main agent edits line 5 of the same file.
+    writeFileSync(path.join(repo, 'a.txt'), 'one\ntwo\nthree\nfour\nFIVE\n');
+    const r = (await wts.settle(1))!;
+    expect(r.conflicts).toEqual([]);
+    expect(r.merged.sort()).toEqual(['a.txt', 'added.txt', 'new.txt']);
+    expect(readFileSync(path.join(repo, 'a.txt'), 'utf8')).toBe('ONE\ntwo\nthree\nfour\nFIVE\n');
+    expect(readFileSync(path.join(repo, 'added.txt'), 'utf8')).toBe('from the agent\n');
+    expect(existsSync(path.join(repo, 'new.txt'))).toBe(false);
+    expect(existsSync(path.join(repo, 'node_modules', 'left-pad', 'index.js'))).toBe(true); // the link wasn't "merged"
+    expect(existsSync(wt.dir)).toBe(false);
+    expect(git(repo, 'worktree', 'list')).not.toContain(wt.dir);
+  });
+
+  it('leave real conflicts for the main agent, with the worktree kept', async () => {
+    const wts = new Worktrees(repo);
+    const wt = (await wts.ensure(2))!;
+    writeFileSync(path.join(wt.root, 'a.txt'), 'agent\ntwo\nthree\nfour\nfive\n');
+    writeFileSync(path.join(repo, 'a.txt'), 'main\ntwo\nthree\nfour\nfive\n');
+    const r = (await wts.settle(2))!;
+    expect(r.conflicts).toEqual(['a.txt']);
+    expect(readFileSync(path.join(repo, 'a.txt'), 'utf8')).toBe('main\ntwo\nthree\nfour\nfive\n');
+    expect(r.kept).toBe(wt.dir);
+    expect(readFileSync(path.join(wt.dir, 'a.txt'), 'utf8')).toContain('agent');
+  });
+
+  it('do nothing outside git', async () => {
+    const plain = mkdtempSync(path.join(os.tmpdir(), 'rein-plain-'));
+    expect(await new Worktrees(plain).ensure(1)).toBeUndefined();
+  });
+
+  it("point the project's absolute paths at the worktree", () => {
+    expect(retarget({path: '/p/proj/src/a.ts', command: 'cd /p/proj && ls /p/project-other'}, '/p/proj', '/w/x')).toEqual({path: '/w/x/src/a.ts', command: 'cd /w/x && ls /p/project-other'});
+  });
+});
+
+describe('worktree recovery', () => {
+  it("merges work left by a Rein that died before its subagent finished", async () => {
+    const wts = new Worktrees(repo);
+    const wt = (await wts.ensure(7))!;
+    writeFileSync(path.join(wt.root, 'b.txt'), 'finished by the agent\n');
+    // Pretend the owning process died.
+    const meta = `${wt.dir}.json`;
+    writeFileSync(meta, JSON.stringify({...JSON.parse(readFileSync(meta, 'utf8')), pid: 999999}));
+    const results = await new Worktrees(repo).recover();
+    expect(results).toEqual([{merged: ['b.txt'], conflicts: []}]);
+    expect(readFileSync(path.join(repo, 'b.txt'), 'utf8')).toBe('finished by the agent\n');
+    expect(existsSync(wt.dir)).toBe(false);
+    expect(existsSync(meta)).toBe(false);
+  });
+});
+
+describe('isolated subagent tool calls', () => {
+  it("run in the worktree (absolute project paths too) and merge home when settled", async () => {
+    const {ToolHost} = await import('../src/tools/host.js');
+    const wts = new Worktrees(repo);
+    const host = new ToolHost({root: repo, mode: () => 'bypass', approve: async () => 'once', sandbox: () => 'write', isolate: async (origin, writes) => wts.get(origin.agentId!) ?? (writes ? wts.ensure(origin.agentId!) : undefined)});
+    const agent = {agentId: 3, name: 'helper'};
+    // Reads before any change happen in the project itself.
+    expect((await host.call('read', {path: 'b.txt'}, agent)).text).toContain('b edited');
+    expect(wts.get(3)).toBeUndefined();
+    const w = await host.call('write', {path: path.join(repo, 'from-agent.txt'), content: 'hello\n'}, agent);
+    expect(w.ok).toBe(true);
+    expect(existsSync(path.join(repo, 'from-agent.txt'))).toBe(false); // not in the project yet
+    expect(readFileSync(path.join(wts.get(3)!.root, 'from-agent.txt'), 'utf8')).toBe('hello\n');
+    const sh = await host.call('shell', {command: `echo more >> from-agent.txt && cat ${repo}/from-agent.txt`}, agent);
+    expect(sh.text).toContain('more');
+    // git works inside the sandboxed worktree (it writes the worktree's own index in the main .git).
+    const st = await host.call('shell', {command: 'git add -A && git status --short'}, agent);
+    expect(st.ok).toBe(true);
+    expect(st.text).toContain('from-agent.txt');
+    const r = (await wts.settle(3))!;
+    expect(r.merged).toEqual(['from-agent.txt']);
+    expect(readFileSync(path.join(repo, 'from-agent.txt'), 'utf8')).toBe('hello\nmore\n');
+    host.close();
+  });
+});

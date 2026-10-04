@@ -4,6 +4,7 @@ import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
+import {retarget} from '../agents/worktrees.js';
 import {resolveInRoot, resolvePath, toPosix, ToolError, workingDirs, type FileStamp, type Origin, type ToolContext, type ToolResult} from './fs.js';
 import {TOOLS, toolByName, type ToolDef} from './registry.js';
 import {addProjectRule, check, loadRules, ruleTool, suggestRule, type Rules, type Subject} from './permissions.js';
@@ -65,6 +66,11 @@ export type ToolHostOptions = {
   planMode?: () => boolean;
   /** Save a file's state before a tool changes it (checkpoints for /rewind). */
   checkpoint?: (file: string) => Promise<void>;
+  /**
+   * A subagent's own copy of the project (a git worktree), if it has or now needs one: `writes`
+   * says whether this call changes things. Its calls then run there, paths retargeted.
+   */
+  isolate?: (origin: Origin, writes: boolean) => Promise<{root: string; writable: string[]} | undefined>;
 };
 
 const MAX_RESULT_CHARS = 60_000;
@@ -73,6 +79,14 @@ const MAX_RESULT_CHARS = 60_000;
  * Runs Rein's tools for whichever provider is chatting: Claude reaches it through the MCP proxy
  * over a unix socket, Codex calls `call()` in-process. Emits `activity` for the transcript.
  */
+const realRoot = (p: string) => {
+  try {
+    return realpathSync(p);
+  } catch {
+    return p;
+  }
+};
+
 export class ToolHost extends EventEmitter {
   private sessionAllowed = false;
   /** "Allow reads outside the project this session" was chosen. */
@@ -140,7 +154,8 @@ export class ToolHost extends EventEmitter {
       .map((t) => ({name: t.name, description: t.describe?.() ?? t.description, inputSchema: t.schema?.() ?? t.inputSchema}));
   }
 
-  async call(name: string, args: unknown, origin?: Origin): Promise<ToolResult> {
+  async call(name: string, rawArgs: unknown, origin?: Origin): Promise<ToolResult> {
+    let args = rawArgs;
     const tool = this.find(name);
     if (!tool) return {ok: false, text: `unknown tool ${name}`};
     if (origin && tool.mainOnly) return {ok: false, text: `${tool.name} is only available to the main agent (subagents can't spawn subagents)`};
@@ -152,6 +167,19 @@ export class ToolHost extends EventEmitter {
     let judge: string | undefined;
     try {
       const ctx: ToolContext = {...this.context(), origin};
+      // A subagent working alongside others gets its own worktree on its first change (see
+      // agents/worktrees.ts): from then on its calls run there, with the project's paths retargeted.
+      let isolated = false;
+      if (origin && this.opts.isolate) {
+        const writes = !!tool.mutating && !(tool.name === 'shell' && readOnlyCommand(String((args as any)?.command ?? '')));
+        const wt = await this.opts.isolate(origin, writes).catch(() => undefined);
+        if (wt) {
+          for (const from of new Set([this.opts.root, realRoot(this.opts.root)])) args = retarget(args, from, wt.root);
+          ctx.root = wt.root;
+          ctx.extraRoots = [...(ctx.extraRoots ?? []), ...wt.writable];
+          isolated = true;
+        }
+      }
       // Permission rules (Claude Code format, .rein/.claude settings): deny blocks outright,
       // allow skips the prompt. Every call is checked — even ones that wouldn't ask.
       const subject = this.subject(ctx, tool, args);
@@ -244,7 +272,7 @@ export class ToolHost extends EventEmitter {
         }
       }
       // Checkpoint every file this call may change (not scratchpad files) before it runs.
-      if (ruleTool(tool.name) === 'edit' && this.opts.checkpoint && approvedBy !== 'scratchpad') {
+      if (ruleTool(tool.name) === 'edit' && this.opts.checkpoint && approvedBy !== 'scratchpad' && !isolated) {
         for (const p of subject.paths ?? []) await this.opts.checkpoint(p).catch(() => {});
       }
       const edited = (tool.name === 'write' || tool.name === 'edit') && subject.paths?.length === 1 ? this.editorVersions.get(subject.paths[0]!) : undefined;

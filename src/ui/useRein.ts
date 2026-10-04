@@ -182,6 +182,13 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
       // The sandbox is on by default; say so once where this machine can't provide one.
       if ((runtime.config.sandbox ?? 'write') !== 'off' && !sandboxBackend())
         log('info', process.platform === 'win32' ? "The command sandbox isn't available on Windows: the agent's commands run unsandboxed (approvals still apply)." : process.platform === 'linux' ? "The command sandbox needs bubblewrap (install the 'bubblewrap' package): until then the agent's commands run unsandboxed." : "The command sandbox isn't available here: the agent's commands run unsandboxed.");
+      // Subagent work left in worktrees by a Rein that exited mid-task: merge it home now.
+      void runtime.worktrees.recover().then((results) => {
+        for (const r of results) {
+          if (r.merged.length) log('info', `Merged unfinished subagent work from the last session into the project: ${r.merged.slice(0, 8).join(', ')}${r.merged.length > 8 ? ` and ${r.merged.length - 8} more` : ''}.`);
+          if (r.conflicts.length) log('info', `Some unfinished subagent work conflicts with your changes and wasn't merged: ${r.conflicts.join(', ')}. Its versions are in ${r.kept}.`);
+        }
+      }, () => {});
       // Editor integration: connect quietly to the editor holding this project, if there is one.
       if (findIdes().length) void runtime.connectIde().then((m) => log('info', m), () => {});
       // Launch-time self-update check (background; never delays startup).

@@ -1,5 +1,7 @@
 import {adapters} from './providers/index.js';
 import {catalog} from './router/catalog.js';
+import {mergeNote, Worktrees} from './agents/worktrees.js';
+import type {Origin} from './tools/fs.js';
 import {makeRouter, type AutoRouter} from './router/index.js';
 import {makeAutoRouter} from './router/auto.js';
 import {Engine} from './session/engine.js';
@@ -93,7 +95,28 @@ export class Runtime {
     readOnlyJudge: (command) => this.judgeReadOnly(command),
     configDirs: () => this.config?.additionalDirectories ?? [],
     checkpoint: (file) => this.checkpoints.snapshot(this.currentTurn(), file),
+    isolate: (origin, writes) => this.isolate(origin, writes),
   });
+
+  /** Subagents' private worktrees (see agents/worktrees.ts). */
+  readonly worktrees = new Worktrees(process.cwd(), () => this.engine?.transcript.id);
+
+  /**
+   * Whether a subagent's call runs in its own worktree: once it has one, always; otherwise it gets
+   * one on its first change when other work is going on (it runs in the background, or another
+   * subagent is running). A lone foreground subagent works in place, as before.
+   */
+  private async isolate(origin: Origin, writes: boolean): Promise<{root: string; writable: string[]} | undefined> {
+    if (origin.agentId === undefined) return undefined;
+    const have = this.worktrees.get(origin.agentId);
+    if (have) return have;
+    if (!writes || (this.config.worktrees ?? 'auto') === 'off') return undefined;
+    const agent = this.agents.get(origin.agentId);
+    if (!agent) return undefined;
+    const others = this.agents.running().some((a) => a.id !== agent.id);
+    if (!agent.background && !others) return undefined;
+    return this.worktrees.ensure(agent.id);
+  }
 
   /** MCP servers (project .mcp.json, ~/.rein/mcp.json, Claude Code's ~/.claude.json). */
   readonly mcp = new McpManager(process.cwd());
@@ -201,6 +224,12 @@ export class Runtime {
       return () => void this.tools.off('activity', h);
     },
     finished: (agent) => this.subagentFinished(agent),
+    settle: async (agent) => {
+      const r = await this.worktrees.settle(agent.id);
+      if (!r) return undefined;
+      if (r.kept) this.tools.addDirs([r.kept]); // the main agent merges the conflicting files from there
+      return mergeNote(r);
+    },
     killShells: (agentId) => {
       for (const s of this.tools.shells.running()) if (s.origin?.agentId === agentId) this.tools.shells.kill(s.id);
     },

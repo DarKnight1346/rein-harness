@@ -61,6 +61,7 @@ How these play together is covered in [load balancing](../../internals/load-bala
 | Key | Type | Default | Meaning | Set in |
 | --- | --- | --- | --- | --- |
 | `toolApproval` | `"ask"` \| `"auto"` \| `"bypass"` | `"ask"` | What happens when the agent calls a tool that changes things: file writes, edits and deletes, plus `shell`, `image_generate`, `mcp_add`/`mcp_remove` and MCP tools without `readOnlyHint`. `ask` prompts you. `auto` lets the decision model allow changes that clearly match your request (p ≥ 0.85) and asks you about everything else. It never auto-denies. `bypass` allows all, except credentials outside the project, which always ask. Also the default for `rein -p --permission-mode`. | `/settings` → Approvals |
+| `worktrees` | string | `"auto"` | `auto`: subagents working alongside other work get their own git worktree, merged back when they finish. `off`: subagents always edit the project directly. | `/settings` → Worktrees |
 | `apiAccounts` | string | `"fallback"` | When pay-per-use API accounts (Console, Bedrock, Vertex, OpenAI key) are used. `fallback`: only when no subscription account can serve the model. `always`: alongside subscriptions, after them. Subscriptions always come first. | `/settings` → API accounts |
 | `sandbox` | string | `"write"` | OS sandbox around the agent's shell commands. `write`: commands can only write inside the project, its working directories, the session scratchpad, temp folders and package caches (git hooks/config and agent/editor settings stay read-only). `strict`: the same, and no network except localhost. `off`: no sandbox. macOS uses `sandbox-exec`, Linux bubblewrap; Windows runs unsandboxed. | `/settings` → Sandbox |
 | `shellMaxMinutes` | number | `120` | Longest a foreground shell command may run. The agent picks a timeout per command (2 minutes by default) up to this cap. `0` = no limit. Background commands have no limit. | `/settings` → Shell |
@@ -115,6 +116,7 @@ Valid `sidebarSections` ids: `agents`, `accounts`, `models` (chat model picker),
 | **Goals** | `goalMaxRounds` | Unlimited *(default)* · 10 · 25 · 50 · 100 · 250 continuations |
 | **Load balancing** | `loadBalancing` | Balanced *(default, cache-aware)* · Sticky |
 | **Sandbox** | `sandbox` | On *(default)* · Strict · Off |
+| **Worktrees** | `worktrees` | Automatic *(default)* · Off |
 | **API accounts** | `apiAccounts` | Fallback *(default)* · Always |
 | **Notifications** | `notifications` | Terminal *(default)* · Desktop · Off |
 | **Updates** | `autoUpdate` | Auto-update Rein *(default)* · Only when I run `/update` |
@@ -147,6 +149,7 @@ Every key, with defaults where it makes sense and realistic values for the optio
   "toolApproval": "ask",
   "sandbox": "write",
   "apiAccounts": "fallback",
+  "worktrees": "auto",
   "shellMaxMinutes": 120,
   "backgroundCheckMinutes": 60,
   "additionalDirectories": ["../shared-lib", "~/notes"],
