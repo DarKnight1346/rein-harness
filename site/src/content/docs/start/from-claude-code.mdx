@@ -87,11 +87,17 @@ On Windows the agent's shell and your hooks use Git Bash when it's installed, as
 
 ## What doesn't carry over
 
+### Custom commands, subagent definitions and CLAUDE.local.md
+
+- **`.claude/commands/*.md`** (the project's and `~/.claude/commands`) become slash commands, sub-folders included. `$ARGUMENTS` and `$1`…`$9` are filled in like in Claude Code, and `description` / `argument-hint` show in the command list. A ``!`cmd` `` line, which Claude Code runs before sending, becomes an instruction to run that command first, so it goes through Rein's approvals. `allowed-tools` and `model` aren't used; Rein's permissions and routing apply. A Rein skill with the same name wins. → [Skills](../../features/skills/#claude-code-custom-commands)
+- **`.claude/agents/*.md`** (and `~/.claude/agents`) become specialized subagents the agent can spawn by name, with their role prompt, their `tools` list and their `model` (`sonnet`/`opus`/`haiku`/`inherit`). → [Subagents](../../features/subagents/#named-subagent-definitions)
+- **`CLAUDE.local.md`** is read with the other instruction files.
+
+## What doesn't carry over
+
 Rein starts `claude` with `--setting-sources ""` and `--disable-slash-commands`, and with its own tools in place of Claude's. Inside a Rein session, Claude Code's own settings, commands and built-in tools are therefore off. Rein reads the pieces listed above itself. It does **not** read:
 
-- **Custom slash commands and skills** in `.claude/commands/` or `.claude/skills/`. Rein has its own [skills](../../features/skills/) in `<project>/.rein/skills/` and `~/.rein/skills/`. Ask `/skill:create` to write one.
-- **Custom subagent definitions** in `.claude/agents/`. Rein's agent spawns [subagents](../../features/subagents/) on demand, on any model.
-- **`CLAUDE.local.md`.** Use `CLAUDE.md`, `AGENTS.md`, or Rein's project memory (`/memory`).
+- **Claude Code skills** in `.claude/skills/`. Rein has its own [skills](../../features/skills/) in `<project>/.rein/skills/` and `~/.rein/skills/`, in a similar folder-with-`SKILL.md` format. Ask `/skill:create` to write one.
 
 ## What's different (and new)
 

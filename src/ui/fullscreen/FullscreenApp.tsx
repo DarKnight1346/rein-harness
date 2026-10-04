@@ -39,7 +39,7 @@ import {kTokens, rainbow, Working} from '../Working.js';
 import {agentLines, assistantLines, entryLines, wrap} from './lines.js';
 import {InfoWindow, Window} from './Window.js';
 import {COMMANDS} from '../../commands/index.js';
-import {skillDirs, type Skill} from '../../skills/index.js';
+import {skillDirs, skillSourceLabel, type Skill} from '../../skills/index.js';
 import chalk from 'chalk';
 import {isEmpty, lineRange, selectedText, type Selection} from './selection.js';
 import {copyToClipboard} from '../terminal/clipboard.js';
@@ -334,7 +334,7 @@ export function FullscreenApp({resume}: {resume: Resume}) {
                 {c === r.selected ? '❯ ' : '  '}
                 {`/${c.name}`.padEnd(10)}
                 {c.description}
-                {c.skill ? <Text dimColor> · {c.skill.source === 'builtin' ? 'built-in' : c.skill.source} skill</Text> : null}
+                {c.skill ? <Text dimColor> · {skillSourceLabel(c.skill.source)}{c.skill.argumentHint ? ` · ${c.skill.argumentHint}` : ''}</Text> : null}
               </Text>
             </Clickable>
           ))}

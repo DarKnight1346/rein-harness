@@ -3,6 +3,7 @@ import {catalog, toRef} from '../router/catalog.js';
 import type {Config} from '../store/config.js';
 import {ToolError} from '../tools/fs.js';
 import type {ToolDef} from '../tools/registry.js';
+import {definitionModel, loadAgentDefinitions} from './definitions.js';
 import {subagentStatusText, type Subagent, type SubagentManager} from './manager.js';
 
 const COST = ['', 'very low', 'low', 'medium', 'high', 'very high', 'highest'];
@@ -70,6 +71,12 @@ export function agentTools(agents: SubagentManager, config: () => Config): ToolD
           '  If you end your turn while background subagents are still running, each report is delivered to you as a message when it finishes.',
           `- A decision model checks each subagent's work and makes it continue if it isn't complete. At most ${cfg.subagentLimit} subagents run at once.`,
           ...(fixed ? [] : ['Models available now:', ...models.map((m) => m.line)]),
+          ...(() => {
+            const defs = loadAgentDefinitions();
+            return defs.length
+              ? ['Specialized subagents (agent_type; always a new session, with their own role, tools and model):', ...defs.map((d) => `- ${d.name}: ${d.description}`)]
+              : [];
+          })(),
         ].join('\n');
       },
       inputSchema: {},
@@ -85,6 +92,10 @@ export function agentTools(agents: SubagentManager, config: () => Config): ToolD
             ...(forced(cfg) ? {} : {model: {type: 'string', enum: ['auto', ...models], description: 'Model for new mode ("auto" = decision model picks)'}}),
             name: {type: 'string', description: 'Short name shown to the user (e.g. "test-writer")'},
             background: {type: 'boolean', description: 'Return immediately; collect later with agent_result'},
+            ...(() => {
+              const defs = loadAgentDefinitions().map((d) => d.name);
+              return defs.length ? {agent_type: {type: 'string', enum: defs, description: 'Run as one of the specialized subagents listed above'}} : {};
+            })(),
           },
           required: ['task', 'mode'],
         };
@@ -94,11 +105,17 @@ export function agentTools(agents: SubagentManager, config: () => Config): ToolD
       summarize: (a) => `${a?.name ?? 'agent'} · ${a?.mode === 'fork' ? 'fork' : a?.model ?? 'auto'}${a?.background ? ' · background' : ''}`,
       async run(_ctx, args) {
         if (typeof args?.task !== 'string' || !args.task.trim()) throw new ToolError('task is required');
-        const mode = args.mode === 'fork' ? 'fork' : 'new';
-        const model = subagentModelFor(config(), args.model);
+        const definition = typeof args.agent_type === 'string' ? loadAgentDefinitions().find((d) => d.name === args.agent_type) : undefined;
+        if (args.agent_type && !definition) throw new ToolError(`no subagent type "${args.agent_type}"`);
+        // A specialized subagent always starts fresh with its own role; its model (if set) wins.
+        const mode = definition ? 'new' : args.mode === 'fork' ? 'fork' : 'new';
+        // The definition's model if it's signed in (`inherit` = the main agent's), else the usual choice.
+        const wanted = definition?.model === 'inherit' ? 'inherit' : definitionModel(definition?.model);
+        const usable = wanted === 'inherit' || (wanted && parseRef(wanted) && catalog.get(parseRef(wanted)!));
+        const model = (usable ? wanted : undefined) ?? subagentModelFor(config(), args.model);
         let spawned;
         try {
-          spawned = agents.spawn({task: args.task, mode, model, name: args.name, background: !!args.background});
+          spawned = agents.spawn({task: args.task, mode, model, name: args.name ?? definition?.name, background: !!args.background, definition});
         } catch (err) {
           throw new ToolError((err as Error).message);
         }

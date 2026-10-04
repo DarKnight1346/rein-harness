@@ -1,4 +1,5 @@
 import React, {useState} from 'react';
+import {skillSourceLabel} from '../skills/index.js';
 import {Box, Static, Text} from 'ink';
 import {approvalNote, compactText, routeLabel, toolResultSummary} from './format.js';
 import {ImportPrompt} from './ImportPrompt.js';
@@ -101,7 +102,7 @@ export function ClassicApp({resume}: {resume: Resume}) {
               <Text key={c.name} color={c === r.selected ? 'cyan' : undefined} dimColor={c !== r.selected}>
                 {`/${c.name}`.padEnd(12)}
                 {c.description}
-                {c.skill ? <Text dimColor> · {c.skill.source === 'builtin' ? 'built-in' : c.skill.source} skill</Text> : null}
+                {c.skill ? <Text dimColor> · {skillSourceLabel(c.skill.source)}{c.skill.argumentHint ? ` · ${c.skill.argumentHint}` : ''}</Text> : null}
               </Text>
             ))}
           </Box>

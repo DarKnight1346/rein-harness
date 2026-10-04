@@ -38,6 +38,8 @@ export type Subagent = {
   collected?: boolean;
   /** Input tokens of its latest request (≈ how full its context is). */
   lastInput?: number;
+  /** A named definition it runs as (`.claude/agents` / `.rein/agents`): role prompt and tool set. */
+  definition?: import('./definitions.js').AgentDefinition;
 };
 
 export type CompletionVerdict = {complete: boolean; note: string};
@@ -115,7 +117,7 @@ export class SubagentManager extends EventEmitter {
     return this.done.get(id);
   }
 
-  spawn(args: {task: string; model: string; mode: SubagentMode; name?: string; background?: boolean}): {agent: Subagent; done: Promise<Subagent>} {
+  spawn(args: {task: string; model: string; mode: SubagentMode; name?: string; background?: boolean; definition?: import('./definitions.js').AgentDefinition}): {agent: Subagent; done: Promise<Subagent>} {
     const limit = this.deps.limit();
     if (this.running().length >= limit) {
       throw new Error(`subagent limit reached (${limit} running; the user's limit is ${limit}). Wait for one with agent_result {id, wait: true}, or do the work yourself.`);
@@ -134,6 +136,7 @@ export class SubagentManager extends EventEmitter {
       rounds: 0,
       events: [],
       tokens: {input: 0, cached: 0, output: 0},
+      ...(args.definition ? {definition: args.definition} : {}),
     };
     this.agents.set(id, agent);
     const done = this.run(agent);

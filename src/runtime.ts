@@ -160,22 +160,25 @@ export class Runtime {
     open: (agent, tools) => this.openSubagent(agent, tools),
     bind: (agent) => {
       const origin = {agentId: agent.id, name: agent.name};
+      const only = agent.definition?.tools;
+      const permitted = (name: string) => !only || only.includes(name) || only.some((t) => t.startsWith('mcp__') && name.startsWith(t));
       let closeSocket: (() => void) | undefined;
       const host = this.tools;
       return {
         binding: {
           // Fork-mode histories reference agent/agent_result, so forks still see their definitions.
+          // A definition's `tools` list narrows what it sees and may call (MCP servers by prefix).
           get tools() {
-            return host.specs({subagent: true, includeMainOnly: agent.mode === 'fork'});
+            return host.specs({subagent: true, includeMainOnly: agent.mode === 'fork'}).filter((t) => permitted(t.name));
           },
-          call: (name, args) => host.call(name, args, origin),
+          call: (name, args) => (permitted(name) ? host.call(name, args, origin) : Promise.resolve({ok: false, text: `${name} isn't available to the ${agent.definition?.name} subagent`})),
           listen: async () => {
             const l = await host.listenFor(origin);
             closeSocket = l.close;
             return l.socket;
           },
           proxy: mcpProxyCommand(),
-          allowed: host.specs({subagent: true}).map((t) => t.name),
+          allowed: host.specs({subagent: true}).map((t) => t.name).filter(permitted),
         },
         close: () => closeSocket?.(),
       };
@@ -225,18 +228,20 @@ export class Runtime {
       const ref = this.engine.current!.ref;
       return {session, ref, accountId: this.engine.current!.accountId, label: catalog.get(ref)?.label ?? ref.model};
     }
-    let ref: ModelRef | undefined;
-    if (agent.requested === 'auto') {
+    // `inherit` (a definition's model): the main agent's current model, else routed like auto.
+    let ref: ModelRef | undefined = agent.requested === 'inherit' ? this.engine.current?.ref : undefined;
+    if (!ref && (agent.requested === 'auto' || agent.requested === 'inherit')) {
       const t = newTranscript();
       t.messages.push({role: 'user', text: agent.task, at: Date.now()});
       ref = (await this.auto(agent.task, t, undefined, new Set())).ref;
-    } else {
+    } else if (!ref) {
       ref = parseRef(agent.requested);
       if (!ref || !catalog.get(ref)) throw new Error(`model ${agent.requested} isn't available; use one from the tool description or "auto"`);
     }
     const account = catalog.healthyAccounts(ref, this.config.maxUsedPct)[0];
     if (!account) throw new Error(`no healthy account for ${ref.model}`);
-    const prompt = `${await systemPrompt({tools: true, scratch: this.engine.scratch})}\n\n${SUBAGENT_PROMPT(agent.name)}`;
+    const role = agent.definition ? `\n\n# Your role: ${agent.definition.name}\n${agent.definition.prompt}` : '';
+    const prompt = `${await systemPrompt({tools: true, scratch: this.engine.scratch})}\n\n${SUBAGENT_PROMPT(agent.name)}${role}`;
     const session = catalog.track(await adapters[ref.provider].openSession({account, model: ref.model, systemPrompt: prompt, tools}));
     return {session, ref, accountId: account.id, label: catalog.get(ref)?.label ?? ref.model};
   }

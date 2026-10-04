@@ -70,6 +70,25 @@ If you've pinned a Subagents model and priority is "Your model first", the agent
 
 `auto` runs the same [auto router](../routing/) as the chat, on the task text alone. The subagent then starts on the healthiest account for that model. Live sessions count against an account's [load-balancing](../../internals/load-balancing/) score, so a batch of subagents spreads across your subscriptions instead of piling onto one.
 
+## Named subagent definitions
+
+Give the agent specialists. A markdown file in `<project>/.rein/agents/`, `<project>/.claude/agents/`, `~/.rein/agents/` or `~/.claude/agents/` defines one, in Claude Code's format, so existing Claude Code agents work as they are:
+
+```md title=".claude/agents/code-reviewer.md"
+---
+name: code-reviewer
+description: Reviews a change for bugs and risky patterns
+tools: Read, Grep, Glob, Bash
+model: haiku
+---
+You are a meticulous reviewer. Read the changed files, look for bugs, report findings with file:line.
+```
+
+- The agent sees the list in its `agent` tool and spawns one with `agent_type: "code-reviewer"`. A specialist always starts a fresh session with its role added to its system prompt.
+- **`tools`** limits what it can see and call. Claude Code names map to Rein's (`Read` → `read`, `Grep` → `search`, `Glob` → `list`, `Bash` → `shell`…), and Rein names and `mcp__server` prefixes work too. Leave it out for every tool.
+- **`model`**: `sonnet`, `opus` or `haiku` (Claude), `inherit` (the main agent's model), or any Rein ref such as `codex:gpt-x`. If that model isn't signed in, the usual [subagent model choice](#which-model-a-new-subagent-gets) applies.
+- On a name clash: project `.rein` → project `.claude` → `~/.rein` → `~/.claude`.
+
 ## Foreground, background, and reports
 
 There are two ways to work with subagents, and the agent picks one per task:

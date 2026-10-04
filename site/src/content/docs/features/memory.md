@@ -80,7 +80,7 @@ Details:
 - Each file is capped at **64 KB** (the rest is cut off).
 - Files with identical contents are included once, so a `CLAUDE.md` that's a symlink to or copy of `AGENTS.md` doesn't double up.
 - Without a git repository, the walk goes up to the filesystem root, so an `AGENTS.md` in your home folder or a parent folder applies too.
-- `CLAUDE.local.md` isn't read, and `@path` imports inside these files aren't expanded.
+- `CLAUDE.local.md` (Claude Code's personal, uncommitted instructions) is read next to `CLAUDE.md` in each folder. `@path` imports inside these files aren't expanded.
 
 ## Scoped subfolder instructions
 
