@@ -17,7 +17,19 @@ import {reinHome} from '../store/paths.js';
  */
 type Stored = {client?: OAuthClientInformationMixed; tokens?: OAuthTokens; verifier?: string; port?: number};
 
-const authFile = (url: string) => path.join(reinHome(), 'mcp-auth', `${createHash('sha256').update(url).digest('hex').slice(0, 24)}.json`);
+/**
+ * The token file for a server: named after where the server is (protocol, host, path), never after
+ * credentials or query parameters a URL might carry. A filename, not a secret: any hash would do.
+ */
+export function serverKey(url: string): string {
+  try {
+    const u = new URL(url);
+    return `${u.protocol}//${u.host}${u.pathname}`;
+  } catch {
+    return url.split(/[?#]/)[0]!.replace(/\/\/[^/@]*@/, '//');
+  }
+}
+const authFile = (url: string) => path.join(reinHome(), 'mcp-auth', `${createHash('sha256').update(serverKey(url)).digest('hex').slice(0, 24)}.json`);
 
 export class ReinOAuthProvider implements OAuthClientProvider {
   private data: Stored;

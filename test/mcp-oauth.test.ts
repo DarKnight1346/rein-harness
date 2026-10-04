@@ -56,3 +56,11 @@ describe('MCP OAuth sign-in (SDK demo server)', () => {
     await again.closeAll();
   });
 });
+
+describe('OAuth token file names', () => {
+  it('ignore credentials and query parameters in the server URL', async () => {
+    const {serverKey} = await import('../src/mcp/oauth.js');
+    expect(serverKey('https://user:hunter2@mcp.example.com/mcp?token=abc#x')).toBe('https://mcp.example.com/mcp');
+    expect(serverKey('https://mcp.example.com/mcp')).toBe('https://mcp.example.com/mcp');
+  });
+});
