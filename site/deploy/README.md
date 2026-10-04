@@ -7,7 +7,7 @@ a `rein-harness` organization builds it and hosts it.
 ## One-time setup
 
 1. **Create the organization** `rein-harness` (free): https://github.com/account/organizations/new
-2. **Create the repository** `rein-harness/rein-harness.github.io` (public, can be empty).
+2. **Create the repository** `rein-harness/rein-harness.github.io`. It must be **public**: on GitHub Free, Pages only serves public repos.
 3. **Add the workflow:** copy [`pages.yml`](pages.yml) to `.github/workflows/pages.yml` in that repo.
 4. **Turn on Pages:** in that repo, Settings → Pages → Source: **GitHub Actions**.
 5. Run the workflow once (Actions → Deploy site → Run workflow). The site goes live at
