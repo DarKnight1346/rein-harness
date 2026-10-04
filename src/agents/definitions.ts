@@ -3,6 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import {parseSkillFile, skillName} from '../skills/index.js';
 import {reinHome} from '../store/paths.js';
+import {loadPlugins, pluginVars} from '../plugins/index.js';
 
 /**
  * Named subagent definitions, in Claude Code's format (`.claude/agents/<name>.md`): frontmatter
@@ -54,18 +55,23 @@ export function mapTools(list: string): string[] {
 
 export function loadAgentDefinitions(cwd = process.cwd()): AgentDefinition[] {
   const byName = new Map<string, AgentDefinition>();
-  for (const dir of agentDefinitionDirs(cwd)) {
-    if (!existsSync(dir)) continue;
-    for (const f of readdirSync(dir).filter((f) => f.endsWith('.md')).sort()) {
-      const file = path.join(dir, f);
+  // Lowest first: installed plugins' agents (as `<plugin>:<name>`), then the folders above.
+  const sources: {files: string[]; prefix?: string; vars?: (t: string) => string}[] = [
+    ...loadPlugins(cwd).map((p) => ({files: p.agents, prefix: p.name, vars: (t: string) => pluginVars(t, p)})),
+    ...agentDefinitionDirs(cwd).filter((d) => existsSync(d)).map((d) => ({files: readdirSync(d).filter((f) => f.endsWith('.md')).sort().map((f) => path.join(d, f))})),
+  ];
+  for (const src of sources) {
+    for (const file of src.files) {
+      const f = path.basename(file);
       let text: string;
       try {
         text = readFileSync(file, 'utf8');
       } catch {
         continue;
       }
-      const {fields, body} = parseSkillFile(text);
-      const name = skillName(fields.name || f.replace(/\.md$/, ''));
+      const {fields, body} = parseSkillFile(src.vars ? src.vars(text) : text);
+      const base = fields.name || f.replace(/\.md$/, '');
+      const name = skillName(src.prefix ? `${src.prefix}:${base}` : base);
       if (!name || !body) continue;
       byName.set(name, {
         name,

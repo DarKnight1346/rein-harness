@@ -3,6 +3,7 @@ import {createHash} from 'node:crypto';
 import {readFileSync} from 'node:fs';
 import path from 'node:path';
 import {trustedHooksHash, trustHooks} from './store/trust.js';
+import {loadPlugins} from './plugins/index.js';
 import {settingsFiles} from './tools/permissions.js';
 import {isWindows, shellFor} from './util/platform.js';
 
@@ -103,14 +104,15 @@ function readHooks(root: string, projectOnly = false): Partial<Record<HookEvent,
     onUntrusted?.(project);
   }
   const files = settingsFiles(root);
-  for (const file of project?.trusted ? files.slice(projectOnly ? 2 : 0) : projectOnly ? [] : files.slice(0, 2)) {
-    const hooks = hooksIn(file);
-    if (!hooks) continue;
-    for (const [event, groups] of Object.entries(hooks)) {
+  const add = (hooks: Record<string, unknown> | undefined) => {
+    for (const [event, groups] of Object.entries(hooks ?? {})) {
       if (!Array.isArray(groups)) continue;
       (out[event as HookEvent] ??= []).push(...(groups as HookGroup[]).filter((g) => Array.isArray(g?.hooks)));
     }
-  }
+  };
+  for (const file of project?.trusted ? files.slice(projectOnly ? 2 : 0) : projectOnly ? [] : files.slice(0, 2)) add(hooksIn(file));
+  // Installed plugins' hooks run like the user's own (installing the plugin was the consent).
+  if (!projectOnly) for (const p of loadPlugins(root)) add(p.hooks);
   return out;
 }
 

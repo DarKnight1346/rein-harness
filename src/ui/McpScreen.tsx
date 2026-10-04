@@ -5,7 +5,7 @@ import {runtime} from '../runtime.js';
 import {Clickable} from './terminal/clicks.js';
 
 const COLOR = {connected: 'green', connecting: 'yellow', failed: 'red', 'needs-approval': 'yellow', 'needs-auth': 'yellow'} as const;
-const SOURCE = {project: '.mcp.json', rein: '~/.rein/mcp.json', claude: '~/.claude.json'} as Record<string, string>;
+const SOURCE = {project: '.mcp.json', rein: '~/.rein/mcp.json', claude: '~/.claude.json', plugin: 'plugin'} as Record<string, string>;
 
 /** /mcp: servers with status and tool count; enter approves a project server or reconnects. */
 export function McpScreen({onClose}: {onClose(): void}) {

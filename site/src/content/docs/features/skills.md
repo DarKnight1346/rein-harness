@@ -21,8 +21,10 @@ A skill is a folder holding a `SKILL.md`, plus any scripts, templates or referen
 | **Built-in** | `<rein install>/skills/` | Ships with Rein, can't be changed |
 | **Project** | `<project>/.rein/skills/<name>/` | This project (commit it to share with your team) |
 | **Global** | `~/.rein/skills/<name>/` | Every project |
+| **Codex skills** | `~/.codex/skills/`, `~/.agents/skills/`, `<project>/.agents/skills/` | As Codex uses them (its built-in `.system` skills are skipped) |
+| **Plugins** | Installed Claude Code / Codex plugins, as `/<plugin>:<skill>` | See [Plugins](../plugins/) |
 
-On a name clash, **built-in wins, then project, then global**. A project skill hides a global one with the same name, and nothing can replace a built-in. Rein's own commands (`/help`, `/model`, `/goal`, …) beat skills too. If a skill is hidden by a command, Rein says so at startup: `Skill "help" hidden by built-in command; rename to use it.`
+On a name clash, **built-in wins, then project, then global**, then Claude Code commands, then Codex skills and plugins. A project skill hides a global one with the same name, and nothing can replace a built-in. Rein's own commands (`/help`, `/model`, `/goal`, …) beat skills too. If a skill is hidden by a command, Rein says so at startup: `Skill "help" hidden by built-in command; rename to use it.`
 
 Skills are rescanned each time you start typing a `/` command, so a new or edited skill shows up without restarting.
 

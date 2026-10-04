@@ -16,6 +16,7 @@ import {incompatibleMessage} from '../providers/codex/compat.js';
 import {sandboxBackend} from '../tools/sandbox.js';
 import {findIdes} from '../ide/connection.js';
 import {diffTabName, proposedChange} from '../ide/review.js';
+import {loadPlugins} from '../plugins/index.js';
 import {conversationMarkdown, writeExport} from '../session/export.js';
 import {copyToClipboard} from './terminal/clipboard.js';
 import {editExternally} from './terminal/editor.js';
@@ -738,6 +739,22 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
       case 'mcp':
         setOverlay({name: 'mcp'});
         break;
+      case 'plugins': {
+        const plugins = loadPlugins();
+        const codexSkills = skills.filter((s) => s.source === 'codex').map((s) => `/${s.name}`);
+        if (!plugins.length && !codexSkills.length) {
+          log('info', 'No plugins installed. Install them with `claude plugin install …` or Codex; Rein loads them on the next /plugins or start.');
+          return;
+        }
+        const count = (n: number, what: string) => (n ? `${n} ${what}${n === 1 ? '' : 's'}` : '');
+        const lines = plugins.map((p) => {
+          const own = skills.filter((s) => s.plugin === p.name).map((s) => `/${s.name}`);
+          const parts = [count(own.length, 'command'), count(p.agents.length, 'agent'), count(Object.keys(p.hooks ?? {}).length, 'hook event'), count(Object.keys(p.mcpServers ?? {}).length, 'MCP server')].filter(Boolean);
+          return `${p.name} ${p.version ?? ''} · ${p.from === 'claude' ? 'Claude Code' : 'Codex'}${parts.length ? ` · ${parts.join(', ')}` : ''}${own.length ? `\n  ${own.join('  ')}` : ''}`;
+        });
+        log('info', [...lines, ...(codexSkills.length ? [`Codex skills: ${codexSkills.join('  ')}`] : [])].join('\n'));
+        return;
+      }
       case 'export': {
         const t = viewing ? undefined : runtime.engine.transcript;
         if (!t?.messages.length) {

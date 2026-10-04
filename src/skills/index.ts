@@ -3,13 +3,15 @@ import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import os from 'node:os';
 import {reinHome} from '../store/paths.js';
+import {codexSkillRoots, loadPlugins, pluginVars} from '../plugins/index.js';
 
 /** `claude-project` / `claude-user`: Claude Code custom commands (`.claude/commands/*.md`), run as skills. */
-export type SkillSource = 'builtin' | 'project' | 'global' | 'claude-project' | 'claude-user';
+/** `plugin`: from an installed Claude Code / Codex plugin; `codex`: a Codex skill (~/.codex/skills, .agents/skills). */
+export type SkillSource = 'builtin' | 'project' | 'global' | 'claude-project' | 'claude-user' | 'plugin' | 'codex';
 
 /** How a skill's origin reads in the UI. */
 export const skillSourceLabel = (s: SkillSource) =>
-  ({builtin: 'built-in skill', project: 'project skill', global: 'global skill', 'claude-project': 'Claude Code command (project)', 'claude-user': 'Claude Code command'})[s];
+  ({builtin: 'built-in skill', project: 'project skill', global: 'global skill', 'claude-project': 'Claude Code command (project)', 'claude-user': 'Claude Code command', plugin: 'plugin', codex: 'Codex skill'})[s];
 
 export type Skill = {
   name: string;
@@ -28,6 +30,10 @@ export type Skill = {
   planMode?: boolean;
   /** Claude Code command frontmatter `argument-hint` (shown in the command list). */
   argumentHint?: string;
+  /** A Claude Code-style command (`$ARGUMENTS`, `!`cmd``), not a skill folder. */
+  command?: boolean;
+  /** The plugin it comes from. */
+  plugin?: string;
 };
 
 /**
@@ -88,6 +94,7 @@ function scan(root: string, source: SkillSource): Skill[] {
   if (!existsSync(root)) return [];
   const out: Skill[] = [];
   for (const entry of readdirSync(root).sort()) {
+    if (entry.startsWith('.')) continue; // e.g. Codex's own .system skills
     const dir = path.join(root, entry);
     try {
       if (!statSync(dir).isDirectory()) continue;
@@ -113,6 +120,28 @@ function scan(root: string, source: SkillSource): Skill[] {
       aliases: (Array.isArray(config.aliases) ? config.aliases : []).map((a) => skillName(String(a))).filter((a) => a && a !== name),
       ...(config.planMode === true ? {planMode: true} : {}),
     });
+  }
+  return out;
+}
+
+/** Commands and skills from installed plugins, as `/<plugin>:<name>`. */
+function pluginSkills(cwd: string): Skill[] {
+  const out: Skill[] = [];
+  for (const p of loadPlugins(cwd)) {
+    for (const file of p.commands) {
+      let text: string;
+      try {
+        text = readFileSync(file, 'utf8');
+      } catch {
+        continue;
+      }
+      const {fields, body} = parseSkillFile(pluginVars(text, p));
+      const name = skillName(`${p.name}:${path.basename(file, '.md')}`);
+      if (name && body) out.push({name, description: fields.description || firstLine(body), source: 'plugin', plugin: p.name, dir: path.dirname(file), path: file, body, files: [path.basename(file)], aliases: [], command: true, ...(fields['argument-hint'] ? {argumentHint: fields['argument-hint']} : {})});
+    }
+    for (const dir of p.skills) {
+      for (const s of scan(path.dirname(dir), 'plugin').filter((x) => x.dir === dir)) out.push({...s, name: skillName(`${p.name}:${s.name.replace(/^.*:/, '')}`), plugin: p.name, body: pluginVars(s.body, p)});
+    }
   }
   return out;
 }
@@ -160,6 +189,7 @@ function scanCommands(root: string, source: 'claude-project' | 'claude-user', su
       body,
       files: [path.basename(file)],
       aliases: [],
+      command: true,
       ...(fields['argument-hint'] ? {argumentHint: fields['argument-hint']} : {}),
     });
   }
@@ -176,6 +206,9 @@ export function loadSkills(cwd = process.cwd()): Skill[] {
   const dirs = skillDirs(cwd);
   const commands = claudeCommandDirs(cwd);
   const byName = new Map<string, Skill>();
+  // Lowest first: installed plugins and Codex skills, then Claude Code commands, then Rein's own.
+  for (const s of pluginSkills(cwd)) byName.set(s.name, s);
+  for (const root of codexSkillRoots(cwd)) for (const s of scan(root, 'codex')) byName.set(s.name, s);
   for (const s of scanCommands(commands.user, 'claude-user')) byName.set(s.name, s);
   for (const s of scanCommands(commands.project, 'claude-project')) byName.set(s.name, s);
   for (const s of scan(dirs.global, 'global')) byName.set(s.name, s);
@@ -195,7 +228,7 @@ export function skillPrompt(skill: Skill, args: string, cwd = process.cwd()): st
     .replaceAll('{{GLOBAL_SKILLS_DIR}}', dirs.global)
     .replaceAll('{{PROJECT_SKILLS_DIR}}', dirs.project)
     .replaceAll('{{BUILTIN_SKILLS_DIR}}', dirs.builtin);
-  if (skill.source === 'claude-project' || skill.source === 'claude-user') return commandPrompt(skill, body, args);
+  if (skill.command) return commandPrompt(skill, body, args);
   const files = skill.files.length > 1 ? `\nFiles in this skill's folder (${skill.dir}): ${skill.files.join(', ')}` : '';
   return `<skill name="${skill.name}" source="${skill.source}" dir="${skill.dir}">\n${body}${files}\n</skill>\n\n${args.trim() || 'Follow the skill above.'}`;
 }
