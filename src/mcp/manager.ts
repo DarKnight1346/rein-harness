@@ -4,12 +4,16 @@ import {Client} from '@modelcontextprotocol/sdk/client/index.js';
 import {SSEClientTransport} from '@modelcontextprotocol/sdk/client/sse.js';
 import {StdioClientTransport} from '@modelcontextprotocol/sdk/client/stdio.js';
 import {StreamableHTTPClientTransport} from '@modelcontextprotocol/sdk/client/streamableHttp.js';
+import {UnauthorizedError} from '@modelcontextprotocol/sdk/client/auth.js';
 import {ToolListChangedNotificationSchema} from '@modelcontextprotocol/sdk/types.js';
+import {openBrowser} from '../util/proc.js';
+import {callbackServer, ReinOAuthProvider} from './oauth.js';
 import {ToolError, type ToolImage} from '../tools/fs.js';
 import type {ToolDef} from '../tools/registry.js';
 import {loadServers, type ServerConfig, type ServerEntry} from './config.js';
 
-export type ServerStatus = 'connecting' | 'connected' | 'failed' | 'needs-approval';
+/** `needs-auth`: a remote server that wants an OAuth sign-in (/mcp → enter). */
+export type ServerStatus = 'connecting' | 'connected' | 'failed' | 'needs-approval' | 'needs-auth';
 type McpTool = {name: string; description?: string; inputSchema: Record<string, unknown>; annotations?: {readOnlyHint?: boolean; title?: string}};
 type Server = ServerEntry & {status: ServerStatus; error?: string; client?: Client; tools: McpTool[]};
 
@@ -65,8 +69,10 @@ export class McpManager extends EventEmitter {
     this.servers.set(e.name, server);
     this.emit('change');
     const client = new Client({name: 'rein', version: '0.1.0'}, {capabilities: {}});
+    // Remote servers: saved OAuth tokens are used (and refreshed); without any, a 401 means "sign in".
+    const auth = oauthFor(e.config, e.name);
     try {
-      await withTimeout(client.connect(transportFor(e.config, this.root)), CONNECT_TIMEOUT_MS, 'timed out connecting');
+      await withTimeout(client.connect(transportFor(e.config, this.root, auth?.hasTokens ? auth : undefined)), CONNECT_TIMEOUT_MS, 'timed out connecting');
       server.client = client;
       server.tools = await this.listTools(client);
       server.status = 'connected';
@@ -83,11 +89,58 @@ export class McpManager extends EventEmitter {
         }
       };
     } catch (err) {
-      server.status = 'failed';
-      server.error = (err as Error).message;
+      const unauthorized = err instanceof UnauthorizedError || (err as {code?: number}).code === 401 || /\b401\b|unauthorized|invalid_token/i.test((err as Error).message);
+      server.status = unauthorized && auth ? 'needs-auth' : 'failed';
+      server.error = unauthorized && auth ? 'sign-in required (/mcp → enter)' : (err as Error).message;
       await client.close().catch(() => {});
     }
     this.emit('change');
+  }
+
+  /**
+   * OAuth sign-in for a remote server: a loopback callback server, the browser for the user's
+   * login and consent, then the code is exchanged for tokens (saved) and the server reconnects.
+   * `onUrl` gets the authorization URL (shown in case the browser didn't open).
+   */
+  async signIn(name: string, onUrl?: (url: string) => void): Promise<void> {
+    const s = this.servers.get(name);
+    if (!s || !('url' in s.config)) throw new Error(`${name} isn't a remote (http/sse) server`);
+    const auth = oauthFor(s.config, name);
+    if (!auth) throw new Error(`${name} has its own Authorization header; nothing to sign in to`);
+    // Keep the port the client was registered with; if it's taken, register again on a new one.
+    let cb;
+    try {
+      cb = await callbackServer(auth.port ?? 0, auth.state());
+    } catch {
+      cb = await callbackServer(0, auth.state());
+    }
+    if (cb.port !== auth.port) {
+      auth.setPort(cb.port);
+      await auth.clear(); // the old registration's redirect URL no longer matches
+      auth.setPort(cb.port);
+    }
+    auth.interactive((url) => {
+      onUrl?.(url.toString());
+      openBrowser(url.toString());
+    });
+    const transport = transportFor(s.config, this.root, auth) as StreamableHTTPClientTransport | SSEClientTransport;
+    const client = new Client({name: 'rein', version: '0.1.0'}, {capabilities: {}});
+    try {
+      await withTimeout(client.connect(transport), CONNECT_TIMEOUT_MS, 'timed out connecting');
+      await client.close().catch(() => {}); // already authorized (valid tokens)
+      cb.close();
+    } catch (err) {
+      if (!(err instanceof UnauthorizedError)) {
+        cb.close();
+        throw err;
+      }
+      await transport.finishAuth(await cb.code); // the browser came back with a code
+      await client.close().catch(() => {});
+    } finally {
+      auth.interactive(undefined);
+    }
+    await this.close(name);
+    await this.connect(s);
   }
 
   private async listTools(client: Client): Promise<McpTool[]> {
@@ -174,10 +227,17 @@ export class McpManager extends EventEmitter {
   }
 }
 
-function transportFor(config: ServerConfig, root: string) {
+/** An OAuth provider for a remote server, unless its config already sends an Authorization header. */
+function oauthFor(config: ServerConfig, name: string): ReinOAuthProvider | undefined {
+  if (!('url' in config)) return undefined;
+  if (Object.keys(config.headers ?? {}).some((h) => h.toLowerCase() === 'authorization')) return undefined;
+  return new ReinOAuthProvider(config.url, name);
+}
+
+function transportFor(config: ServerConfig, root: string, authProvider?: ReinOAuthProvider) {
   if ('url' in config) {
     const url = new URL(config.url);
-    const init = config.headers ? {requestInit: {headers: config.headers}} : undefined;
+    const init = {...(config.headers ? {requestInit: {headers: config.headers}} : {}), ...(authProvider ? {authProvider} : {})};
     return config.type === 'sse' ? new SSEClientTransport(url, init) : new StreamableHTTPClientTransport(url, init);
   }
   return new StdioClientTransport({

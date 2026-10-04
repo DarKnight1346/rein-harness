@@ -168,6 +168,8 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
       setTimeout(() => {
         const waiting = runtime.mcp.list().filter((s) => s.status === 'needs-approval').map((s) => s.name);
         if (waiting.length) log('info', `This project's .mcp.json has MCP server${waiting.length > 1 ? 's' : ''} waiting for your approval: ${waiting.join(', ')} — /mcp to review.`);
+        const signIn = runtime.mcp.list().filter((s) => s.status === 'needs-auth').map((s) => s.name);
+        if (signIn.length) log('info', `MCP server${signIn.length > 1 ? 's' : ''} ${signIn.join(', ')} need${signIn.length > 1 ? '' : 's'} you to sign in — /mcp, then enter.`);
       }, 1500);
       // Launch-time self-update check (background; never delays startup).
       if (runtime.config.autoUpdate !== false) void autoUpdate((text) => log('info', text)).catch(() => {});

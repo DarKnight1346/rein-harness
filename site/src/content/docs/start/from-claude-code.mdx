@@ -77,7 +77,7 @@ Rein loads servers in Claude Code's `mcpServers` format (stdio, `http` and `sse`
 
 - **`<project>/.mcp.json`**: the project's shared servers. Each one needs your approval once, because a repo shouldn't be able to launch commands on its own. Approvals you already gave in Claude Code (`enabledMcpjsonServers` in `.claude/settings.local.json`) count.
 - **`~/.rein/mcp.json`**: your own Rein servers.
-- **`~/.claude.json`**: servers added with **`claude mcp add`**, both user scope and this project's scope.
+- **`~/.claude.json`**: servers added with **`claude mcp add`**, both user scope and this project's scope. Remote servers that use OAuth need one [sign-in in Rein](../../features/mcp/#signing-in-to-remote-servers-oauth) (`/mcp` → Enter), because Claude Code keeps its tokens to itself.
 
 Open `/mcp` to see their status and tools, approve project servers and reconnect. → [MCP servers](../../features/mcp/)
 
