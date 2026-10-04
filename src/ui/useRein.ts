@@ -37,6 +37,9 @@ export const VERSION = reinVersion();
 /** Queue marker: deliver a finished background subagent's report (if still uncollected). */
 const DELIVER = '\u0000deliver-agent:';
 
+/** Background commands running at least this long are mentioned (once) when a turn ends. */
+const BACKGROUND_REMINDER_MS = 5 * 60_000;
+
 export type Overlay =
   | {name: 'none'}
   | {name: 'login'}
@@ -388,6 +391,19 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
         setGoalNote(undefined);
       });
   }, [chat.busy, queued.length, overlay.name, ready, statusTick]);
+  // Background commands run until stopped (no timeout). When a turn ends, mention any that have been
+  // going for a while, once each, so a forgotten dev server or emulator doesn't run unnoticed.
+  const announcedBg = useRef(new Set<number>());
+  useEffect(() => {
+    if (chat.busy) return;
+    const stale = runtime.tools.shells
+      .running({background: true})
+      .filter((s) => Date.now() - s.startedAt >= BACKGROUND_REMINDER_MS && !announcedBg.current.has(s.id));
+    if (!stale.length) return;
+    stale.forEach((s) => announcedBg.current.add(s.id));
+    log('info', `Still running in the background: ${stale.map((s) => `#${s.id} ${s.command.slice(0, 60)} (${shellStatusText(s).replace('running ', '')})`).join(', ')}. Ask the agent to stop ${stale.length > 1 ? 'them' : 'it'} if you're done, or /shells to look.`);
+  }, [chat.busy]);
+
   useEffect(() => {
     if (chat.busy || !queued.length) return;
     const [next, ...rest] = queued;

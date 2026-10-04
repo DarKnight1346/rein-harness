@@ -23,6 +23,21 @@ export type Shell = {
 
 const MAX_LINES = 5000;
 const MAX_LINE_CHARS = 2000;
+/**
+ * An unfinished line longer than this is cut: output that never sends a newline (a UEFI firmware
+ * console on `-serial stdio`, a spinner redrawing with \r for hours) must not grow one string
+ * without bound while the command runs.
+ */
+const MAX_PARTIAL_CHARS = 16_000;
+/** Finished commands keep their last lines, and only the most recent ones keep any output. */
+const FINISHED_MAX_LINES = 2000;
+const FINISHED_WITH_OUTPUT = 50;
+
+/**
+ * A stored line as its own string. Slicing or splitting a big string can return a view that keeps
+ * the whole original alive in V8 (a 2,000-char line pinning a 60 MB stream); a copy doesn't.
+ */
+const own = (s: string) => (s.length > 12 ? Buffer.from(s, 'utf8').toString('utf8') : s);
 export const DEFAULT_TIMEOUT_MS = 120_000;
 
 /**
@@ -81,6 +96,7 @@ export class ShellManager extends EventEmitter {
         shell.exitCode = code;
         shell.endedAt = Date.now();
         this.procs.delete(shell.id);
+        this.trimFinished(shell);
         this.emit('change', shell);
         resolve(shell);
       };
@@ -126,9 +142,34 @@ export class ShellManager extends EventEmitter {
     const key = `${shell.id}:${stream}`;
     const text = (this.partial.get(key) ?? '') + stripAnsi(chunk);
     const parts = text.split('\n');
-    this.partial.set(key, parts.pop() ?? '');
+    let rest = parts.pop() ?? '';
     for (const line of parts) this.push(shell, line);
+    if (rest.length > MAX_PARTIAL_CHARS) {
+      // No newline in sight: a \r redraw only needs its last state; anything else becomes a line.
+      const cr = rest.lastIndexOf('\r');
+      if (cr >= 0) rest = own(rest.slice(cr + 1));
+      if (rest.length > MAX_PARTIAL_CHARS) {
+        this.push(shell, rest);
+        rest = '';
+      }
+    }
+    this.partial.set(key, rest);
     this.emit('change', shell);
+  }
+
+  /** A finished command keeps its last lines; only the most recent finished ones keep output at all. */
+  private trimFinished(shell: Shell): void {
+    if (shell.lines.length > FINISHED_MAX_LINES) {
+      const drop = shell.lines.length - FINISHED_MAX_LINES;
+      shell.lines.splice(0, drop);
+      shell.dropped += drop;
+    }
+    const finished = this.list().filter((s) => s.status !== 'running');
+    for (const old of finished.slice(0, Math.max(0, finished.length - FINISHED_WITH_OUTPUT))) {
+      if (!old.lines.length) continue;
+      old.dropped += old.lines.length;
+      old.lines = [];
+    }
   }
 
   private flushPartial(shell: Shell): void {
@@ -142,7 +183,7 @@ export class ShellManager extends EventEmitter {
   private push(shell: Shell, raw: string): void {
     // Progress bars redraw with \r: keep only the final state of the line.
     const line = raw.includes('\r') ? raw.split('\r').filter(Boolean).at(-1) ?? '' : raw;
-    shell.lines.push(line.length > MAX_LINE_CHARS ? line.slice(0, MAX_LINE_CHARS) + '…' : line);
+    shell.lines.push(own(line.length > MAX_LINE_CHARS ? line.slice(0, MAX_LINE_CHARS) + '…' : line));
     if (shell.lines.length > MAX_LINES) {
       const drop = shell.lines.length - MAX_LINES;
       shell.lines.splice(0, drop);

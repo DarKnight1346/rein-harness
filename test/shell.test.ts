@@ -65,3 +65,35 @@ describe('shell tools via ToolHost', () => {
     strict.close();
   });
 });
+
+describe('shell output memory', () => {
+  it('cuts output that never sends a newline instead of growing one string forever', async () => {
+    const {ShellManager} = await import('../src/tools/shells.js');
+    const m = new ShellManager();
+    // ~200k chars with no newline (a firmware console / spinner).
+    const {shell, done} = m.start(`node -e "process.stdout.write('x'.repeat(200000))"`, {cwd: process.cwd(), background: true});
+    await done;
+    expect(shell.lines.length).toBeGreaterThan(1); // cut into lines as it streamed
+    expect(Math.max(...shell.lines.map((l) => l.length))).toBeLessThanOrEqual(2001);
+  });
+
+  it('keeps only the last state of a \\r progress line', async () => {
+    const {ShellManager} = await import('../src/tools/shells.js');
+    const m = new ShellManager();
+    const {shell, done} = m.start(`node -e "for (let i = 0; i <= 50000; i++) process.stdout.write('\\\\rstep ' + i)"`, {cwd: process.cwd(), background: true});
+    await done;
+    expect(shell.lines.at(-1)).toBe('step 50000');
+  });
+
+  it('finished commands keep their last 2000 lines; only the 50 most recent keep output', async () => {
+    const {ShellManager} = await import('../src/tools/shells.js');
+    const m = new ShellManager();
+    const first = m.start(`node -e "for (let i = 0; i < 3000; i++) console.log(i)"`, {cwd: process.cwd(), background: true});
+    await first.done;
+    expect(first.shell.lines.length).toBe(2000);
+    expect(first.shell.dropped).toBe(1000);
+    for (let i = 0; i < 50; i++) await m.start('echo hi', {cwd: process.cwd(), background: true}).done;
+    expect(first.shell.lines).toEqual([]); // the oldest finished command let go of its output
+    expect(m.list().at(-1)!.lines).toEqual(['hi']);
+  });
+});
