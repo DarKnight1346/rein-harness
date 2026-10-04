@@ -1,8 +1,9 @@
 import type {Skill} from '../skills/index.js';
 
-export type CommandName = 'ide' | 'memory' | 'mcp' | 'rewind' | 'permissions' | 'add-dir' | 'goal' | 'goal:plan' | 'btw' | 'agents' | 'agent' | 'resume' | 'login' | 'usage' | 'model' | 'context' | 'compact' | 'shells' | 'configure' | 'update' | 'tui' | 'clear' | 'help' | 'exit';
+export type CommandName = 'export' | 'ide' | 'memory' | 'mcp' | 'rewind' | 'permissions' | 'add-dir' | 'goal' | 'goal:plan' | 'btw' | 'agents' | 'agent' | 'resume' | 'login' | 'usage' | 'model' | 'context' | 'compact' | 'shells' | 'configure' | 'update' | 'tui' | 'clear' | 'help' | 'exit';
 
 export const COMMANDS: {name: CommandName; description: string}[] = [
+  {name: 'export', description: 'Save the conversation as Markdown and copy it to the clipboard: /export [file] (default ~/.rein/exports/<id>.md)'},
   {name: 'ide', description: 'Editor integration (VS Code, Cursor, Windsurf, JetBrains with the Claude Code extension): connect, or show the connection'},
   {name: 'memory', description: "This project's memory (.rein/MEMORY.md) — what Rein has learned here"},
   {name: 'mcp', description: 'MCP servers: status and tools; approve project servers, reconnect'},

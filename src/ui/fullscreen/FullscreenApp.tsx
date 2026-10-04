@@ -10,6 +10,7 @@ import type {Entry} from '../entries.js';
 import {accountLabel, modelLabel} from '../format.js';
 import {ImportPrompt} from '../ImportPrompt.js';
 import {TrustHooksPrompt} from '../TrustHooksPrompt.js';
+import {HistorySearch} from '../HistorySearch.js';
 import {LoginScreen} from '../LoginScreen.js';
 import {ModelScreen} from '../ModelScreen.js';
 import {Clickable, useClickable} from '../terminal/clicks.js';
@@ -167,6 +168,12 @@ export function FullscreenApp({resume}: {resume: Resume}) {
         return (
           <Window title="Found existing logins" width={72} onClose={() => r.finishImport(false)}>
             <ImportPrompt bare rows={overlay.rows} onImport={() => r.finishImport(true)} onSkip={() => r.finishImport(false)} />
+          </Window>
+        );
+      case 'history':
+        return (
+          <Window title="Search your messages" width={windowWidth} onClose={() => r.pickHistory(undefined)}>
+            <HistorySearch entries={overlay.entries} width={windowText - 2} onPick={r.pickHistory} onCancel={() => r.pickHistory(undefined)} />
           </Window>
         );
       case 'trust':

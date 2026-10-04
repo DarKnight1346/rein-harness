@@ -87,10 +87,15 @@ See [Goals](../../features/goals/) and [Plan mode](../../features/plans/).
 | `/configure` | — | Settings in eleven tabs: Status line, Sidebar, Approvals, Shell, Subagents, Goals, Load balancing, Notifications, Updates, Privacy, Compaction. **Aliases: `/config`, `/settings`.** |
 | `/tui` | `fullscreen` \| `classic` | Switches renderer and carries the conversation over. With no argument, shows which renderer is active. *Waits for idle.* |
 | `/update` | — | Updates the `claude` and `codex` CLIs, checks the Codex app-server protocol, then updates Rein. *Waits for idle.* |
+| `/export` | `[file]` | Saves the whole conversation as Markdown (every message, each reply's tool calls as a list) and copies it to the clipboard. Default file: `~/.rein/exports/<id>.md`; a path is relative to the project. |
 | `/help` | — | Commands and skills. |
 | `/exit` | — | Quits. Ctrl+C twice also exits. |
 
 `/config` and `/settings` are the only aliases. An unknown command prints `Unknown command /<name>. Try /help.`
+
+## Shell commands with `!`
+
+Start a message with `!` to run a shell command yourself, like Claude Code's bash mode: `!npm test`, `!git status`. It runs in the project with no approval (you typed it), its output shows live under the input, and the command plus its output go along with your next message so the agent knows what you ran. Ctrl+C stops it.
 
 ## Built-in skills
 
@@ -98,6 +103,7 @@ These four entries look like commands but are **skills**. Each one sends a prepa
 
 | Skill | Arguments | What it does |
 |---|---|---|
+| `/init` | `[guidance]` | Has the agent look through the project and write (or improve) `AGENTS.md`: what the project is, the real build/test/lint commands, a map, conventions and gotchas. With a `CLAUDE.md` but no `AGENTS.md`, it moves the shared rules into `AGENTS.md` and leaves `CLAUDE.md` as an `@AGENTS.md` import. |
 | `/plan` | `<task>` | Plans a change before making it. Turns plan mode on, and the agent explores read-only, asks you questions, then presents a plan for approval. |
 | `/plan:deep` | `<task>` | Thorough planning for big or risky changes: deeper exploration (parallel subagents), more questions and advisor reviews, then a plan for approval. Also turns on plan mode. |
 | `/skill:create` | `<what it should do>` | Has the agent create a new Rein skill, global or for this project. |

@@ -270,6 +270,12 @@ Drop superseded reads of the same file, routine listings, and output that no lon
   /** SessionStart hook context, added to the first message of the session. */
   private sessionContext: string | undefined;
 
+  /** `!command` runs typed by the user since the last message: they go along with the next one. */
+  private userShells: string[] = [];
+  noteUserShell(command: string, exit: string, output: string): void {
+    this.userShells.push(`<user_shell command=${JSON.stringify(command)} status=${JSON.stringify(exit)}>\n${output.slice(-10_000)}\n</user_shell>`);
+  }
+
   /** The connected editor (Claude Code IDE extension protocol), if any. */
   ide: IdeConnection | undefined;
   /** Called when the editor connects, disconnects, or its selection changes (UI refresh). */
@@ -305,7 +311,9 @@ Drop superseded reads of the same file, routine listings, and output that no lon
     const selection = sel
       ? `<ide_selection file="${path.relative(root, sel.filePath) || sel.filePath}" lines="${sel.startLine}-${sel.endLine}">\n${sel.text.slice(0, 20_000)}\n</ide_selection>\nThe user has this selected in their editor; it may or may not be what the message is about.`
       : undefined;
-    const context = [this.sessionContext, out.context, selection, this.planMode ? PLAN_MODE_CONTEXT : undefined].filter(Boolean).join('\n');
+    const shells = this.userShells.length ? `${this.userShells.join('\n')}\nThe user ran ${this.userShells.length > 1 ? 'these commands' : 'this command'} themselves (with !) before this message.` : undefined;
+    const context = [this.sessionContext, out.context, shells, selection, this.planMode ? PLAN_MODE_CONTEXT : undefined].filter(Boolean).join('\n');
+    if (!out.block) this.userShells = [];
     if (!out.block) this.sessionContext = undefined;
     return {block: out.block, context: context || undefined};
   }

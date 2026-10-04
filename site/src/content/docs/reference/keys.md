@@ -35,6 +35,8 @@ Rein follows Claude Code's conventions wherever it can: Esc interrupts, Esc twic
 | **Ctrl+W** / **Option+Backspace** | Deletes the word before the cursor. |
 | **Ctrl+U** | Deletes from the start of the line to the cursor (on a one-line draft with the cursor at the end, that clears it). |
 | **Ctrl+K** | Deletes from the cursor to the end of the line. |
+| **Ctrl+R** | Searches the messages you sent in this project (newest first, every word must match). ↑↓ or Ctrl+R again to move, Enter puts the message in the input, Esc cancels. |
+| **`!` at the start** | Runs the rest as a shell command yourself (`!npm test`): live output, no approval, and it goes along with your next message. |
 | **Ctrl+G** | Opens the draft in your editor (`$VISUAL`, then `$EDITOR`, else `vi`; Notepad on Windows). Save and quit to bring the edited text back. |
 | **Ctrl+V** | Pastes an **image** from the clipboard as `[Image #1]`. Normal text paste uses your terminal's paste. |
 | **Paste** | Long pastes (more than 3 lines or 800 characters) collapse to `[Pasted text #1 +42 lines]`. |

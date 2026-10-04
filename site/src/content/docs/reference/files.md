@@ -21,6 +21,7 @@ Set `REIN_HOME` to move the whole folder, for example to keep a test setup apart
 | `accounts/claude/<id>/` | `CLAUDE_CONFIG_DIR` for a Claude account you added with `/login` (`claude-1`, `claude-2`, …) |
 | `accounts/codex/<id>/` | `CODEX_HOME` for a Codex account you added (`codex-1`, …) |
 | `state/usage.json` | Last-known usage windows per account, plus limit cooldowns (account unusable until a time) |
+| `exports/<id>.md` | Conversations saved with `/export` (when no file is given) |
 | `mcp-auth/<host>_<path>.json` | OAuth tokens and client registration for each remote MCP server you signed in to (owner-only), e.g. `mcp.linear.app_mcp.json`. Delete one to sign out of that server |
 | `state/codex-compat.json` | Result of the compatibility check for the installed `codex` version (and its feature flags). Delete it to re-check |
 | `state/trusted-projects.json` | Projects whose hooks you trusted, with a hash of the hooks as reviewed (a change asks again) |

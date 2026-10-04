@@ -15,6 +15,8 @@ import {notify} from './terminal/notify.js';
 import {incompatibleMessage} from '../providers/codex/compat.js';
 import {findIdes} from '../ide/connection.js';
 import {diffTabName, proposedChange} from '../ide/review.js';
+import {conversationMarkdown, writeExport} from '../session/export.js';
+import {copyToClipboard} from './terminal/clipboard.js';
 import {editExternally} from './terminal/editor.js';
 import {addHistory, HistoryCursor, loadHistory} from '../store/history.js';
 import {askBtwSubagent, btw} from '../session/btw.js';
@@ -37,7 +39,7 @@ import type {AskAnswer, AskQuestion} from '../tools/ask.js';
 import {settingsFiles} from '../tools/permissions.js';
 import {memoryFacts, memoryFile} from '../tools/memory.js';
 import {readFileSync} from 'node:fs';
-import {accountName, hidingIdentity} from './privacy.js';
+import {accountName, hidingIdentity, redact} from './privacy.js';
 import nodePath from 'node:path';
 
 export const VERSION = reinVersion();
@@ -58,6 +60,8 @@ export type Overlay =
   | {name: 'approval'; req: ApprovalRequest; resolve(d: ApprovalDecision): void; position: number; total: number}
   | {name: 'import'; rows: AccountRow[]}
   | {name: 'trust'; hooks: ProjectHooks}
+  /** Ctrl+R: search the messages sent in this project. */
+  | {name: 'history'; entries: string[]}
   // Fullscreen-only info windows (classic prints these into the transcript instead).
   | {name: 'usage'; data?: {rows: UsageRow[]; jev: boolean}}
   | {name: 'context'; report?: ContextReport; agent?: string}
@@ -546,6 +550,19 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
   // Pastes, images and dropped files shown as placeholders in the input; expanded on send.
   const attachments = useRef(new Attachments(() => nodePath.join(runtime.engine.scratch, 'images')));
   const onPaste = (text: string) => attachments.current.paste(text);
+  // Ctrl+R: reverse search through this project's sent messages.
+  useInput(
+    (input, key) => {
+      if (key.ctrl && input === 'r') setOverlay({name: 'history', entries: loadHistory(process.cwd())});
+    },
+    {isActive: inputActive},
+  );
+  const pickHistory = (text: string | undefined) => {
+    setOverlay({name: 'none'});
+    if (text === undefined) return;
+    prevDraft.current = text;
+    setDraft(text);
+  };
   // The editor's "mention in chat" (Claude Code extension) inserts `@file` into the input.
   useEffect(() => {
     runtime.onIdeChange = bump;
@@ -614,7 +631,30 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
     {isActive: inputActive && !suggestions.length && !fileSuggestions.length},
   );
 
+  /**
+   * `!command`: run it yourself in the project (no approval: you typed it), with live output, like
+   * Claude Code's bash mode. The command and its output go along with your next message.
+   */
+  const runBang = (command: string) => {
+    logMain('user', `! ${command}`);
+    const cap = runtime.config.shellMaxMinutes;
+    const {shell, done} = runtime.tools.shells.start(command, {cwd: process.cwd(), background: false, timeoutMs: cap ? cap * 60_000 : 24 * 3600_000, maxMs: cap ? cap * 60_000 : undefined});
+    void done.then((s) => {
+      const status = s.status === 'exited' ? `exit ${s.exitCode ?? '?'}` : s.status;
+      const output = runtime.tools.shells.tail(s, 2000);
+      runtime.noteUserShell(command, status, output);
+      const shown = runtime.tools.shells.tail(s, 30);
+      logMain(s.status === 'exited' && s.exitCode === 0 ? 'info' : 'error', `${shown || '(no output)'}\n[${shellStatusText(s)}] · goes along with your next message`);
+      void shell;
+    });
+  };
+
   const runCommand = (raw: string) => {
+    // `!command` runs a shell command directly (main conversation only).
+    if (/^\s*!\s*\S/.test(raw) && !viewing) {
+      runBang(raw.trim().slice(1).trim());
+      return;
+    }
     // Viewing a subagent: command feedback shows in its view (the main history isn't on screen).
     const shown = viewing;
     const log = shown ? (kind: 'info' | 'error' | 'user', text: string) => kind !== 'user' && runtime.agents.note(shown.id, kind === 'error' ? `✗ ${text}` : text) : logMain;
@@ -694,6 +734,21 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
       case 'mcp':
         setOverlay({name: 'mcp'});
         break;
+      case 'export': {
+        const t = viewing ? undefined : runtime.engine.transcript;
+        if (!t?.messages.length) {
+          log('info', viewing ? '/export works on the main conversation.' : 'Nothing to export yet.');
+          return;
+        }
+        const md = conversationMarkdown(t, {redact});
+        try {
+          const file = writeExport(t, md, parsed.args.trim() || undefined);
+          void copyToClipboard(md).then((ok) => log('info', `Exported ${t.messages.length} messages to ${redact(file)}${ok ? ' and copied it to the clipboard' : ''}.`));
+        } catch (err) {
+          log('error', `Couldn't export: ${(err as Error).message}`);
+        }
+        return;
+      }
       case 'ide': {
         if (runtime.ide && !parsed.args) {
           const sel = runtime.ide.selection;
@@ -1138,7 +1193,7 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
 
   return {
     entries, add, log, overlay, setOverlay, closeOverlay, finishImport, ready, updating, updateLog, statusTick, bump,
-    finishTrust, startPlanGoal, startNewPlan, draft, onDraft, onSubmit, onPaste, onImagePaste, onHistory: suggestions.length || fileSuggestions.length ? undefined : onHistory, onExternalEdit, doRewind, togglePlanMode, fileSuggestions, fileSelected, acceptFile, runCommand, suggestions, selected, setSuggestIndex, inputActive, chat, skills, openShells, queued, exitArmed, compacting, pickSession,
+    finishTrust, pickHistory, startPlanGoal, startNewPlan, draft, onDraft, onSubmit, onPaste, onImagePaste, onHistory: suggestions.length || fileSuggestions.length ? undefined : onHistory, onExternalEdit, doRewind, togglePlanMode, fileSuggestions, fileSelected, acceptFile, runCommand, suggestions, selected, setSuggestIndex, inputActive, chat, skills, openShells, queued, exitArmed, compacting, pickSession,
     view, setView, viewing, goalNote,
   };
 }

@@ -135,6 +135,7 @@ Fix issue #$1 with priority $2. Recent changes: !`git log --oneline -5`
 
 | Skill | What it does |
 |---|---|
+| `/init [guidance]` | The agent studies the project and writes or improves `AGENTS.md` (commands that actually exist, a map, conventions, gotchas), then reads it back to check every command and path. |
 | `/plan <task>` | Plan mode on. Restate the goal, explore read-only (with subagents for wide areas), ask clarifying questions with `ask_user`, then present a plan with 2–10 checkable milestones. |
 | `/plan:deep <task>` | The thorough version for big or risky work: broader exploration with parallel subagents, more questions, an [advisor](../subagents/) review of the approach *and* of the draft plan (when an advisor is configured), risks, rollback, and 3–10 milestones. |
 | `/skill:create <what>` | The agent writes a new skill for you, project or global. |

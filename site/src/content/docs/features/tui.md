@@ -175,7 +175,7 @@ The input box grows up to six lines and has a few tricks:
 - **Backspace** after a token deletes the whole token and its attachment.
 - **`@mentions`.** Type `@` and part of a path to get fuzzy matches from your project's files and folders (from `rg --files`, so `.gitignore` is respected). `Tab` or `Enter` inserts the selected match. On send, a mentioned file's contents, image or folder listing goes along with your message.
 - **Slash commands.** Type `/` for a list of commands and skills. `↑↓` selects and `Tab` completes.
-- **A real line editor.** Move with `←/→` (by word with `Option`/`Alt`), `Home`/`End` or `Ctrl+A`/`Ctrl+E`, delete words with `Ctrl+W`, and edit anywhere in the draft. `↑` on the first row recalls earlier messages in this project, even from past sessions. `Ctrl+G` opens the draft in `$EDITOR` for long prompts. Full list in [Keyboard & mouse](../../reference/keys/).
+- **A real line editor.** Move with `←/→` (by word with `Option`/`Alt`), `Home`/`End` or `Ctrl+A`/`Ctrl+E`, delete words with `Ctrl+W`, and edit anywhere in the draft. `↑` on the first row recalls earlier messages in this project, even from past sessions. `Ctrl+G` opens the draft in `$EDITOR` for long prompts. `Ctrl+R` searches your earlier messages, and `!command` runs a shell command yourself. Full list in [Keyboard & mouse](../../reference/keys/).
 - **Queueing.** While the agent is busy, messages you send are queued and run in order when it finishes. The placeholder reads `queue a message, or /btw <question>`. [`/btw`](../btw/) runs right away. `/clear`, `/compact`, `/tui`, `/update` and `/resume` wait until the agent is idle.
 
 ## Stopping and exiting

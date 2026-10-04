@@ -4,6 +4,7 @@ import {Box, Static, Text} from 'ink';
 import {approvalNote, compactText, routeLabel, toolResultSummary} from './format.js';
 import {ImportPrompt} from './ImportPrompt.js';
 import {TrustHooksPrompt} from './TrustHooksPrompt.js';
+import {HistorySearch} from './HistorySearch.js';
 import {LoginScreen} from './LoginScreen.js';
 import {ModelScreen} from './ModelScreen.js';
 import {ConfigureScreen} from './ConfigureScreen.js';
@@ -81,6 +82,11 @@ export function ClassicApp({resume}: {resume: Resume}) {
           <Working startedAt={r.goalNote.startedAt} phase="tool" tool={r.goalNote.label} />
         ) : null}
         {overlay.name === 'import' && <ImportPrompt rows={overlay.rows} onImport={() => r.finishImport(true)} onSkip={() => r.finishImport(false)} />}
+        {overlay.name === 'history' && (
+          <Box borderStyle="round" borderColor="cyan" paddingX={1} flexDirection="column">
+            <HistorySearch entries={overlay.entries} onPick={r.pickHistory} onCancel={() => r.pickHistory(undefined)} />
+          </Box>
+        )}
         {overlay.name === 'trust' && <TrustHooksPrompt hooks={overlay.hooks} onTrust={() => r.finishTrust(true)} onSkip={() => r.finishTrust(false)} />}
         {overlay.name === 'login' && <LoginScreen onLog={r.log} onClose={r.closeOverlay} />}
         {overlay.name === 'model' && <ModelScreen onLog={r.log} onClose={r.closeOverlay} />}
