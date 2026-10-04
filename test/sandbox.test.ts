@@ -13,7 +13,8 @@ const project = () => {
 };
 
 describe('sandbox', () => {
-  it('builds a write-limiting Seatbelt profile; strict also blocks the network', () => {
+  // Seatbelt is macOS only (Windows has no sandbox, and its 8.3 temp paths don't round-trip).
+  it.skipIf(process.platform === 'win32')('builds a write-limiting Seatbelt profile; strict also blocks the network', () => {
     const p = project();
     const write = seatbeltProfile({mode: 'write', roots: [p]});
     expect(write).toContain('(deny file-write* (require-not (require-any');

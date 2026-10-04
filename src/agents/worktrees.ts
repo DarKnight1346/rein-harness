@@ -1,6 +1,6 @@
 import {execFile} from 'node:child_process';
 import {randomBytes} from 'node:crypto';
-import {chmodSync, copyFileSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, readlinkSync, realpathSync, rmSync, statSync, symlinkSync, unlinkSync, utimesSync, writeFileSync} from 'node:fs';
+import {chmodSync, copyFileSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, readlinkSync, realpathSync, rmSync, statSync, symlinkSync, unlinkSync, utimesSync, writeFileSync} from 'node:fs';
 import {constants as fsConstants} from 'node:fs';
 import fsp from 'node:fs/promises';
 import os from 'node:os';
@@ -112,9 +112,11 @@ export async function repoTop(dir: string): Promise<string | undefined> {
  */
 export async function snapshot(top: string, skip: ReadonlySet<string> = new Set()): Promise<{commit: string; big: string[]}> {
   const indexPath = path.resolve(top, (await git(top, ['rev-parse', '--git-path', 'index'])).trim());
-  const tmp = path.join(os.tmpdir(), `rein-index-${randomBytes(6).toString('hex')}`);
+  // In a private folder (mkdtemp, 0700): the index lists the project's files.
+  const tmpDir = mkdtempSync(path.join(os.tmpdir(), 'rein-index-'));
+  const tmp = path.join(tmpDir, 'index');
   if (existsSync(indexPath)) {
-    copyFileSync(indexPath, tmp);
+    copyFileSync(indexPath, tmp, fsConstants.COPYFILE_EXCL);
     // Keep the index's own timestamp: git trusts cached file stats only when they're older than the
     // index ("racy git"), and a fresh copy would make a same-size edit from that second look unchanged.
     const st = statSync(indexPath);
@@ -143,7 +145,7 @@ export async function snapshot(top: string, skip: ReadonlySet<string> = new Set(
     const commit = (await git(top, ['commit-tree', tree, ...(head ? ['-p', head] : []), '-m', 'rein: snapshot for a subagent worktree'], {GIT_AUTHOR_NAME: 'Rein', GIT_AUTHOR_EMAIL: 'rein@localhost', GIT_COMMITTER_NAME: 'Rein', GIT_COMMITTER_EMAIL: 'rein@localhost'})).trim();
     return {commit, big};
   } finally {
-    rmSync(tmp, {force: true});
+    rmSync(tmpDir, {recursive: true, force: true});
   }
 }
 
@@ -155,8 +157,10 @@ async function furnish(top: string, dir: string, big: string[]): Promise<Set<str
     if (existsSync(target)) return;
     mkdirSync(path.dirname(target), {recursive: true});
     try {
-      // A junction on Windows: directory symlinks there need admin rights or developer mode.
-      symlinkSync(path.join(top, rel), target, 'junction');
+      // A junction for a folder on Windows: directory symlinks there need admin rights or developer
+      // mode (a file link may still fail without them; it's then left out).
+      const source = path.join(top, rel);
+      symlinkSync(source, target, lstatSync(source).isDirectory() ? 'junction' : 'file');
       linked.add(rel);
     } catch {}
   };
@@ -226,7 +230,10 @@ function writeFile(file: string, content: Buffer, mode: string | undefined): voi
     symlinkSync(content.toString(), file);
     return;
   }
-  if (existsSync(file) && lstatSync(file).isSymbolicLink()) unlinkSync(file);
+  // Replace a symlink rather than writing through it (lstat, not exists-then-check).
+  try {
+    if (lstatSync(file).isSymbolicLink()) unlinkSync(file);
+  } catch {}
   writeFileSync(file, content);
   if (mode === '100755') chmodSync(file, 0o755);
 }
@@ -234,13 +241,13 @@ function writeFile(file: string, content: Buffer, mode: string | undefined): voi
 /** Three-way merge of one text file; undefined = conflict (or not text). */
 async function mergeText(ours: Buffer, base: Buffer, theirs: Buffer): Promise<Buffer | undefined> {
   if ([ours, base, theirs].some((b) => b.includes(0))) return undefined;
-  const dir = path.join(os.tmpdir(), `rein-merge-${randomBytes(6).toString('hex')}`);
-  mkdirSync(dir);
+  // A private folder (mkdtemp, 0700): the file contents are the user's code.
+  const dir = mkdtempSync(path.join(os.tmpdir(), 'rein-merge-'));
   try {
     const [o, b, t] = ['ours', 'base', 'theirs'].map((n) => path.join(dir, n));
-    writeFileSync(o!, ours);
-    writeFileSync(b!, base);
-    writeFileSync(t!, theirs);
+    writeFileSync(o!, ours, {mode: 0o600, flag: 'wx'});
+    writeFileSync(b!, base, {mode: 0o600, flag: 'wx'});
+    writeFileSync(t!, theirs, {mode: 0o600, flag: 'wx'});
     try {
       const {stdout} = await run('git', ['merge-file', '-p', o!, b!, t!], {encoding: 'buffer', maxBuffer: 256 * 1024 * 1024});
       return stdout;
@@ -311,9 +318,9 @@ export class Worktrees {
     const linked = await furnish(top, dir, big);
     let real = this.root;
     try {
-      real = realpathSync(this.root);
+      real = realpathSync.native(this.root);
     } catch {}
-    const sub = path.relative(realpathSync(top), real);
+    const sub = path.relative(realpathSync.native(top), real);
     const gitDir = (await git(dir, ['rev-parse', '--absolute-git-dir'])).trim();
     const common = path.resolve(dir, (await git(dir, ['rev-parse', '--git-common-dir'])).trim());
     const wt: Worktree = {root: sub ? path.join(dir, sub) : dir, dir, base: commit, linked, writable: [gitDir, path.join(common, 'objects')]};

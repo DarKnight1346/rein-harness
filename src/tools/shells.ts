@@ -31,7 +31,7 @@ export type Shell = {
 };
 
 /** A running pseudo-terminal: node-pty when it loads, else `script` over pipes. */
-type Term = {write(data: string): void; resize(cols: number, rows: number): void; raw: string; alt: boolean; quietTimer?: NodeJS.Timeout};
+type Term = {write(data: string): void; resize(cols: number, rows: number): void; raw: string; alt: boolean; quietTimer?: NodeJS.Timeout; kill?: () => void};
 
 /** Bytes of raw terminal output kept to repaint the screen when the user takes over. */
 const RAW_KEEP = 64 * 1024;
@@ -224,6 +224,12 @@ export class ShellManager extends EventEmitter {
               p.resize(Math.max(20, c), Math.max(5, r));
             } catch {}
           };
+          // Windows (ConPTY): killing the pid alone doesn't end the session; the pty has to close.
+          term.kill = () => {
+            try {
+              p.kill();
+            } catch {}
+          };
           p.onData(onData);
           p.onExit(({exitCode}) => finish(exitCode));
         } else if (isWindows) {
@@ -307,6 +313,7 @@ export class ShellManager extends EventEmitter {
     if (!child || !shell || shell.status !== 'running') return false;
     shell.status = reason;
     killTree(child.pid, 'SIGTERM');
+    if (isWindows) this.terms.get(id)?.kill?.();
     // Escalate if it ignores SIGTERM.
     setTimeout(() => {
       if (this.procs.has(id)) killTree(child.pid, 'SIGKILL');

@@ -28,7 +28,7 @@ describe('/export', () => {
     const def = writeExport(t, '# hi\n');
     expect(def).toBe(path.join(process.env.REIN_HOME, 'exports', `${t.id}.md`));
     const custom = writeExport(t, '# hi\n', path.join(process.env.REIN_HOME, 'notes/chat'));
-    expect(custom.endsWith('notes/chat.md')).toBe(true);
+    expect(custom.endsWith(path.join('notes', 'chat.md'))).toBe(true);
     expect(readFileSync(custom, 'utf8')).toBe('# hi\n');
   });
 });
