@@ -1,0 +1,61 @@
+name: Deploy site
+
+# Lives in rein-harness/rein-harness.github.io as .github/workflows/pages.yml. Builds the docs from
+# the public DarKnight1346/rein-harness repo (site/) and publishes them at https://rein-harness.github.io/.
+# Triggered by the main repo's Docs workflow (repository_dispatch), daily as a fallback, or by hand.
+on:
+  repository_dispatch:
+    types: [docs-updated]
+  schedule:
+    - cron: '17 6 * * *'
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Branch, tag or commit of DarKnight1346/rein-harness to build
+        default: main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: DarKnight1346/rein-harness
+          ref: ${{ inputs.ref || 'main' }}
+          fetch-depth: 0 # page "last updated" dates come from git history
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: site/package-lock.json
+      - uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
+      - name: Build
+        working-directory: site
+        run: npm ci && npm run build
+        env:
+          SITE_URL: https://rein-harness.github.io
+          BASE_PATH: /
+      - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+        with:
+          path: site/dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1

@@ -1,0 +1,135 @@
+---
+title: Install
+description: Install Rein with npm on macOS, Linux or Windows, sign in to Claude Code or Codex, and keep everything up to date.
+---
+
+import { Steps, Tabs, TabItem } from '@astrojs/starlight/components';
+
+Rein is a single npm package. Rein does not talk to model APIs directly. It drives the official `claude` and `codex` CLIs, so you need at least one of them installed and signed in.
+
+## Requirements
+
+- **macOS, Linux or Windows**
+- **Node.js 22 or newer.** Check with `node --version`.
+- **At least one official CLI, signed in:**
+  - **Claude Code** for Claude subscriptions
+  - **Codex** for ChatGPT subscriptions (Rein uses ChatGPT sign-in for Codex accounts)
+- **Windows:** [Git for Windows](https://git-scm.com/download/win) is recommended. With it, the agent's shell and your hooks run in Git Bash, as in Claude Code. Without it they fall back to PowerShell. Use Windows Terminal.
+
+## Install
+
+<Steps>
+
+1. **Install and sign in to a CLI** (skip any you already use).
+
+   <Tabs syncKey="os">
+   <TabItem label="macOS / Linux">
+
+   ```sh
+   # Claude Code
+   curl -fsSL https://claude.ai/install.sh | bash
+   claude            # run once to sign in
+
+   # Codex
+   npm install -g @openai/codex
+   codex login
+   ```
+
+   </TabItem>
+   <TabItem label="Windows">
+
+   ```sh
+   # Claude Code
+   npm install -g @anthropic-ai/claude-code
+   claude            # run once to sign in
+
+   # Codex
+   npm install -g @openai/codex
+   codex login
+   ```
+
+   </TabItem>
+   </Tabs>
+
+   `npm install -g @anthropic-ai/claude-code` works on macOS and Linux too.
+
+2. **Install Rein.**
+
+   ```sh
+   npm install -g rein-harness
+   ```
+
+   To try it without installing anything globally, run `npx rein-harness`.
+
+3. **Run it from your project folder.** Rein's tools work freely inside the folder you start it in. Paths outside it ask first.
+
+   ```sh
+   cd ~/code/my-project
+   rein
+   ```
+
+   On first launch Rein finds your existing `claude` / `codex` logins and offers to import them. Continue with [Your first session](../first-session/).
+
+</Steps>
+
+:::tip[Terminal.app users]
+Turn on **View → Allow Mouse Reporting** so clicks, scrolling and drag-to-copy work in Rein's fullscreen UI.
+:::
+
+### If npm fails with `EACCES`
+
+That means your global npm folder is owned by root. Either install with `sudo npm install -g rein-harness`, or point npm at a folder you own (once) and install again:
+
+```sh
+npm config set prefix ~/.npm-global
+echo 'export PATH="$HOME/.npm-global/bin:$PATH"' >> ~/.zshrc   # or ~/.bashrc
+source ~/.zshrc
+npm install -g rein-harness
+```
+
+### From source
+
+```sh
+git clone https://github.com/DarKnight1346/rein-harness.git && cd rein-harness
+npm install && npm run build && npm link
+rein            # or, without linking: npm run dev
+```
+
+A source checkout updates itself with `git pull` (see below).
+
+## Updating
+
+Rein keeps itself current:
+
+- **Auto-update on launch.** Each launch Rein asks npm for the latest release in the background. If a newer one exists, it installs it in a detached process and tells you `Rein updated 0.1.0 → 0.1.1 — restart rein to use it.` Startup is never delayed, and a lock file stops several Rein windows from installing at once. Turn it off in `/configure` → **Updates** → *Only when I run /update*, or set `REIN_NO_AUTOUPDATE=1`.
+- **`rein --update`** (or **`/update`** inside Rein) updates everything in one go. It updates the `claude` CLI and then the `codex` CLI. Next it checks that Codex's app-server protocol still works with this Rein. Last, it installs the latest Rein from npm.
+
+```sh
+rein --update
+```
+
+From a git checkout, `/update` runs `git pull --ff-only`, `npm install` and `npm run build` instead. Auto-update only tells you that a newer version exists.
+
+:::note
+If npm can't write to the global folder during an update, Rein tells you and suggests `sudo npm install -g rein-harness@latest` or a user-owned prefix, as above.
+:::
+
+## Uninstall
+
+```sh
+npm uninstall -g rein-harness
+```
+
+Rein keeps its data in `~/.rein/` (or wherever `REIN_HOME` points): settings, saved conversations, checkpoints, and the config folders of accounts **you added through Rein**. Delete that folder to remove everything:
+
+```sh
+rm -rf ~/.rein
+```
+
+Your own `claude` and `codex` logins are untouched. Rein uses imported logins in place and never logs them out.
+
+Projects may also contain a `.rein/` folder (project permission rules, memory, saved plans, project skills). Remove it if you no longer want them.
+
+## Next
+
+Start your [first session](../first-session/), or read [Coming from Claude Code](../from-claude-code/) if you already use it.

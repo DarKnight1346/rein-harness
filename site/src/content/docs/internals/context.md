@@ -1,0 +1,148 @@
+---
+title: Context & compaction
+description: How Rein keeps one transcript as the source of truth, treats native CLI sessions as disposable caches, carries context across models and accounts, and compacts long conversations.
+---
+
+Rein switches models, accounts and even providers in the middle of a conversation, and the model on the other side still knows what happened. That works because the native `claude`/`codex` sessions are not where the conversation lives. Rein's own transcript is. A native session is a **cache** of that transcript: Rein reuses it while it's valid and rebuilds the missing part when it isn't.
+
+This page covers that mechanism. It lives in `src/session/engine.ts`, `src/session/transcript.ts`, `src/session/carry.ts` and `src/session/compactor.ts`.
+
+## The transcript is the truth
+
+Every conversation is a `Transcript` (`src/session/transcript.ts`): the messages, the tool calls on each reply (label, argument summary, ok, the result clipped to 4,000 characters), an optional compaction `summary`, and a map of native sessions:
+
+```ts
+/** A native session that has seen `messages[0..coversUpTo)` (or the summary + messages after it). */
+export type NativeRef = {provider: string; accountId: string; nativeId: string; coversUpTo: number};
+```
+
+`transcript.native` is keyed by `${provider}:${accountId}`. That's the cache key. A Claude session on Claude Account 1 and one on Claude Account 2 are different caches of the same conversation. Each one records **how far into the transcript it has seen** (`coversUpTo`).
+
+On disk, the transcript is an append-only JSONL log in `~/.rein/sessions/<id>.jsonl` plus a small `<id>.meta.json` index (see [Files & directories](../../reference/files/)). Saving appends only new lines, so a long conversation is never rewritten.
+
+## Resume or rebuild
+
+Before each turn, `Engine.prepare()` decides whether the native session can be reused:
+
+1. If the live session belongs to another `(provider, account)`, close it.
+2. If the effort changed: Codex takes effort per turn (`setEffort`); Claude's is fixed per process, so the session is closed and reopened (it resumes, so nothing is lost).
+3. With no live session, look up `transcript.native[key]`. **Resume only if `coversUpTo === userIndex`**, meaning the native session saw every message up to the new one. Otherwise open a fresh native session and carry the missing part.
+4. A model change within the same session is free: Claude gets a `set_model` control request, Codex takes the model on the next `turn/start`.
+
+After every completed turn, `markCovered()` records the native id and the new `coversUpTo`. Several things deliberately break the cache:
+
+| Event | What happens |
+| --- | --- |
+| Compaction | `t.native = {}`, so the next turn starts a fresh session from the summary. Resuming would reload the full history and undo the compaction. |
+| `/rewind` | `t.native = {}`, and the summary is dropped if it covered the rewound part. |
+| Tool list changes (advisor switched on, an MCP server adds tools) | `refreshTools()` closes the live session. The next turn **resumes** it (same history) with the new tool list. |
+| Account removed | `releaseAccount()` drops the session after the running turn finishes. The next turn carries the context to another account. |
+
+## Context carry
+
+When a session hasn't seen part of the conversation (a new account, a provider switch, a failover), `buildCarry()` prepends what's missing to the user's message:
+
+```text
+<earlier_conversation>
+
+This conversation started before you joined it (another model or session). Continue it naturally; do not mention the handoff. Tool calls you see here were made by you earlier; results not shown in full can be re-read if needed.
+
+<summary>
+…compaction summary, if the session predates it…
+</summary>
+
+User: …
+Assistant: [tool Read(src/x.ts) ✓]
+…
+</earlier_conversation>
+```
+
+`carryStart()` picks the first message to include. If a summary covers more than the session saw, the carry starts at the summary and skips the folded messages.
+
+### Which tool results travel
+
+Text alone loses what was read, run and changed. Carrying every tool result can blow the budget. `src/session/carry.ts` resolves this in three tiers:
+
+1. **All of them** if their results fit `CARRY_TOOL_BUDGET` (12,000 tokens).
+2. Otherwise the **compaction model picks**. It sees a one-line index per call, never the result bodies:
+
+   ```text
+   #3 Read(src/session/engine.ts) ok · ~5200 tokens · import {adapters} from '../providers/index.js';
+   #4 Shell($ npm test) FAILED · ~800 tokens · [exited 1]
+   ```
+
+   and returns a JSON array of indices, most important first. Its prompt (in `Runtime.selectCarry`, `src/runtime.ts`) asks for the latest contents of files being worked on, recent errors and test output, and results still in use, and tells it to drop superseded reads and routine listings. Rein keeps its picks in order until the budget or `MAX_PICKED` (24) is reached.
+3. If the selector fails or returns nothing, the **most recent** results that fit.
+
+Everything not picked becomes a one-line trace, `[tool Edit(src/x.ts) ✓]`, so the new session still knows the step happened and can re-read the file. When the selection kicks in, you see a notice:
+
+```text title="rein"
+Context carried over: 7 of 31 tool results (chosen by the compaction model), the rest as one-line traces
+```
+
+### When the carry is too big
+
+The conversation text has its own budget, `CARRY_BUDGET_TOKENS` (24,000) in `engine.ts`. If the carried prompt exceeds it, the engine runs a **handoff compaction** first and rebuilds the carry from the summary. The load balancer also checks this: it won't move a conversation to a better account if the move would force a compaction (see [Load balancing](../load-balancing/)).
+
+## Compaction
+
+`compactTranscript()` (`src/session/compactor.ts`) folds older messages into a structured summary with the compaction model (`/model` → Compaction model, `cheapest` by default). The system prompt asks for these sections, omitting empty ones:
+
+```text
+GOAL: what the user is trying to accomplish.
+KEY FACTS & DECISIONS: everything established so far, including names, numbers, file paths, code identifiers and exact values (verbatim).
+USER PREFERENCES: tone, format, constraints the user asked for.
+CODE & ARTIFACTS: essential code or text produced, verbatim if short, otherwise its gist and key signatures.
+OPEN QUESTIONS / NEXT STEPS: what was pending when the transcript ends.
+```
+
+Details worth knowing:
+
+- **Kept messages.** The last `KEEP_RECENT` (4) messages stay verbatim. `/compact` keeps 2.
+- **Chunked folding.** No more than `CHUNK_TOKENS` (60,000) of transcript goes into one call. Longer histories are folded chunk by chunk: each call gets `EXISTING SUMMARY` plus `NEW TRANSCRIPT TO FOLD IN`. A 500k-token conversation compacts on a model with a much smaller window.
+- **Nothing is deleted.** Messages stay on disk. Only `summary = {text, coversUpTo}` is added, and `native` is cleared.
+- **Subfolder instructions reset.** After a compaction, scoped `AGENTS.md`/`CLAUDE.md` files are delivered again on the next tool call that touches them, because the summary may not keep them word for word.
+
+### Triggers
+
+| Reason | When | Line shown after it |
+| --- | --- | --- |
+| `manual` | You run `/compact` | `You ran /compact · the next reply starts from the summary · /context for details` |
+| `auto` | After a turn, input tokens ≥ `autoCompactPct` of the window (default 80%) | `Auto-compacted at 80% of the context window · change it in /configure → Compaction` |
+| `handoff` | A carry into a new session would exceed 24k tokens | `Compacted before handing the conversation to another model` |
+| `context` | The model rejected the prompt as too long (Claude: "prompt is too long"; Codex: `contextWindowExceeded`). The engine compacts and retries once | `The model's context window was full — compacted and retried` |
+
+The auto trigger (`maybeAutoCompact`) uses the provider's measured input tokens for the last request when available, and falls back to a ~4 chars/token estimate. The window is the model's real one, learned from the CLI (`result.modelUsage[*].contextWindow` on Claude, `models_cache.json` on Codex) and remembered in `~/.rein/state/context-windows.json`. If nothing is known, 200k is assumed. With `autoCompactPct: 0`, auto-compaction is off; `/compact` and the `context` retry still work.
+
+While it runs you see `Compacting N messages…`, then a rule:
+
+```text title="rein"
+── ▁▃▅▇ Conversation compacted ─────────────────────────────
+  48 messages → 2.1k-token summary · context 96k → 9.4k (−90%) · Haiku
+  Auto-compacted at 80% of the context window · change it in /configure → Compaction
+```
+
+## `/context`
+
+`/context` opens a live grid (`src/ui/ContextView.tsx`, data from `src/session/context.ts`): 20 × 8 cells, filled in proportion to the model's window, with a legend.
+
+| Category | What it counts |
+| --- | --- |
+| System prompt | Rein's prompt, including instruction files and memory |
+| Tool definitions (N) | The tool schemas as sent to the model |
+| Summary | The compaction summary, if any |
+| Messages | Messages after the summary, plus the reply in progress |
+| Tool calls & results | Tool lines and their stored results |
+| Other (provider overhead, full tool output) | Measured input minus Rein's estimate |
+
+Rein's own numbers are estimates (~4 chars/token). When the provider measured the last request on the same model, the header says `measured` and the difference shows as **Other**. That covers CLI overhead and full tool outputs Rein only keeps 4,000 characters of. Claude's figure is the **last API call's** input, not the turn's sum across tool calls, so it reflects what the context holds right now. The footer shows message count, how many were folded into the summary, and where auto-compaction will trigger.
+
+When you're viewing a subagent, `/context` shows that subagent's context instead. For a fork, the parent's inherited history appears under "Inherited from the parent + provider overhead".
+
+## Related
+
+- [Load balancing](../load-balancing/): when a conversation moves between accounts
+- [Drivers](../drivers/): how sessions are opened, resumed and forked on each CLI
+- [Decision model](../decision-model/): the other cheap model in the loop
+- [Configuration](../../reference/configuration/): `compactionModel`, `autoCompactPct`
+- [Rewind](../../features/rewind/): truncating the transcript

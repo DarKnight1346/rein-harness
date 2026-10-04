@@ -1,0 +1,82 @@
+---
+title: Introduction
+description: Rein is one terminal for every AI subscription you pay for. It drives the official Claude Code and Codex CLIs with routing, failover, goals, plans and one shared tool set.
+---
+
+import { Card, CardGrid, LinkCard } from '@astrojs/starlight/components';
+
+You pay for Claude. Maybe two Claude plans. Maybe ChatGPT too. Each one sits in its own CLI with its own limits, and when one runs dry mid-task you lose your flow. **Rein puts all of them behind one terminal.** It looks and feels like Claude Code, but every message is routed to the right model on the right account, and when a usage window runs out, the conversation carries on somewhere else.
+
+```text title="rein"
+> refactor the session store to use one append-only log
+
+  → Sonnet · effort high · Claude Account 1 (auto · 0.86)
+
+⏺ Read(src/session/store.ts)
+  Read 212 lines
+⏺ Edit(src/session/store.ts) · you approved
+  ...
+```
+
+## What makes it different
+
+### One terminal, every subscription
+Sign in as many accounts as you have: several Claude subscriptions, one or more ChatGPT (Codex) accounts. Rein imports the logins you already have on first run and adds more with `/login`. The top bar shows which account is serving you and how much of its 5-hour and weekly windows it has used.
+
+### Official CLIs only
+Rein never reads or extracts OAuth tokens. All model traffic goes through the real `claude` and `codex` programs, the same ones you would run yourself. Rein starts them in a machine-readable mode and gives them its own tools. Your subscriptions are used the way their vendors ship them.
+
+### The same tools for every model
+Claude and GPT get the **same** tool set: `read`, `list`, `write`, `edit`, `delete`, `search`, `shell`, web search and fetch, image generation (while a Codex account is signed in), subagents, questions, plans and memory. Rein turns off each CLI's built-in tools and runs its own instead. Approvals, permission rules, hooks, checkpoints and `/rewind` therefore work the same whichever model is talking.
+
+### Usage-aware failover
+When an account hits a rate limit, Rein switches to the next healthy account on the same model and retries the turn. If none is left, it moves to the closest alternative model. It also moves before you hit the wall: when an account drops below 10% headroom, Rein rebalances. Because it knows a cold prompt cache is costly, it doesn't hop accounts mid-conversation unless the move is clearly worth it.
+
+### Auto routing with a decision model
+Set the chat model to `auto` and a small **decision model** picks the cheapest model that will answer each message well. That can be [Jev](https://typesafe.ai), a fast hosted decider, or the cheapest model you're signed in to. It sees only the head and tail of your new message, never the transcript. The route line under each reply tells you what it chose and how sure it was: `(auto · 0.86)`.
+
+### Agent workflows built in
+- **`/goal`**: give the agent a goal and it keeps working until the decision model checks its evidence (passing tests, verified output, files present) and logs `◎ Goal achieved and verified`.
+- **`/plan`**: the agent explores read-only, asks you questions, then presents a plan with milestones. Save it, implement it, or start it as a tracked goal.
+- **`/btw`**: ask a side question while the agent works. Rein forks the live session to answer it, so the main agent is never interrupted and the side question never enters the conversation.
+- **`/rewind`**: undo to before any message. Rein restores the **whole project** from a private snapshot, including changes made by shell commands, and/or rewinds the conversation.
+- **Subagents**: the agent can delegate to forks of itself or to fresh sessions on any signed-in model, in parallel. You can watch and message each one from the sidebar.
+
+### Feels like Claude Code
+Your `.claude/settings.json` permission rules and hooks, `CLAUDE.md` / `AGENTS.md`, `.mcp.json` and `claude mcp add` servers all carry over. Esc interrupts, Esc twice rewinds, Shift+Tab toggles plan mode. See [Coming from Claude Code](../from-claude-code/).
+
+### Scriptable
+`rein -p "…"` runs one prompt headlessly with text, JSON or streaming JSON output. Use it in scripts and CI, with the same routing and failover as the TUI.
+
+## Highlights
+
+<CardGrid>
+  <Card title="Accounts & failover" icon="random">
+    Several Claude and Codex accounts, live usage windows, automatic switch-over on limits. [Learn more](../../features/accounts/)
+  </Card>
+  <Card title="Model routing" icon="rocket">
+    `auto` sends each message to the cheapest model that will handle it well. [Learn more](../../features/routing/)
+  </Card>
+  <Card title="Goals" icon="approve-check">
+    `/goal` keeps the agent going until the result is verified with evidence. [Learn more](../../features/goals/)
+  </Card>
+  <Card title="Plan mode" icon="list-format">
+    Read-only exploration, your questions answered, milestones you approve. [Learn more](../../features/plans/)
+  </Card>
+  <Card title="/btw side questions" icon="comment-alt">
+    A forked agent answers on the side, with no interruption and nothing added to the transcript. [Learn more](../../features/btw/)
+  </Card>
+  <Card title="Rewind" icon="seti:clock">
+    Whole-project snapshots before every message, shell changes included. [Learn more](../../features/rewind/)
+  </Card>
+  <Card title="Subagents" icon="puzzle">
+    Parallel workers on any model, visible and messageable in the sidebar. [Learn more](../../features/subagents/)
+  </Card>
+  <Card title="Headless & CI" icon="seti:shell">
+    `rein -p` with JSON output, permission modes and allow-lists. [Learn more](../../features/headless/)
+  </Card>
+</CardGrid>
+
+## Next
+
+<LinkCard title="Install Rein" description="Node 22+, one signed-in CLI, and one npm command." href="../install/" />
