@@ -1,9 +1,15 @@
 import {existsSync, readdirSync, readFileSync, statSync} from 'node:fs';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
+import os from 'node:os';
 import {reinHome} from '../store/paths.js';
 
-export type SkillSource = 'builtin' | 'project' | 'global';
+/** `claude-project` / `claude-user`: Claude Code custom commands (`.claude/commands/*.md`), run as skills. */
+export type SkillSource = 'builtin' | 'project' | 'global' | 'claude-project' | 'claude-user';
+
+/** How a skill's origin reads in the UI. */
+export const skillSourceLabel = (s: SkillSource) =>
+  ({builtin: 'built-in skill', project: 'project skill', global: 'global skill', 'claude-project': 'Claude Code command (project)', 'claude-user': 'Claude Code command'})[s];
 
 export type Skill = {
   name: string;
@@ -20,6 +26,8 @@ export type Skill = {
   aliases: string[];
   /** config.json "planMode": true — running the skill turns plan mode on (/plan, /plan:deep). */
   planMode?: boolean;
+  /** Claude Code command frontmatter `argument-hint` (shown in the command list). */
+  argumentHint?: string;
 };
 
 /**
@@ -109,12 +117,67 @@ function scan(root: string, source: SkillSource): Skill[] {
   return out;
 }
 
+/** Claude Code's custom command folders: the project's, then the user's (`~/.claude/commands`). */
+export const claudeCommandDirs = (cwd = process.cwd()) => ({
+  project: path.join(cwd, '.claude', 'commands'),
+  user: path.join(os.homedir(), '.claude', 'commands'),
+});
+
+/**
+ * Claude Code custom commands: every `*.md` under a commands folder (sub-folders included, as in
+ * Claude Code the name is the file name and the folder shows in the description). Frontmatter
+ * `description` and `argument-hint` are used; `allowed-tools` / `model` are left to Rein's own
+ * permissions and routing.
+ */
+function scanCommands(root: string, source: 'claude-project' | 'claude-user', sub = ''): Skill[] {
+  if (!existsSync(root)) return [];
+  const out: Skill[] = [];
+  for (const e of readdirSync(path.join(root, sub), {withFileTypes: true}).sort((a, b) => a.name.localeCompare(b.name))) {
+    if (e.name.startsWith('.')) continue;
+    const rel = sub ? path.join(sub, e.name) : e.name;
+    if (e.isDirectory()) {
+      out.push(...scanCommands(root, source, rel));
+      continue;
+    }
+    if (!e.name.endsWith('.md')) continue;
+    const file = path.join(root, rel);
+    let text: string;
+    try {
+      text = readFileSync(file, 'utf8');
+    } catch {
+      continue;
+    }
+    const {fields, body} = parseSkillFile(text);
+    const name = skillName(e.name.replace(/\.md$/, ''));
+    if (!name || !body) continue;
+    const where = `${source === 'claude-project' ? 'project' : 'user'}${sub ? `:${sub.split(path.sep).join(':')}` : ''}`;
+    out.push({
+      name,
+      description: `${fields.description || firstLine(body)} (${where})`,
+      source,
+      dir: path.dirname(file),
+      path: file,
+      body,
+      files: [path.basename(file)],
+      aliases: [],
+      ...(fields['argument-hint'] ? {argumentHint: fields['argument-hint']} : {}),
+    });
+  }
+  return out;
+}
+
 const firstLine = (body: string) => (body.split('\n').find((l) => l.trim() && !l.startsWith('#')) ?? body.split('\n')[0] ?? '').trim().slice(0, 100);
 
-/** All skills; on a name clash the built-in wins, then the project's, then the global one. */
+/**
+ * All skills; on a name clash the built-in wins, then the project's, then the global one, then
+ * Claude Code commands (the project's, then the user's).
+ */
 export function loadSkills(cwd = process.cwd()): Skill[] {
   const dirs = skillDirs(cwd);
+  const commands = claudeCommandDirs(cwd);
   const byName = new Map<string, Skill>();
+  for (const s of scanCommands(commands.user, 'claude-user')) byName.set(s.name, s);
+  for (const s of scanCommands(commands.project, 'claude-project')) byName.set(s.name, s);
   for (const s of scan(dirs.global, 'global')) byName.set(s.name, s);
   for (const s of scan(dirs.project, 'project')) byName.set(s.name, s);
   for (const s of scan(dirs.builtin, 'builtin')) byName.set(s.name, s);
@@ -132,6 +195,22 @@ export function skillPrompt(skill: Skill, args: string, cwd = process.cwd()): st
     .replaceAll('{{GLOBAL_SKILLS_DIR}}', dirs.global)
     .replaceAll('{{PROJECT_SKILLS_DIR}}', dirs.project)
     .replaceAll('{{BUILTIN_SKILLS_DIR}}', dirs.builtin);
+  if (skill.source === 'claude-project' || skill.source === 'claude-user') return commandPrompt(skill, body, args);
   const files = skill.files.length > 1 ? `\nFiles in this skill's folder (${skill.dir}): ${skill.files.join(', ')}` : '';
   return `<skill name="${skill.name}" source="${skill.source}" dir="${skill.dir}">\n${body}${files}\n</skill>\n\n${args.trim() || 'Follow the skill above.'}`;
+}
+
+/**
+ * A Claude Code command, the way Claude Code expands it: `$ARGUMENTS` and `$1`…`$9` are filled in
+ * (args are appended when the body uses neither). `!`cmd`` lines, which Claude Code runs before
+ * sending, become instructions to run them first, so they go through Rein's approvals like any
+ * other command.
+ */
+function commandPrompt(skill: Skill, body: string, args: string): string {
+  const argv = args.trim() ? args.trim().split(/\s+/) : [];
+  const usesArgs = /\$ARGUMENTS|\$[1-9]/.test(body);
+  let text = body.replaceAll('$ARGUMENTS', args.trim()).replace(/\$([1-9])/g, (_m, n) => argv[Number(n) - 1] ?? '');
+  const bang = [...text.matchAll(/!`([^`]+)`/g)].map((m) => m[1]!);
+  if (bang.length) text = text.replace(/!`([^`]+)`/g, '`$1`') + `\n\nBefore anything else, run ${bang.length > 1 ? 'these commands' : 'this command'} and use the output: ${bang.map((c) => `\`${c}\``).join(', ')}.`;
+  return `<skill name="${skill.name}" source="${skill.source}" file="${skill.path}">\n${text}\n</skill>\n\n${usesArgs ? 'Follow the command above.' : args.trim() || 'Follow the command above.'}`;
 }

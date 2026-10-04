@@ -21,13 +21,14 @@ Set `REIN_HOME` to move the whole folder, for example to keep a test setup apart
 | `accounts/claude/<id>/` | `CLAUDE_CONFIG_DIR` for a Claude account you added with `/login` (`claude-1`, `claude-2`, …) |
 | `accounts/codex/<id>/` | `CODEX_HOME` for a Codex account you added (`codex-1`, …) |
 | `state/usage.json` | Last-known usage windows per account, plus limit cooldowns (account unusable until a time) |
+| `mcp-auth/<host>_<path>.json` | OAuth tokens and client registration for each remote MCP server you signed in to (owner-only), e.g. `mcp.linear.app_mcp.json`. Delete one to sign out of that server |
 | `state/codex-compat.json` | Result of the compatibility check for the installed `codex` version (and its feature flags). Delete it to re-check |
 | `state/trusted-projects.json` | Projects whose hooks you trusted, with a hash of the hooks as reviewed (a change asks again) |
 | `state/input-history.json` | Messages you sent, per project (the last 200), for `↑` recall in the input |
 | `state/context-windows.json` | Context windows learned from real responses (`result.modelUsage` on Claude), remembered across restarts |
 | `state/claude-models-<id>.json` | Model list the `claude` CLI reported for that account. Refreshed in the background once a day |
 | `state/codex-catalog/<id>.json` | Rein's rewritten Codex model catalog with the built-in tools stripped. See [drivers](../../internals/drivers/) |
-| `sessions/<id>.jsonl` | Conversation transcripts, append-only: one line per message, plus meta lines (summary, native session refs, tokens, subagents, goal) |
+| `sessions/<id>.jsonl` | Conversation transcripts, append-only: one line per message, plus meta lines (summary, native session refs, tokens, subagents, goal) and `progress` lines that record a running turn's tool calls, so a crash mid-turn loses nothing |
 | `sessions/<id>.meta.json` | Small index entry per conversation, used for listing and `/resume` |
 | `scratch/<id>/` | The session's scratchpad. The agent can write here without approval. Pasted and dropped images are copied to `scratch/<id>/images/` |
 | `checkpoints/<id>/` | [`/rewind`](../../features/rewind/) data: `tree.git` (a private git store of whole-project snapshots, never your project's `.git`), `trees.json`, and per-file checkpoints (`index.jsonl` + content-addressed `blobs/`, ≤ 10 MB per file) |

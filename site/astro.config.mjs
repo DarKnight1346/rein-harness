@@ -57,6 +57,7 @@ export default defineConfig({
           {label: 'Hooks', slug: 'features/hooks'},
           {label: 'Memory & instructions', slug: 'features/memory'},
           {label: 'Headless & CI', slug: 'features/headless'},
+          {label: 'Editor integration', slug: 'features/ide'},
           {label: 'The terminal UI', slug: 'features/tui'},
         ]},
         {label: 'Reference', items: [

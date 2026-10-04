@@ -4,7 +4,7 @@ import {approveProjectServer} from '../mcp/config.js';
 import {runtime} from '../runtime.js';
 import {Clickable} from './terminal/clicks.js';
 
-const COLOR = {connected: 'green', connecting: 'yellow', failed: 'red', 'needs-approval': 'yellow'} as const;
+const COLOR = {connected: 'green', connecting: 'yellow', failed: 'red', 'needs-approval': 'yellow', 'needs-auth': 'yellow'} as const;
 const SOURCE = {project: '.mcp.json', rein: '~/.rein/mcp.json', claude: '~/.claude.json'} as Record<string, string>;
 
 /** /mcp: servers with status and tool count; enter approves a project server or reconnects. */
@@ -12,6 +12,8 @@ export function McpScreen({onClose}: {onClose(): void}) {
   const [, setTick] = useState(0);
   const [cursor, setCursor] = useState(0);
   const [busy, setBusy] = useState<string | undefined>();
+  /** Sign-in in progress: the authorization URL (in case the browser didn't open), or an error. */
+  const [signIn, setSignIn] = useState<{name: string; url?: string; error?: string} | undefined>();
   useEffect(() => {
     const on = () => setTick((t) => t + 1);
     runtime.mcp.on('change', on);
@@ -25,6 +27,14 @@ export function McpScreen({onClose}: {onClose(): void}) {
     if (s.status === 'needs-approval') {
       approveProjectServer(process.cwd(), s.name);
       await runtime.mcp.start();
+    } else if (s.status === 'needs-auth') {
+      setSignIn({name: s.name});
+      try {
+        await runtime.mcp.signIn(s.name, (url) => setSignIn({name: s.name, url}));
+        setSignIn(undefined);
+      } catch (err) {
+        setSignIn({name: s.name, error: (err as Error).message});
+      }
     } else await runtime.mcp.reconnect(s.name);
     setBusy(undefined);
   };
@@ -50,7 +60,7 @@ export function McpScreen({onClose}: {onClose(): void}) {
           <Text wrap="truncate" color={i === cursor ? 'cyan' : undefined}>
             {i === cursor ? '❯ ' : '  '}
             <Text color={COLOR[s.status]}>●</Text> <Text bold>{s.name.padEnd(16)}</Text>
-            {busy === s.name ? 'working…' : s.status === 'connected' ? `${s.tools} tool${s.tools === 1 ? '' : 's'}` : s.status}
+            {busy === s.name ? (s.status === 'needs-auth' ? 'waiting for the browser sign-in…' : 'working…') : s.status === 'needs-auth' ? 'sign in' : s.status === 'connected' ? `${s.tools} tool${s.tools === 1 ? '' : 's'}` : s.status}
             <Text dimColor>
               {' '}
               · {s.transport} · {SOURCE[s.source] ?? s.source}
@@ -59,8 +69,22 @@ export function McpScreen({onClose}: {onClose(): void}) {
           </Text>
         </Clickable>
       ))}
+      {signIn && (
+        <Box marginTop={1} flexDirection="column">
+          {signIn.error ? (
+            <Text color="red">Sign-in to {signIn.name} failed: {signIn.error}</Text>
+          ) : (
+            <>
+              <Text color="yellow">Sign in to {signIn.name} in your browser (it should have opened).</Text>
+              {signIn.url && <Text dimColor wrap="truncate-end">If it didn't: {signIn.url}</Text>}
+            </>
+          )}
+        </Box>
+      )}
       <Box marginTop={1}>
-        <Text dimColor>enter: {servers[cursor]?.status === 'needs-approval' ? 'approve this project server (runs its command)' : 'reconnect'} · esc close</Text>
+        <Text dimColor>
+          enter: {servers[cursor]?.status === 'needs-approval' ? 'approve this project server (runs its command)' : servers[cursor]?.status === 'needs-auth' ? 'sign in (opens your browser)' : 'reconnect'} · esc close
+        </Text>
       </Box>
     </Box>
   );

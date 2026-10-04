@@ -42,6 +42,7 @@ node scripts/check-docs.mjs   # docs drift check, also runs in CI
 | `src/tools/` | Tool host (approvals and permissions) and the tools every model gets |
 | `src/agents/`, `src/goals/`, `src/plans/` | Subagents and advisor, `/goal`, saved plans |
 | `src/mcp/`, `src/hooks.ts`, `src/skills/` | MCP client, Claude Code-compatible hooks, skills |
+| `src/ide/` | Editor integration over the Claude Code IDE extension protocol (selection, diffs, diagnostics) |
 | `src/ui/` | Ink UI: fullscreen and classic renderers, windows, input |
 | `skills/` | Built-in skills shipped with the package (`/plan`, `/plan:deep`, `/skill:create`, `/skill:edit`) |
 | `test/` | vitest suites, `test/fixtures/fake-{claude,codex}.mjs` |
@@ -77,6 +78,7 @@ update the docs in the same PR.
 | A tool, its parameters or approval behaviour (`src/tools/`, `src/agents/tools.ts`, …) | `reference/tools.md`, `features/tools.md`, `features/permissions.md` if approvals change |
 | Permission rules, sensitive paths, approval modes (`src/tools/host.ts`, `permissions.ts`) | `features/permissions.md`, `project/security.md` |
 | Hooks, MCP, skills, AGENTS.md/CLAUDE.md loading | `features/hooks.md`, `features/mcp.md`, `features/skills.md`, `features/memory.md`, `start/from-claude-code.md` |
+| Editor integration (`src/ide/`) | `features/ide.md`, `reference/commands.md` (`/ide`), `reference/tools.md` (`ide_diagnostics`) |
 | Routing, failover, load balancing, compaction, decision-model thresholds | `features/routing.md`, `features/accounts.md`, `internals/*.md` |
 | Goals, plans, `/btw`, rewind, subagents | the matching `features/*.md` page |
 | Keyboard shortcuts, mouse, status line, sidebar | `reference/keys.md`, `features/tui.md` |

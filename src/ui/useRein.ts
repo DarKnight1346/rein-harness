@@ -13,6 +13,8 @@ import {compactableCount} from '../session/compactor.js';
 import {onUntrustedHooks, trustProjectHooks, type ProjectHooks} from '../hooks.js';
 import {notify} from './terminal/notify.js';
 import {incompatibleMessage} from '../providers/codex/compat.js';
+import {findIdes} from '../ide/connection.js';
+import {diffTabName, proposedChange} from '../ide/review.js';
 import {editExternally} from './terminal/editor.js';
 import {addHistory, HistoryCursor, loadHistory} from '../store/history.js';
 import {askBtwSubagent, btw} from '../session/btw.js';
@@ -168,7 +170,11 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
       setTimeout(() => {
         const waiting = runtime.mcp.list().filter((s) => s.status === 'needs-approval').map((s) => s.name);
         if (waiting.length) log('info', `This project's .mcp.json has MCP server${waiting.length > 1 ? 's' : ''} waiting for your approval: ${waiting.join(', ')} — /mcp to review.`);
+        const signIn = runtime.mcp.list().filter((s) => s.status === 'needs-auth').map((s) => s.name);
+        if (signIn.length) log('info', `MCP server${signIn.length > 1 ? 's' : ''} ${signIn.join(', ')} need${signIn.length > 1 ? '' : 's'} you to sign in — /mcp, then enter.`);
       }, 1500);
+      // Editor integration: connect quietly to the editor holding this project, if there is one.
+      if (findIdes().length) void runtime.connectIde().then((m) => log('info', m), () => {});
       // Launch-time self-update check (background; never delays startup).
       if (runtime.config.autoUpdate !== false) void autoUpdate((text) => log('info', text)).catch(() => {});
     })().catch((err) => log('error', `startup failed: ${(err as Error).message}`));
@@ -212,21 +218,43 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
       setOverlay((o) => (o.name === 'approval' ? {name: 'none'} : o));
       return;
     }
+    let settled = false;
+    const ide = runtime.ide;
+    const change = ide && ['write', 'edit'].includes(next.req.tool.name) ? proposedChange(next.req, runtime.tools.pathsFor(next.req.tool.name, next.req.args)[0]) : undefined;
+    const resolve = (d: ApprovalDecision) => {
+      if (settled) return;
+      settled = true;
+      if (change) void ide!.closeDiffs(); // answered in Rein: close the editor's diff tab
+      approvals.current = approvals.current.filter((a) => a !== next);
+      next.resolve(d);
+      // "Allow all this session" also releases everything already waiting.
+      if (d === 'session') {
+        for (const a of approvals.current) a.resolve('session');
+        approvals.current = [];
+      }
+      showNextApproval();
+    };
+    // The same change as a diff in the editor: Accept there allows it (with any edits made in the
+    // diff), Reject or closing the tab denies it. Whichever side answers first wins.
+    if (change) {
+      void ide!.openDiff(change.path, change.contents, diffTabName(change.path)).then(
+        (r) => {
+          if (settled) return;
+          if (r.answer === 'accepted' && r.contents !== undefined && r.contents !== change.contents) runtime.tools.useEditorVersion(change.path, r.contents);
+          settled = true;
+          approvals.current = approvals.current.filter((a) => a !== next);
+          next.resolve(r.answer === 'accepted' ? 'once' : 'deny');
+          showNextApproval();
+        },
+        () => {}, // the editor went away: answer in Rein
+      );
+    }
     setOverlay({
       name: 'approval',
       req: next.req,
       position: 1,
       total: approvals.current.length,
-      resolve: (d) => {
-        approvals.current = approvals.current.filter((a) => a !== next);
-        next.resolve(d);
-        // "Allow all this session" also releases everything already waiting.
-        if (d === 'session') {
-          for (const a of approvals.current) a.resolve('session');
-          approvals.current = [];
-        }
-        showNextApproval();
-      },
+      resolve,
     });
   }, []);
   useEffect(() => {
@@ -518,6 +546,23 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
   // Pastes, images and dropped files shown as placeholders in the input; expanded on send.
   const attachments = useRef(new Attachments(() => nodePath.join(runtime.engine.scratch, 'images')));
   const onPaste = (text: string) => attachments.current.paste(text);
+  // The editor's "mention in chat" (Claude Code extension) inserts `@file` into the input.
+  useEffect(() => {
+    runtime.onIdeChange = bump;
+    runtime.onIdeMention = (m) => {
+      const rel = nodePath.relative(process.cwd(), m.filePath) || m.filePath;
+      const lines = m.lineStart ? ` (lines ${m.lineStart}${m.lineEnd && m.lineEnd !== m.lineStart ? `-${m.lineEnd}` : ''})` : '';
+      setDraft((d) => {
+        const next = `${d}${d && !d.endsWith(' ') ? ' ' : ''}@${rel}${lines} `;
+        prevDraft.current = next;
+        return next;
+      });
+    };
+    return () => {
+      runtime.onIdeChange = undefined;
+      runtime.onIdeMention = undefined;
+    };
+  }, []);
   // ↑/↓ recall of earlier messages (per project, kept across sessions); off while a list uses the arrows.
   const history = useRef(new HistoryCursor(loadHistory(process.cwd())));
   const onExternalEdit = (current: string) => {
@@ -649,6 +694,15 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
       case 'mcp':
         setOverlay({name: 'mcp'});
         break;
+      case 'ide': {
+        if (runtime.ide && !parsed.args) {
+          const sel = runtime.ide.selection;
+          log('info', `Connected to ${runtime.ide.lock.ideName} (port ${runtime.ide.lock.port}).${sel ? ` Selected: ${nodePath.relative(process.cwd(), sel.filePath)} lines ${sel.startLine}-${sel.endLine}.` : ''} /ide reconnect to reconnect.`);
+          return;
+        }
+        void runtime.connectIde().then((m) => log('info', m), (err) => log('error', `Couldn't connect to the editor: ${(err as Error).message}`));
+        return;
+      }
       case 'memory': {
         const facts = memoryFacts(process.cwd());
         log('info', facts.length ? `Project memory (${memoryFile(process.cwd())}):\n${facts.map((f) => `• ${f}`).join('\n')}\nThe agent adds and removes facts itself; you can also edit the file.` : `Project memory is empty. The agent saves lasting facts about this project there (${memoryFile(process.cwd())}); you can also write it yourself.`);
@@ -1105,6 +1159,7 @@ function replay(t: Transcript, add: AddEntry): void {
         add({kind: 'tool', ...tool, ...(plan ? {plan} : {})});
       }
       add({kind: 'assistant', text: m.text, first: true});
+      if (m.cutOff) add({kind: 'info', text: `Rein stopped in the middle of this turn; its work so far was saved (${m.tools?.length ?? 0} tool call${m.tools?.length === 1 ? '' : 's'}). Say "continue" and the agent picks up from there.`});
     }
   }
 }

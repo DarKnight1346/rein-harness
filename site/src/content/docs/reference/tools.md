@@ -283,6 +283,16 @@ Ticks milestone *N* (`- [x]` in the plan file) after the same evidence check (p 
 
 ## Subagents and helpers
 
+### `ide_diagnostics`
+
+Label `Diagnostics`. Approval: none (read-only). **Only listed while an editor is connected** ([editor integration](../../features/ide/)).
+
+| Parameter | Type | Notes |
+| --- | --- | --- |
+| `path` | string | A file, project-relative or absolute. Omit for the whole workspace |
+
+Returns the errors and warnings the editor's language servers report (the extension's `getDiagnostics`).
+
 ### `agent`
 
 Label `Agent`. Approval: none. Spawning has no side effects, but the subagent's own tool calls do go through approval. **Main agent only.**
@@ -294,6 +304,7 @@ Label `Agent`. Approval: none. Spawning has no side effects, but the subagent's 
 | `model` | string | `"auto"` or a ref from the live list in the tool description. For `new` mode only. **Absent** when you pinned a subagent model with "Your model first" priority |
 | `name` | string | Short name shown in the sidebar |
 | `background` | boolean | Return an id at once; collect with `agent_result` |
+| `agent_type` | string | Run as a [named definition](../../features/subagents/#named-subagent-definitions) from `.rein/agents` or `.claude/agents` (role, tools, model). Always a new session. **Present only when definitions exist** |
 
 The description lists the models signed in right now, with cost hints, and the concurrency limit (`subagentLimit`). When a subagent ends its turn, the decision model checks it actually finished (p ≥ 0.5). If not, it is told to continue, up to 3 extra rounds. Subagents can't spawn subagents.
 

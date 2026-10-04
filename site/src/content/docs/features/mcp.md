@@ -78,6 +78,23 @@ Expansion applies to project `.mcp.json` files too, which is one more reason to 
 
 Servers connect in the background at startup, with a 30-second connect timeout. Their tools appear as each one comes up, and if a server sends `tools/list_changed`, its tool list refreshes on the fly.
 
+## Signing in to remote servers (OAuth)
+
+Hosted MCP servers such as Linear, Notion, Atlassian, Sentry and GitHub's remote server sign you in with OAuth. Add one by URL, with no token needed:
+
+```json title="~/.rein/mcp.json"
+{"mcpServers": {"linear": {"type": "http", "url": "https://mcp.linear.app/mcp"}}}
+```
+
+1. Rein connects, sees the server wants a sign-in, and shows it as **sign in** (a yellow dot) in [`/mcp`](#the-mcp-screen). On launch it also mentions which servers need one. It never opens a browser on its own.
+2. In `/mcp`, press **Enter** on the server. Your browser opens the server's login and consent page; the URL is also shown in case it didn't open.
+3. After you approve, the browser comes back to a one-off page on `127.0.0.1` ("Signed in — you can close this tab"), and the server connects with its tools.
+
+Under the hood this is the MCP authorization flow, handled by the MCP SDK: dynamic client registration, authorization code with PKCE, and a loopback redirect. Tokens and the client registration are stored per server URL in `~/.rein/mcp-auth/`, readable only by you, and refreshed automatically. Later launches reconnect without signing in again.
+
+- A server whose config already sends an `Authorization` header (as in the example above) uses that header and never asks to sign in.
+- Servers you signed into with Claude Code (`claude mcp add`) need one sign-in in Rein too: Claude Code keeps its tokens to itself.
+
 ## Tool names
 
 Server tools appear to the model as `mcp__<server>__<tool>`, the same naming Claude Code uses, so permission rules and hook matchers you wrote for Claude Code carry over. Characters outside `A–Z a–z 0–9 _ -` become `_`. Names longer than 50 characters are shortened and given a 6-character hash, which keeps them within provider limits once Claude's `mcp__rein__` prefix is added.

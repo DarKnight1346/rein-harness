@@ -24,6 +24,8 @@ import {PLAN_MODE_CONTEXT, presentPlanTool, type PlanDecision, type PresentedPla
 import {askUserTool, type AskAnswer, type AskQuestion} from './tools/ask.js';
 import {decideTool} from './decider/tool.js';
 import {startUsageRefresh} from './accounts/usage.js';
+import path from 'node:path';
+import {findIdes, IdeConnection} from './ide/connection.js';
 import {hasHooks, runHooks} from './hooks.js';
 import {goalDoneTool, milestoneDoneTool} from './goals/tool.js';
 import {webTools} from './tools/web.js';
@@ -160,22 +162,25 @@ export class Runtime {
     open: (agent, tools) => this.openSubagent(agent, tools),
     bind: (agent) => {
       const origin = {agentId: agent.id, name: agent.name};
+      const only = agent.definition?.tools;
+      const permitted = (name: string) => !only || only.includes(name) || only.some((t) => t.startsWith('mcp__') && name.startsWith(t));
       let closeSocket: (() => void) | undefined;
       const host = this.tools;
       return {
         binding: {
           // Fork-mode histories reference agent/agent_result, so forks still see their definitions.
+          // A definition's `tools` list narrows what it sees and may call (MCP servers by prefix).
           get tools() {
-            return host.specs({subagent: true, includeMainOnly: agent.mode === 'fork'});
+            return host.specs({subagent: true, includeMainOnly: agent.mode === 'fork'}).filter((t) => permitted(t.name));
           },
-          call: (name, args) => host.call(name, args, origin),
+          call: (name, args) => (permitted(name) ? host.call(name, args, origin) : Promise.resolve({ok: false, text: `${name} isn't available to the ${agent.definition?.name} subagent`})),
           listen: async () => {
             const l = await host.listenFor(origin);
             closeSocket = l.close;
             return l.socket;
           },
           proxy: mcpProxyCommand(),
-          allowed: host.specs({subagent: true}).map((t) => t.name),
+          allowed: host.specs({subagent: true}).map((t) => t.name).filter(permitted),
         },
         close: () => closeSocket?.(),
       };
@@ -225,18 +230,20 @@ export class Runtime {
       const ref = this.engine.current!.ref;
       return {session, ref, accountId: this.engine.current!.accountId, label: catalog.get(ref)?.label ?? ref.model};
     }
-    let ref: ModelRef | undefined;
-    if (agent.requested === 'auto') {
+    // `inherit` (a definition's model): the main agent's current model, else routed like auto.
+    let ref: ModelRef | undefined = agent.requested === 'inherit' ? this.engine.current?.ref : undefined;
+    if (!ref && (agent.requested === 'auto' || agent.requested === 'inherit')) {
       const t = newTranscript();
       t.messages.push({role: 'user', text: agent.task, at: Date.now()});
       ref = (await this.auto(agent.task, t, undefined, new Set())).ref;
-    } else {
+    } else if (!ref) {
       ref = parseRef(agent.requested);
       if (!ref || !catalog.get(ref)) throw new Error(`model ${agent.requested} isn't available; use one from the tool description or "auto"`);
     }
     const account = catalog.healthyAccounts(ref, this.config.maxUsedPct)[0];
     if (!account) throw new Error(`no healthy account for ${ref.model}`);
-    const prompt = `${await systemPrompt({tools: true, scratch: this.engine.scratch})}\n\n${SUBAGENT_PROMPT(agent.name)}`;
+    const role = agent.definition ? `\n\n# Your role: ${agent.definition.name}\n${agent.definition.prompt}` : '';
+    const prompt = `${await systemPrompt({tools: true, scratch: this.engine.scratch})}\n\n${SUBAGENT_PROMPT(agent.name)}${role}`;
     const session = catalog.track(await adapters[ref.provider].openSession({account, model: ref.model, systemPrompt: prompt, tools}));
     return {session, ref, accountId: account.id, label: catalog.get(ref)?.label ?? ref.model};
   }
@@ -263,13 +270,42 @@ Drop superseded reads of the same file, routine listings, and output that no lon
   /** SessionStart hook context, added to the first message of the session. */
   private sessionContext: string | undefined;
 
+  /** The connected editor (Claude Code IDE extension protocol), if any. */
+  ide: IdeConnection | undefined;
+  /** Called when the editor connects, disconnects, or its selection changes (UI refresh). */
+  onIdeChange?: () => void;
+  onIdeMention?: (m: {filePath: string; lineStart?: number; lineEnd?: number}) => void;
+
+  /** Connect to the editor whose workspace holds this project; returns what happened. */
+  async connectIde(): Promise<string> {
+    const lock = findIdes()[0];
+    if (!lock) return "No editor found for this project. Install the Claude Code extension in VS Code, Cursor, Windsurf or a JetBrains IDE and open this folder there.";
+    await this.ide?.close();
+    this.ide = undefined;
+    const conn = await IdeConnection.connect(lock);
+    this.ide = conn;
+    conn.on('selection', () => this.onIdeChange?.());
+    conn.on('mention', (m) => this.onIdeMention?.(m));
+    conn.on('close', () => {
+      if (this.ide === conn) this.ide = undefined;
+      this.onIdeChange?.();
+    });
+    this.onIdeChange?.();
+    return `Connected to ${lock.ideName}: your selection goes with your messages, file changes open as diffs there, and the agent can read its diagnostics.`;
+  }
+
   private async beforePrompt(text: string): Promise<{block?: string; context?: string}> {
     const root = process.cwd();
     // Snapshot the project before this message runs, so /rewind can undo everything it causes.
     if (this.engine) await this.snapshots.snapshot(this.engine.transcript.messages.length);
     const session_id = this.engine?.transcript.id;
     const out = hasHooks('UserPromptSubmit', root) ? await runHooks('UserPromptSubmit', root, {session_id, prompt: text}) : {errors: []};
-    const context = [this.sessionContext, out.context, this.planMode ? PLAN_MODE_CONTEXT : undefined].filter(Boolean).join('\n');
+    // What you have selected in the editor right now goes along (like Claude Code's "⧉ selected").
+    const sel = this.ide?.selection;
+    const selection = sel
+      ? `<ide_selection file="${path.relative(root, sel.filePath) || sel.filePath}" lines="${sel.startLine}-${sel.endLine}">\n${sel.text.slice(0, 20_000)}\n</ide_selection>\nThe user has this selected in their editor; it may or may not be what the message is about.`
+      : undefined;
+    const context = [this.sessionContext, out.context, selection, this.planMode ? PLAN_MODE_CONTEXT : undefined].filter(Boolean).join('\n');
     if (!out.block) this.sessionContext = undefined;
     return {block: out.block, context: context || undefined};
   }
@@ -373,6 +409,20 @@ Drop superseded reads of the same file, routine listings, and output that no lon
         },
       }),
       imageTool(() => this.config),
+      {
+        name: 'ide_diagnostics',
+        label: 'Diagnostics',
+        description: "Problems (errors, warnings) your user's editor reports: type errors, lint findings and so on, from its language servers. For one file (path) or the whole workspace. Use it after changes to check you didn't break anything.",
+        inputSchema: {type: 'object', properties: {path: {type: 'string', description: 'A file (project-relative or absolute); omit for the whole workspace'}}},
+        mutating: false,
+        enabled: () => !!this.ide,
+        summarize: (a: any) => a?.path ?? 'workspace',
+        run: async (_ctx: unknown, a: any) => {
+          if (!this.ide) return {ok: false, text: 'no editor is connected'};
+          const file = typeof a?.path === 'string' ? path.resolve(process.cwd(), a.path) : undefined;
+          return {ok: true, text: (await this.ide.diagnostics(file)) || 'No problems reported.'};
+        },
+      },
     );
     this.config = await loadConfig();
     await this.sessionStartHooks(typeof opts.resume === 'string' ? 'resume' : 'startup');
@@ -478,6 +528,7 @@ Drop superseded reads of the same file, routine listings, and output that no lon
 
   shutdown(): void {
     void this.mcp.closeAll();
+    void this.ide?.close();
     this.stopUsageRefresh();
     this.agents.closeAll();
     this.engine?.shutdown();

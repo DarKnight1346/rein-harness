@@ -113,6 +113,24 @@ With no arguments, the last line is `Follow the skill above.` If the agent is bu
 
 Skill instructions don't bypass anything: the agent still uses its normal tools, under your [permissions](../permissions/).
 
+## Claude Code custom commands
+
+If you have Claude Code commands, they work in Rein as they are. Every `*.md` in `<project>/.claude/commands/` and `~/.claude/commands/` (sub-folders included) becomes a slash command, named after the file:
+
+```md title=".claude/commands/fix-issue.md"
+---
+description: Fix a GitHub issue
+argument-hint: [number] [priority]
+---
+Fix issue #$1 with priority $2. Recent changes: !`git log --oneline -5`
+```
+
+- `/fix-issue 123 high` fills in `$1` and `$2` (and `$ARGUMENTS` with everything). If the file uses none of them, your arguments follow the instructions, as with Rein skills.
+- `description` and `argument-hint` show in the `/` list, tagged *Claude Code command*. The folder shows in the description (`(project:frontend)`).
+- A ``!`cmd` `` line, which Claude Code runs before sending, becomes an instruction to run that command first, so it goes through Rein's [approvals](../permissions/) like any other.
+- `allowed-tools` and `model` aren't used; Rein's permissions and routing apply.
+- On a name clash, Rein skills win: built-in → project → global → project commands → user commands.
+
 ## Built-in skills
 
 | Skill | What it does |

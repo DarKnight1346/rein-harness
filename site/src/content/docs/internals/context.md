@@ -20,6 +20,8 @@ export type NativeRef = {provider: string; accountId: string; nativeId: string; 
 
 On disk, the transcript is an append-only JSONL log in `~/.rein/sessions/<id>.jsonl` plus a small `<id>.meta.json` index (see [Files & directories](../../reference/files/)). Saving appends only new lines, so a long conversation is never rewritten.
 
+**Crash safety.** Your message is written before the turn starts, and while the agent works each finished tool call is appended as a small `progress` line, together with the reply text since the previous one. If Rein stops in the middle of a turn (a crash, a closed terminal, a reboot), loading the session rebuilds that turn as a **cut-off reply** (`cutOff: true`): the text and every tool call up to that point. `/resume` and `rein --continue` say so ("Rein stopped in the middle of this turn; its work so far was saved…"), and the agent sees the work in its context, so "continue" picks up where it stopped instead of starting over.
+
 ## Resume or rebuild
 
 Before each turn, `Engine.prepare()` decides whether the native session can be reused:

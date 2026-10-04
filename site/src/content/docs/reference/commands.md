@@ -76,6 +76,7 @@ See [Goals](../../features/goals/) and [Plan mode](../../features/plans/).
 | `/add-dir` | `<path>` | Adds a working directory the agent can use without asking, for this session. |
 | | *(none)* | Lists the current working directories. |
 | `/permissions` | — | Lists the allow/deny rules in effect, grouped by the settings file they come from. |
+| `/ide` | `reconnect` | Editor integration: shows the connected editor (VS Code, Cursor, Windsurf or JetBrains, through the Claude Code extension) and what's selected, or connects to one. → [Editor integration](../../features/ide/) |
 | `/memory` | — | Shows the project's memory (`.rein/MEMORY.md`): the facts Rein has learned here. |
 | `/mcp` | — | MCP servers with status and tools. Enter approves a waiting project server or reconnects one. |
 

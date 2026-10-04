@@ -33,12 +33,13 @@ export function setExtraWorkingDirs(fn: () => string[]): void {
 const claudeGlobal = () => process.env.REIN_CLAUDE_GLOBAL ?? path.join(os.homedir(), '.claude', 'CLAUDE.md');
 
 /** Instruction files read per directory: the open standard plus Claude Code's. */
-const PROJECT_FILES = ['AGENTS.md', 'CLAUDE.md', path.join('.claude', 'CLAUDE.md')];
+// CLAUDE.local.md: Claude Code's personal, uncommitted project instructions.
+const PROJECT_FILES = ['AGENTS.md', 'CLAUDE.md', path.join('.claude', 'CLAUDE.md'), 'CLAUDE.local.md'];
 
 /**
  * Instruction files, most general first: ~/.rein/AGENTS.md and ~/.claude/CLAUDE.md, then per
  * directory from the git root (or the filesystem root) down to the project root: AGENTS.md,
- * CLAUDE.md, .claude/CLAUDE.md. Duplicates (symlinks, identical copies) are included once. Each
+ * CLAUDE.md, .claude/CLAUDE.md, CLAUDE.local.md. Duplicates (symlinks, identical copies) are included once. Each
  * becomes one section of the system prompt.
  */
 export async function agentsFiles(cwd = process.cwd()): Promise<{path: string; text: string}[]> {
