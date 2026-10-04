@@ -11,5 +11,8 @@
     "@astrojs/starlight": "^0.42.5",
     "astro": "^7.3.5",
     "sharp": "^0.35.5"
+  },
+  "overrides": {
+    "http-cache-semantics": "^4.3.0"
   }
 }

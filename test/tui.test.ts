@@ -59,9 +59,11 @@ describe('layout config', () => {
     expect(enabledItems('sidebar', {...DEFAULT_CONFIG, sidebarSections: ['session', 'bogus', 'accounts']})).toEqual(['session', 'accounts']);
     expect(enabledItems('status', {...DEFAULT_CONFIG, statusLine: []})).toEqual([]);
   });
-  it('parses /config as /configure', async () => {
+  it('/settings opens the settings; the old /configure and /config names are gone', async () => {
     const {parseInput} = await import('../src/commands/index.js');
-    expect(parseInput('/config')).toEqual({kind: 'command', name: 'configure', args: ''});
+    expect(parseInput('/settings')).toEqual({kind: 'command', name: 'settings', args: ''});
+    expect(parseInput('/configure')).toEqual({kind: 'unknown', name: 'configure'});
+    expect(parseInput('/config')).toEqual({kind: 'unknown', name: 'config'});
   });
 });
 

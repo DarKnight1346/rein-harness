@@ -32,7 +32,7 @@ export function ShellWindow({id, width, onClose}: {id: number; width: number; on
   const shell = runtime.tools.shells.get(id);
   if (!shell) return null;
   const head = `${shell.background ? '&' : '$'} ${shell.command}`;
-  const title = `${head.length > width - 30 ? head.slice(0, width - 31) + '…' : head}  ·  ${shellStatusText(shell)}`;
+  const title = `${head.length > width - 30 ? head.slice(0, width - 31) + '…' : head}  ·  ${shellStatusText(shell)}${shell.tty && shell.status === 'running' ? (shell.waiting ? '  ·  waiting for you: ctrl+] to answer' : '  ·  ctrl+] to type into it') : ''}`;
   const lines = [...(shell.dropped ? [`[… ${shell.dropped} earlier lines dropped]`] : []), ...shell.lines];
   return (
     <InfoWindow

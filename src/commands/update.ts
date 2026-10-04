@@ -221,7 +221,7 @@ export async function autoUpdate(notify: (text: string) => void): Promise<void> 
   child.on('close', (code) => {
     rmSync(lock, {force: true});
     if (code === 0) notify(`Rein updated ${current} → ${latest} — restart rein to use it.`);
-    else if (/EACCES|permission denied/i.test(stderr)) notify(`Rein ${latest} is available, but npm can't write to the global folder. Run \`sudo npm install -g ${PACKAGE}@latest\` (or turn off auto-update in /configure).`);
+    else if (/EACCES|permission denied/i.test(stderr)) notify(`Rein ${latest} is available, but npm can't write to the global folder. Run \`sudo npm install -g ${PACKAGE}@latest\` (or turn off auto-update in /settings).`);
     else notify(`Rein ${latest} is available; the automatic install failed. Run \`rein --update\`.`);
   });
 }

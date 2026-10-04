@@ -21,8 +21,10 @@ A skill is a folder holding a `SKILL.md`, plus any scripts, templates or referen
 | **Built-in** | `<rein install>/skills/` | Ships with Rein, can't be changed |
 | **Project** | `<project>/.rein/skills/<name>/` | This project (commit it to share with your team) |
 | **Global** | `~/.rein/skills/<name>/` | Every project |
+| **Codex skills** | `~/.codex/skills/`, `~/.agents/skills/`, `<project>/.agents/skills/` | As Codex uses them (its built-in `.system` skills are skipped) |
+| **Plugins** | Installed Claude Code / Codex plugins, as `/<plugin>:<skill>` | See [Plugins](../plugins/) |
 
-On a name clash, **built-in wins, then project, then global**. A project skill hides a global one with the same name, and nothing can replace a built-in. Rein's own commands (`/help`, `/model`, `/goal`, …) beat skills too. If a skill is hidden by a command, Rein says so at startup: `Skill "help" hidden by built-in command; rename to use it.`
+On a name clash, **built-in wins, then project, then global**, then Claude Code commands, then Codex skills and plugins. A project skill hides a global one with the same name, and nothing can replace a built-in. Rein's own commands (`/help`, `/model`, `/goal`, …) beat skills too. If a skill is hidden by a command, Rein says so at startup: `Skill "help" hidden by built-in command; rename to use it.`
 
 Skills are rescanned each time you start typing a `/` command, so a new or edited skill shows up without restarting.
 
@@ -135,6 +137,7 @@ Fix issue #$1 with priority $2. Recent changes: !`git log --oneline -5`
 
 | Skill | What it does |
 |---|---|
+| `/init [guidance]` | The agent studies the project and writes or improves `AGENTS.md` (commands that actually exist, a map, conventions, gotchas), then reads it back to check every command and path. |
 | `/plan <task>` | Plan mode on. Restate the goal, explore read-only (with subagents for wide areas), ask clarifying questions with `ask_user`, then present a plan with 2–10 checkable milestones. |
 | `/plan:deep <task>` | The thorough version for big or risky work: broader exploration with parallel subagents, more questions, an [advisor](../subagents/) review of the approach *and* of the draft plan (when an advisor is configured), risks, rollback, and 3–10 milestones. |
 | `/skill:create <what>` | The agent writes a new skill for you, project or global. |

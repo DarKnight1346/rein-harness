@@ -46,7 +46,7 @@ Every mutating tool call (writes, edits, deletes, shell commands, MCP adds and r
 4. **Plan mode** refuses file changes. A shell command not on the read-only list goes to the decision model, then to you.
 5. **Outside paths** ask about access first.
 6. **Scratchpad** writes don't ask.
-7. **Approval mode** (`/configure` → Approvals): `ask` (default), `auto` (the decision model allows at p ≥ 0.85 and otherwise asks you; it never auto-denies), or `bypass`.
+7. **Approval mode** (`/settings` → Approvals): `ask` (default), `auto` (the decision model allows at p ≥ 0.85 and otherwise asks you; it never auto-denies), or `bypass`.
 8. A **checkpoint** is taken before any file change, for [/rewind](../../features/rewind/).
 
 `mcp_add` always asks, even with "allow for the session" on, because it runs a command or contacts a URL. Project `.mcp.json` servers need a one-time approval before they connect.
@@ -59,7 +59,7 @@ Every mutating tool call (writes, edits, deletes, shell commands, MCP adds and r
 
 These are real, and you should know them:
 
-- **The shell tool isn't sandboxed.** Commands run as you, with your full environment (including any API keys in it). Env hygiene applies to the CLIs Rein spawns, not to commands the agent runs. Confinement covers the file tools; a shell command is controlled by approval, not by a sandbox.
+- **The sandbox limits writes, not reads.** By default the agent's commands run in an OS sandbox that confines writes to the project, scratchpad, temp folders and package caches (see [the command sandbox](../../features/permissions/#the-command-sandbox)), but they can read anything you can, with your full environment (including API keys in it), and the network is open unless you choose strict mode. Windows, and Linux without bubblewrap, have no sandbox.
 - **Read-only commands auto-run.** The allowlist is conservative, but a command it matches runs without asking.
 - **Private-host blocking is by hostname.** `web_fetch` checks the literal host and IP; it doesn't resolve DNS. A public name that resolves to a private address isn't blocked.
 - **Sensitive-path rules apply outside the project only.** A `.env` inside your project is an ordinary project file the agent can read and edit like any other.

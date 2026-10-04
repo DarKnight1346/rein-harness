@@ -7,7 +7,7 @@ import {paths} from './store/paths.js';
 import {ClassicApp} from './ui/ClassicApp.js';
 import {FullscreenApp, lastEntries} from './ui/fullscreen/FullscreenApp.js';
 import {entryLines} from './ui/fullscreen/lines.js';
-import {installResizeFix, setResizeMode} from './ui/resizeFix.js';
+import {installResizeFix, setResizeMode, ensureTerminalSize} from './ui/resizeFix.js';
 import {ClickProvider} from './ui/terminal/clicks.js';
 import {installTerminalRestore, MOUSE_OFF, MOUSE_ON, MouseStdin} from './ui/terminal/mouse.js';
 import type {ExitResult, Renderer} from './ui/useRein.js';
@@ -87,6 +87,7 @@ let renderer: Renderer = args.includes('--classic') ? 'classic' : args.includes(
 const ci = args.findIndex((a) => a === '--continue' || a === '-c');
 let resume: Resume = ci < 0 ? false : args[ci + 1] && !args[ci + 1]!.startsWith('-') ? args[ci + 1]! : true;
 installTerminalRestore();
+ensureTerminalSize(process.stdout);
 await installResizeFix(process.stdout); // runs before Ink's own resize handler
 
 // Shared render settings validated in the M0/fullscreen spikes: frame cap + incremental line diffs.

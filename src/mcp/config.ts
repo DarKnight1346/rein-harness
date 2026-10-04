@@ -3,6 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import {reinHome} from '../store/paths.js';
 import {updateJsonFileSync} from '../store/json.js';
+import {loadPlugins} from '../plugins/index.js';
 
 /**
  * MCP server configs in Claude Code's format (`{"mcpServers": {name: {command, args, env} |
@@ -16,7 +17,7 @@ import {updateJsonFileSync} from '../store/json.js';
 export type StdioServer = {type?: 'stdio'; command: string; args?: string[]; env?: Record<string, string>};
 export type RemoteServer = {type: 'http' | 'sse'; url: string; headers?: Record<string, string>};
 export type ServerConfig = StdioServer | RemoteServer;
-export type ServerSource = 'project' | 'rein' | 'claude';
+export type ServerSource = 'project' | 'rein' | 'claude' | 'plugin';
 export type ServerEntry = {name: string; config: ServerConfig; source: ServerSource; approved: boolean};
 
 const expand = (s: string) => s.replace(/\$\{(\w+)(?::-([^}]*))?\}/g, (_, name: string, def?: string) => process.env[name] ?? def ?? '');
@@ -64,6 +65,8 @@ export function loadServers(root: string): ServerEntry[] {
     ['project', servers(path.join(root, '.mcp.json'))],
     ['rein', servers(path.join(reinHome(), 'mcp.json'))],
     ['claude', {...servers(claudeJson), ...servers(claudeJson, (j) => j?.projects?.[root]?.mcpServers)}],
+    // Installed plugins' servers (installing the plugin was the consent), as `<plugin>-<name>`.
+    ['plugin', Object.fromEntries(loadPlugins(root).flatMap((p) => Object.entries(p.mcpServers ?? {}).map(([n, c]) => [`${p.name}-${n}`, c as ServerConfig])))],
   ];
   const out: ServerEntry[] = [];
   for (const [source, map] of sources) {

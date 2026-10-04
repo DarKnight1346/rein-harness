@@ -24,8 +24,34 @@ let mode: 'classic' | 'fullscreen' = 'classic';
 /** Fullscreen (alt screen) has no scrollback to protect: wipe it and let Ink redraw everything. */
 export const setResizeMode = (m: 'classic' | 'fullscreen') => void (mode = m);
 
+let instances: WeakMap<object, InkInternals> | undefined;
+
+/** The frame Ink last drew (classic): what's on screen below the transcript. */
+export const inkFrame = (stdout: NodeJS.WriteStream): string => {
+  const ink = instances?.get(stdout);
+  return ink ? ink.lastOutputToRender || (ink.lastOutput ? ink.lastOutput + '\n' : '') : '';
+};
+
+/**
+ * After something else had the terminal (a command the user typed into): erase the frame that was
+ * on screen when it took over, and make Ink draw the whole current frame afresh.
+ */
+export function redrawAfterTakeover(stdout: NodeJS.WriteStream, frame: string): void {
+  const ink = instances?.get(stdout);
+  if (mode === 'fullscreen') {
+    stdout.write('\x1b[2J\x1b[H');
+  } else if (frame) {
+    stdout.write('\r' + '\x1b[2K' + '\x1b[1A\x1b[2K'.repeat(reflowedRows(frame, stdout.columns ?? 80)) + '\r');
+  }
+  if (ink && typeof ink.log?.reset === 'function') {
+    ink.log.reset();
+    ink.lastOutput = '';
+    ink.lastOutputToRender = '';
+  }
+  stdout.emit('resize');
+}
+
 export async function installResizeFix(stdout: NodeJS.WriteStream): Promise<void> {
-  let instances: WeakMap<object, InkInternals> | undefined;
   try {
     const require = createRequire(import.meta.url);
     const inkDir = path.dirname(require.resolve('ink'));
@@ -60,4 +86,20 @@ export function reflowedRows(frame: string, cols: number): number {
   const lines = frame.split('\n');
   if (lines.at(-1) === '') lines.pop();
   return lines.reduce((n, line) => n + Math.max(1, Math.ceil(stringWidth(line) / Math.max(1, cols))), 0);
+}
+
+/**
+ * A terminal that reports no size (0×0: an unsized pty, some embedded terminals) sends Ink to the
+ * `terminal-size` fallback on every frame, and that opens /dev/tty without ever closing it: dozens
+ * of leaked descriptors a second, until spawning processes fails. Give stdout a size instead
+ * ($COLUMNS/$LINES, else 100×30), and again after any resize that reports zero.
+ */
+export function ensureTerminalSize(stdout: NodeJS.WriteStream, env: NodeJS.ProcessEnv = process.env): void {
+  if (!stdout.isTTY) return;
+  const fill = () => {
+    if (!stdout.columns) stdout.columns = Number(env.COLUMNS) || 100;
+    if (!stdout.rows) stdout.rows = Number(env.LINES) || 30;
+  };
+  fill();
+  stdout.prependListener('resize', fill);
 }

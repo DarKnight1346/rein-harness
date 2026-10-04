@@ -106,19 +106,33 @@ Subagent parser-tests finished (done) — its report goes to the main agent.
 
 The agent receives it wrapped in `<subagent_report id="1" name="parser-tests" status="done">` with "Continue with this result." So the agent can fan out work, end its turn, and get woken up as results come in. A report it already collected with `agent_result` isn't delivered a second time.
 
+## Parallel subagents get their own worktree
+
+When subagents work at the same time, they could overwrite each other's edits. Rein prevents that without asking you to manage anything:
+
+- **Only when it's needed.** A subagent gets its own copy of the project (a git worktree) at its first change, and only if other work is going on: it runs in the background, or another subagent is running. A single foreground subagent edits the project directly, and one that only reads never gets a copy.
+- **It starts from your project as it is now,** including uncommitted changes and new files. Rein snapshots the working tree with a temporary index, so your staged changes and branches aren't touched. Dependency folders (`node_modules`, `.venv`, …) are linked. Other ignored folders, like build output (`dist/`, `target/`, `.next/`), are copied, as instant copy-on-write clones on filesystems that support them (APFS, btrfs), up to 500 MB or 20,000 files in all. Small ignored files like `.env` are copied too. So builds and tests run there just as they do in the project. A subagent's own rebuilds stay in its copy and never touch yours.
+- **The subagent doesn't notice.** Paths to your project are pointed at its copy, and the [command sandbox](../permissions/#the-command-sandbox) lets it write there (and run git).
+- **Its changes come home on their own.** When it finishes (or is stopped), its changes are merged into your project file by file. If the main agent changed the same file meanwhile, both sets of edits are kept (a three-way merge), and the copy is deleted. Its report says which files were merged.
+- **Commits stay off your branch.** If a subagent commits in its copy, those commits aren't put on your branch; their changes come back as uncommitted edits, like the rest of its work. The main agent is told, so it can commit them if you want a commit, and the original commits are kept at `refs/rein/worktrees/…` (`git cherry-pick` them if you prefer).
+- **Real conflicts go to the main agent.** If both changed the same lines, your project's version stays and the subagent's version is kept for the main agent, which is told which files to merge.
+- **Nothing is lost if Rein stops.** If Rein exits or crashes while a subagent still has a copy, the next start in that project merges the work in and says so.
+
+Copies live in `~/.rein/worktrees/`, never in your project. Outside a git repository, subagents always edit the project directly. To turn this off: `/settings` → **Worktrees** → **Off** (`worktrees` in the config).
+
 ## The completion check
 
 After each subagent turn, the [decision model](../../internals/decision-model/) gets the task, the final report and the last 40 tool calls, and answers one question: *has the subagent fully completed the task it was given? Actually done, not just planned, partially done, or blocked?*
 
 - At **0.5 or above** the work is accepted.
-- Below that, the subagent is told: *"A completion check found that the task is not finished yet. Re-read the task, do whatever is still missing, and then give your final report."*
+- Below that, the subagent is told: *"A completion check found that the task is not finished yet. Re-read the task, do whatever is still missing, and then give your final report."* With an [advisor](../routing/) set, Rein first asks it what's most likely missing (with the subagent's task and work as context), and that advice goes along, so the subagent gets direction rather than just "keep going". It also shows in the subagent's view as `Advisor: …`.
 - This repeats **at most 3 extra rounds**. After that the subagent stops with `Stopped after 3 continuation rounds.` and its report goes back as-is.
 
 Each verdict shows in the subagent's view, e.g. `completion check: not complete (0.31 via jev) → continuing`. The report header tells the main agent how many continuation rounds it took. If the check itself fails (say no decision model is reachable), the work is accepted rather than blocked.
 
 ## Limits
 
-- **Concurrency.** At most `subagentLimit` subagents run at once (default **10**). Set it in [`/configure`](../tui/) → Subagents: 1, 2, 3, 5, 10 or 20. The agent is told the limit. When it's reached, `agent` returns an error telling it to wait with `agent_result` or do the work itself.
+- **Concurrency.** At most `subagentLimit` subagents run at once (default **10**). Set it in [`/settings`](../tui/) → Subagents: 1, 2, 3, 5, 10 or 20. The agent is told the limit. When it's reached, `agent` returns an error telling it to wait with `agent_result` or do the work itself.
 - **No nesting.** Subagents can't spawn subagents. `agent`, `agent_result`, `ask_user`, `todo_write`, `present_plan`, `milestone_done` and `goal_done` belong to the main agent only. Forks still see those definitions, because their history references them, but calling one fails with `only available to the main agent`.
 - **`/model` targets the main agent.** Changing the chat model while you're viewing a subagent changes the main agent's model; the subagent keeps its own.
 - **No questions.** Subagents are told the user won't answer questions, so they work autonomously and report what's left undone and why.

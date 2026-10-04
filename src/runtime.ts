@@ -1,5 +1,7 @@
 import {adapters} from './providers/index.js';
 import {catalog} from './router/catalog.js';
+import {mergeNote, Worktrees} from './agents/worktrees.js';
+import type {Origin} from './tools/fs.js';
 import {makeRouter, type AutoRouter} from './router/index.js';
 import {makeAutoRouter} from './router/auto.js';
 import {Engine} from './session/engine.js';
@@ -86,13 +88,35 @@ export class Runtime {
     planMode: () => this.planMode,
     mode: () => this.config.toolApproval,
     shellMaxMs: () => this.config.shellMaxMinutes * 60_000,
+    sandbox: () => this.config.sandbox ?? 'write',
     scratch: () => this.engine?.scratch,
     sessionId: () => this.engine?.transcript.id,
     judge: (req) => this.judgeChange(req),
     readOnlyJudge: (command) => this.judgeReadOnly(command),
     configDirs: () => this.config?.additionalDirectories ?? [],
     checkpoint: (file) => this.checkpoints.snapshot(this.currentTurn(), file),
+    isolate: (origin, writes) => this.isolate(origin, writes),
   });
+
+  /** Subagents' private worktrees (see agents/worktrees.ts). */
+  readonly worktrees = new Worktrees(process.cwd(), () => this.engine?.transcript.id);
+
+  /**
+   * Whether a subagent's call runs in its own worktree: once it has one, always; otherwise it gets
+   * one on its first change when other work is going on (it runs in the background, or another
+   * subagent is running). A lone foreground subagent works in place, as before.
+   */
+  private async isolate(origin: Origin, writes: boolean): Promise<{root: string; writable: string[]} | undefined> {
+    if (origin.agentId === undefined) return undefined;
+    const have = this.worktrees.get(origin.agentId);
+    if (have) return have;
+    if (!writes || (this.config.worktrees ?? 'auto') === 'off') return undefined;
+    const agent = this.agents.get(origin.agentId);
+    if (!agent) return undefined;
+    const others = this.agents.running().some((a) => a.id !== agent.id);
+    if (!agent.background && !others) return undefined;
+    return this.worktrees.ensure(agent.id);
+  }
 
   /** MCP servers (project .mcp.json, ~/.rein/mcp.json, Claude Code's ~/.claude.json). */
   readonly mcp = new McpManager(process.cwd());
@@ -186,6 +210,12 @@ export class Runtime {
       };
     },
     judge: (agent) => this.judgeCompletion(agent),
+    advise: async (agent, verdict) => {
+      if (!advisorRef(this.config)) return undefined;
+      const question = `A completion check says my task isn't finished (${verdict.note}). What is most likely missing, and what should I do next? Be brief and specific.`;
+      const res = await this.tools.call('advisor', {question}, {agentId: agent.id, name: agent.name});
+      return res.ok ? res.text : undefined;
+    },
     onActivity: (agentId, fn) => {
       const h = (a: ToolActivity) => {
         if (a.origin?.agentId === agentId) fn(a);
@@ -194,6 +224,12 @@ export class Runtime {
       return () => void this.tools.off('activity', h);
     },
     finished: (agent) => this.subagentFinished(agent),
+    settle: async (agent) => {
+      const r = await this.worktrees.settle(agent.id);
+      if (!r) return undefined;
+      if (r.kept) this.tools.addDirs([r.kept]); // the main agent merges the conflicting files from there
+      return mergeNote(r);
+    },
     killShells: (agentId) => {
       for (const s of this.tools.shells.running()) if (s.origin?.agentId === agentId) this.tools.shells.kill(s.id);
     },
@@ -270,6 +306,12 @@ Drop superseded reads of the same file, routine listings, and output that no lon
   /** SessionStart hook context, added to the first message of the session. */
   private sessionContext: string | undefined;
 
+  /** `!command` runs typed by the user since the last message: they go along with the next one. */
+  private userShells: string[] = [];
+  noteUserShell(command: string, exit: string, output: string): void {
+    this.userShells.push(`<user_shell command=${JSON.stringify(command)} status=${JSON.stringify(exit)}>\n${output.slice(-10_000)}\n</user_shell>`);
+  }
+
   /** The connected editor (Claude Code IDE extension protocol), if any. */
   ide: IdeConnection | undefined;
   /** Called when the editor connects, disconnects, or its selection changes (UI refresh). */
@@ -305,7 +347,9 @@ Drop superseded reads of the same file, routine listings, and output that no lon
     const selection = sel
       ? `<ide_selection file="${path.relative(root, sel.filePath) || sel.filePath}" lines="${sel.startLine}-${sel.endLine}">\n${sel.text.slice(0, 20_000)}\n</ide_selection>\nThe user has this selected in their editor; it may or may not be what the message is about.`
       : undefined;
-    const context = [this.sessionContext, out.context, selection, this.planMode ? PLAN_MODE_CONTEXT : undefined].filter(Boolean).join('\n');
+    const shells = this.userShells.length ? `${this.userShells.join('\n')}\nThe user ran ${this.userShells.length > 1 ? 'these commands' : 'this command'} themselves (with !) before this message.` : undefined;
+    const context = [this.sessionContext, out.context, shells, selection, this.planMode ? PLAN_MODE_CONTEXT : undefined].filter(Boolean).join('\n');
+    if (!out.block) this.userShells = [];
     if (!out.block) this.sessionContext = undefined;
     return {block: out.block, context: context || undefined};
   }
@@ -425,6 +469,7 @@ Drop superseded reads of the same file, routine listings, and output that no lon
       },
     );
     this.config = await loadConfig();
+    catalog.apiAccounts = this.config.apiAccounts ?? 'fallback';
     await this.sessionStartHooks(typeof opts.resume === 'string' ? 'resume' : 'startup');
     // MCP servers connect in the background; their tools appear as they come up.
     this.tools.addSource(() => this.mcp.tools());
@@ -522,6 +567,7 @@ Drop superseded reads of the same file, routine listings, and output that no lon
     // These change what tools exist or their schemas: reload the agent's tool list.
     const toolsChanged = (['advisorModel', 'subagentModel', 'subagentPriority'] as const).some((k) => patch[k] !== undefined && patch[k] !== this.config[k]);
     this.config = {...this.config, ...patch};
+    catalog.apiAccounts = this.config.apiAccounts ?? 'fallback';
     if (toolsChanged) this.engine?.refreshTools();
     await saveConfig(this.config);
   }

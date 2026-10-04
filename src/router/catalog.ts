@@ -28,6 +28,11 @@ export class ModelCatalog {
   loaded = false;
   /** Accounts that failed auth at runtime; skipped until re-login. */
   readonly authFailed = new Set<string>();
+  /**
+   * API accounts (pay per use): 'fallback' (default) = only when no subscription account can serve
+   * the model; 'always' = alongside subscriptions (still after them). Set from config.apiAccounts.
+   */
+  apiAccounts: 'fallback' | 'always' = 'fallback';
   /** The installed codex's compatibility check (see providers/codex/compat.ts); ok false = Codex off. */
   codexCompat: CompatReport | undefined;
 
@@ -132,10 +137,15 @@ export class ModelCatalog {
 
   /** Healthy = not cooling down, not auth-failed, under the used-% ceiling. Best to use first. */
   healthyAccounts(ref: ModelRef, maxUsedPct: number, exclude: ReadonlySet<string> = new Set()): Account[] {
-    return this.accountsFor(ref)
+    const healthy = this.accountsFor(ref)
       .filter((a) => !exclude.has(a.id) && !this.retired.has(a.id) && !this.authFailed.has(a.id) && !usageStore.cooldownUntil(a.id))
       .filter((a) => headroom(usageStore.get(a.id)) > 100 - maxUsedPct)
       .sort((a, b) => this.score(b.id) - this.score(a.id));
+    // Subscriptions first (already paid for); pay-per-use API accounts after them, or only as a
+    // fallback when no subscription can serve this model.
+    const subs = healthy.filter((a) => !a.api);
+    const api = healthy.filter((a) => a.api);
+    return this.apiAccounts === 'always' || !subs.length ? [...subs, ...api] : subs;
   }
 
   /** Models with at least one healthy account. */

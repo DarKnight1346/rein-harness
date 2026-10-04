@@ -24,10 +24,41 @@ type Props = {
   bare?: boolean;
 };
 
+type ApiKind = NonNullable<Account['api']>;
 type Item =
   | {kind: 'account'; row: AccountRow}
-  | {kind: 'add'; provider: ProviderId}
+  | {kind: 'add'; provider: ProviderId; api?: ApiKind}
   | {kind: 'jev'};
+
+/** What each "+ Add …" row adds. */
+const ADD_LABEL = (item: Extract<Item, {kind: 'add'}>) =>
+  ({
+    'claude:': 'Claude subscription (Pro / Max)',
+    'claude:console': 'Claude API key (Anthropic Console, pay per use)',
+    'claude:bedrock': 'Claude on Amazon Bedrock (your AWS credentials)',
+    'claude:vertex': 'Claude on Google Vertex AI (your Google Cloud credentials)',
+    'codex:': 'Codex with ChatGPT (Plus / Pro / Business)',
+    'codex:openai': 'Codex with an OpenAI API key (pay per use)',
+  } as Record<string, string>)[`${item.provider}:${item.api ?? ''}`] ?? `${PROVIDERS[item.provider].name} account`;
+
+/** Bedrock / Vertex settings, asked one field at a time. */
+type CloudForm = {provider: ProviderId; api: 'bedrock' | 'vertex'; fields: {key: 'region' | 'profile' | 'projectId'; label: string; hint: string; optional?: boolean}[]; index: number; values: Record<string, string>};
+const cloudForm = (api: 'bedrock' | 'vertex'): CloudForm => ({
+  provider: 'claude',
+  api,
+  index: 0,
+  values: {},
+  fields:
+    api === 'bedrock'
+      ? [
+          {key: 'region', label: 'AWS region', hint: 'e.g. us-east-1'},
+          {key: 'profile', label: 'AWS profile', hint: 'from ~/.aws/config; enter for the default credentials', optional: true},
+        ]
+      : [
+          {key: 'projectId', label: 'Google Cloud project ID', hint: 'the project with Claude enabled in Vertex AI'},
+          {key: 'region', label: 'Region', hint: 'e.g. us-east5, or global'},
+        ],
+});
 
 type LoginState = {
   account: Account;
@@ -45,6 +76,7 @@ type Mode =
   | {name: 'confirmReauth'; row: AccountRow}
   | {name: 'jevInput'}
   | {name: 'jevActions'; cursor: number}
+  | {name: 'cloud'; form: CloudForm}
   | {name: 'login'; login: LoginState};
 
 export function LoginScreen({onLog, onClose, bare}: Props) {
@@ -88,7 +120,11 @@ export function LoginScreen({onLog, onClose, bare}: Props) {
   const items: Item[] = [
     ...(rows ?? []).map((row) => ({kind: 'account', row}) as const),
     {kind: 'add', provider: 'claude'},
+    {kind: 'add', provider: 'claude', api: 'console'},
+    {kind: 'add', provider: 'claude', api: 'bedrock'},
+    {kind: 'add', provider: 'claude', api: 'vertex'},
     {kind: 'add', provider: 'codex'},
+    {kind: 'add', provider: 'codex', api: 'openai'},
     {kind: 'jev'},
   ];
 
@@ -133,11 +169,23 @@ export function LoginScreen({onLog, onClose, bare}: Props) {
     if (item.kind === 'account') setMode({name: 'actions', row: item.row, cursor: 0});
     else if (item.kind === 'jev') setMode(jevSet ? {name: 'jevActions', cursor: 0} : {name: 'jevInput'});
     else if (item.kind === 'add') {
+      if (item.api === 'bedrock' || item.api === 'vertex') return setMode({name: 'cloud', form: cloudForm(item.api)});
       setBusy('Starting login…');
-      const {account, flow} = await startAdd(item.provider);
+      const {account, flow} = await startAdd(item.provider, item.api ? {api: item.api} : undefined);
       setBusy(undefined);
       void runLogin({account, flow, isNew: true, needsCode: false});
     }
+  };
+  /** One Bedrock / Vertex field answered: next field, or check the setup. */
+  const answerCloud = async (form: CloudForm, value: string) => {
+    const field = form.fields[form.index]!;
+    if (!value.trim() && !field.optional) return;
+    const values = {...form.values, ...(value.trim() ? {[field.key]: value.trim()} : {})};
+    if (form.index + 1 < form.fields.length) return setMode({name: 'cloud', form: {...form, index: form.index + 1, values}});
+    setBusy('Checking…');
+    const {account, flow} = await startAdd(form.provider, {api: form.api, apiConfig: values});
+    setBusy(undefined);
+    void runLogin({account, flow, isNew: true, needsCode: false});
   };
 
   const accountAction = (row: AccountRow, idx: number) => {
@@ -201,7 +249,7 @@ export function LoginScreen({onLog, onClose, bare}: Props) {
         if (key.escape && !mode.login.needsCode) mode.login.flow.cancel();
       }
     },
-    {isActive: !(mode.name === 'login' && mode.login.needsCode) && mode.name !== 'jevInput'},
+    {isActive: !(mode.name === 'login' && mode.login.needsCode) && mode.name !== 'jevInput' && mode.name !== 'cloud'},
   );
 
   return (
@@ -231,6 +279,20 @@ export function LoginScreen({onLog, onClose, bare}: Props) {
           Re-authenticate {accountName(mode.row.account)}? This signs in your normal{' '}
           {PROVIDERS[mode.row.account.provider].name} CLI login too. (y/n)
         </Text>
+      )}
+      {mode.name === 'cloud' && (
+        <Box flexDirection="column">
+          <Text bold>{mode.form.api === 'bedrock' ? 'Claude on Amazon Bedrock' : 'Claude on Google Vertex AI'}</Text>
+          <Text dimColor>
+            {mode.form.api === 'bedrock'
+              ? 'Uses your AWS credentials (profile, environment or SSO); Rein stores no keys.'
+              : 'Uses your Google Cloud credentials (gcloud auth application-default login); Rein stores no keys.'}
+          </Text>
+          <Box marginTop={1}>
+            <Text>{mode.form.fields[mode.form.index]!.label}: </Text>
+            <TextInput key={mode.form.index} placeholder={mode.form.fields[mode.form.index]!.hint} onSubmit={(v) => void answerCloud(mode.form, v)} onCancel={() => setMode({name: 'list'})} />
+          </Box>
+        </Box>
       )}
       {mode.name === 'jevInput' && (
         <Box>
@@ -279,7 +341,7 @@ export function LoginScreen({onLog, onClose, bare}: Props) {
       <Text dimColor>
         {mode.name === 'login'
           ? mode.login.needsCode
-            ? 'paste the code and press enter · esc cancels'
+            ? `paste the ${mode.login.account.api === 'openai' ? 'key' : 'code'} and press enter · esc cancels`
             : 'waiting for browser… · esc cancels'
           : 'click or ↑↓ select · enter open · esc close'}
       </Text>
@@ -291,7 +353,7 @@ function ItemList({items, cursor, active, jevSet, onPick}: {items: Item[]; curso
   return (
     <Box flexDirection="column" marginY={1}>
       {items.map((item, i) => (
-        <Clickable key={item.kind === 'account' ? item.row.account.id : item.kind === 'add' ? `add-${item.provider}` : 'jev'} onClick={() => active && onPick(i)}>
+        <Clickable key={item.kind === 'account' ? item.row.account.id : item.kind === 'add' ? `add-${item.provider}-${item.api ?? ''}` : 'jev'} onClick={() => active && onPick(i)}>
           <ItemRow item={item} pointer={active && i === cursor ? '❯ ' : '  '} highlighted={active && i === cursor} jevSet={jevSet} />
         </Clickable>
       ))}
@@ -304,7 +366,7 @@ function ItemRow({item, pointer, highlighted, jevSet}: {item: Item; pointer: str
   if (item.kind === 'add') {
     return (
       <Text color={highlighted ? 'cyan' : undefined}>
-        {pointer}+ Add {PROVIDERS[item.provider].name} account
+        {pointer}+ Add {ADD_LABEL(item)}
       </Text>
     );
   }
@@ -375,8 +437,13 @@ function LoginView({login}: {login: LoginState}) {
       )}
       {login.needsCode && (
         <Box marginTop={1}>
-          <Text>Code: </Text>
-          <TextInput mask placeholder="paste the code from the browser" onSubmit={(c) => login.flow.submitCode(c)} onCancel={() => login.flow.cancel()} />
+          <Text>{login.account.api === 'openai' ? 'OpenAI API key: ' : 'Code: '}</Text>
+          <TextInput
+            mask
+            placeholder={login.account.api === 'openai' ? 'paste your key from platform.openai.com (Codex stores it, not Rein)' : 'paste the code from the browser'}
+            onSubmit={(c) => login.flow.submitCode(c)}
+            onCancel={() => login.flow.cancel()}
+          />
         </Box>
       )}
       {login.error && <Text color="red">{login.error}</Text>}

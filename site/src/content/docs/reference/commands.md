@@ -43,7 +43,7 @@ In fullscreen, commands that show information open a window over the conversatio
 | | `pause` | The current turn finishes, then the agent stops working on the goal. |
 | | `resume` | Continues a paused goal. |
 | | `clear` | Removes the goal. |
-| `/plan:goal` | — | Starts a saved, unfinished plan from `.rein/plans/` as a goal, with milestones tracked in the sidebar. You can also start planning a new one from the same window, which puts `/plan ` in the input. |
+| `/goal:plan` | — | Starts a saved, unfinished plan from `.rein/plans/` as a goal, with milestones tracked in the sidebar. You can also start planning a new one from the same window, which puts `/plan ` in the input. |
 
 See [Goals](../../features/goals/) and [Plan mode](../../features/plans/).
 
@@ -54,7 +54,8 @@ See [Goals](../../features/goals/) and [Plan mode](../../features/plans/).
 | `/model` | *(none)* | Opens **Models** with sections Chat model, Subagents, Subagent priority, Decision model, Compaction model, Advisor and Web. Choosing a chat model continues to its effort level. |
 | | `auto` | Sets the chat model to auto routing. |
 | | `<model>` | Sets the chat model. Accepts a `provider:model` ref or a model's id or label as shown in `/model`, case-insensitive. |
-| `/login` | — | Lists accounts, adds Claude or Codex accounts, re-authenticates or removes them, and manages the Jev API key. |
+| `/plugins` | — | Lists the Claude Code and Codex plugins Rein loaded, and what each adds (commands, agents, hooks, MCP servers), plus Codex skills. → [Plugins](../../features/plugins/) |
+| `/login` | — | Lists accounts; adds Claude (subscription, Console API key, Bedrock, Vertex) or Codex (ChatGPT, OpenAI API key) accounts; re-authenticates or removes them; manages the Jev API key. → [Accounts](../../features/accounts/#api-accounts-pay-per-use) |
 | `/usage` | *(none)* | Usage windows (5h / weekly / 30-day) and reset times for every account. |
 | | `refresh` | Re-checks now. Claude accounts send a tiny request on their cheapest model to get fresh numbers. |
 
@@ -84,13 +85,18 @@ See [Goals](../../features/goals/) and [Plan mode](../../features/plans/).
 
 | Command | Arguments | What it does |
 |---|---|---|
-| `/configure` | — | Settings in eleven tabs: Status line, Sidebar, Approvals, Shell, Subagents, Goals, Load balancing, Notifications, Updates, Privacy, Compaction. **Aliases: `/config`, `/settings`.** |
+| `/settings` | — | Settings in tabs: Status line, Sidebar, Approvals, Sandbox, Shell, Subagents, Goals, Load balancing, Worktrees, API accounts, Notifications, Updates, Privacy, Compaction. |
 | `/tui` | `fullscreen` \| `classic` | Switches renderer and carries the conversation over. With no argument, shows which renderer is active. *Waits for idle.* |
 | `/update` | — | Updates the `claude` and `codex` CLIs, checks the Codex app-server protocol, then updates Rein. *Waits for idle.* |
+| `/export` | `[file]` | Saves the whole conversation as Markdown (every message, each reply's tool calls as a list) and copies it to the clipboard. Default file: `~/.rein/exports/<id>.md`; a path is relative to the project. |
 | `/help` | — | Commands and skills. |
 | `/exit` | — | Quits. Ctrl+C twice also exits. |
 
-`/config` and `/settings` are the only aliases. An unknown command prints `Unknown command /<name>. Try /help.`
+Rein has no command aliases. An unknown command prints `Unknown command /<name>. Try /help.`
+
+## Shell commands with `!`
+
+Start a message with `!` to run a shell command yourself, like Claude Code's bash mode: `!npm test`, `!git status`. It runs in the project with no approval (you typed it), its output shows live under the input, and the command plus its output go along with your next message so the agent knows what you ran. Ctrl+C stops it.
 
 ## Built-in skills
 
@@ -98,6 +104,7 @@ These four entries look like commands but are **skills**. Each one sends a prepa
 
 | Skill | Arguments | What it does |
 |---|---|---|
+| `/init` | `[guidance]` | Has the agent look through the project and write (or improve) `AGENTS.md`: what the project is, the real build/test/lint commands, a map, conventions and gotchas. With a `CLAUDE.md` but no `AGENTS.md`, it moves the shared rules into `AGENTS.md` and leaves `CLAUDE.md` as an `@AGENTS.md` import. |
 | `/plan` | `<task>` | Plans a change before making it. Turns plan mode on, and the agent explores read-only, asks you questions, then presents a plan for approval. |
 | `/plan:deep` | `<task>` | Thorough planning for big or risky changes: deeper exploration (parallel subagents), more questions and advisor reviews, then a plan for approval. Also turns on plan mode. |
 | `/skill:create` | `<what it should do>` | Has the agent create a new Rein skill, global or for this project. |

@@ -1,15 +1,17 @@
 import type {Skill} from '../skills/index.js';
 
-export type CommandName = 'ide' | 'memory' | 'mcp' | 'rewind' | 'permissions' | 'add-dir' | 'goal' | 'plan:goal' | 'btw' | 'agents' | 'agent' | 'resume' | 'login' | 'usage' | 'model' | 'context' | 'compact' | 'shells' | 'configure' | 'update' | 'tui' | 'clear' | 'help' | 'exit';
+export type CommandName = 'plugins' | 'export' | 'ide' | 'memory' | 'mcp' | 'rewind' | 'permissions' | 'add-dir' | 'goal' | 'goal:plan' | 'btw' | 'agents' | 'agent' | 'resume' | 'login' | 'usage' | 'model' | 'context' | 'compact' | 'shells' | 'settings' | 'update' | 'tui' | 'clear' | 'help' | 'exit';
 
 export const COMMANDS: {name: CommandName; description: string}[] = [
+  {name: 'plugins', description: 'Installed Claude Code and Codex plugins Rein loaded: their commands, skills, agents, hooks and MCP servers'},
+  {name: 'export', description: 'Save the conversation as Markdown and copy it to the clipboard: /export [file] (default ~/.rein/exports/<id>.md)'},
   {name: 'ide', description: 'Editor integration (VS Code, Cursor, Windsurf, JetBrains with the Claude Code extension): connect, or show the connection'},
   {name: 'memory', description: "This project's memory (.rein/MEMORY.md) — what Rein has learned here"},
   {name: 'mcp', description: 'MCP servers: status and tools; approve project servers, reconnect'},
   {name: 'rewind', description: 'Undo: restore files and/or the conversation to before one of your messages (also esc twice)'},
   {name: 'permissions', description: 'Show the allow/deny rules in effect and where they come from'},
   {name: 'add-dir', description: 'Add a working directory the agent can use without asking: /add-dir <path> (no path: list them)'},
-  {name: 'plan:goal', description: 'Start a saved plan as a goal (milestones tracked in the sidebar), or start planning a new one'},
+  {name: 'goal:plan', description: 'Start a saved plan as a goal (milestones tracked in the sidebar), or start planning a new one'},
   {name: 'goal', description: 'Keep the agent on a goal until verified done: /goal <text> · pause · resume · clear'},
   {name: 'btw', description: 'Ask a side question without interrupting the agent (/btw <question>)'},
   {name: 'agents', description: 'Subagents the agent spawned; pick one to view and message it'},
@@ -21,7 +23,7 @@ export const COMMANDS: {name: CommandName; description: string}[] = [
   {name: 'context', description: 'Show what the current context holds and how full it is'},
   {name: 'compact', description: 'Summarize the conversation with the compaction model'},
   {name: 'shells', description: 'Shell commands the agent started; open one to see its logs (/shells <id>)'},
-  {name: 'configure', description: 'Choose what the status line and sidebar show (alias /config)'},
+  {name: 'settings', description: 'Settings: status line, sidebar, approvals, sandbox, shell, subagents, goals, load balancing, notifications, updates, privacy, compaction'},
   {name: 'update', description: 'Update the claude and codex CLIs and Rein'},
   {name: 'tui', description: 'Switch renderer: /tui fullscreen or /tui classic'},
   {name: 'clear', description: 'Clear the conversation'},
@@ -38,7 +40,7 @@ export type Parsed =
 /** An autocomplete row: a built-in command or a skill. */
 export type Suggestion = {name: string; description: string; skill?: Skill};
 
-const ALIASES: Record<string, CommandName> = {config: 'configure', settings: 'configure'};
+const ALIASES: Record<string, CommandName> = {};
 
 /** Built-in commands win over skills with the same name. */
 export const shadowedSkills = (skills: Skill[]) => skills.filter((s) => isCommandName(s.name));

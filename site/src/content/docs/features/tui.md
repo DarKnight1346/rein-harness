@@ -1,6 +1,6 @@
 ---
 title: The terminal UI
-description: Rein's fullscreen and classic renderers, the clickable top bar and sidebar, windows, input tricks like paste collapse and @mentions, privacy mode and every /configure tab.
+description: Rein's fullscreen and classic renderers, the clickable top bar and sidebar, windows, input tricks like paste collapse and @mentions, privacy mode and every /settings tab.
 ---
 
 Rein runs as a full terminal app: a live status bar you can click, a sidebar that shows every account's usage at a glance, windows that open over the conversation while it keeps streaming, and an input box that understands pastes, images, dropped files and `@mentions`. If you prefer your terminal's own scrollback, one flag switches to the classic inline renderer.
@@ -63,7 +63,7 @@ Fullscreen needs mouse reporting for clicks and scrolling. In macOS Terminal.app
 
 ## The top bar
 
-The bar starts with the `▁▃▅▇ Rein` mark, followed by the segments you've enabled in `/configure → Status line`, separated by `│`. These are the available segments, with the default ones marked:
+The bar starts with the `▁▃▅▇ Rein` mark, followed by the segments you've enabled in `/settings → Status line`, separated by `│`. These are the available segments, with the default ones marked:
 
 | Segment | Shows | Click |
 |---|---|---|
@@ -75,7 +75,7 @@ The bar starts with the `▁▃▅▇ Rein` mark, followed by the segments you'v
 | Decision model | `decides: Jev`, or the LLM that routes auto mode | `/model` |
 | Messages | `N msgs` | `/context` |
 | Advisor | `advisor: off` or the advisor model | `/model` |
-| Approvals | `edits: ask` (green), `auto` (yellow), `bypass` (red) | `/configure` |
+| Approvals | `edits: ask` (green), `auto` (yellow), `bypass` (red) | `/settings` |
 
 Rein adds some segments on its own when they apply:
 
@@ -91,7 +91,7 @@ While you view a subagent, the model, account, usage and context segments show t
 
 ## The sidebar
 
-The sidebar is 32 columns wide on the right. `Ctrl+B` or the `[≡]` button toggles it, and Rein remembers your choice. It hides automatically when the terminal is narrower than 96 columns. You pick its sections, and their order, in `/configure → Sidebar`:
+The sidebar is 32 columns wide on the right. `Ctrl+B` or the `[≡]` button toggles it, and Rein remembers your choice. It hides automatically when the terminal is narrower than 96 columns. You pick its sections, and their order, in `/settings → Sidebar`:
 
 | Section | What it shows |
 |---|---|
@@ -114,7 +114,7 @@ In fullscreen, commands that show information or ask you something open a center
 
 - Close a window with `Esc`, the `[×]` button, or a click outside it. Read-only windows (usage, context, help) also close with `q` or `Enter`, and scroll with `↑↓`, PgUp/PgDn or the wheel.
 - Approval windows (`Approve command`, `Approve file change`) don't close on an outside click, so a stray click can't decide for you. When several approvals are waiting, the title shows the count and who asked, e.g. `Approve file change (1 of 3) · subagent reviewer`.
-- Windows with tabs (`/model`, `/configure`) keep the same size whichever tab you're on.
+- Windows with tabs (`/model`, `/settings`) keep the same size whichever tab you're on.
 - A window keeps its height while open, so its content doesn't jump around as it changes.
 
 Windows include `Accounts` (`/login`), `Models`, `Usage`, `Context`, `Commands` (`/help`), `Configure`, `Rewind`, `Continue a conversation` (`/resume`), `MCP servers`, `Questions from the agent`, `Plan — approve to start`, the goal window, the agents and shells lists, and `btw · <question>`.
@@ -175,7 +175,7 @@ The input box grows up to six lines and has a few tricks:
 - **Backspace** after a token deletes the whole token and its attachment.
 - **`@mentions`.** Type `@` and part of a path to get fuzzy matches from your project's files and folders (from `rg --files`, so `.gitignore` is respected). `Tab` or `Enter` inserts the selected match. On send, a mentioned file's contents, image or folder listing goes along with your message.
 - **Slash commands.** Type `/` for a list of commands and skills. `↑↓` selects and `Tab` completes.
-- **A real line editor.** Move with `←/→` (by word with `Option`/`Alt`), `Home`/`End` or `Ctrl+A`/`Ctrl+E`, delete words with `Ctrl+W`, and edit anywhere in the draft. `↑` on the first row recalls earlier messages in this project, even from past sessions. `Ctrl+G` opens the draft in `$EDITOR` for long prompts. Full list in [Keyboard & mouse](../../reference/keys/).
+- **A real line editor.** Move with `←/→` (by word with `Option`/`Alt`), `Home`/`End` or `Ctrl+A`/`Ctrl+E`, delete words with `Ctrl+W`, and edit anywhere in the draft. `↑` on the first row recalls earlier messages in this project, even from past sessions. `Ctrl+G` opens the draft in `$EDITOR` for long prompts. `Ctrl+R` searches your earlier messages, and `!command` runs a shell command yourself. Full list in [Keyboard & mouse](../../reference/keys/).
 - **Queueing.** While the agent is busy, messages you send are queued and run in order when it finishes. The placeholder reads `queue a message, or /btw <question>`. [`/btw`](../btw/) runs right away. `/clear`, `/compact`, `/tui`, `/update` and `/resume` wait until the agent is idle.
 
 ## Stopping and exiting
@@ -196,11 +196,11 @@ Privacy mode is on by default, so you can share screenshots without editing them
 - Your home folder shows as `~`.
 - Your OS username shows as `user` when it's 5 or more characters, so short names don't match ordinary words.
 
-To see real emails and paths, go to `/configure → Privacy` (or set `hidePersonalInfo` to `false`).
+To see real emails and paths, go to `/settings → Privacy` (or set `hidePersonalInfo` to `false`).
 
-## /configure
+## /settings
 
-`/configure` opens a window with eleven tabs (`/config` and `/settings` also work). Changes save to `~/.rein/config.json` right away, and the bar and sidebar behind the window update as you toggle. `←→` or `Tab` switches tabs, `Enter`, `Space` or a click chooses, and `Esc` closes.
+`/settings` opens a window with tabs. Changes save to `~/.rein/config.json` right away, and the bar and sidebar behind the window update as you toggle. `←→` or `Tab` switches tabs, `Enter`, `Space` or a click chooses, and `Esc` closes.
 
 | Tab | Options (default in bold) | Config key |
 |---|---|---|
@@ -211,6 +211,9 @@ To see real emails and paths, go to `/configure → Privacy` (or set `hidePerson
 | **Subagents** | How many may run at once: 1, 2, 3, 5, **10**, 20 | `subagentLimit` |
 | **Goals** | Automatic continuations before a `/goal` pauses itself: **Unlimited**, 10, 25, 50, 100, 250 | `goalMaxRounds` |
 | **Load balancing** | **Balanced** (cache-aware) · Sticky (stay on one account until it hits a limit) | `loadBalancing` |
+| **Sandbox** | **On**: the agent's commands can only write inside the project, scratchpad, temp folders and package caches · Strict: also no network except localhost · Off | `sandbox` |
+| **Worktrees** | **Automatic**: parallel subagents get their own git worktree, merged back when they finish · Off | `worktrees` |
+| **API accounts** | **Fallback**: pay-per-use API accounts only when no subscription can serve the model · Always: alongside subscriptions (after them) | `apiAccounts` |
 | **Notifications** | **Terminal** (bell + terminal notification) · Desktop (also macOS / Linux notifications) · Off. Fires when Rein needs you (approval, question, plan, hook trust) and when work that took 20 s or more finishes | `notifications` |
 | **Updates** | **Auto-update Rein** on launch · Only when I run `/update` | `autoUpdate` |
 | **Privacy** | **Hide personal info** · Show emails and paths | `hidePersonalInfo` |

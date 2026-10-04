@@ -54,6 +54,7 @@ export default defineConfig({
           {label: 'Permissions', slug: 'features/permissions'},
           {label: 'MCP servers', slug: 'features/mcp'},
           {label: 'Skills', slug: 'features/skills'},
+          {label: 'Plugins', slug: 'features/plugins'},
           {label: 'Hooks', slug: 'features/hooks'},
           {label: 'Memory & instructions', slug: 'features/memory'},
           {label: 'Headless & CI', slug: 'features/headless'},

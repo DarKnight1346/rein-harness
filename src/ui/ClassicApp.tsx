@@ -4,6 +4,7 @@ import {Box, Static, Text} from 'ink';
 import {approvalNote, compactText, routeLabel, toolResultSummary} from './format.js';
 import {ImportPrompt} from './ImportPrompt.js';
 import {TrustHooksPrompt} from './TrustHooksPrompt.js';
+import {HistorySearch} from './HistorySearch.js';
 import {LoginScreen} from './LoginScreen.js';
 import {ModelScreen} from './ModelScreen.js';
 import {ConfigureScreen} from './ConfigureScreen.js';
@@ -37,7 +38,7 @@ function ForegroundTail() {
   return (
     <Box flexDirection="column" paddingLeft={2}>
       <Text color="yellow" wrap="truncate">
-        $ {s.command} <Text dimColor>· {shellStatusText(s)} · esc interrupts</Text>
+        $ {s.command} <Text dimColor>· {shellStatusText(s)}{s.tty ? (s.waiting ? ' · waiting for you: ctrl+] to answer' : ' · ctrl+] to type into it') : ''} · esc interrupts</Text>
       </Text>
       {s.lines.slice(-8).map((l, i) => (
         <Text key={i} dimColor wrap="truncate">
@@ -65,7 +66,7 @@ export function ClassicApp({resume}: {resume: Resume}) {
 
   return (
     <>
-      <Static key={generation} items={r.entries}>{(e) => <EntryView key={e.id} entry={e} />}</Static>
+      <Static key={generation} items={r.transcript}>{(e) => <EntryView key={e.id} entry={e} />}</Static>
       <Box flexDirection="column">
         {chat.live ? (
           <Box paddingLeft={2}>
@@ -81,6 +82,11 @@ export function ClassicApp({resume}: {resume: Resume}) {
           <Working startedAt={r.goalNote.startedAt} phase="tool" tool={r.goalNote.label} />
         ) : null}
         {overlay.name === 'import' && <ImportPrompt rows={overlay.rows} onImport={() => r.finishImport(true)} onSkip={() => r.finishImport(false)} />}
+        {overlay.name === 'history' && (
+          <Box borderStyle="round" borderColor="cyan" paddingX={1} flexDirection="column">
+            <HistorySearch entries={overlay.entries} onPick={r.pickHistory} onCancel={() => r.pickHistory(undefined)} />
+          </Box>
+        )}
         {overlay.name === 'trust' && <TrustHooksPrompt hooks={overlay.hooks} onTrust={() => r.finishTrust(true)} onSkip={() => r.finishTrust(false)} />}
         {overlay.name === 'login' && <LoginScreen onLog={r.log} onClose={r.closeOverlay} />}
         {overlay.name === 'model' && <ModelScreen onLog={r.log} onClose={r.closeOverlay} />}
@@ -90,7 +96,7 @@ export function ClassicApp({resume}: {resume: Resume}) {
         {overlay.name === 'ask' && <AskScreen questions={overlay.questions} onDone={overlay.resolve} />}
         {overlay.name === 'plan' && <PlanScreen plan={overlay.plan} width={(process.stdout.columns ?? 100) - 4} onDecide={overlay.resolve} />}
         {overlay.name === 'rewind' && <RewindScreen points={overlay.points} onPick={(i, m) => void r.doRewind(i, m)} onCancel={r.closeOverlay} />}
-        {overlay.name === 'configure' && <ConfigureScreen onClose={r.closeOverlay} onChange={r.bump} />}
+        {overlay.name === 'settings' && <ConfigureScreen onClose={r.closeOverlay} onChange={r.bump} />}
         {overlay.name === 'approval' && <ApprovalPrompt req={overlay.req} onDecide={overlay.resolve} />}
         <Box borderStyle="round" borderColor={r.inputActive ? 'gray' : 'blackBright'} paddingX={1}>
           <Text color="gray">{'> '}</Text>
@@ -102,7 +108,7 @@ export function ClassicApp({resume}: {resume: Resume}) {
               <Text key={c.name} color={c === r.selected ? 'cyan' : undefined} dimColor={c !== r.selected}>
                 {`/${c.name}`.padEnd(12)}
                 {c.description}
-                {c.skill ? <Text dimColor> · {skillSourceLabel(c.skill.source)}{c.skill.argumentHint ? ` · ${c.skill.argumentHint}` : ''}</Text> : null}
+                {c.skill ? <Text dimColor> · {c.skill.plugin ? `plugin ${c.skill.plugin}` : skillSourceLabel(c.skill.source)}{c.skill.argumentHint ? ` · ${c.skill.argumentHint}` : ''}</Text> : null}
               </Text>
             ))}
           </Box>

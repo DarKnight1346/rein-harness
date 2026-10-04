@@ -74,6 +74,8 @@ and answers: *do the tool results and evidence in context concretely show that t
 
 The claim is accepted at probability **≥ 0.7**. Below that, the tool returns `Not accepted — rejected (0.42 via jev): the evidence in context doesn't show the goal is fully achieved. Keep working; produce concrete proof (run the tests/checks, show the output), then call goal_done again.` — and the loop carries on.
 
+When an advisor is set (`/model` → Advisor), a rejection doesn't stop at "keep working": Rein asks the advisor what's most likely missing and which steps would prove it, and appends its answer (`The advisor's take on what's missing: …`). Rejected `milestone_done` calls get the same treatment.
+
 Because the evidence window is the tool calls *since the goal started*, a test run from before you typed `/goal` doesn't count. The agent has to actually run the check.
 
 ## "Impossible" is not a completion
@@ -107,14 +109,14 @@ The Goal window looks like this:
 status: paused · 7 continuations · 1 escalation
   14:02:11 turn: gave up → escalated to the advisor
   14:09:40 done claim: rejected (0.38 via jev)
-  14:15:02 turn: paused after 25 automatic continuations (limit in /configure → Goals)
+  14:15:02 turn: paused after 25 automatic continuations (limit in /settings → Goals)
 
 /goal pause · /goal resume · /goal clear
 ```
 
 ## Goals from a plan
 
-A goal can carry out a saved [plan](../plans/). Choose **Save & start as a goal** when a plan is presented, or run `/plan:goal` and pick an unfinished plan from `.rein/plans/` (or `✎ Start a new plan`):
+A goal can carry out a saved [plan](../plans/). Choose **Save & start as a goal** when a plan is presented, or run `/goal:plan` and pick an unfinished plan from `.rein/plans/` (or `✎ Start a new plan`):
 
 ```text title="Start a plan as a goal"
 Unfinished plans in .rein/plans/ (newest first):
@@ -151,7 +153,7 @@ Each `<goal_reminder>` re-lists the milestones with the next one marked `→`, s
 
 ### Round limit
 
-`goalMaxRounds` caps automatic continuations. It defaults to `0` (unlimited); set it in **/configure → Goals** to 10, 25, 50, 100 or 250. When the cap is hit the goal pauses with `paused after N automatic continuations (limit in /configure → Goals)`. `/goal resume` past the cap resets the counter, so you get another full run.
+`goalMaxRounds` caps automatic continuations. It defaults to `0` (unlimited); set it in **/settings → Goals** to 10, 25, 50, 100 or 250. When the cap is hit the goal pauses with `paused after N automatic continuations (limit in /settings → Goals)`. `/goal resume` past the cap resets the counter, so you get another full run.
 
 ```json title="~/.rein/config.json"
 {

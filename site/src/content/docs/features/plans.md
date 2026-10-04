@@ -35,7 +35,7 @@ Goal: cap anonymous and authenticated traffic per client …
 
 [1 Save & implement now]
 [2 Save & start as a goal — tracked milestones, verified as it goes]
-[3 Save only — start it later with /plan:goal]
+[3 Save only — start it later with /goal:plan]
 [4 Keep planning — I'll give feedback]
 ```
 
@@ -112,7 +112,7 @@ subagents alike.
   Deny rules still block as usual.
 
 :::caution[Bypass mode doesn't bypass plan mode]
-With `/configure` → Approvals set to **Bypass**, a command the decision model can't clear is **refused**, not
+With `/settings` → Approvals set to **Bypass**, a command the decision model can't clear is **refused**, not
 prompted. The agent is told to stick to plain read-only commands (one per call, no loops or substitutions) and get
 on with the plan. See [Permissions](../permissions/).
 :::
@@ -148,7 +148,7 @@ markdown (↑↓, PgUp/PgDn or the mouse wheel to scroll) with four choices:
 | --- | --- | --- |
 | **1 Save & implement now** | `1` or Enter | Saves the plan, turns plan mode off, and the agent carries it out step by step with a `todo_write` task list. |
 | **2 Save & start as a goal** | `2` | Saves the plan, turns plan mode off, and starts a [goal](../goals/) linked to the file: `◎ Plan saved and started as a goal — milestones in the sidebar (plan mode off).` |
-| **3 Save only** | `3` | Saves the plan and turns plan mode off. The agent confirms and stops: `Plan saved to .rein/plans/ — start it any time with /plan:goal (plan mode off).` |
+| **3 Save only** | `3` | Saves the plan and turns plan mode off. The agent confirms and stops: `Plan saved to .rein/plans/ — start it any time with /goal:plan (plan mode off).` |
 | **4 Keep planning** | `4` or Esc | Nothing is saved, plan mode stays on, and you type your feedback: `Keep planning — type your feedback.` |
 
 :::note
@@ -182,9 +182,9 @@ They're ordinary markdown, so you can read them, edit them and commit them. The 
 progress record: when a goal runs from the plan, each `milestone_done` that the decision model accepts ticks a box
 (`- [x]`) in the file. Progress survives sessions, and a plan counts as complete once every box is ticked.
 
-## Running a saved plan: `/plan:goal`
+## Running a saved plan: `/goal:plan`
 
-`/plan:goal` opens **Start a plan as a goal**: your unfinished plans, newest first, with progress and age, plus a
+`/goal:plan` opens **Start a plan as a goal**: your unfinished plans, newest first, with progress and age, plus a
 **✎ Start a new plan** row that puts `/plan ` in your input.
 
 ```text title="Start a plan as a goal"

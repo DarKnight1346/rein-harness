@@ -4,7 +4,7 @@ import {catalog} from '../router/catalog.js';
 import {runtime} from '../runtime.js';
 
 /**
- * "Hide personal info" (/configure → Privacy, on by default): accounts show as "Claude Account 1"
+ * "Hide personal info" (/settings → Privacy, on by default): accounts show as "Claude Account 1"
  * instead of an email, and rendered text has known emails and the home folder (which carries the
  * OS username) replaced — so screenshots are safe to share.
  */

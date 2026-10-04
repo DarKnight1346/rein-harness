@@ -127,7 +127,7 @@ export function presentPlanTool(deps: {
       const file = savePlan(deps.root(), {title, plan, milestones});
       if (!decision) return {ok: true, text: `Plan saved to ${file}. Nobody is here to approve it (headless run), so nothing will be changed — stop here.`};
       deps.done(decision, file, title);
-      if (decision === 'save') return {ok: true, text: `Plan saved to ${file}; the user will start it later (/plan:goal). Plan mode is off. Don't start the work — briefly confirm it's saved and stop.`};
+      if (decision === 'save') return {ok: true, text: `Plan saved to ${file}; the user will start it later (/goal:plan). Plan mode is off. Don't start the work — briefly confirm it's saved and stop.`};
       if (decision === 'goal')
         return {
           ok: true,

@@ -45,6 +45,8 @@ export function classifyError(text: string): ChatErrorKind {
   if (/hit your .*limit|usage limit|rate.?limit|limit reached|resets? /i.test(text)) return 'limit';
   if (/overloaded|529|capacity/i.test(text)) return 'overloaded';
   if (/prompt is too long|context (window|length)|too many tokens/i.test(text)) return 'context';
+  // API accounts: no credit left, or a bad key — park the account until /login like a failed login.
+  if (/credit balance is too low|insufficient_quota|billing|invalid api key/i.test(text)) return 'auth';
   if (/log ?in|logged out|auth|credential|401|403|oauth/i.test(text)) return 'auth';
   return 'other';
 }

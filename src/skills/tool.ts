@@ -2,7 +2,7 @@ import {ToolError} from '../tools/fs.js';
 import type {ToolDef} from '../tools/registry.js';
 import {loadSkills, skillPrompt, type Skill} from './index.js';
 
-const SOURCE: Record<Skill['source'], string> = {builtin: 'built-in', project: 'project', global: 'global', 'claude-project': 'Claude Code command, project', 'claude-user': 'Claude Code command'};
+const SOURCE: Record<Skill['source'], string> = {builtin: 'built-in', project: 'project', global: 'global', 'claude-project': 'Claude Code command, project', 'claude-user': 'Claude Code command', plugin: 'plugin', codex: 'Codex skill'};
 
 /** A skill by name or one of its aliases. */
 function find(skills: Skill[], name: string): Skill | undefined {

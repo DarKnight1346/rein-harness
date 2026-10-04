@@ -5,7 +5,7 @@ import {usageStore} from '../store/usage.js';
 import {enabledItems, statusInfo} from './layout.js';
 import {useShellsTick} from './fullscreen/Shells.js';
 
-/** Classic renderer's status line: the configured segments as plain text (`/configure`). */
+/** Classic renderer's status line: the configured segments as plain text (`/settings`). */
 export function StatusBar({tick}: {tick: number}) {
   const [, setUsageTick] = useState(0);
   useEffect(() => usageStore.subscribe(() => setUsageTick((t) => t + 1)), []);

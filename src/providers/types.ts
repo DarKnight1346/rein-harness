@@ -15,7 +15,18 @@ export type Account = {
   label?: string;
   email?: string;
   plan?: string;
+  /**
+   * API accounts (pay per use) instead of a subscription: `console` (Anthropic Console key, the
+   * CLI's own `auth login --console`), `bedrock` / `vertex` (Claude through AWS / Google Cloud,
+   * your own cloud credentials), `openai` (an OpenAI API key, Codex's own API-key login).
+   * Subscriptions leave it unset.
+   */
+  api?: 'console' | 'bedrock' | 'vertex' | 'openai';
+  /** Non-secret settings for Bedrock / Vertex (credentials come from your AWS / Google setup). */
+  apiConfig?: {region?: string; profile?: string; projectId?: string};
 };
+
+export const isApiAccount = (a: Pick<Account, 'api'>) => !!a.api;
 
 export type AccountStatus =
   | {loggedIn: true; email?: string; plan?: string}

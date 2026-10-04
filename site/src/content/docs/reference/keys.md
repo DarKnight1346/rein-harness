@@ -35,6 +35,9 @@ Rein follows Claude Code's conventions wherever it can: Esc interrupts, Esc twic
 | **Ctrl+W** / **Option+Backspace** | Deletes the word before the cursor. |
 | **Ctrl+U** | Deletes from the start of the line to the cursor (on a one-line draft with the cursor at the end, that clears it). |
 | **Ctrl+K** | Deletes from the cursor to the end of the line. |
+| **Ctrl+R** | Searches the messages you sent in this project (newest first, every word must match). ↑↓ or Ctrl+R again to move, Enter puts the message in the input, Esc cancels. |
+| **`!` at the start** | Runs the rest as a shell command yourself (`!npm test`): live output, no approval, and it goes along with your next message. |
+| **Ctrl+]** | While a command the agent ran with `interactive: true` has your terminal: back to Rein (it keeps running). In Rein: hand the terminal back to that command. |
 | **Ctrl+G** | Opens the draft in your editor (`$VISUAL`, then `$EDITOR`, else `vi`; Notepad on Windows). Save and quit to bring the edited text back. |
 | **Ctrl+V** | Pastes an **image** from the clipboard as `[Image #1]`. Normal text paste uses your terminal's paste. |
 | **Paste** | Long pastes (more than 3 lines or 800 characters) collapse to `[Pasted text #1 +42 lines]`. |
@@ -73,7 +76,7 @@ Rein follows Claude Code's conventions wherever it can: Esc interrupts, Esc twic
 | **Click a top-bar segment** | Model → `/model`, account or usage → `/usage`, `ctx` → `/context`, `⏸ plan mode` → turns it off, `◎ goal` → `/goal`, `● N agents` → `/agents`, `● N background` → the shell's logs (or the list, if several are running), `◂ main` → back to the main agent, `[≡]` → sidebar. |
 | **Click in the sidebar** | Opens an agent's view, an account's usage, switches to a listed model, or runs the section's action (compact, accounts, configure). |
 | **Click a suggestion** | Runs that command, or inserts that file. |
-| **Click a button or menu row** | Picks it, in approval prompts, `/login`, `/model`, `/configure` and other windows. |
+| **Click a button or menu row** | Picks it, in approval prompts, `/login`, `/model`, `/settings` and other windows. |
 | **Click `[×]` or outside a window** | Closes the window. |
 | **`↓ N lines below` (when scrolled up)** | Click to jump to the latest message. |
 
@@ -91,7 +94,7 @@ Commands like `/usage`, `/help`, `/context` and `/shells` open a centered window
 |---|---|
 | **Esc** | Closes the window. In info windows **q** and **Enter** close it too. |
 | **↑ / ↓**, **PgUp / PgDn**, wheel | Scroll the window's content. |
-| **← / →** or **Tab** | Switch sections in `/model`. **← / →** switch tabs in `/configure`. |
+| **← / →** or **Tab** | Switch sections in `/model`. **← / →** switch tabs in `/settings`. |
 | **Enter** | Choose the highlighted row. |
 | **k** | In `/agents`: stop the subagent. In `/shells`: kill the command. |
 

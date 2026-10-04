@@ -131,6 +131,25 @@ Pick an account in `/login` to get **Re-authenticate**, **Log out & remove** (Re
 - A conversation that was on the removed account moves to the best remaining one with its context
   carried over: `Continuing on Claude Account 2 (the previous account was removed)`.
 
+## API accounts (pay per use)
+
+If your company pays for Claude or OpenAI through an API, add that too. Rein still goes through the official CLIs, and stores no keys of its own:
+
+| `/login` → Add… | How it signs in |
+|---|---|
+| **Claude API key (Anthropic Console)** | The Claude CLI's own Console login (`claude auth login --console`): the same browser-and-code flow as a subscription. The CLI keeps the key for that account's config folder. |
+| **Claude on Amazon Bedrock** | Asks for the AWS region and, optionally, an AWS profile. Credentials come from your AWS setup (profile, environment variables, SSO); Rein checks they work with one tiny request. |
+| **Claude on Google Vertex AI** | Asks for the Google Cloud project ID and region. Credentials come from `gcloud auth application-default login`; Rein checks they work. |
+| **Codex with an OpenAI API key** | Paste the key. Rein checks it with OpenAI (one free request), then hands it to Codex's own API-key login, which stores it in that account's folder. |
+
+How they're used:
+
+- **Subscriptions always come first**, since you've already paid for them. By default API accounts are a **fallback**: a model is served by an API account only when no subscription account can serve it (all limited, or the model is only available through the API). `/settings` → **API accounts** → **Always** uses them alongside subscriptions, still after them.
+- **No usage windows.** API accounts are pay-per-use, so `/usage` has no 5-hour or weekly bars for them, and Rein never sends them background "usage ping" requests.
+- **Out of credit, or a bad key?** The account is parked like a failed login ("Credit balance is too low", "invalid API key") until you fix it in `/login`, and work fails over to another account.
+- **Your shell's keys don't leak in.** Rein removes `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `CLAUDE_CODE_USE_BEDROCK` and similar variables from every account's environment, and gives each account only its own settings. A Bedrock account can't turn your subscription into a Bedrock one, or the other way round.
+- The same email can be both a subscription and a Console API account: they're different accounts.
+
 ## The Jev API key
 
 The last row in `/login` stores an API key for [Jev](https://typesafe.ai), a fast decision model you can
@@ -203,14 +222,14 @@ It moves when:
 - the cache is gone anyway (after compaction, or 60 minutes idle) **and** another account scores at least
   15 points better.
 
-Switch to `Sticky` in `/configure → Load balancing` to stay on one account until it can't continue. The full
+Switch to `Sticky` in `/settings → Load balancing` to stay on one account until it can't continue. The full
 algorithm is in [Load balancing](../../internals/load-balancing/).
 
 ## Privacy
 
 Privacy mode is on by default. Accounts show as `Claude Account 1`, `Codex Account 1` and so on everywhere,
 including notices and windows, so you can share screenshots safely. Turn it off in
-`/configure → Privacy` to see emails instead.
+`/settings → Privacy` to see emails instead.
 
 ## Gotchas
 

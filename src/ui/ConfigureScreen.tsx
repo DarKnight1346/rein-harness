@@ -11,7 +11,7 @@ const TABS: Tab[] = [
   {id: 'sidebar', title: 'Sidebar', items: SIDEBAR_ITEMS, defaults: DEFAULT_SIDEBAR, key: 'sidebarSections'},
 ];
 type Choice = {value: string | number | boolean; label: string};
-type ChoiceTabDef = {title: string; key: 'autoCompactPct' | 'toolApproval' | 'shellMaxMinutes' | 'subagentLimit' | 'goalMaxRounds' | 'hidePersonalInfo' | 'autoUpdate' | 'loadBalancing' | 'notifications'; description: string; choices: Choice[]};
+type ChoiceTabDef = {title: string; key: 'autoCompactPct' | 'toolApproval' | 'shellMaxMinutes' | 'subagentLimit' | 'goalMaxRounds' | 'hidePersonalInfo' | 'autoUpdate' | 'loadBalancing' | 'notifications' | 'sandbox' | 'apiAccounts' | 'worktrees'; description: string; choices: Choice[]};
 const CHOICE_TABS: ChoiceTabDef[] = [
   {
     title: 'Approvals',
@@ -21,6 +21,16 @@ const CHOICE_TABS: ChoiceTabDef[] = [
       {value: 'ask', label: 'Ask — confirm every file change  (default)'},
       {value: 'auto', label: 'Auto — the decision model approves changes that clearly match your request; asks you otherwise'},
       {value: 'bypass', label: 'Bypass — allow every file change without asking'},
+    ],
+  },
+  {
+    title: 'Sandbox',
+    key: 'sandbox',
+    description: "An OS sandbox around the agent's shell commands (macOS sandbox-exec, Linux bubblewrap). Your own ! commands, hooks and MCP servers aren't sandboxed.",
+    choices: [
+      {value: 'write', label: 'On — commands can only write inside the project, scratchpad, temp folders and package caches  (default)'},
+      {value: 'strict', label: 'Strict — the same, and no network except localhost'},
+      {value: 'off', label: 'Off — no sandbox; approvals are the only guard'},
     ],
   },
   {
@@ -64,6 +74,24 @@ const CHOICE_TABS: ChoiceTabDef[] = [
     ],
   },
   {
+    title: 'Worktrees',
+    key: 'worktrees',
+    description: "Subagents working at the same time as other work get their own copy of the project (a git worktree), so they can't trip over each other. Their changes merge back on their own when they finish; you never manage a worktree.",
+    choices: [
+      {value: 'auto', label: 'Automatic — only when subagents work in parallel  (default)'},
+      {value: 'off', label: 'Off — subagents always edit the project directly'},
+    ],
+  },
+  {
+    title: 'API accounts',
+    key: 'apiAccounts',
+    description: 'When Rein uses pay-per-use API accounts (Anthropic Console, Bedrock, Vertex, OpenAI keys) added in /login. Subscriptions always come first.',
+    choices: [
+      {value: 'fallback', label: 'Fallback — only when no subscription can serve the model  (default)'},
+      {value: 'always', label: 'Always — alongside subscriptions (after them)'},
+    ],
+  },
+  {
     title: 'Updates',
     key: 'autoUpdate',
     description: 'On launch, check npm for a newer Rein and install it in the background (takes effect next start). /update or rein --update also updates the claude and codex CLIs.',
@@ -94,7 +122,7 @@ const CHOICE_TABS: ChoiceTabDef[] = [
 const TAB_TITLES = [...TABS.map((t) => t.title), ...CHOICE_TABS.map((t) => t.title)];
 
 /**
- * `/configure`: choose and order what the status line and sidebar show. Changes save immediately
+ * `/settings`: choose and order what the status line and sidebar show. Changes save immediately
  * and apply live (the bar and sidebar behind the window update as you toggle).
  */
 export function ConfigureScreen({onClose, onChange, bare}: {onClose(): void; onChange(): void; bare?: boolean}) {

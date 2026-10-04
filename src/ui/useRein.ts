@@ -13,8 +13,14 @@ import {compactableCount} from '../session/compactor.js';
 import {onUntrustedHooks, trustProjectHooks, type ProjectHooks} from '../hooks.js';
 import {notify} from './terminal/notify.js';
 import {incompatibleMessage} from '../providers/codex/compat.js';
+import {sandboxBackend} from '../tools/sandbox.js';
 import {findIdes} from '../ide/connection.js';
 import {diffTabName, proposedChange} from '../ide/review.js';
+import {takeOver} from './terminal/takeover.js';
+import {preloadPty} from '../tools/shells.js';
+import {loadPlugins} from '../plugins/index.js';
+import {conversationMarkdown, writeExport} from '../session/export.js';
+import {copyToClipboard} from './terminal/clipboard.js';
 import {editExternally} from './terminal/editor.js';
 import {addHistory, HistoryCursor, loadHistory} from '../store/history.js';
 import {askBtwSubagent, btw} from '../session/btw.js';
@@ -37,7 +43,7 @@ import type {AskAnswer, AskQuestion} from '../tools/ask.js';
 import {settingsFiles} from '../tools/permissions.js';
 import {memoryFacts, memoryFile} from '../tools/memory.js';
 import {readFileSync} from 'node:fs';
-import {accountName, hidingIdentity} from './privacy.js';
+import {accountName, hidingIdentity, redact} from './privacy.js';
 import nodePath from 'node:path';
 
 export const VERSION = reinVersion();
@@ -54,10 +60,12 @@ export type Overlay =
   | {name: 'none'}
   | {name: 'login'}
   | {name: 'model'}
-  | {name: 'configure'}
+  | {name: 'settings'}
   | {name: 'approval'; req: ApprovalRequest; resolve(d: ApprovalDecision): void; position: number; total: number}
   | {name: 'import'; rows: AccountRow[]}
   | {name: 'trust'; hooks: ProjectHooks}
+  /** Ctrl+R: search the messages sent in this project. */
+  | {name: 'history'; entries: string[]}
   // Fullscreen-only info windows (classic prints these into the transcript instead).
   | {name: 'usage'; data?: {rows: UsageRow[]; jev: boolean}}
   | {name: 'context'; report?: ContextReport; agent?: string}
@@ -88,6 +96,15 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
   const banner = (): Entry => ({id: nextId.current++, kind: 'banner', text: `Rein ${VERSION}`});
   const nextId = useRef(0);
   const [entries, setEntries] = useState<Entry[]>(() => [banner()]);
+  const entriesNow = useRef(entries);
+  entriesNow.current = entries;
+  /**
+   * While a command has the terminal (takeover.ts), Rein's drawing is dropped. The classic
+   * transcript is printed once per entry (<Static>), so entries added meanwhile would never appear:
+   * it shows only the first `terminalHold` entries until the command hands the terminal back.
+   */
+  const terminalHold = useRef<number | undefined>(undefined);
+  const [, setHoldTick] = useState(0);
   const [overlay, setOverlay] = useState<Overlay>({name: 'none'});
   const [ready, setReady] = useState(false);
   const [updating, setUpdating] = useState(false);
@@ -173,6 +190,16 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
         const signIn = runtime.mcp.list().filter((s) => s.status === 'needs-auth').map((s) => s.name);
         if (signIn.length) log('info', `MCP server${signIn.length > 1 ? 's' : ''} ${signIn.join(', ')} need${signIn.length > 1 ? '' : 's'} you to sign in — /mcp, then enter.`);
       }, 1500);
+      // The sandbox is on by default; say so once where this machine can't provide one.
+      if ((runtime.config.sandbox ?? 'write') !== 'off' && !sandboxBackend())
+        log('info', process.platform === 'win32' ? "The command sandbox isn't available on Windows: the agent's commands run unsandboxed (approvals still apply)." : process.platform === 'linux' ? "The command sandbox needs bubblewrap (install the 'bubblewrap' package): until then the agent's commands run unsandboxed." : "The command sandbox isn't available here: the agent's commands run unsandboxed.");
+      // Subagent work left in worktrees by a Rein that exited mid-task: merge it home now.
+      void runtime.worktrees.recover().then((results) => {
+        for (const r of results) {
+          if (r.merged.length) log('info', `Merged unfinished subagent work from the last session into the project: ${r.merged.slice(0, 8).join(', ')}${r.merged.length > 8 ? ` and ${r.merged.length - 8} more` : ''}.`);
+          if (r.conflicts.length) log('info', `Some unfinished subagent work conflicts with your changes and wasn't merged: ${r.conflicts.join(', ')}. Its versions are in ${r.kept}.`);
+        }
+      }, () => {});
       // Editor integration: connect quietly to the editor holding this project, if there is one.
       if (findIdes().length) void runtime.connectIde().then((m) => log('info', m), () => {});
       // Launch-time self-update check (background; never delays startup).
@@ -207,6 +234,42 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
     setExitArmed(true);
     clearTimeout(exitTimer.current);
     exitTimer.current = setTimeout(() => setExitArmed(false), 2000);
+  });
+
+  // Interactive commands (shell interactive: true): when one waits for the user, it gets the real
+  // terminal until it exits or the user presses Ctrl+] (which also reopens it). See takeover.ts.
+  const takeoverEnd = useRef<(() => void) | undefined>(undefined);
+  const openTerminal = useCallback(
+    (shell: Shell) => {
+      if (takeoverEnd.current || shell.background || !shell.tty || shell.status !== 'running') return;
+      terminalHold.current = entriesNow.current.length;
+      takeoverEnd.current = takeOver(runtime.tools.shells, shell, {
+        fullscreen: windowed,
+        label: shell.origin?.name,
+        onEnd: (reason) => {
+          takeoverEnd.current = undefined;
+          terminalHold.current = undefined;
+          setHoldTick((n) => n + 1); // draw what was held
+          if (reason === 'detach' && shell.status === 'running') log('info', `$ ${shell.command} is still running · ctrl+] to type into it again`);
+        },
+      });
+    },
+    [windowed, log],
+  );
+  useEffect(() => {
+    const shells = runtime.tools.shells;
+    shells.interactiveUser = true;
+    preloadPty();
+    shells.on('input', openTerminal);
+    return () => {
+      shells.off('input', openTerminal);
+      takeoverEnd.current?.();
+    };
+  }, [openTerminal]);
+  useInput((input, key) => {
+    if (!(input === '\x1d' || (key.ctrl && input === ']'))) return;
+    const s = runtime.tools.shells.running({background: false}).find((x) => x.tty);
+    if (s) openTerminal(s);
   });
 
   // File changes and commands ask the user through an approval overlay. Several agents can ask at
@@ -329,7 +392,7 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
           plan,
           resolve: (d) => {
             setOverlay({name: 'none'});
-            log('info', {revise: 'Keep planning — type your feedback.', implement: 'Plan saved — implementing it now (plan mode off).', goal: '◎ Plan saved and started as a goal — milestones in the sidebar (plan mode off).', save: 'Plan saved to .rein/plans/ — start it any time with /plan:goal (plan mode off).'}[d]);
+            log('info', {revise: 'Keep planning — type your feedback.', implement: 'Plan saved — implementing it now (plan mode off).', goal: '◎ Plan saved and started as a goal — milestones in the sidebar (plan mode off).', save: 'Plan saved to .rein/plans/ — start it any time with /goal:plan (plan mode off).'}[d]);
             bump();
             resolve(d);
           },
@@ -546,6 +609,19 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
   // Pastes, images and dropped files shown as placeholders in the input; expanded on send.
   const attachments = useRef(new Attachments(() => nodePath.join(runtime.engine.scratch, 'images')));
   const onPaste = (text: string) => attachments.current.paste(text);
+  // Ctrl+R: reverse search through this project's sent messages.
+  useInput(
+    (input, key) => {
+      if (key.ctrl && input === 'r') setOverlay({name: 'history', entries: loadHistory(process.cwd())});
+    },
+    {isActive: inputActive},
+  );
+  const pickHistory = (text: string | undefined) => {
+    setOverlay({name: 'none'});
+    if (text === undefined) return;
+    prevDraft.current = text;
+    setDraft(text);
+  };
   // The editor's "mention in chat" (Claude Code extension) inserts `@file` into the input.
   useEffect(() => {
     runtime.onIdeChange = bump;
@@ -614,7 +690,30 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
     {isActive: inputActive && !suggestions.length && !fileSuggestions.length},
   );
 
+  /**
+   * `!command`: run it yourself in the project (no approval: you typed it), with live output, like
+   * Claude Code's bash mode. The command and its output go along with your next message.
+   */
+  const runBang = (command: string) => {
+    logMain('user', `! ${command}`);
+    const cap = runtime.config.shellMaxMinutes;
+    const {shell, done} = runtime.tools.shells.start(command, {cwd: process.cwd(), background: false, timeoutMs: cap ? cap * 60_000 : 24 * 3600_000, maxMs: cap ? cap * 60_000 : undefined});
+    void done.then((s) => {
+      const status = s.status === 'exited' ? `exit ${s.exitCode ?? '?'}` : s.status;
+      const output = runtime.tools.shells.tail(s, 2000);
+      runtime.noteUserShell(command, status, output);
+      const shown = runtime.tools.shells.tail(s, 30);
+      logMain(s.status === 'exited' && s.exitCode === 0 ? 'info' : 'error', `${shown || '(no output)'}\n[${shellStatusText(s)}] · goes along with your next message`);
+      void shell;
+    });
+  };
+
   const runCommand = (raw: string) => {
+    // `!command` runs a shell command directly (main conversation only).
+    if (/^\s*!\s*\S/.test(raw) && !viewing) {
+      runBang(raw.trim().slice(1).trim());
+      return;
+    }
     // Viewing a subagent: command feedback shows in its view (the main history isn't on screen).
     const shown = viewing;
     const log = shown ? (kind: 'info' | 'error' | 'user', text: string) => kind !== 'user' && runtime.agents.note(shown.id, kind === 'error' ? `✗ ${text}` : text) : logMain;
@@ -688,12 +787,43 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
       return;
     }
     // In fullscreen, commands that open a window don't echo into the history.
-    const opensWindow = ['plan:goal', 'login', 'usage', 'context', 'help', 'update', 'configure', 'shells', 'btw', 'resume', 'agents', 'agent'].includes(parsed.name) || (parsed.name === 'model' && !parsed.args);
+    const opensWindow = ['goal:plan', 'login', 'usage', 'context', 'help', 'update', 'settings', 'shells', 'btw', 'resume', 'agents', 'agent'].includes(parsed.name) || (parsed.name === 'model' && !parsed.args);
     if (!(windowed && opensWindow)) log('user', raw.trim());
     switch (parsed.name) {
       case 'mcp':
         setOverlay({name: 'mcp'});
         break;
+      case 'plugins': {
+        const plugins = loadPlugins();
+        const codexSkills = skills.filter((s) => s.source === 'codex').map((s) => `/${s.name}`);
+        if (!plugins.length && !codexSkills.length) {
+          log('info', 'No plugins installed. Install them with `claude plugin install …` or Codex; Rein loads them on the next /plugins or start.');
+          return;
+        }
+        const count = (n: number, what: string) => (n ? `${n} ${what}${n === 1 ? '' : 's'}` : '');
+        const lines = plugins.map((p) => {
+          const own = skills.filter((s) => s.plugin === p.name).map((s) => `/${s.name}`);
+          const parts = [count(own.length, 'command'), count(p.agents.length, 'agent'), count(Object.keys(p.hooks ?? {}).length, 'hook event'), count(Object.keys(p.mcpServers ?? {}).length, 'MCP server')].filter(Boolean);
+          return `${p.name} ${p.version ?? ''} · ${p.from === 'claude' ? 'Claude Code' : 'Codex'}${parts.length ? ` · ${parts.join(', ')}` : ''}${own.length ? `\n  ${own.join('  ')}` : ''}`;
+        });
+        log('info', [...lines, ...(codexSkills.length ? [`Codex skills: ${codexSkills.join('  ')}`] : [])].join('\n'));
+        return;
+      }
+      case 'export': {
+        const t = viewing ? undefined : runtime.engine.transcript;
+        if (!t?.messages.length) {
+          log('info', viewing ? '/export works on the main conversation.' : 'Nothing to export yet.');
+          return;
+        }
+        const md = conversationMarkdown(t, {redact});
+        try {
+          const file = writeExport(t, md, parsed.args.trim() || undefined);
+          void copyToClipboard(md).then((ok) => log('info', `Exported ${t.messages.length} messages to ${redact(file)}${ok ? ' and copied it to the clipboard' : ''}.`));
+        } catch (err) {
+          log('error', `Couldn't export: ${(err as Error).message}`);
+        }
+        return;
+      }
       case 'ide': {
         if (runtime.ide && !parsed.args) {
           const sel = runtime.ide.selection;
@@ -746,7 +876,7 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
         }
         break;
       }
-      case 'plan:goal': {
+      case 'goal:plan': {
         const plans = listPlans(process.cwd()).filter((p) => !p.complete);
         setOverlay({name: 'plans', plans});
         break;
@@ -946,8 +1076,8 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
         void runtime.setConfig({tui: want}).then(() => exit({switchTo: want, sessionId: runtime.engine.transcript.messages.length ? runtime.engine.transcript.id : undefined} satisfies ExitResult));
         break;
       }
-      case 'configure':
-        setOverlay({name: 'configure'});
+      case 'settings':
+        setOverlay({name: 'settings'});
         break;
       case 'agents': {
         const all = runtime.agents.list();
@@ -1114,7 +1244,7 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
     return () => clearInterval(timer);
   }, [contextOpen, viewing]);
 
-  /** /plan:goal → a saved plan: make it the goal and start working on it. */
+  /** /goal:plan → a saved plan: make it the goal and start working on it. */
   const startPlanGoal = (p: SavedPlan) => {
     setOverlay({name: 'none'});
     if (viewing) setView('main');
@@ -1124,7 +1254,7 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
     if (chat.busy) setQueued((q) => [...q, kick]);
     else void chat.send(kick).then(bump);
   };
-  /** /plan:goal → "start a new plan": put /plan in the input for the task description. */
+  /** /goal:plan → "start a new plan": put /plan in the input for the task description. */
   const startNewPlan = () => {
     setOverlay({name: 'none'});
     prevDraft.current = '/plan ';
@@ -1137,8 +1267,8 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
   };
 
   return {
-    entries, add, log, overlay, setOverlay, closeOverlay, finishImport, ready, updating, updateLog, statusTick, bump,
-    finishTrust, startPlanGoal, startNewPlan, draft, onDraft, onSubmit, onPaste, onImagePaste, onHistory: suggestions.length || fileSuggestions.length ? undefined : onHistory, onExternalEdit, doRewind, togglePlanMode, fileSuggestions, fileSelected, acceptFile, runCommand, suggestions, selected, setSuggestIndex, inputActive, chat, skills, openShells, queued, exitArmed, compacting, pickSession,
+    entries, transcript: terminalHold.current === undefined ? entries : entries.slice(0, terminalHold.current), add, log, overlay, setOverlay, closeOverlay, finishImport, ready, updating, updateLog, statusTick, bump,
+    finishTrust, pickHistory, startPlanGoal, startNewPlan, draft, onDraft, onSubmit, onPaste, onImagePaste, onHistory: suggestions.length || fileSuggestions.length ? undefined : onHistory, onExternalEdit, doRewind, togglePlanMode, fileSuggestions, fileSelected, acceptFile, runCommand, suggestions, selected, setSuggestIndex, inputActive, chat, skills, openShells, queued, exitArmed, compacting, pickSession,
     view, setView, viewing, goalNote,
   };
 }

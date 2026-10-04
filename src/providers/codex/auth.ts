@@ -10,6 +10,7 @@ type GetAccountResponse = {
 export function toStatus(res: GetAccountResponse): AccountStatus {
   const acct = res.account;
   if (!acct) return {loggedIn: false};
+  if (acct.type === 'apiKey') return {loggedIn: true, plan: 'API · OpenAI'};
   if (acct.type !== 'chatgpt') return {loggedIn: false, error: `unsupported auth type: ${acct.type}`};
   const {email, planType} = acct as {email: string | null; planType: string};
   return {loggedIn: true, email: email ?? undefined, plan: planType};
@@ -42,11 +43,28 @@ export const codexAuth: ProviderAuth = {
     let client: AppServerClient | undefined;
     let loginId: string | undefined;
     let cancelled = false;
+    let provideKey: ((key: string) => void) | undefined;
 
     void (async () => {
       try {
         client = await AppServerClient.start(account);
         if (cancelled) return;
+        if (account.api === 'openai') {
+          // An OpenAI API key: Codex's own API-key login stores it in this account's CODEX_HOME.
+          events.push({type: 'needsCode'});
+          const apiKey = await new Promise<string>((resolve) => (provideKey = resolve));
+          if (cancelled) return;
+          // Codex stores any string without checking it: catch a typo now, not on the first request.
+          const check = await checkOpenAiKey(apiKey);
+          if (check) {
+            events.push({type: 'error', message: check});
+            return;
+          }
+          await client.request('account/login/start', {type: 'apiKey', apiKey});
+          const status = toStatus(await client.request<GetAccountResponse>('account/read', {refreshToken: false}));
+          events.push(status.loggedIn ? {type: 'done', status} : {type: 'error', message: 'Codex did not accept the key'});
+          return;
+        }
         const completed = client.waitFor('account/login/completed');
         const res = await client.request<{loginId: string; authUrl: string}>('account/login/start', {type: 'chatgpt'});
         loginId = res.loginId;
@@ -70,8 +88,9 @@ export const codexAuth: ProviderAuth = {
 
     return {
       events,
-      submitCode() {
-        // Codex completes via a localhost callback; nothing to paste.
+      submitCode(code) {
+        // ChatGPT logins complete via a localhost callback; an API-key account pastes its key.
+        provideKey?.(code.trim());
       },
       cancel() {
         cancelled = true;
@@ -89,3 +108,16 @@ export const codexAuth: ProviderAuth = {
     await withClient(account, (c) => c.request('account/logout'));
   },
 };
+
+/** One free request (list models) to see whether OpenAI accepts the key; undefined = fine. */
+export async function checkOpenAiKey(key: string, fetchImpl: typeof fetch = fetch): Promise<string | undefined> {
+  if (!/^sk-[\w-]{16,}$/.test(key)) return "that doesn't look like an OpenAI API key (they start with sk-)";
+  try {
+    const res = await fetchImpl('https://api.openai.com/v1/models', {headers: {authorization: `Bearer ${key}`}, signal: AbortSignal.timeout(15_000)});
+    if (res.status === 401) return 'OpenAI rejected the key (401): check it on platform.openai.com/api-keys';
+    if (res.status === 403) return 'OpenAI refused the key (403): the key or its project may lack access';
+    return undefined;
+  } catch {
+    return undefined; // offline / blocked: let Codex try
+  }
+}

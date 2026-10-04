@@ -4,6 +4,7 @@ import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
+import {retarget} from '../agents/worktrees.js';
 import {resolveInRoot, resolvePath, toPosix, ToolError, workingDirs, type FileStamp, type Origin, type ToolContext, type ToolResult} from './fs.js';
 import {TOOLS, toolByName, type ToolDef} from './registry.js';
 import {addProjectRule, check, loadRules, ruleTool, suggestRule, type Rules, type Subject} from './permissions.js';
@@ -49,8 +50,10 @@ export type ToolHostOptions = {
   /** Current session's scratchpad (created on demand); file changes inside it skip approval. */
   scratch?: () => string | undefined;
   sessionId?: () => string | undefined;
-  /** Foreground shell cap in ms (0 = none), read per call so /configure applies at once. */
+  /** Foreground shell cap in ms (0 = none), read per call so /settings applies at once. */
   shellMaxMs?: () => number;
+  /** The sandbox mode for the agent's shell commands (/settings → Sandbox). */
+  sandbox?: () => import('./sandbox.js').SandboxMode;
   /** `auto` mode: the decision model's verdict; `ask` falls through to the user. */
   judge?: (req: ApprovalRequest) => Promise<{allow: boolean; note: string}>;
   /** Extra working directories from config (`additionalDirectories`). */
@@ -63,6 +66,11 @@ export type ToolHostOptions = {
   planMode?: () => boolean;
   /** Save a file's state before a tool changes it (checkpoints for /rewind). */
   checkpoint?: (file: string) => Promise<void>;
+  /**
+   * A subagent's own copy of the project (a git worktree), if it has or now needs one: `writes`
+   * says whether this call changes things. Its calls then run there, paths retargeted.
+   */
+  isolate?: (origin: Origin, writes: boolean) => Promise<{root: string; writable: string[]} | undefined>;
 };
 
 const MAX_RESULT_CHARS = 60_000;
@@ -71,6 +79,14 @@ const MAX_RESULT_CHARS = 60_000;
  * Runs Rein's tools for whichever provider is chatting: Claude reaches it through the MCP proxy
  * over a unix socket, Codex calls `call()` in-process. Emits `activity` for the transcript.
  */
+const realRoot = (p: string) => {
+  try {
+    return realpathSync.native(p); // the long form on Windows (not RUNNER~1)
+  } catch {
+    return p;
+  }
+};
+
 export class ToolHost extends EventEmitter {
   private sessionAllowed = false;
   /** "Allow reads outside the project this session" was chosen. */
@@ -138,7 +154,8 @@ export class ToolHost extends EventEmitter {
       .map((t) => ({name: t.name, description: t.describe?.() ?? t.description, inputSchema: t.schema?.() ?? t.inputSchema}));
   }
 
-  async call(name: string, args: unknown, origin?: Origin): Promise<ToolResult> {
+  async call(name: string, rawArgs: unknown, origin?: Origin): Promise<ToolResult> {
+    let args = rawArgs;
     const tool = this.find(name);
     if (!tool) return {ok: false, text: `unknown tool ${name}`};
     if (origin && tool.mainOnly) return {ok: false, text: `${tool.name} is only available to the main agent (subagents can't spawn subagents)`};
@@ -150,6 +167,19 @@ export class ToolHost extends EventEmitter {
     let judge: string | undefined;
     try {
       const ctx: ToolContext = {...this.context(), origin};
+      // A subagent working alongside others gets its own worktree on its first change (see
+      // agents/worktrees.ts): from then on its calls run there, with the project's paths retargeted.
+      let isolated = false;
+      if (origin && this.opts.isolate) {
+        const writes = !!tool.mutating && !(tool.name === 'shell' && readOnlyCommand(String((args as any)?.command ?? '')));
+        const wt = await this.opts.isolate(origin, writes).catch(() => undefined);
+        if (wt) {
+          for (const from of new Set([this.opts.root, realRoot(this.opts.root)])) args = retarget(args, from, wt.root);
+          ctx.root = wt.root;
+          ctx.extraRoots = [...(ctx.extraRoots ?? []), ...wt.writable];
+          isolated = true;
+        }
+      }
       // Permission rules (Claude Code format, .rein/.claude settings): deny blocks outright,
       // allow skips the prompt. Every call is checked — even ones that wouldn't ask.
       const subject = this.subject(ctx, tool, args);
@@ -163,7 +193,9 @@ export class ToolHost extends EventEmitter {
       if (pre?.block) throw new ToolError(`blocked by a PreToolUse hook: ${pre.block}`);
       // Read-only shell commands (ls, git status, brew info, --version…) run without asking, like
       // Claude Code — unless they name paths outside the working directories.
-      const readOnly = tool.name === 'shell' && typeof (args as any)?.command === 'string' && readOnlyCommand((args as any).command) && !this.namesOutside(ctx, (args as any).command);
+      // A command leaving the sandbox is never "just read-only": it always gets the prompt below.
+      const unsandboxed = tool.name === 'shell' && (args as {unsandboxed?: boolean} | undefined)?.unsandboxed === true && (this.opts.sandbox?.() ?? 'off') !== 'off';
+      const readOnly = !unsandboxed && tool.name === 'shell' && typeof (args as any)?.command === 'string' && readOnlyCommand((args as any).command) && !this.namesOutside(ctx, (args as any).command);
       // Plan mode: file changes are refused. A command not on the read-only list goes to the
       // decision model ("does this only read?"); if it can't say yes, bypass mode refuses it and the
       // other modes ask the user.
@@ -217,7 +249,8 @@ export class ToolHost extends EventEmitter {
       if (tool.mutating && !approvedBy) {
         const mode = this.opts.mode();
         const req = planAsk ? {tool, args, summary, preview: preview(tool, args), origin, planMode: true} : {tool, args, summary, preview: preview(tool, args), origin, suggestion};
-        const forceAsk = !!pre?.ask || planAsk; // a PreToolUse hook asked for the prompt, or plan mode
+        // Leaving the sandbox is always the user's call: no rule, session allowance, judge or bypass covers it.
+        const forceAsk = !!pre?.ask || planAsk || unsandboxed; // a PreToolUse hook asked for the prompt, plan mode, or leaving the sandbox
         if (forceAsk) {
           // fall through to the prompt
         } else if (verdict === 'allow') approvedBy = 'rule';
@@ -239,7 +272,7 @@ export class ToolHost extends EventEmitter {
         }
       }
       // Checkpoint every file this call may change (not scratchpad files) before it runs.
-      if (ruleTool(tool.name) === 'edit' && this.opts.checkpoint && approvedBy !== 'scratchpad') {
+      if (ruleTool(tool.name) === 'edit' && this.opts.checkpoint && approvedBy !== 'scratchpad' && !isolated) {
         for (const p of subject.paths ?? []) await this.opts.checkpoint(p).catch(() => {});
       }
       const edited = (tool.name === 'write' || tool.name === 'edit') && subject.paths?.length === 1 ? this.editorVersions.get(subject.paths[0]!) : undefined;
@@ -396,6 +429,7 @@ export class ToolHost extends EventEmitter {
       extraRoots: [...(scratch ? [scratch] : []), globalSkills, ...config, ...this.addedDirs],
       shells: this.shells,
       shellMaxMs: this.opts.shellMaxMs?.(),
+      sandbox: this.opts.sandbox?.(),
       sessionId: this.opts.sessionId?.(),
     };
   }
