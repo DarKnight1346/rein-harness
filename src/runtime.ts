@@ -440,6 +440,7 @@ Drop superseded reads of the same file, routine listings, and output that no lon
       },
     );
     this.config = await loadConfig();
+    catalog.apiAccounts = this.config.apiAccounts ?? 'fallback';
     await this.sessionStartHooks(typeof opts.resume === 'string' ? 'resume' : 'startup');
     // MCP servers connect in the background; their tools appear as they come up.
     this.tools.addSource(() => this.mcp.tools());
@@ -537,6 +538,7 @@ Drop superseded reads of the same file, routine listings, and output that no lon
     // These change what tools exist or their schemas: reload the agent's tool list.
     const toolsChanged = (['advisorModel', 'subagentModel', 'subagentPriority'] as const).some((k) => patch[k] !== undefined && patch[k] !== this.config[k]);
     this.config = {...this.config, ...patch};
+    catalog.apiAccounts = this.config.apiAccounts ?? 'fallback';
     if (toolsChanged) this.engine?.refreshTools();
     await saveConfig(this.config);
   }

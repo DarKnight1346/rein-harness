@@ -54,7 +54,7 @@ See [Goals](../../features/goals/) and [Plan mode](../../features/plans/).
 | `/model` | *(none)* | Opens **Models** with sections Chat model, Subagents, Subagent priority, Decision model, Compaction model, Advisor and Web. Choosing a chat model continues to its effort level. |
 | | `auto` | Sets the chat model to auto routing. |
 | | `<model>` | Sets the chat model. Accepts a `provider:model` ref or a model's id or label as shown in `/model`, case-insensitive. |
-| `/login` | — | Lists accounts, adds Claude or Codex accounts, re-authenticates or removes them, and manages the Jev API key. |
+| `/login` | — | Lists accounts; adds Claude (subscription, Console API key, Bedrock, Vertex) or Codex (ChatGPT, OpenAI API key) accounts; re-authenticates or removes them; manages the Jev API key. → [Accounts](../../features/accounts/#api-accounts-pay-per-use) |
 | `/usage` | *(none)* | Usage windows (5h / weekly / 30-day) and reset times for every account. |
 | | `refresh` | Re-checks now. Claude accounts send a tiny request on their cheapest model to get fresh numbers. |
 
@@ -84,7 +84,7 @@ See [Goals](../../features/goals/) and [Plan mode](../../features/plans/).
 
 | Command | Arguments | What it does |
 |---|---|---|
-| `/settings` | — | Settings in twelve tabs: Status line, Sidebar, Approvals, Sandbox, Shell, Subagents, Goals, Load balancing, Notifications, Updates, Privacy, Compaction. |
+| `/settings` | — | Settings in tabs: Status line, Sidebar, Approvals, Sandbox, Shell, Subagents, Goals, Load balancing, API accounts, Notifications, Updates, Privacy, Compaction. |
 | `/tui` | `fullscreen` \| `classic` | Switches renderer and carries the conversation over. With no argument, shows which renderer is active. *Waits for idle.* |
 | `/update` | — | Updates the `claude` and `codex` CLIs, checks the Codex app-server protocol, then updates Rein. *Waits for idle.* |
 | `/export` | `[file]` | Saves the whole conversation as Markdown (every message, each reply's tool calls as a list) and copies it to the clipboard. Default file: `~/.rein/exports/<id>.md`; a path is relative to the project. |

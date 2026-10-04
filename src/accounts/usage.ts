@@ -21,6 +21,8 @@ export async function collectUsage(opts: {force: boolean}): Promise<{rows: Usage
     accounts.map(async (account): Promise<UsageRow> => {
       const adapter = adapters[account.provider];
       const cached = usageStore.get(account.id);
+      // API accounts are pay-per-use: no usage windows to read (and a ping would cost money).
+      if (account.api) return {account, snapshot: undefined, refreshed: false, cooldownUntil: usageStore.cooldownUntil(account.id)};
       try {
         let snapshot: UsageSnapshot | undefined;
         let refreshed = false;
@@ -60,8 +62,9 @@ export function startUsageRefresh(opts: {balancing: () => boolean; busy: (accoun
     running = true;
     try {
       const {accounts} = await loadAccounts();
-      const claude = accounts.filter((a) => a.provider === 'claude');
+      const claude = accounts.filter((a) => a.provider === 'claude' && !a.api);
       for (const account of accounts) {
+        if (account.api) continue; // pay-per-use: nothing to read, and pings cost money
         const snap = usageStore.get(account.id);
         const age = snap ? Date.now() - snap.at : Infinity;
         if (account.provider === 'codex' && age > CODEX_REFRESH_MS) await adapters.codex.readUsage(account).catch(() => undefined);

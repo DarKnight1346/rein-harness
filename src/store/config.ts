@@ -66,6 +66,8 @@ export type Config = {
   jevModel: string;
   /** Get your attention when Rein needs you or finished a long task: terminal bell + OSC 9, also a desktop notification, or off. */
   notifications: 'terminal' | 'system' | 'off';
+  /** API accounts (pay per use): 'fallback' = only when no subscription can serve the model (default), 'always' = alongside subscriptions (after them). */
+  apiAccounts: 'fallback' | 'always';
   /** OS sandbox for the agent's shell commands: 'write' (default: writes limited to the project), 'strict' (also no network), 'off'. */
   sandbox: 'write' | 'strict' | 'off';
   /** Every this many minutes of a background command's life, a fork of the agent checks it's still needed and stops it if not; 0 = off. */
@@ -97,6 +99,7 @@ export const DEFAULT_CONFIG: Config = {
   notifications: 'terminal',
   backgroundCheckMinutes: 60,
   sandbox: 'write',
+  apiAccounts: 'fallback',
 };
 
 export async function loadConfig(): Promise<Config> {

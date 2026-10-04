@@ -52,9 +52,9 @@ function withIdentity(account: Account, status: AccountStatus): Account {
  * Start adding a Rein-owned account. The caller drives `flow` (shows URL, forwards a pasted code)
  * and then calls `finishAdd` with the final status.
  */
-export async function startAdd(provider: ProviderId): Promise<{account: Account; flow: LoginFlow}> {
+export async function startAdd(provider: ProviderId, api?: Pick<Account, 'api' | 'apiConfig'>): Promise<{account: Account; flow: LoginFlow}> {
   const {accounts} = await loadAccounts();
-  const account = newOwnedAccount(provider, accounts);
+  const account: Account = {...newOwnedAccount(provider, accounts), ...(api?.api ? {api: api.api} : {}), ...(api?.apiConfig ? {apiConfig: api.apiConfig} : {})};
   return {account, flow: auth[provider].login(account)};
 }
 
@@ -64,7 +64,9 @@ export async function finishAdd(account: Account, status: AccountStatus): Promis
     throw new Error('login did not complete');
   }
   const {accounts} = await loadAccounts();
-  const dup = status.email && accounts.find((a) => a.provider === account.provider && a.email === status.email);
+  // A Console API login shares the email of your subscription: the same email is only a duplicate
+  // for the same kind of account.
+  const dup = status.email && accounts.find((a) => a.provider === account.provider && a.email === status.email && (a.api ?? '') === (account.api ?? ''));
   if (dup) {
     // Same login twice would just split one quota across two "accounts".
     await auth[account.provider].logout(account).catch(() => {});
