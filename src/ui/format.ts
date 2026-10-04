@@ -50,8 +50,9 @@ export function compactText(reason: string, r: {summarized: number; summaryToken
   const stats = `${r.summarized} messages → ${k(r.summaryTokens)}-token summary · context ${k(r.beforeTokens)} → ${k(r.afterTokens)} (${delta}) · ${r.model}`;
   const why =
     reason === 'auto' ? `Auto-compacted at ${autoPct}% of the context window · change it in /configure → Compaction`
+    : reason === 'midturn' ? `Compacted mid-task at ${autoPct}% of the context window — the agent carries on from the summary`
     : reason === 'handoff' ? 'Compacted before handing the conversation to another model'
-    : reason === 'context' ? "The model's context window was full — compacted and retried"
+    : reason === 'context' ? "The model's context window was full — compacted, and the agent carries on"
     : 'You ran /compact · the next reply starts from the summary · /context for details';
   return {stats, why};
 }

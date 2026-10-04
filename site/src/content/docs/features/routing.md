@@ -137,7 +137,7 @@ Adding a Jev key doesn't switch the decision model by itself. Choose **Jev** in 
 
 ## The other model roles
 
-- **Compaction model** (`cheapest`): writes the structured summary when you run `/compact`, when context passes `autoCompactPct`, and when a conversation hands off to a different model or account. See [Context](../../internals/context/).
+- **Compaction model** (`cheapest`): writes the structured summary when you run `/compact`, when context passes `autoCompactPct` (between turns or mid-turn), and when a conversation hands off to a different model or account. See [Context](../../internals/context/).
 - **Advisor** (`off`): when set, the main agent and subagents get an `advisor` tool that sends one call to the stronger model, with about 40k tokens of recent conversation plus their question. It is **never auto**, because it's meant to be the expensive one. The list puts the most capable models first. Goals escalate to it when the agent is stuck (see [Goals](../goals/)).
 - **Web** (`cheapest`): runs `web_search` through its provider's server-side search, and answers `web_fetch` prompts about long pages. Any signed-in Claude or Codex model works, whatever your chat model is. See [Web & images](../web-and-images/).
 - **Subagents** and **Subagent priority**: decide which model a *new*-mode subagent gets. With **Your model first** (default) the order is your Subagents model → the agent's own pick → auto. With **Agent's choice first** it's the agent's pick → your model → auto. `auto` here means the same auto router picks from the subagent's task. **Forked subagents always keep the parent's model and account.** See [Subagents](../subagents/).

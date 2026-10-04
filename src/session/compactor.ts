@@ -1,7 +1,7 @@
 import {completeWith, resolveUtilityModel} from '../decider/index.js';
 import {catalog} from '../router/catalog.js';
 import type {Config} from '../store/config.js';
-import {estimateTokens, renderMessages, saveTranscript, type Transcript} from './transcript.js';
+import {estimateTokens, renderForSummary, renderMessages, saveTranscript, type Transcript} from './transcript.js';
 
 const SYSTEM = `You compress chat transcripts into a summary another assistant will use to continue the conversation seamlessly.
 Write in plain text with these sections (omit empty ones):
@@ -9,7 +9,7 @@ GOAL: what the user is trying to accomplish.
 KEY FACTS & DECISIONS: everything established so far, including names, numbers, file paths, code identifiers and exact values (verbatim).
 USER PREFERENCES: tone, format, constraints the user asked for.
 CODE & ARTIFACTS: essential code or text produced, verbatim if short, otherwise its gist and key signatures.
-OPEN QUESTIONS / NEXT STEPS: what was pending when the transcript ends.
+OPEN QUESTIONS / NEXT STEPS: what was pending when the transcript ends. If it ends in the middle of a task, say exactly where the work stopped and what the next step is.
 Be dense and specific. No preamble, no commentary about the summary itself.`;
 
 /** Messages kept verbatim after the summary (the last couple of turns). */
@@ -28,7 +28,8 @@ export type CompactResult =
     }
   | {skipped: string};
 
-export type CompactReason = 'manual' | 'auto' | 'handoff' | 'context';
+/** `midturn`: the context filled up while the agent was working; it carries on from the summary. */
+export type CompactReason = 'manual' | 'auto' | 'midturn' | 'handoff' | 'context';
 
 /** Messages a compaction would fold into the summary (0 = nothing to do). */
 export function compactableCount(t: Transcript, keepRecent = KEEP_RECENT): number {
@@ -60,8 +61,8 @@ export async function compactTranscript(t: Transcript, cfg: Config, opts: {keepR
   while (start < upTo) {
     // Grow the chunk until it hits the token budget (always at least one message).
     let end = start + 1;
-    while (end < upTo && estimateTokens(renderMessages(t.messages.slice(start, end + 1))) < CHUNK_TOKENS) end++;
-    const chunk = renderMessages(t.messages.slice(start, end));
+    while (end < upTo && estimateTokens(renderForSummary(t.messages.slice(start, end + 1))) < CHUNK_TOKENS) end++;
+    const chunk = renderForSummary(t.messages.slice(start, end));
     const prompt = `${summary ? `EXISTING SUMMARY (of earlier conversation):\n${summary}\n\nNEW TRANSCRIPT TO FOLD IN:\n` : 'TRANSCRIPT:\n'}${chunk}\n\nWrite the updated summary.`;
     summary = (await completeWith(ref, cfg, SYSTEM, prompt, {timeoutMs: 180_000})).trim();
     if (!summary) throw new Error('compaction model returned an empty summary');

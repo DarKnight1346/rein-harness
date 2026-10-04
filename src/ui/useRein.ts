@@ -275,7 +275,7 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
   function openRewind() {
     const points: RewindPoint[] = runtime.engine.transcript.messages
       .map((m, index) => ({m, index}))
-      .filter(({m}) => m.role === 'user')
+      .filter(({m}) => m.role === 'user' && !m.synthetic)
       .map(({m, index}) => ({index, at: m.at, text: displayText(m.text), files: runtime.checkpoints.changedSince(index).length, whole: runtime.snapshots.has(index)}))
       .reverse();
     setOverlay({name: 'rewind', points});
@@ -972,7 +972,8 @@ function replay(t: Transcript, add: AddEntry): void {
   const recent = t.messages.slice(-10);
   add({kind: 'info', text: t.messages.length > recent.length ? `Resumed conversation (${t.messages.length} messages; showing the last ${recent.length})` : 'Resumed conversation'});
   for (const m of recent) {
-    if (m.role === 'user') add({kind: 'user', text: displayText(m.text)});
+    if (m.synthetic) add({kind: 'info', text: 'Context compacted mid-task — the agent carried on from the summary.'});
+    else if (m.role === 'user') add({kind: 'user', text: displayText(m.text)});
     else {
       for (const tool of m.tools ?? []) {
         const plan = planPreview(tool.label, tool.summary, tool.ok, tool.result);
