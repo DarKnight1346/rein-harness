@@ -62,7 +62,7 @@ Two things the original design sketch in PLAN.md didn't have, and the code does:
 
 ## Startup
 
-`src/cli.tsx` parses flags. `--update` runs the updater and exits. `-p`/`--print` hands off to `src/headless.ts`. Without a TTY it refuses to start. Otherwise it renders `FullscreenApp` (alt screen, mouse via `MouseStdin`) or `ClassicApp` (inline `<Static>` output) with Ink at `maxFps: 30` and `incrementalRendering`. `/tui` exits the render loop with `switchTo` and the loop re-renders the other UI with the same session id, so switching renderers keeps the conversation.
+`src/cli.ts` loads React and Ink in their production builds (their development builds record a `performance.measure` per render and print warnings onto the screen), then hands over to `src/app.tsx`, which parses flags. `--update` runs the updater and exits. `-p`/`--print` hands off to `src/headless.ts`. Without a TTY it refuses to start. Otherwise it renders `FullscreenApp` (alt screen, mouse via `MouseStdin`) or `ClassicApp` (inline `<Static>` output) with Ink at `maxFps: 30` and `incrementalRendering`. `/tui` exits the render loop with `switchTo` and the loop re-renders the other UI with the same session id, so switching renderers keeps the conversation.
 
 Both UIs share `src/ui/useRein.ts`, and everything stateful lives on one object: the `Runtime` singleton in `src/runtime.ts`. It owns:
 
@@ -129,7 +129,8 @@ MCP servers you configure are a dynamic tool source (`addSource`). When their to
 
 ```text
 src/
-  cli.tsx            entry: flags, renderer loop, --update, -p
+  cli.ts             entry: loads production React/Ink, then app.tsx
+  app.tsx            flags, renderer loop, --update, -p
   headless.ts        rein -p: one prompt, text/json/stream-json output
   runtime.ts         Runtime singleton: wires engine, tools, agents, goals, MCP
   hooks.ts           Claude Code-compatible hooks (5 events)
