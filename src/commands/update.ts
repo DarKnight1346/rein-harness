@@ -1,4 +1,6 @@
 import {execFileSync} from 'node:child_process';
+import {checkCodex, incompatibleMessage, resetCodexCompat, SUPPORTED_CODEX} from '../providers/codex/compat.js';
+import {readModelsCache} from '../providers/codex/catalog.js';
 import {spawn} from '../util/platform.js';
 import {existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync} from 'node:fs';
 import {reinHome} from '../store/paths.js';
@@ -12,7 +14,8 @@ import {loadAccounts} from '../store/accounts.js';
 import {run} from '../util/proc.js';
 
 /** Codex app-server is experimental; Rein was verified against this minor line. */
-export const TESTED_CODEX = '0.160';
+/** @deprecated kept for callers; see SUPPORTED_CODEX in providers/codex/compat.ts. */
+export const TESTED_CODEX = SUPPORTED_CODEX;
 
 /** Rein's install folder. REIN_INSTALL_ROOT overrides it (tests: self-update must never touch the real install). */
 export const reinRoot = () => process.env.REIN_INSTALL_ROOT ?? path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
@@ -106,15 +109,23 @@ export async function* runUpdate(closeSessions: () => void): AsyncGenerator<Upda
 async function* codexCompatCheck(): AsyncGenerator<UpdateLine> {
   const version = await adapters.codex.version();
   if (!version) return;
-  if (minor(version) !== TESTED_CODEX) {
-    yield {text: `codex ${version} is newer/older than the tested ${TESTED_CODEX}.x — checking the app-server protocol…`, level: 'warn'};
-  }
+  resetCodexCompat(); // a new codex gets a fresh check on the next start too
   const {accounts} = await loadAccounts();
   const account = accounts.find((a) => a.provider === 'codex');
-  if (!account) return;
+  if (minor(version) !== SUPPORTED_CODEX) yield {text: `codex ${version} is newer/older than the verified ${SUPPORTED_CODEX}.x — checking the app-server protocol…`, level: 'warn'};
+  const {report} = await checkCodex(version, account ? (await readModelsCache(account))?.models : undefined);
+  for (const w of report.warnings) yield {text: `Codex: ${w}`, level: 'warn'};
+  if (report.ok === false) {
+    yield {text: incompatibleMessage(report), level: 'error'};
+    return;
+  }
+  if (!account) {
+    if (report.ok) yield {text: `Codex app-server protocol OK (everything Rein uses is there)`, level: 'ok'};
+    return;
+  }
   try {
     const models = await adapters.codex.listModels(account);
-    yield {text: `Codex app-server protocol OK (${models.length} models)`, level: 'ok'};
+    yield {text: `Codex app-server protocol OK (everything Rein uses is there; ${models.length} models)`, level: 'ok'};
   } catch (err) {
     yield {text: `Codex app-server check failed: ${(err as Error).message}. Codex chats may break until Rein is updated.`, level: 'error'};
   } finally {

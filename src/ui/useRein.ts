@@ -12,6 +12,7 @@ import {subagentContextReport, contextReport, type ContextReport} from '../sessi
 import {compactableCount} from '../session/compactor.js';
 import {onUntrustedHooks, trustProjectHooks, type ProjectHooks} from '../hooks.js';
 import {notify} from './terminal/notify.js';
+import {incompatibleMessage} from '../providers/codex/compat.js';
 import {editExternally} from './terminal/editor.js';
 import {addHistory, HistoryCursor, loadHistory} from '../store/history.js';
 import {askBtwSubagent, btw} from '../session/btw.js';
@@ -153,6 +154,10 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
       if (rows?.length) setOverlay({name: 'import', rows});
       else if (rows) await skipImport();
       await refresh();
+      // A codex whose app-server protocol changed under Rein is switched off (see compat.ts).
+      const compat = catalog.codexCompat;
+      if (compat?.ok === false) log('error', incompatibleMessage(compat));
+      else for (const w of compat?.warnings ?? []) log('info', `Codex ${compat!.version}: ${w}`);
       const shadowed = shadowedSkills(loadSkills());
       if (shadowed.length) log('info', `Skill${shadowed.length > 1 ? 's' : ''} ${shadowed.map((s) => `"${s.name}"`).join(', ')} hidden by built-in command${shadowed.length > 1 ? 's' : ''}; rename to use ${shadowed.length > 1 ? 'them' : 'it'}.`);
       setReady(true);

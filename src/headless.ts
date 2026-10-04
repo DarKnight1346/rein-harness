@@ -58,6 +58,11 @@ export async function runHeadless(argv: string[]): Promise<number> {
   onUntrustedHooks((p) => process.stderr.write(`rein: skipping ${p.commands.length} project hook${p.commands.length === 1 ? '' : 's'} (not trusted yet). Run \`rein\` in this folder once to review and trust them.\n`));
   await runtime.init({resume: resumeId ?? false});
   await runtime.refreshCatalog();
+  const {catalog} = await import('./router/catalog.js');
+  if (catalog.codexCompat?.ok === false) {
+    const {incompatibleMessage} = await import('./providers/codex/compat.js');
+    process.stderr.write(`rein: ${incompatibleMessage(catalog.codexCompat)}\n`);
+  }
 
   // Per-run settings: never saved to config.json.
   const model = opt('--model');

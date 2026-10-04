@@ -20,6 +20,7 @@ import type {
 import {AppServerClient, type Notification} from './appServer.js';
 import {codexAuth} from './auth.js';
 import {appServerArgs, cacheIsFresh, codexTier, contextWindows, readModelsCache, writeReinCatalog} from './catalog.js';
+import {codexCompat} from './compat.js';
 
 const codexBin = () => process.env.REIN_CODEX_BIN ?? 'codex';
 
@@ -76,7 +77,8 @@ class AppServerPool {
     }
     const catalogPath = await writeReinCatalog(account);
     // experimentalApi: required for dynamic (client-side) tools.
-    const client = await AppServerClient.start(account, {args: appServerArgs(catalogPath), onServerRequest: declineServerRequest, experimental: true});
+    const features = (await codexCompat().catch(() => undefined))?.features;
+    const client = await AppServerClient.start(account, {args: appServerArgs(catalogPath, features), onServerRequest: declineServerRequest, experimental: true});
     client.onNotification((n) => {
       if (n.method === 'account/rateLimits/updated') mergeRateLimits(account.id, n.params?.rateLimits);
     });
