@@ -15,6 +15,8 @@ export type Message = {
   model?: ModelRef;
   accountId?: string;
   interrupted?: boolean;
+  /** Written by Rein, not the user (the nudge to carry on after a mid-turn compaction). */
+  synthetic?: boolean;
   /** Tool calls made while producing this reply (kept for the record and for session search). */
   tools?: {label: string; summary: string; ok: boolean; result: string; diff?: DiffLine[]}[];
   /** Images attached to a user message (files in the session's scratch folder). */
@@ -226,6 +228,23 @@ export const estimateTokens = (text: string) => Math.ceil(text.length / 4);
 export function renderMessages(messages: Message[]): string {
   return messages
     .map((m) => `${m.role === 'user' ? 'User' : 'Assistant'}: ${m.text}${m.images?.length ? `\n[attached image${m.images.length > 1 ? 's' : ''}: ${m.images.map((i) => i.path).join(', ')}]` : ''}${m.interrupted ? ' [interrupted]' : ''}`)
+    .join('\n\n');
+}
+
+/**
+ * Messages for the compaction model: the text plus a one-line trace per tool call with a short
+ * excerpt of its result, so a summary of a tool-heavy turn knows what was read, run and changed.
+ */
+export function renderForSummary(messages: Message[]): string {
+  return messages
+    .map((m) => {
+      const tools = (m.tools ?? []).map((c) => {
+        const excerpt = c.result.slice(0, 300).replace(/\s+/g, ' ');
+        const more = c.result.length > 300 ? ` … [excerpt; full result ${c.result.split('\n').length} lines, ${c.result.length} chars]` : '';
+        return `[tool ${c.label}(${c.summary}) ${c.ok ? '✓' : '✗'}] ${excerpt}${more}`;
+      });
+      return renderMessages([m]) + (tools.length ? `\n${tools.join('\n')}` : '');
+    })
     .join('\n\n');
 }
 

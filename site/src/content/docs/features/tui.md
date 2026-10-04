@@ -213,7 +213,7 @@ To see real emails and paths, go to `/configure → Privacy` (or set `hidePerson
 | **Load balancing** | **Balanced** (cache-aware) · Sticky (stay on one account until it hits a limit) | `loadBalancing` |
 | **Updates** | **Auto-update Rein** on launch · Only when I run `/update` | `autoUpdate` |
 | **Privacy** | **Hide personal info** · Show emails and paths | `hidePersonalInfo` |
-| **Compaction** | Auto-compact at 50, 60, 70, **80**, 90 or 95% of the context window, or Off (only `/compact`, or when a model rejects a full context) | `autoCompactPct` |
+| **Compaction** | Auto-compact at 50, 60, 70, **80**, 90 or 95% of the context window (mid-turn too; the agent keeps working), or Off (only `/compact`, or when a model rejects a full context) | `autoCompactPct` |
 
 :::note
 Rein reads and searches files without asking in every approval mode. The Approvals tab controls what happens when the agent wants to change something. See [Permissions](../permissions/).

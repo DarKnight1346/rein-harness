@@ -87,7 +87,7 @@ The `rate_limit_event` only fires on a process's first request, so a long chat's
 
 ### Rein's tools over MCP
 
-`MCP_TOOL_TIMEOUT` is set to 24 hours whenever tools are attached. A shell command can legitimately run for hours, plus however long the approval prompt waits, and Rein enforces the real limit (`shellMaxMinutes`) itself.
+`DISABLE_AUTO_COMPACT=1` is set for chat sessions: Rein compacts the conversation itself, mid-turn included (see [Context carry & compaction](../context/)). `MCP_TOOL_TIMEOUT` is set to 24 hours whenever tools are attached. A shell command can legitimately run for hours, plus however long the approval prompt waits, and Rein enforces the real limit (`shellMaxMinutes`) itself.
 
 The MCP proxy (`src/tools/mcpProxy.ts`) is under 70 lines and has no dependencies. It answers `initialize` and `ping`, and forwards `tools/list` and `tools/call` over the socket. Results come back as MCP content (`text`, plus `image` blocks for images the `read` tool returns) with `isError` set from the tool's `ok`.
 

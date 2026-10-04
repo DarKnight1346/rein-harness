@@ -51,10 +51,10 @@ export class Runtime {
   /** Last auto-routing decision, for the status line / debugging. */
   lastDecision: string | undefined;
   auto: AutoRouter = makeAutoRouter({config: () => this.config, onDecision: (d) => (this.lastDecision = d)});
-  compact = (t: Transcript, _reason: CompactReason): Promise<CompactResult> => {
+  compact = (t: Transcript, _reason: CompactReason, opts?: {keepRecent?: number}): Promise<CompactResult> => {
     // The summary may not keep subfolder instructions word for word: deliver them again as needed.
     this.tools.deliveredInstructions.clear();
-    return compactTranscript(t, this.config);
+    return compactTranscript(t, this.config, opts);
   };
 
   /** Plan mode (/plan, Shift+Tab, --permission-mode plan): read-only until a plan is approved. */
@@ -93,7 +93,7 @@ export class Runtime {
   /** Index of the user message the agent is working on (checkpoints are grouped by it). */
   currentTurn(): number {
     const m = this.engine?.transcript.messages ?? [];
-    for (let i = m.length - 1; i >= 0; i--) if (m[i]!.role === 'user') return i;
+    for (let i = m.length - 1; i >= 0; i--) if (m[i]!.role === 'user' && !m[i]!.synthetic) return i;
     return 0;
   }
 
@@ -118,7 +118,7 @@ export class Runtime {
   }
 
   private async judgeChange(req: ApprovalRequest): Promise<{allow: boolean; note: string}> {
-    const lastUser = [...(this.engine?.transcript.messages ?? [])].reverse().find((m) => m.role === 'user');
+    const lastUser = [...(this.engine?.transcript.messages ?? [])].reverse().find((m) => m.role === 'user' && !m.synthetic);
     const state = {
       user_request: headTail(lastUser?.text ?? ''),
       action: `${req.tool.label} ${req.summary}`,
@@ -393,7 +393,7 @@ Drop superseded reads of the same file, routine listings, and output that no lon
         config: () => this.config,
         route: router.route,
         alternative: router.alternative,
-        compact: (t, reason) => this.compact(t, reason),
+        compact: (t, reason, opts) => this.compact(t, reason, opts),
         selectCarry: (input) => this.selectCarry(input),
         pickEffort: (text, levels) => this.pickEffort(text, levels),
         beforePrompt: (text) => this.beforePrompt(text),

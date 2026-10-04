@@ -87,6 +87,9 @@ export class ClaudeSession implements ProviderSession {
         // Rein's shell tool can run for hours (user-configurable cap) plus time waiting for approval;
         // Rein enforces the real limit itself, so Claude's MCP timeout just needs to be out of the way.
         ...(opts.tools ? {MCP_TOOL_TIMEOUT: String(24 * 3600_000)} : {}),
+        // Rein compacts the conversation itself (at /configure → Compaction, mid-turn included) and
+        // keeps the agent going; Claude's own auto-compact would rewrite the history behind its back.
+        ...(opts.tools ? {DISABLE_AUTO_COMPACT: '1'} : {}),
       },
       stdio: ['pipe', 'pipe', 'pipe'],
     });

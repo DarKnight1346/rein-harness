@@ -9,7 +9,7 @@ import {DANGER_HEADROOM, headroom, usageStore} from '../store/usage.js';
 import {compactableCount, compactTranscript, type CompactReason, type CompactResult} from './compactor.js';
 import {systemPrompt} from './prompt.js';
 import {buildCarry, carryStart, estimateTokens, newTranscript, saveTranscript, scratchDir, truncateTranscript, type Message, type Transcript} from './transcript.js';
-import {carriedTools, selectCarriedTools, type CarrySelector} from './carry.js';
+import {CARRY_TOOL_BUDGET, carriedTools, selectCarriedTools, type CarrySelector} from './carry.js';
 
 export type Route = {ref: ModelRef; reason: 'fixed' | 'auto' | 'sticky' | 'default' | 'failover'; confidence?: number};
 
@@ -31,7 +31,7 @@ export type EngineDeps = {
   /** Pick a replacement model when every account for `failed` is unavailable. */
   alternative: (text: string, t: Transcript, failed: ModelRef, exclude: ReadonlySet<string>) => Promise<ModelRef | undefined>;
   /** Summarize older messages into `t.summary` (M6). */
-  compact: (t: Transcript, reason: CompactReason) => Promise<CompactResult>;
+  compact: (t: Transcript, reason: CompactReason, opts?: {keepRecent?: number}) => Promise<CompactResult>;
   /** Rein's tools for chat sessions, plus their activity feed (tool lines in the transcript). */
   tools?: {binding: ToolBinding; forkBinding?: ToolBinding; onActivity(fn: (a: ToolActivity) => void): () => void};
   /** Picks which tool results a new session needs when the conversation moves (compaction model). */
@@ -55,6 +55,12 @@ const CACHE_WARM_MS: Record<string, number> = {claude: 60 * 60_000, codex: 60 * 
 /** A cold switch needs the other account to be at least this much better (no flip-flopping). */
 const BALANCE_MARGIN = 15;
 const MAX_ATTEMPTS = 5;
+/** Compactions inside one turn before Rein stops compacting it (a single huge tool result can't loop). */
+const MAX_MIDTURN_COMPACTIONS = 3;
+/** Sent after a mid-turn compaction so the agent picks the task back up instead of ending its turn. */
+const CONTINUE_AFTER_COMPACTION = `<context_compacted>
+The conversation was compacted in the middle of your work because the context window was filling up. The summary above covers everything so far, including your tool calls and where you stopped. Continue the task from exactly where you left off: don't start over, don't repeat finished steps, and don't stop to ask the user unless you genuinely need their input.
+</context_compacted>`;
 
 /**
  * Owns the conversation. Rein's transcript is the source of truth; native sessions are caches
@@ -216,7 +222,7 @@ export class Engine {
     this.closeActive();
   }
 
-  async *send(typed: string, images: ImageInput[] = []): AsyncGenerator<EngineEvent> {
+  async *send(typed: string, attached: ImageInput[] = []): AsyncGenerator<EngineEvent> {
     const t = this.transcript;
     const cfg = this.deps.config();
     let text = typed;
@@ -226,8 +232,9 @@ export class Engine {
       return;
     }
     if (hook?.context) text = `${text}\n\n<hook_context>\n${hook.context}\n</hook_context>`;
+    let images = attached;
     t.messages.push({role: 'user', text, at: Date.now(), ...(images.length ? {images} : {})});
-    const userIndex = t.messages.length - 1;
+    let userIndex = t.messages.length - 1;
     this.interruptRequested = false;
 
     let route: Route;
@@ -240,6 +247,7 @@ export class Engine {
 
     const excluded = new Set<string>();
     let compacted = false;
+    let midTurnCompactions = 0;
     for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
       if (this.interruptRequested) {
         yield {type: 'done', interrupted: true};
@@ -281,24 +289,49 @@ export class Engine {
       yield {type: 'route', route, account, effort: session.effort};
       let reply = '';
       const replyTools: NonNullable<Message['tools']> = [];
+      const fullResults: string[] = []; // unclipped, for the continuation after a mid-turn compaction
       let failure: {kind: string; message: string; resetsAt?: number} | undefined;
       this.running = session;
       this.inFlight = {reply: '', tools: replyTools};
       let seenInput = 0; // token events are cumulative over the turn's requests
+      // Mid-turn compaction: once a request's prompt reaches the auto-compact threshold, stop the
+      // turn between steps (never while a tool runs), compact, and carry on in a fresh session.
+      const compactAt = this.autoCompactLimit(route.ref);
+      let toolsRunning = 0;
+      let compactDue = false;
+      let compacting = false; // interrupt sent for a mid-turn compaction
+      let continued = false; // compacted mid-turn; the continuation goes out next
+      const stopForCompaction = () => {
+        if (compacting || toolsRunning > 0 || this.interruptRequested) return;
+        compacting = true;
+        session.interrupt();
+      };
       for await (const ev of this.withToolActivity(session.send(prompt, images))) {
         if (ev.type === 'tool') {
           const a = ev.activity;
           if (a.origin) continue; // a subagent's tool call: shown in its own view, not here
-          if (a.phase === 'end') replyTools.push({label: a.label, summary: a.summary, ok: a.ok, result: a.result.slice(0, 4000), diff: a.diff});
+          if (a.phase === 'start') toolsRunning++;
+          else {
+            toolsRunning = Math.max(0, toolsRunning - 1);
+            replyTools.push({label: a.label, summary: a.summary, ok: a.ok, result: clipResult(a.result), diff: a.diff});
+            fullResults.push(a.result);
+          }
           yield ev;
+          if (compactDue) stopForCompaction();
           continue;
         }
         if (ev.type === 'tokens') {
           this.callTokens = ev.call;
           // Each jump in input is one request's full prompt: how full the context is right now.
           if (ev.call.input > seenInput) {
+            // Not on a segment's first request: nothing has happened yet that a compaction would fold away.
+            const laterRequest = seenInput > 0;
             this.lastUsage = {ref: route.ref, input: ev.call.input - seenInput, output: 0, at: Date.now()};
             seenInput = ev.call.input;
+            if (laterRequest && compactAt && this.lastUsage.input >= compactAt && midTurnCompactions < MAX_MIDTURN_COMPACTIONS) {
+              compactDue = true;
+              stopForCompaction();
+            }
           }
           yield ev;
           continue;
@@ -307,6 +340,20 @@ export class Engine {
           reply += ev.delta;
           if (this.inFlight) this.inFlight.reply = reply;
           yield {type: 'text', delta: ev.delta};
+        } else if (ev.type === 'done' && ev.interrupted && compacting && !this.interruptRequested) {
+          // Stopped for a mid-turn compaction (not by the user): save the work so far, compact,
+          // and send the continuation as a fresh request.
+          this.running = undefined;
+          this.inFlight = undefined;
+          this.commitCallTokens();
+          this.lastUsed.set(account.id, Date.now());
+          this.lastAccountId = account.id;
+          midTurnCompactions++;
+          userIndex = yield* this.compactAndContinue(route.ref, account, reply, replyTools, fullResults, 'midturn');
+          text = CONTINUE_AFTER_COMPACTION;
+          images = [];
+          continued = true;
+          break;
         } else if (ev.type === 'done') {
           this.running = undefined;
           this.inFlight = undefined;
@@ -338,6 +385,10 @@ export class Engine {
           failure = ev;
         }
       }
+      if (continued) {
+        attempt = -1; // a fresh request: failover attempts start over
+        continue;
+      }
       this.running = undefined;
       this.inFlight = undefined;
       this.commitCallTokens();
@@ -352,6 +403,16 @@ export class Engine {
         const why = failure.kind === 'limit' ? `hit its limit${failure.resetsAt ? ` (resets ${clock(failure.resetsAt)})` : ''}` : failure.kind === 'auth' ? 'needs re-login (/login)' : 'is overloaded';
         yield {type: 'notice', text: `${account.email ?? account.id} ${why}${reply ? ' — retrying' : ''}`};
         if (reply) yield {type: 'notice', text: '(partial reply discarded)'};
+        continue;
+      }
+      if (failure.kind === 'context' && (reply || replyTools.length) && midTurnCompactions < MAX_MIDTURN_COMPACTIONS) {
+        // The context overflowed mid-task: keep what the agent did and let it carry on, instead
+        // of re-sending the request and losing the work.
+        midTurnCompactions++;
+        userIndex = yield* this.compactAndContinue(route.ref, account, reply, replyTools, fullResults, 'context');
+        text = CONTINUE_AFTER_COMPACTION;
+        images = [];
+        attempt = -1;
         continue;
       }
       if (failure.kind === 'context' && !compacted) {
@@ -503,24 +564,45 @@ export class Engine {
     if (nativeId) this.transcript.native[key] = {provider: session.provider, accountId: account.id, nativeId, coversUpTo: upTo};
   }
 
-  private async *maybeAutoCompact(ref: ModelRef, inputTokens: number | undefined): AsyncGenerator<EngineEvent> {
+  /** Prompt size at which a conversation on `ref` is compacted (undefined = auto-compact off). */
+  private autoCompactLimit(ref: ModelRef): number | undefined {
     const pct = this.deps.config().autoCompactPct;
-    if (!pct) return; // auto-compact off
-    const window = catalog.get(ref)?.contextWindow ?? 200_000;
+    return pct ? (catalog.get(ref)?.contextWindow ?? 200_000) * (pct / 100) : undefined;
+  }
+
+  /**
+   * Save the interrupted turn's work as an assistant message, compact everything into the summary
+   * (nothing kept verbatim: the turn itself is what filled the context), drop the native session,
+   * and add the continuation prompt. Returns the continuation's message index.
+   */
+  private async *compactAndContinue(ref: ModelRef, account: Account, reply: string, tools: NonNullable<Message['tools']>, fullResults: string[], reason: CompactReason): AsyncGenerator<EngineEvent, number> {
+    const t = this.transcript;
+    if (reply || tools.length) t.messages.push({role: 'assistant', text: reply, at: Date.now(), model: ref, accountId: account.id, tools: tools.length ? tools : undefined});
+    await saveTranscript(t).catch(() => {});
+    yield* this.compactWithEvents(reason, 0);
+    this.closeActive();
+    t.messages.push({role: 'user', text: CONTINUE_AFTER_COMPACTION + recentResults(tools, fullResults), at: Date.now(), synthetic: true});
+    await saveTranscript(t).catch(() => {});
+    return t.messages.length - 1;
+  }
+
+  private async *maybeAutoCompact(ref: ModelRef, inputTokens: number | undefined): AsyncGenerator<EngineEvent> {
+    const limit = this.autoCompactLimit(ref);
+    if (!limit) return; // auto-compact off
     const used = inputTokens ?? estimateTokens(this.transcript.messages.map((m) => m.text).join('\n'));
-    if (used < window * (pct / 100)) return;
+    if (used < limit) return;
     yield* this.compactWithEvents('auto');
     // The native session still holds the full history; start fresh from the summary next turn.
     this.closeActive();
   }
 
   /** Run a compaction, surfacing start/end so the UI can animate it and show the result. */
-  private async *compactWithEvents(reason: CompactReason): AsyncGenerator<EngineEvent> {
-    const messages = compactableCount(this.transcript);
+  private async *compactWithEvents(reason: CompactReason, keepRecent?: number): AsyncGenerator<EngineEvent> {
+    const messages = compactableCount(this.transcript, keepRecent);
     if (!messages) return;
     yield {type: 'compact', phase: 'start', reason, messages};
     try {
-      const result = await this.deps.compact(this.transcript, reason);
+      const result = await this.deps.compact(this.transcript, reason, keepRecent === undefined ? undefined : {keepRecent});
       if (!('skipped' in result)) this.cacheBroken = true;
       yield {type: 'compact', phase: 'end', reason, result};
     } catch (err) {
@@ -561,4 +643,32 @@ export function clampEffort(level: string, levels: string[]): string | undefined
   const rank = EFFORT_ORDER.indexOf(level);
   const below = levels.filter((l) => EFFORT_ORDER.indexOf(l) <= rank).sort((a, b) => EFFORT_ORDER.indexOf(b) - EFFORT_ORDER.indexOf(a));
   return below[0] ?? levels[0];
+}
+
+/**
+ * The newest tool results of the interrupted turn, verbatim (newest first, within the carry budget),
+ * so the agent keeps its working memory across a mid-turn compaction instead of guessing from the
+ * summary's short excerpts.
+ */
+function recentResults(tools: NonNullable<Message['tools']>, full: string[]): string {
+  const picked: string[] = [];
+  let used = 0;
+  for (let i = tools.length - 1; i >= 0; i--) {
+    const c = tools[i]!;
+    let block = `<tool_result call="${c.label}(${c.summary})" ok="${c.ok}">\n${full[i] ?? c.result}\n</tool_result>`;
+    // The newest result alone is over budget: keep its clipped form rather than nothing.
+    if (!picked.length && estimateTokens(block) > CARRY_TOOL_BUDGET) block = `<tool_result call="${c.label}(${c.summary})" ok="${c.ok}">\n${c.result}\n</tool_result>`;
+    const cost = estimateTokens(block);
+    if (used + cost > CARRY_TOOL_BUDGET) break;
+    picked.unshift(block);
+    used += cost;
+  }
+  if (!picked.length) return '';
+  const older = tools.length - picked.length;
+  return `\n\nYour most recent tool results, verbatim${older ? ` (the ${older} earlier ones are in the summary)` : ''}:\n${picked.join('\n')}`;
+}
+
+/** A tool result as kept in the transcript: the first 4,000 characters, marked when there was more. */
+function clipResult(result: string): string {
+  return result.length > 4000 ? `${result.slice(0, 4000)}\n… [truncated: ${result.length} characters in full — re-run the tool to see the rest]` : result;
 }

@@ -65,7 +65,7 @@ How these play together is covered in [load balancing](../../internals/load-bala
 | `additionalDirectories` | string[] | `[]` | Extra working directories. Tools use them without asking, like the project folder. Relative paths resolve against the project, `~/` against your home folder. Directories that don't exist are skipped. | File only (per session: `/add-dir`, `rein --add-dir`) |
 | `subagentLimit` | number | `10` | How many subagents may run at once. The agent is told the limit. | `/configure` → Subagents |
 | `goalMaxRounds` | number | `0` | Automatic continuations a `/goal` may take before it pauses itself. `0` = unlimited. | `/configure` → Goals |
-| `autoCompactPct` | number | `80` | Auto-compact when the context reaches this % of the model's window. `0` = off (only `/compact`, or when a model rejects a full context). | `/configure` → Compaction |
+| `autoCompactPct` | number | `80` | Auto-compact when the context reaches this % of the model's window, including in the middle of a turn (the agent carries on from the summary). `0` = off (only `/compact`, or when a model rejects a full context). | `/configure` → Compaction |
 
 See [permissions](../../features/permissions/) for rules, plan mode and the full approval pipeline.
 
