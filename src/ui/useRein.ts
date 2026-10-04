@@ -13,6 +13,7 @@ import {compactableCount} from '../session/compactor.js';
 import {onUntrustedHooks, trustProjectHooks, type ProjectHooks} from '../hooks.js';
 import {notify} from './terminal/notify.js';
 import {incompatibleMessage} from '../providers/codex/compat.js';
+import {sandboxBackend} from '../tools/sandbox.js';
 import {findIdes} from '../ide/connection.js';
 import {diffTabName, proposedChange} from '../ide/review.js';
 import {conversationMarkdown, writeExport} from '../session/export.js';
@@ -177,6 +178,9 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
         const signIn = runtime.mcp.list().filter((s) => s.status === 'needs-auth').map((s) => s.name);
         if (signIn.length) log('info', `MCP server${signIn.length > 1 ? 's' : ''} ${signIn.join(', ')} need${signIn.length > 1 ? '' : 's'} you to sign in — /mcp, then enter.`);
       }, 1500);
+      // The sandbox is on by default; say so once where this machine can't provide one.
+      if ((runtime.config.sandbox ?? 'write') !== 'off' && !sandboxBackend())
+        log('info', process.platform === 'win32' ? "The command sandbox isn't available on Windows: the agent's commands run unsandboxed (approvals still apply)." : process.platform === 'linux' ? "The command sandbox needs bubblewrap (install the 'bubblewrap' package): until then the agent's commands run unsandboxed." : "The command sandbox isn't available here: the agent's commands run unsandboxed.");
       // Editor integration: connect quietly to the editor holding this project, if there is one.
       if (findIdes().length) void runtime.connectIde().then((m) => log('info', m), () => {});
       // Launch-time self-update check (background; never delays startup).

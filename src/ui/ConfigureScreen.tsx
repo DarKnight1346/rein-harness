@@ -11,7 +11,7 @@ const TABS: Tab[] = [
   {id: 'sidebar', title: 'Sidebar', items: SIDEBAR_ITEMS, defaults: DEFAULT_SIDEBAR, key: 'sidebarSections'},
 ];
 type Choice = {value: string | number | boolean; label: string};
-type ChoiceTabDef = {title: string; key: 'autoCompactPct' | 'toolApproval' | 'shellMaxMinutes' | 'subagentLimit' | 'goalMaxRounds' | 'hidePersonalInfo' | 'autoUpdate' | 'loadBalancing' | 'notifications'; description: string; choices: Choice[]};
+type ChoiceTabDef = {title: string; key: 'autoCompactPct' | 'toolApproval' | 'shellMaxMinutes' | 'subagentLimit' | 'goalMaxRounds' | 'hidePersonalInfo' | 'autoUpdate' | 'loadBalancing' | 'notifications' | 'sandbox'; description: string; choices: Choice[]};
 const CHOICE_TABS: ChoiceTabDef[] = [
   {
     title: 'Approvals',
@@ -21,6 +21,16 @@ const CHOICE_TABS: ChoiceTabDef[] = [
       {value: 'ask', label: 'Ask — confirm every file change  (default)'},
       {value: 'auto', label: 'Auto — the decision model approves changes that clearly match your request; asks you otherwise'},
       {value: 'bypass', label: 'Bypass — allow every file change without asking'},
+    ],
+  },
+  {
+    title: 'Sandbox',
+    key: 'sandbox',
+    description: "An OS sandbox around the agent's shell commands (macOS sandbox-exec, Linux bubblewrap). Your own ! commands, hooks and MCP servers aren't sandboxed.",
+    choices: [
+      {value: 'write', label: 'On — commands can only write inside the project, scratchpad, temp folders and package caches  (default)'},
+      {value: 'strict', label: 'Strict — the same, and no network except localhost'},
+      {value: 'off', label: 'Off — no sandbox; approvals are the only guard'},
     ],
   },
   {

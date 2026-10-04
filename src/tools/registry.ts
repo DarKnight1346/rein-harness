@@ -3,6 +3,7 @@ import {deleteTool, editTool, listTool, readTool, resolveInRoot, searchTool, Too
 import {DEFAULT_TIMEOUT_MS, shellStatusText} from './shells.js';
 import {shellFor} from '../util/platform.js';
 import {sessionRead, sessionsSearch} from './sessions.js';
+import {denialNote, type SandboxSpec} from './sandbox.js';
 
 export type ToolDef = {
   name: string;
@@ -141,7 +142,9 @@ export const TOOLS: ToolDef[] = [
       `Run a shell command in the project (${shellFor('').kind === 'powershell' ? 'PowerShell' : `${path.basename(shellFor('').file)} -c`}). Foreground (default) waits and returns the output and exit code; ` +
       `the user watches it live. Timeout ${DEFAULT_TIMEOUT_MS / 1000}s by default; raise it with timeout_ms for long builds/tests (capped by the user's limit, 120 min by default). ` +
       'Use background: true for long-running processes (dev servers, watchers): it returns an id at once; read output with shell_logs and stop it with shell_kill. ' +
-      'No stdin/TTY: interactive commands will fail — pass flags like --yes instead.',
+      'No stdin/TTY: interactive commands will fail — pass flags like --yes instead. ' +
+      "Commands run in Rein's OS sandbox unless the user turned it off: writes only inside the project, its working directories, the scratchpad, temp folders and package caches (git hooks/config and agent/editor settings stay read-only; strict mode also blocks the network). " +
+      'If a command genuinely needs to run outside it, set unsandboxed: true — the user is always asked.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -149,6 +152,7 @@ export const TOOLS: ToolDef[] = [
         background: {type: 'boolean', description: 'Run in the background and return immediately'},
         timeout_ms: {type: 'integer', description: `Foreground timeout in ms (default ${DEFAULT_TIMEOUT_MS})`},
         cwd: str('Working directory relative to the project root (default: root)'),
+        unsandboxed: {type: 'boolean', description: "Run outside Rein's sandbox (always asks the user). Only when the sandbox blocked something the command really needs."},
       },
       required: ['command'],
     },
@@ -219,11 +223,13 @@ TOOLS.push(
 
 const MAX_SHELL_OUTPUT = 30_000;
 
-async function shellTool(ctx: ToolContext, args: {command: string; background?: boolean; timeout_ms?: number; cwd?: string}): Promise<ToolResult> {
+async function shellTool(ctx: ToolContext, args: {command: string; background?: boolean; timeout_ms?: number; cwd?: string; unsandboxed?: boolean}): Promise<ToolResult> {
   if (!ctx.shells) throw new ToolError('shell is not available');
   if (typeof args?.command !== 'string' || !args.command.trim()) throw new ToolError('command is required');
   const cwd = resolveInRoot(ctx, args.cwd ?? '.');
-  const {shell, done} = ctx.shells.start(args.command, {cwd, background: !!args.background, timeoutMs: args.timeout_ms, maxMs: ctx.shellMaxMs, origin: ctx.origin});
+  // The sandbox may write to the project and every working directory (subagent worktrees included).
+  const sandbox: SandboxSpec | undefined = ctx.sandbox && ctx.sandbox !== 'off' && !args.unsandboxed ? {mode: ctx.sandbox, roots: [ctx.root, ...(ctx.extraRoots ?? [])]} : undefined;
+  const {shell, done} = ctx.shells.start(args.command, {cwd, background: !!args.background, timeoutMs: args.timeout_ms, maxMs: ctx.shellMaxMs, origin: ctx.origin, sandbox});
   if (args.background) {
     return {ok: true, text: `Started background shell #${shell.id}${shell.pid ? ` (pid ${shell.pid})` : ''}: ${args.command}\nRead its output with shell_logs {id: ${shell.id}}; stop it with shell_kill {id: ${shell.id}}.`};
   }
@@ -232,7 +238,8 @@ async function shellTool(ctx: ToolContext, args: {command: string; background?: 
   if (out.length > MAX_SHELL_OUTPUT) out = '[… output truncated]\n' + out.slice(-MAX_SHELL_OUTPUT);
   const ok = s.status === 'exited' && s.exitCode === 0;
   const status = s.status === 'killed' ? 'killed (interrupted by the user)' : shellStatusText(s);
-  return {ok, text: `[${status}]\n${out || '(no output)'}`};
+  const note = !ok && sandbox && s.sandboxed ? denialNote(out, sandbox) : undefined;
+  return {ok, text: `[${status}]\n${out || '(no output)'}${note ? `\n\n${note}` : ''}`};
 }
 
 export const toolByName = (name: string) => TOOLS.find((t) => t.name === name);

@@ -51,6 +51,8 @@ export type ToolHostOptions = {
   sessionId?: () => string | undefined;
   /** Foreground shell cap in ms (0 = none), read per call so /configure applies at once. */
   shellMaxMs?: () => number;
+  /** The sandbox mode for the agent's shell commands (/configure → Sandbox). */
+  sandbox?: () => import('./sandbox.js').SandboxMode;
   /** `auto` mode: the decision model's verdict; `ask` falls through to the user. */
   judge?: (req: ApprovalRequest) => Promise<{allow: boolean; note: string}>;
   /** Extra working directories from config (`additionalDirectories`). */
@@ -163,7 +165,9 @@ export class ToolHost extends EventEmitter {
       if (pre?.block) throw new ToolError(`blocked by a PreToolUse hook: ${pre.block}`);
       // Read-only shell commands (ls, git status, brew info, --version…) run without asking, like
       // Claude Code — unless they name paths outside the working directories.
-      const readOnly = tool.name === 'shell' && typeof (args as any)?.command === 'string' && readOnlyCommand((args as any).command) && !this.namesOutside(ctx, (args as any).command);
+      // A command leaving the sandbox is never "just read-only": it always gets the prompt below.
+      const unsandboxed = tool.name === 'shell' && (args as {unsandboxed?: boolean} | undefined)?.unsandboxed === true && (this.opts.sandbox?.() ?? 'off') !== 'off';
+      const readOnly = !unsandboxed && tool.name === 'shell' && typeof (args as any)?.command === 'string' && readOnlyCommand((args as any).command) && !this.namesOutside(ctx, (args as any).command);
       // Plan mode: file changes are refused. A command not on the read-only list goes to the
       // decision model ("does this only read?"); if it can't say yes, bypass mode refuses it and the
       // other modes ask the user.
@@ -217,7 +221,8 @@ export class ToolHost extends EventEmitter {
       if (tool.mutating && !approvedBy) {
         const mode = this.opts.mode();
         const req = planAsk ? {tool, args, summary, preview: preview(tool, args), origin, planMode: true} : {tool, args, summary, preview: preview(tool, args), origin, suggestion};
-        const forceAsk = !!pre?.ask || planAsk; // a PreToolUse hook asked for the prompt, or plan mode
+        // Leaving the sandbox is always the user's call: no rule, session allowance, judge or bypass covers it.
+        const forceAsk = !!pre?.ask || planAsk || unsandboxed; // a PreToolUse hook asked for the prompt, plan mode, or leaving the sandbox
         if (forceAsk) {
           // fall through to the prompt
         } else if (verdict === 'allow') approvedBy = 'rule';
@@ -396,6 +401,7 @@ export class ToolHost extends EventEmitter {
       extraRoots: [...(scratch ? [scratch] : []), globalSkills, ...config, ...this.addedDirs],
       shells: this.shells,
       shellMaxMs: this.opts.shellMaxMs?.(),
+      sandbox: this.opts.sandbox?.(),
       sessionId: this.opts.sessionId?.(),
     };
   }

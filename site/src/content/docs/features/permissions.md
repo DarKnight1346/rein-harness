@@ -28,6 +28,22 @@ Tools fall into two groups:
 
 That means reading `.env` *inside* your project never prompts. Rein treats the project folder as yours to read. If that's not what you want, add a [deny rule](#saved-rules).
 
+## The command sandbox
+
+Approvals decide *whether* a command runs. The sandbox limits *what it can do* once it runs, which is what makes long unattended runs (bypass mode, `/goal`) safe. It's **on by default** (`/configure` → **Sandbox**):
+
+| Mode | The agent's shell commands… |
+|---|---|
+| **On** (`write`, default) | can only write inside the project, its working directories (including `/add-dir` folders), the session scratchpad, temp folders and package-manager caches (`~/.npm`, `~/.cache`, `~/.cargo`…). Reading and the network work as usual. |
+| **Strict** | the same, and no network except `localhost` (local dev servers and databases keep working). |
+| **Off** | run with no sandbox: approvals are the only guard. |
+
+Even inside the project, files that could run code *outside* the sandbox later stay read-only: `.git/hooks`, `.git/config`, `.gitmodules`, `.mcp.json`, `.claude/` and `.rein/` settings, `.vscode/`, `.idea/`. So `git init` and `git config` need to run unsandboxed.
+
+When a command fails because of the sandbox (`Operation not permitted`, or a network error in strict mode), the agent is told why and can retry with `unsandboxed: true`. **That always asks you**, even in bypass mode, and no saved rule or "allow for the session" covers it.
+
+macOS uses `sandbox-exec` (Seatbelt), as Claude Code and Codex do. Linux uses bubblewrap (install the `bubblewrap` package); without it, and on Windows, commands run unsandboxed and Rein says so at startup. Only the agent's commands are sandboxed: your own [`!` commands](../../reference/commands/#shell-commands-with-), hooks and MCP servers aren't.
+
 ## Approval modes
 
 Pick a mode in `/configure` → **Approvals** (saved as `toolApproval` in `~/.rein/config.json`). The mode only decides what happens to mutating calls that nothing else (a rule, a hook, the scratchpad, the read-only list) has already settled.

@@ -86,6 +86,7 @@ export class Runtime {
     planMode: () => this.planMode,
     mode: () => this.config.toolApproval,
     shellMaxMs: () => this.config.shellMaxMinutes * 60_000,
+    sandbox: () => this.config.sandbox ?? 'write',
     scratch: () => this.engine?.scratch,
     sessionId: () => this.engine?.transcript.id,
     judge: (req) => this.judgeChange(req),

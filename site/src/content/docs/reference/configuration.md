@@ -61,6 +61,7 @@ How these play together is covered in [load balancing](../../internals/load-bala
 | Key | Type | Default | Meaning | Set in |
 | --- | --- | --- | --- | --- |
 | `toolApproval` | `"ask"` \| `"auto"` \| `"bypass"` | `"ask"` | What happens when the agent calls a tool that changes things: file writes, edits and deletes, plus `shell`, `image_generate`, `mcp_add`/`mcp_remove` and MCP tools without `readOnlyHint`. `ask` prompts you. `auto` lets the decision model allow changes that clearly match your request (p ≥ 0.85) and asks you about everything else. It never auto-denies. `bypass` allows all, except credentials outside the project, which always ask. Also the default for `rein -p --permission-mode`. | `/configure` → Approvals |
+| `sandbox` | string | `"write"` | OS sandbox around the agent's shell commands. `write`: commands can only write inside the project, its working directories, the session scratchpad, temp folders and package caches (git hooks/config and agent/editor settings stay read-only). `strict`: the same, and no network except localhost. `off`: no sandbox. macOS uses `sandbox-exec`, Linux bubblewrap; Windows runs unsandboxed. | `/configure` → Sandbox |
 | `shellMaxMinutes` | number | `120` | Longest a foreground shell command may run. The agent picks a timeout per command (2 minutes by default) up to this cap. `0` = no limit. Background commands have no limit. | `/configure` → Shell |
 | `backgroundCheckMinutes` | number | `60` | Every this many minutes of a background command's life, a fork of the agent (like `/btw`) checks whether it's still needed and stops it if not. Unsure keeps it running. `0` = off. | `~/.rein/config.json` |
 | `additionalDirectories` | string[] | `[]` | Extra working directories. Tools use them without asking, like the project folder. Relative paths resolve against the project, `~/` against your home folder. Directories that don't exist are skipped. | File only (per session: `/add-dir`, `rein --add-dir`) |
@@ -101,7 +102,7 @@ Valid `sidebarSections` ids: `agents`, `accounts`, `models` (chat model picker),
 
 ## The `/configure` tabs
 
-`/configure` (aliases `/config` and `/settings`) opens a window with eleven tabs. Switch with click, `←` `→` or `Tab`. Close with `Esc`.
+`/configure` (aliases `/config` and `/settings`) opens a window with twelve tabs. Switch with click, `←` `→` or `Tab`. Close with `Esc`.
 
 | Tab | Key | Choices |
 | --- | --- | --- |
@@ -112,6 +113,7 @@ Valid `sidebarSections` ids: `agents`, `accounts`, `models` (chat model picker),
 | **Subagents** | `subagentLimit` | 1 · 2 · 3 · 5 · 10 *(default)* · 20 at a time |
 | **Goals** | `goalMaxRounds` | Unlimited *(default)* · 10 · 25 · 50 · 100 · 250 continuations |
 | **Load balancing** | `loadBalancing` | Balanced *(default, cache-aware)* · Sticky |
+| **Sandbox** | `sandbox` | On *(default)* · Strict · Off |
 | **Notifications** | `notifications` | Terminal *(default)* · Desktop · Off |
 | **Updates** | `autoUpdate` | Auto-update Rein *(default)* · Only when I run `/update` |
 | **Privacy** | `hidePersonalInfo` | Hide personal info *(default)* · Show emails and paths |
@@ -141,6 +143,7 @@ Every key, with defaults where it makes sense and realistic values for the optio
   "maxUsedPct": 98,
 
   "toolApproval": "ask",
+  "sandbox": "write",
   "shellMaxMinutes": 120,
   "backgroundCheckMinutes": 60,
   "additionalDirectories": ["../shared-lib", "~/notes"],

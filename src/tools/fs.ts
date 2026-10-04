@@ -24,6 +24,8 @@ export type ToolContext = {
   outsideAllowed?: string[];
   shells?: import('./shells.js').ShellManager;
   shellMaxMs?: number;
+  /** Sandbox for the agent's shell commands (see sandbox.ts). */
+  sandbox?: import('./sandbox.js').SandboxMode;
   /** Current conversation id (marks it in session search). */
   sessionId?: string;
   /** Set when a subagent is calling (its shells are tagged with it). */

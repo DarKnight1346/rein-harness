@@ -2,6 +2,7 @@ import {isWindows, killTree, shellFor} from '../util/platform.js';
 import {spawn, type ChildProcess} from 'node:child_process';
 import {EventEmitter} from 'node:events';
 import stripAnsi from 'strip-ansi';
+import {wrap, type SandboxSpec} from './sandbox.js';
 
 export type Shell = {
   id: number;
@@ -19,6 +20,8 @@ export type Shell = {
   dropped: number;
   /** Subagent that started it (its foreground output shows in the subagent window, not a popup). */
   origin?: {agentId: number; name: string};
+  /** Ran inside the OS sandbox (see sandbox.ts). */
+  sandboxed?: boolean;
 };
 
 const MAX_LINES = 5000;
@@ -67,10 +70,13 @@ export class ShellManager extends EventEmitter {
 
   /** Start `command` with the user's shell in `cwd`. Resolves when it ends (foreground) or at once (background). */
   /** `maxMs`: the user's cap (0/undefined = none); the agent's `timeoutMs` is clamped to it. */
-  start(command: string, opts: {cwd: string; background: boolean; timeoutMs?: number; maxMs?: number; origin?: Shell['origin']}): {shell: Shell; done: Promise<Shell>} {
+  start(command: string, opts: {cwd: string; background: boolean; timeoutMs?: number; maxMs?: number; origin?: Shell['origin']; sandbox?: SandboxSpec}): {shell: Shell; done: Promise<Shell>} {
     const shell: Shell = {id: this.nextId++, command, cwd: opts.cwd, background: opts.background, startedAt: Date.now(), status: 'running', lines: [], dropped: 0, origin: opts.origin};
     this.shells.set(shell.id, shell);
-    const sh = shellFor(command);
+    const plain = shellFor(command);
+    const boxed = wrap(plain, opts.sandbox);
+    if (boxed) shell.sandboxed = true;
+    const sh = boxed ?? plain;
     const child = spawn(sh.file, sh.args, {
       cwd: opts.cwd,
       env: {...process.env, FORCE_COLOR: '0', CI: process.env.CI ?? '1', PAGER: 'cat', GIT_PAGER: 'cat'},
