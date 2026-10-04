@@ -14,6 +14,7 @@ import {askBtwSubagent, btw} from '../session/btw.js';
 import type {Transcript} from '../session/transcript.js';
 import type {AddEntry, Entry} from './entries.js';
 import type {ApprovalDecision, ApprovalRequest} from '../tools/host.js';
+import {dueForCheck, stillNeeded} from '../tools/backgroundCheck.js';
 import {shellStatusText, type Shell} from '../tools/shells.js';
 import {subagentStatusText} from '../agents/manager.js';
 import {report as agentReport} from '../agents/tools.js';
@@ -36,6 +37,9 @@ export const VERSION = reinVersion();
 
 /** Queue marker: deliver a finished background subagent's report (if still uncollected). */
 const DELIVER = '\u0000deliver-agent:';
+
+/** Background commands running at least this long are mentioned (once) when a turn ends. */
+const BACKGROUND_REMINDER_MS = 5 * 60_000;
 
 export type Overlay =
   | {name: 'none'}
@@ -388,6 +392,47 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
         setGoalNote(undefined);
       });
   }, [chat.busy, queued.length, overlay.name, ready, statusTick]);
+  // Background commands run until stopped (no timeout). When a turn ends, mention any that have been
+  // going for a while, once each, so a forgotten dev server or emulator doesn't run unnoticed.
+  const announcedBg = useRef(new Set<number>());
+  useEffect(() => {
+    if (chat.busy) return;
+    const stale = runtime.tools.shells
+      .running({background: true})
+      .filter((s) => Date.now() - s.startedAt >= BACKGROUND_REMINDER_MS && !announcedBg.current.has(s.id));
+    if (!stale.length) return;
+    stale.forEach((s) => announcedBg.current.add(s.id));
+    log('info', `Still running in the background: ${stale.map((s) => `#${s.id} ${s.command.slice(0, 60)} (${shellStatusText(s).replace('running ', '')})`).join(', ')}. Ask the agent to stop ${stale.length > 1 ? 'them' : 'it'} if you're done, or /shells to look.`);
+  }, [chat.busy]);
+
+  // ...and after an hour (backgroundCheckMinutes), a fork of the agent checks whether each is still
+  // needed and stops the ones that aren't. Unsure keeps them running.
+  const bgChecked = useRef(new Map<number, number>());
+  const bgChecking = useRef(false);
+  useEffect(() => {
+    const timer = setInterval(() => {
+      if (bgChecking.current) return;
+      const due = dueForCheck(runtime.tools.shells.list(), bgChecked.current, runtime.config.backgroundCheckMinutes);
+      const shell = due[0];
+      if (!shell) return;
+      bgChecking.current = true;
+      bgChecked.current.set(shell.id, Date.now());
+      const age = shellStatusText(shell).replace('running ', '');
+      void stillNeeded(runtime.engine, runtime.config, runtime.tools.shells, shell)
+        .then((v) => {
+          if (shell.status !== 'running') return;
+          if (v.keep) log('info', `Background #${shell.id} ${shell.command.slice(0, 60)} has run ${age}; the agent says it's still needed (${v.reason}). Checking again later.`);
+          else {
+            runtime.tools.shells.kill(shell.id);
+            log('info', `Stopped background #${shell.id} ${shell.command.slice(0, 60)} after ${age}: the agent no longer needs it (${v.reason}).`);
+          }
+        })
+        .catch(() => {}) // couldn't ask: leave it running, try again next round
+        .finally(() => (bgChecking.current = false));
+    }, 60_000);
+    return () => clearInterval(timer);
+  }, []);
+
   useEffect(() => {
     if (chat.busy || !queued.length) return;
     const [next, ...rest] = queued;

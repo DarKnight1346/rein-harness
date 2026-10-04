@@ -150,13 +150,13 @@ Confinement applies to the **file tools** and to the shell's working directory. 
  ✓ 128 tests passed
 ```
 
-**Background** commands (`background: true`) return an id immediately and have no timeout. They're meant for dev servers and watchers. The agent reads them with `shell_logs` and stops them with `shell_kill`, and the status line shows `● 1 background (/shells)`.
+**Background** commands (`background: true`) return an id immediately and have no timeout. They're meant for dev servers and watchers. The agent reads them with `shell_logs` and stops them with `shell_kill`, and the status line shows `● 1 background (/shells)`. They keep running until the agent stops them or Rein exits, so when a turn ends Rein also mentions, once, any background command that has been running for 5 minutes or more (`Still running in the background: #3 gmake run (2h 41m)…`). After an hour (`backgroundCheckMinutes`, default 60), Rein forks the agent the way [`/btw`](../btw/) does, so it sees the full conversation with read-only tools while the main turn keeps going. The fork is asked whether the command is still needed, given its recent output. If the answer is no, Rein stops it and says why (`Stopped background #3 gmake run after 1h 2m: the agent no longer needs it (…)`). If yes or unsure, the command keeps running and is checked again an hour later.
 
 Every command runs:
 
 - with **no stdin and no TTY**, so interactive prompts fail fast (the agent is told to pass `--yes`-style flags);
 - with `CI=1` (unless you already set `CI`), `PAGER=cat`, `GIT_PAGER=cat` and `FORCE_COLOR=0`;
-- with ANSI codes stripped and `\r` progress bars collapsed to their final state, keeping the last 5000 lines;
+- with ANSI codes stripped and `\r` progress bars collapsed to their final state, keeping the last 5000 lines while it runs and the last 2000 once it ends (only the 50 most recent finished commands keep output). Output that never sends a newline, like a firmware console or a spinner, is cut into lines so it can't grow without bound;
 - in its own process group, so stopping it takes down its children. Stopping sends SIGTERM, then SIGKILL after 3 seconds.
 
 Pressing Esc or Ctrl+C to interrupt the agent also kills its foreground command. Background shells keep running until stopped or until you quit Rein.

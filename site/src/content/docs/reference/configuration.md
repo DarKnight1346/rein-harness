@@ -62,6 +62,7 @@ How these play together is covered in [load balancing](../../internals/load-bala
 | --- | --- | --- | --- | --- |
 | `toolApproval` | `"ask"` \| `"auto"` \| `"bypass"` | `"ask"` | What happens when the agent calls a tool that changes things: file writes, edits and deletes, plus `shell`, `image_generate`, `mcp_add`/`mcp_remove` and MCP tools without `readOnlyHint`. `ask` prompts you. `auto` lets the decision model allow changes that clearly match your request (p ≥ 0.85) and asks you about everything else. It never auto-denies. `bypass` allows all, except credentials outside the project, which always ask. Also the default for `rein -p --permission-mode`. | `/configure` → Approvals |
 | `shellMaxMinutes` | number | `120` | Longest a foreground shell command may run. The agent picks a timeout per command (2 minutes by default) up to this cap. `0` = no limit. Background commands have no limit. | `/configure` → Shell |
+| `backgroundCheckMinutes` | number | `60` | Every this many minutes of a background command's life, a fork of the agent (like `/btw`) checks whether it's still needed and stops it if not. Unsure keeps it running. `0` = off. | `~/.rein/config.json` |
 | `additionalDirectories` | string[] | `[]` | Extra working directories. Tools use them without asking, like the project folder. Relative paths resolve against the project, `~/` against your home folder. Directories that don't exist are skipped. | File only (per session: `/add-dir`, `rein --add-dir`) |
 | `subagentLimit` | number | `10` | How many subagents may run at once. The agent is told the limit. | `/configure` → Subagents |
 | `goalMaxRounds` | number | `0` | Automatic continuations a `/goal` may take before it pauses itself. `0` = unlimited. | `/configure` → Goals |
@@ -139,6 +140,7 @@ Every key, with defaults where it makes sense and realistic values for the optio
 
   "toolApproval": "ask",
   "shellMaxMinutes": 120,
+  "backgroundCheckMinutes": 60,
   "additionalDirectories": ["../shared-lib", "~/notes"],
   "subagentLimit": 10,
   "goalMaxRounds": 0,
