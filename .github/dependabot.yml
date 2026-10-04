@@ -8,6 +8,13 @@ updates:
       # One PR for routine minor/patch bumps instead of one per package.
       minor-and-patch:
         update-types: [minor, patch]
+  - package-ecosystem: npm
+    directory: /site
+    schedule:
+      interval: weekly
+    groups:
+      docs-site:
+        update-types: [minor, patch]
   - package-ecosystem: github-actions
     directory: /
     schedule:

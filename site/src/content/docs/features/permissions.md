@@ -196,7 +196,7 @@ Rein splits a command on `&&`, `||`, `;`, `|` and newlines (outside quotes) and 
 
 - **Allow** only if *every* part is allowed. With `shell(npm test:*)` allowed, `npm test && rm -rf build` still asks.
 - **Deny** if *any* part is denied. With `shell(git push:*)` denied, `git commit -m x && git push` is refused.
-- Commands containing `$( … )`, backticks, `<( … )` or `>( … )` can't be vetted, so allow rules never match them and **deny rules don't match them either**. They fall through to your approval mode: a prompt in `ask` mode, the judge in `auto` mode. In `bypass` mode they run.
+- Commands containing `$( … )`, backticks, `<( … )` or `>( … )` can't be vetted, so allow rules never match them, and **neither do deny rules with a pattern** (a bare `shell` deny still blocks them, because it blocks every command). They fall through to your approval mode: a prompt in `ask` mode, the judge in `auto` mode. In `bypass` mode they run.
 
 :::caution[Rules are a guardrail, not a sandbox]
 Matching is on the literal start of each simple command. `shell(rm:*)` doesn't match `sudo rm …`, `/bin/rm …`, `env rm …` or `rm $(…)`. If something must never happen, keep `bypass` off, and consider a bare `"deny": ["shell"]` or a [PreToolUse hook](../hooks/) that inspects the command properly.
