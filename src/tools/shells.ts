@@ -22,7 +22,45 @@ export type Shell = {
   origin?: {agentId: number; name: string};
   /** Ran inside the OS sandbox (see sandbox.ts). */
   sandboxed?: boolean;
+  /** Runs in a pseudo-terminal (interactive: true): it can ask questions, the user can answer. */
+  tty?: boolean;
+  /** A terminal command that looks like it's waiting for the user (see waitingForInput). */
+  waiting?: boolean;
+  /** Stopped because it waited for input and nobody could answer (headless). */
+  noUser?: boolean;
 };
+
+/** A running pseudo-terminal: node-pty when it loads, else `script` over pipes. */
+type Term = {write(data: string): void; resize(cols: number, rows: number): void; raw: string; alt: boolean; quietTimer?: NodeJS.Timeout};
+
+/** Bytes of raw terminal output kept to repaint the screen when the user takes over. */
+const RAW_KEEP = 64 * 1024;
+/** No output for this long, and it looks like a prompt: the command is waiting for the user. */
+export const QUIET_MS = 1500;
+
+let ptyModule: typeof import('@lydell/node-pty') | null | undefined;
+async function loadPty(): Promise<typeof import('@lydell/node-pty') | null> {
+  if (ptyModule !== undefined) return ptyModule;
+  try {
+    ptyModule = process.env.REIN_NO_NODE_PTY ? null : await import('@lydell/node-pty');
+  } catch {
+    ptyModule = null;
+  }
+  return ptyModule;
+}
+/** Load node-pty ahead of the first interactive command (it's an optional native dependency). */
+export const preloadPty = () => void loadPty();
+
+/**
+ * Does a quiet terminal look like it's waiting for the user? A full-screen program (alternate
+ * screen), a cursor left at the end of an unfinished line (`Name: `), or a last line that reads like
+ * a question. A slow build that's just quiet isn't.
+ */
+export function waitingForInput(lastLine: string, partial: string, alt: boolean): boolean {
+  if (alt) return true;
+  if (partial.trim()) return true;
+  return /(\?|:|>|\]|\)|\(y\/n\)|\[y\/n\]|password|passphrase|continue)\s*$/i.test(lastLine.trim());
+}
 
 const MAX_LINES = 5000;
 const MAX_LINE_CHARS = 2000;
@@ -52,7 +90,13 @@ export const DEFAULT_TIMEOUT_MS = 120_000;
 export class ShellManager extends EventEmitter {
   private nextId = 1;
   private shells = new Map<number, Shell>();
-  private procs = new Map<number, ChildProcess>();
+  private procs = new Map<number, ChildProcess | {pid: number}>();
+  private terms = new Map<number, Term>();
+  /**
+   * Someone can answer a terminal command's questions (the TUI sets it). Without a user (headless),
+   * a command that waits for input is stopped instead of hanging until its timeout.
+   */
+  interactiveUser = false;
   /** Unfinished last line per `${id}:out|err` (stdout and stderr interleave by line, never mid-line). */
   private partial = new Map<string, string>();
 
@@ -70,13 +114,14 @@ export class ShellManager extends EventEmitter {
 
   /** Start `command` with the user's shell in `cwd`. Resolves when it ends (foreground) or at once (background). */
   /** `maxMs`: the user's cap (0/undefined = none); the agent's `timeoutMs` is clamped to it. */
-  start(command: string, opts: {cwd: string; background: boolean; timeoutMs?: number; maxMs?: number; origin?: Shell['origin']; sandbox?: SandboxSpec}): {shell: Shell; done: Promise<Shell>} {
+  start(command: string, opts: {cwd: string; background: boolean; timeoutMs?: number; maxMs?: number; origin?: Shell['origin']; sandbox?: SandboxSpec; tty?: boolean}): {shell: Shell; done: Promise<Shell>} {
     const shell: Shell = {id: this.nextId++, command, cwd: opts.cwd, background: opts.background, startedAt: Date.now(), status: 'running', lines: [], dropped: 0, origin: opts.origin};
     this.shells.set(shell.id, shell);
     const plain = shellFor(command);
     const boxed = wrap(plain, opts.sandbox);
     if (boxed) shell.sandboxed = true;
     const sh = boxed ?? plain;
+    if (opts.tty && !isWindows) return this.startTty(shell, sh, opts);
     const child = spawn(sh.file, sh.args, {
       cwd: opts.cwd,
       env: {...process.env, FORCE_COLOR: '0', CI: process.env.CI ?? '1', PAGER: 'cat', GIT_PAGER: 'cat'},
@@ -112,6 +157,134 @@ export class ShellManager extends EventEmitter {
     if (!opts.background) this.emit('foreground', shell);
     this.emit('change', shell);
     return {shell, done};
+  }
+
+  /**
+   * A command in a pseudo-terminal. Its environment looks like a person's terminal (no CI=1, which
+   * makes tools skip the very prompts this is for). Output goes to the same bounded lines as any
+   * command, plus the last RAW_KEEP bytes as they came, to repaint the screen when the user takes
+   * over. When it goes quiet looking like a prompt, `waiting` is set and `input` emitted.
+   */
+  private startTty(shell: Shell, sh: {file: string; args: string[]}, opts: {cwd: string; background: boolean; timeoutMs?: number; maxMs?: number}): {shell: Shell; done: Promise<Shell>} {
+    shell.tty = true;
+    const {CI: _ci, FORCE_COLOR: _fc, NO_COLOR: _nc, ...base} = process.env;
+    const env = {...base, TERM: 'xterm-256color', PAGER: 'cat', GIT_PAGER: 'cat'} as Record<string, string>;
+    const cols = process.stdout.columns || 100;
+    const rows = process.stdout.rows || 30;
+    const term: Term = {write: () => {}, resize: () => {}, raw: '', alt: false};
+    this.terms.set(shell.id, term);
+    let resolveDone!: (s: Shell) => void;
+    const done = new Promise<Shell>((r) => (resolveDone = r));
+    const wanted = Math.max(1000, opts.timeoutMs ?? DEFAULT_TIMEOUT_MS);
+    const timeout = opts.background ? undefined : opts.maxMs ? Math.min(opts.maxMs, wanted) : wanted;
+    let timer: NodeJS.Timeout | undefined;
+    const finish = (code: number | null, err?: string) => {
+      if (shell.endedAt) return;
+      clearTimeout(timer);
+      clearTimeout(term.quietTimer);
+      this.flushPartial(shell);
+      if (err) shell.lines.push(`[failed to start: ${err}]`);
+      if (shell.status === 'running') shell.status = 'exited';
+      shell.waiting = false;
+      shell.exitCode = code;
+      shell.endedAt = Date.now();
+      this.procs.delete(shell.id);
+      this.terms.delete(shell.id);
+      this.trimFinished(shell);
+      this.emit('change', shell);
+      resolveDone(shell);
+    };
+    const onData = (d: string) => {
+      term.raw = (term.raw + d).slice(-RAW_KEEP);
+      // Full-screen programs switch to the alternate screen (vim, less, htop, fzf…).
+      const alt = d.lastIndexOf('\x1b[?1049h'), main = d.lastIndexOf('\x1b[?1049l');
+      if (alt >= 0 || main >= 0) term.alt = alt > main;
+      this.emit('data', shell, d);
+      this.append(shell, 'out', d);
+      if (shell.waiting) {
+        shell.waiting = false;
+        this.emit('change', shell);
+      }
+      clearTimeout(term.quietTimer);
+      term.quietTimer = setTimeout(() => this.checkWaiting(shell, term), QUIET_MS);
+      term.quietTimer.unref?.();
+    };
+    void loadPty().then((pty) => {
+      if (shell.status !== 'running') return finish(null);
+      try {
+        if (pty) {
+          const p = pty.spawn(sh.file, sh.args, {name: 'xterm-256color', cols, rows, cwd: opts.cwd, env});
+          shell.pid = p.pid;
+          this.procs.set(shell.id, {pid: p.pid});
+          term.write = (data) => p.write(data);
+          term.resize = (c, r) => {
+            try {
+              p.resize(Math.max(20, c), Math.max(5, r));
+            } catch {}
+          };
+          p.onData(onData);
+          p.onExit(({exitCode}) => finish(exitCode));
+        } else {
+          // No node-pty: `script` gives the command a terminal; we talk to it over pipes.
+          // macOS script refuses a socket for stdin (Node's pipes are sockets): a FIFO via `< <(cat)` works.
+          const [file, args] =
+            process.platform === 'darwin'
+              ? ['/bin/bash', ['-c', 'exec script -q /dev/null "$@" < <(cat)', 'rein', sh.file, ...sh.args]]
+              : ['script', ['-qfec', [sh.file, ...sh.args].map(quote).join(' '), '/dev/null']];
+          const child = spawn(file, args as string[], {cwd: opts.cwd, env: {...env, COLUMNS: String(cols), LINES: String(rows)}, stdio: ['pipe', 'pipe', 'pipe'], detached: true});
+          shell.pid = child.pid;
+          this.procs.set(shell.id, child);
+          term.write = (data) => child.stdin?.write(data);
+          child.stdout?.on('data', (b: Buffer) => onData(b.toString()));
+          child.stderr?.on('data', (b: Buffer) => onData(b.toString()));
+          child.on('error', (e) => finish(null, e.message));
+          child.on('close', (code) => finish(code));
+        }
+      } catch (e) {
+        finish(null, (e as Error).message);
+      }
+      this.emit('change', shell);
+    });
+    timer = timeout ? setTimeout(() => this.kill(shell.id, 'timeout'), timeout) : undefined;
+    if (!opts.background) this.emit('foreground', shell);
+    this.emit('change', shell);
+    return {shell, done};
+  }
+
+  /** Quiet for QUIET_MS: is it waiting for the user? Without one (headless), stop it. */
+  private checkWaiting(shell: Shell, term: Term): void {
+    if (shell.status !== 'running') return;
+    const partial = this.partial.get(`${shell.id}:out`) ?? '';
+    const last = partial || shell.lines.at(-1) || '';
+    if (!waitingForInput(last, partial, term.alt)) return;
+    if (!this.interactiveUser) {
+      this.flushPartial(shell);
+      shell.lines.push('[it waited for input, and nobody can answer it here (no interactive user): stopped]');
+      shell.noUser = true;
+      this.kill(shell.id);
+      return;
+    }
+    shell.waiting = true;
+    this.emit('input', shell);
+    this.emit('change', shell);
+  }
+
+  /** Keystrokes from the user to a terminal command. */
+  write(id: number, data: string): boolean {
+    const term = this.terms.get(id);
+    if (!term) return false;
+    term.write(data);
+    return true;
+  }
+
+  /** The terminal's size changed (the user's window): full-screen programs redraw. */
+  resize(id: number, cols: number, rows: number): void {
+    this.terms.get(id)?.resize(cols, rows);
+  }
+
+  /** The recent raw output of a terminal command, to repaint its screen. */
+  screen(id: number): string {
+    return this.terms.get(id)?.raw ?? '';
   }
 
   kill(id: number, reason: 'killed' | 'timeout' = 'killed'): boolean {
@@ -197,6 +370,8 @@ export class ShellManager extends EventEmitter {
     }
   }
 }
+
+const quote = (s: string) => (/^[\w@%+=:,./-]+$/.test(s) ? s : `'${s.replace(/'/g, `'\\''`)}'`);
 
 export function shellStatusText(s: Shell, now = Date.now()): string {
   const secs = Math.round(((s.endedAt ?? now) - s.startedAt) / 1000);

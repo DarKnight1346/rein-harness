@@ -213,6 +213,7 @@ With `--permission-mode ask` the reviewer can read the checkout, search it and r
 - **MCP servers connect in the background**, so a very short run can finish before a slow server's tools show up. Project servers from `.mcp.json` only connect once approved (`enabledMcpjsonServers` in `.rein/settings.local.json`).
 - **Subagents' approval requests are denied too.** Give the rules they need with `--allowedTools`.
 - **Plan mode writes one file:** the plan in `.rein/plans/`.
+- **Nobody can answer a command's questions.** A command the agent runs with `interactive: true` still gets a terminal, but if it waits for input it's stopped after a couple of seconds and the agent is told nobody can answer.
 
 ## Related
 

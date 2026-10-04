@@ -38,7 +38,7 @@ function ForegroundTail() {
   return (
     <Box flexDirection="column" paddingLeft={2}>
       <Text color="yellow" wrap="truncate">
-        $ {s.command} <Text dimColor>· {shellStatusText(s)} · esc interrupts</Text>
+        $ {s.command} <Text dimColor>· {shellStatusText(s)}{s.tty ? (s.waiting ? ' · waiting for you: ctrl+] to answer' : ' · ctrl+] to type into it') : ''} · esc interrupts</Text>
       </Text>
       {s.lines.slice(-8).map((l, i) => (
         <Text key={i} dimColor wrap="truncate">

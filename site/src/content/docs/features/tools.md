@@ -48,7 +48,7 @@ File changes show up in the transcript as a colored diff.
 
 | Tool | What it does |
 |---|---|
-| `shell` | Runs a command, in the foreground (waits) or with `background: true`. |
+| `shell` | Runs a command, in the foreground (waits) or with `background: true`. With `interactive: true` it gets a terminal you can type into when it asks something. |
 | `shell_logs` | Reads a shell's recent output, or lists all shells. |
 | `shell_kill` | Stops a shell and everything it started. |
 
@@ -154,10 +154,18 @@ Confinement applies to the **file tools** and to the shell's working directory. 
 
 Every command runs:
 
-- with **no stdin and no TTY**, so interactive prompts fail fast (the agent is told to pass `--yes`-style flags);
+- with **no stdin and no TTY**, so prompts fail fast and the agent reaches for `--yes`-style flags first (unless it asked for a terminal, below);
 - with `CI=1` (unless you already set `CI`), `PAGER=cat`, `GIT_PAGER=cat` and `FORCE_COLOR=0`;
 - with ANSI codes stripped and `\r` progress bars collapsed to their final state, keeping the last 5000 lines while it runs and the last 2000 once it ends (only the 50 most recent finished commands keep output). Output that never sends a newline, like a firmware console or a spinner, is cut into lines so it can't grow without bound;
 - in its own process group, so stopping it takes down its children. Stopping sends SIGTERM, then SIGKILL after 3 seconds.
+
+### Commands that need you
+
+Some commands can't run without a person: a login, an SSH passphrase, an installer with no flag for its choices, `git rebase -i`. For those the agent sets `interactive: true` (and when a command fails with "not a tty" or similar, Rein suggests it). The command then runs in a real terminal (a pseudo-terminal, without `CI=1`, so tools ask their questions instead of skipping them).
+
+If it never asks anything, you never see a difference. If it goes quiet looking like it's waiting for you (an unfinished `Name: ` line, a question, `(y/n)`, a password prompt, or a full-screen program like `vim` or `less`), **Rein hands you the terminal**: the screen shows the command, your keys go straight to it (Esc and Ctrl+C included), and colors and full-screen programs work as in any terminal. A bar at the top says what's waiting. When the command ends, Rein's screen comes back and the agent gets the output. **Ctrl+]** returns to Rein early while the command keeps running, and pressing it again in Rein reopens the command. This works for subagents' commands too; the bar names the subagent.
+
+With nobody there to answer ([headless runs](../headless/)), a command that waits for input is stopped after a moment instead of hanging until its timeout, and the agent is told why.
 
 Pressing Esc or Ctrl+C to interrupt the agent also kills its foreground command. Background shells keep running until stopped or until you quit Rein.
 

@@ -16,6 +16,8 @@ import {incompatibleMessage} from '../providers/codex/compat.js';
 import {sandboxBackend} from '../tools/sandbox.js';
 import {findIdes} from '../ide/connection.js';
 import {diffTabName, proposedChange} from '../ide/review.js';
+import {takeOver} from './terminal/takeover.js';
+import {preloadPty} from '../tools/shells.js';
 import {loadPlugins} from '../plugins/index.js';
 import {conversationMarkdown, writeExport} from '../session/export.js';
 import {copyToClipboard} from './terminal/clipboard.js';
@@ -223,6 +225,39 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
     setExitArmed(true);
     clearTimeout(exitTimer.current);
     exitTimer.current = setTimeout(() => setExitArmed(false), 2000);
+  });
+
+  // Interactive commands (shell interactive: true): when one waits for the user, it gets the real
+  // terminal until it exits or the user presses Ctrl+] (which also reopens it). See takeover.ts.
+  const takeoverEnd = useRef<(() => void) | undefined>(undefined);
+  const openTerminal = useCallback(
+    (shell: Shell) => {
+      if (takeoverEnd.current || shell.background || !shell.tty || shell.status !== 'running') return;
+      takeoverEnd.current = takeOver(runtime.tools.shells, shell, {
+        fullscreen: windowed,
+        label: shell.origin?.name,
+        onEnd: (reason) => {
+          takeoverEnd.current = undefined;
+          if (reason === 'detach' && shell.status === 'running') log('info', `$ ${shell.command} is still running · ctrl+] to type into it again`);
+        },
+      });
+    },
+    [windowed, log],
+  );
+  useEffect(() => {
+    const shells = runtime.tools.shells;
+    shells.interactiveUser = true;
+    preloadPty();
+    shells.on('input', openTerminal);
+    return () => {
+      shells.off('input', openTerminal);
+      takeoverEnd.current?.();
+    };
+  }, [openTerminal]);
+  useInput((input, key) => {
+    if (!(input === '\x1d' || (key.ctrl && input === ']'))) return;
+    const s = runtime.tools.shells.running({background: false}).find((x) => x.tty);
+    if (s) openTerminal(s);
   });
 
   // File changes and commands ask the user through an approval overlay. Several agents can ask at

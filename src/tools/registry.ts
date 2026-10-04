@@ -142,7 +142,7 @@ export const TOOLS: ToolDef[] = [
       `Run a shell command in the project (${shellFor('').kind === 'powershell' ? 'PowerShell' : `${path.basename(shellFor('').file)} -c`}). Foreground (default) waits and returns the output and exit code; ` +
       `the user watches it live. Timeout ${DEFAULT_TIMEOUT_MS / 1000}s by default; raise it with timeout_ms for long builds/tests (capped by the user's limit, 120 min by default). ` +
       'Use background: true for long-running processes (dev servers, watchers): it returns an id at once; read output with shell_logs and stop it with shell_kill. ' +
-      'No stdin/TTY: interactive commands will fail — pass flags like --yes instead. ' +
+      'Commands get no terminal by default: prefer non-interactive flags (--yes, -y, --no-input). When a command really needs a terminal or asks questions only a person can answer (a login, a passphrase, an installer with no flag for its choices, git rebase -i), set interactive: true: it runs in a terminal, and if it waits for input the user answers it in their terminal, then the output comes back to you. ' +
       "Commands run in Rein's OS sandbox unless the user turned it off: writes only inside the project, its working directories, the scratchpad, temp folders and package caches (git hooks/config and agent/editor settings stay read-only; strict mode also blocks the network). " +
       'If a command genuinely needs to run outside it, set unsandboxed: true — the user is always asked.',
     inputSchema: {
@@ -153,12 +153,13 @@ export const TOOLS: ToolDef[] = [
         timeout_ms: {type: 'integer', description: `Foreground timeout in ms (default ${DEFAULT_TIMEOUT_MS})`},
         cwd: str('Working directory relative to the project root (default: root)'),
         unsandboxed: {type: 'boolean', description: "Run outside Rein's sandbox (always asks the user). Only when the sandbox blocked something the command really needs."},
+        interactive: {type: 'boolean', description: 'Run in a terminal the user can type into when it asks for input (foreground only). Use only when non-interactive flags are not an option.'},
       },
       required: ['command'],
     },
     mutating: true,
     run: shellTool,
-    summarize: (a) => `${a?.background ? '&' : '$'} ${String(a?.command ?? '').replace(/\s+/g, ' ').slice(0, 80)}`,
+    summarize: (a) => `${a?.background ? '&' : '$'} ${String(a?.command ?? '').replace(/\s+/g, ' ').slice(0, 80)}${a?.interactive ? ' (interactive)' : ''}`,
   },
   {
     name: 'shell_logs',
@@ -223,13 +224,17 @@ TOOLS.push(
 
 const MAX_SHELL_OUTPUT = 30_000;
 
-async function shellTool(ctx: ToolContext, args: {command: string; background?: boolean; timeout_ms?: number; cwd?: string; unsandboxed?: boolean}): Promise<ToolResult> {
+/** Output of a command that failed for want of a terminal. */
+export const needsTerminal = (out: string) => /not a tty|not a terminal|inappropriate ioctl|must be run (from|in) a terminal|requires a tty|no tty present|input device is not a TTY|interactive mode requires|cannot prompt|unable to prompt|stdin is not interactive/i.test(out);
+
+async function shellTool(ctx: ToolContext, args: {command: string; background?: boolean; timeout_ms?: number; cwd?: string; unsandboxed?: boolean; interactive?: boolean}): Promise<ToolResult> {
   if (!ctx.shells) throw new ToolError('shell is not available');
   if (typeof args?.command !== 'string' || !args.command.trim()) throw new ToolError('command is required');
+  if (args.interactive && args.background) throw new ToolError('interactive commands run in the foreground (the user may need to answer them): drop background');
   const cwd = resolveInRoot(ctx, args.cwd ?? '.');
   // The sandbox may write to the project and every working directory (subagent worktrees included).
   const sandbox: SandboxSpec | undefined = ctx.sandbox && ctx.sandbox !== 'off' && !args.unsandboxed ? {mode: ctx.sandbox, roots: [ctx.root, ...(ctx.extraRoots ?? [])]} : undefined;
-  const {shell, done} = ctx.shells.start(args.command, {cwd, background: !!args.background, timeoutMs: args.timeout_ms, maxMs: ctx.shellMaxMs, origin: ctx.origin, sandbox});
+  const {shell, done} = ctx.shells.start(args.command, {cwd, background: !!args.background, timeoutMs: args.timeout_ms, maxMs: ctx.shellMaxMs, origin: ctx.origin, sandbox, tty: !!args.interactive});
   if (args.background) {
     return {ok: true, text: `Started background shell #${shell.id}${shell.pid ? ` (pid ${shell.pid})` : ''}: ${args.command}\nRead its output with shell_logs {id: ${shell.id}}; stop it with shell_kill {id: ${shell.id}}.`};
   }
@@ -237,9 +242,10 @@ async function shellTool(ctx: ToolContext, args: {command: string; background?: 
   let out = ctx.shells.tail(s, 2000);
   if (out.length > MAX_SHELL_OUTPUT) out = '[… output truncated]\n' + out.slice(-MAX_SHELL_OUTPUT);
   const ok = s.status === 'exited' && s.exitCode === 0;
-  const status = s.status === 'killed' ? 'killed (interrupted by the user)' : shellStatusText(s);
+  const status = s.status === 'killed' ? (s.noUser ? `stopped after ${Math.round(((s.endedAt ?? Date.now()) - s.startedAt) / 1000)}s: waiting for input nobody can give` : 'killed (interrupted by the user)') : shellStatusText(s);
   const note = !ok && sandbox && s.sandboxed ? denialNote(out, sandbox) : undefined;
-  return {ok, text: `[${status}]\n${out || '(no output)'}${note ? `\n\n${note}` : ''}`};
+  const ttyNote = !ok && !args.interactive && needsTerminal(out) ? '\n\n<terminal_note>This command wanted a terminal. Look for a non-interactive flag first; if there is none, run it again with interactive: true (the user can answer it).</terminal_note>' : '';
+  return {ok, text: `[${status}]\n${out || '(no output)'}${note ? `\n\n${note}` : ''}${ttyNote}`};
 }
 
 export const toolByName = (name: string) => TOOLS.find((t) => t.name === name);
