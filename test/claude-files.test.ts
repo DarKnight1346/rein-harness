@@ -19,11 +19,11 @@ beforeEach(() => {
 
 describe('Claude Code custom commands', () => {
   it('loads .claude/commands as slash commands, sub-folders included', () => {
-    put('.claude/commands/review.md', '---\ndescription: Review the diff\nargument-hint: [file]\n---\nReview $ARGUMENTS carefully.');
+    put('.claude/commands/lint-diff.md', '---\ndescription: Lint the diff\nargument-hint: [file]\n---\nLint $ARGUMENTS carefully.');
     put('.claude/commands/frontend/component.md', 'Create a component named $1 in $2.');
     const skills = loadSkills(root);
-    const review = skills.find((s) => s.name === 'review')!;
-    expect(review).toMatchObject({source: 'claude-project', description: 'Review the diff (project)', argumentHint: '[file]'});
+    const review = skills.find((s) => s.name === 'lint-diff')!;
+    expect(review).toMatchObject({source: 'claude-project', description: 'Lint the diff (project)', argumentHint: '[file]'});
     expect(skills.find((s) => s.name === 'component')!.description).toBe('Create a component named $1 in $2. (project:frontend)');
   });
 
