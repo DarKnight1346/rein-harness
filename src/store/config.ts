@@ -64,6 +64,8 @@ export type Config = {
   autoCompactPct: number;
   /** Pinned Jev model id (keeps thresholds calibrated). */
   jevModel: string;
+  /** Get your attention when Rein needs you or finished a long task: terminal bell + OSC 9, also a desktop notification, or off. */
+  notifications: 'terminal' | 'system' | 'off';
 };
 
 export const DEFAULT_CONFIG: Config = {
@@ -88,6 +90,7 @@ export const DEFAULT_CONFIG: Config = {
   subagentLimit: 10,
   goalMaxRounds: 0,
   jevModel: 'jev-1.13.0',
+  notifications: 'terminal',
 };
 
 export async function loadConfig(): Promise<Config> {

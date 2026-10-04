@@ -200,7 +200,7 @@ To see real emails and paths, go to `/configure → Privacy` (or set `hidePerson
 
 ## /configure
 
-`/configure` opens a window with ten tabs (`/config` and `/settings` also work). Changes save to `~/.rein/config.json` right away, and the bar and sidebar behind the window update as you toggle. `←→` or `Tab` switches tabs, `Enter`, `Space` or a click chooses, and `Esc` closes.
+`/configure` opens a window with eleven tabs (`/config` and `/settings` also work). Changes save to `~/.rein/config.json` right away, and the bar and sidebar behind the window update as you toggle. `←→` or `Tab` switches tabs, `Enter`, `Space` or a click chooses, and `Esc` closes.
 
 | Tab | Options (default in bold) | Config key |
 |---|---|---|
@@ -211,6 +211,7 @@ To see real emails and paths, go to `/configure → Privacy` (or set `hidePerson
 | **Subagents** | How many may run at once: 1, 2, 3, 5, **10**, 20 | `subagentLimit` |
 | **Goals** | Automatic continuations before a `/goal` pauses itself: **Unlimited**, 10, 25, 50, 100, 250 | `goalMaxRounds` |
 | **Load balancing** | **Balanced** (cache-aware) · Sticky (stay on one account until it hits a limit) | `loadBalancing` |
+| **Notifications** | **Terminal** (bell + terminal notification) · Desktop (also macOS / Linux notifications) · Off. Fires when Rein needs you (approval, question, plan, hook trust) and when work that took 20 s or more finishes | `notifications` |
 | **Updates** | **Auto-update Rein** on launch · Only when I run `/update` | `autoUpdate` |
 | **Privacy** | **Hide personal info** · Show emails and paths | `hidePersonalInfo` |
 | **Compaction** | Auto-compact at 50, 60, 70, **80**, 90 or 95% of the context window, or Off (only `/compact`, or when a model rejects a full context) | `autoCompactPct` |

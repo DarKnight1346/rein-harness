@@ -11,6 +11,7 @@ import {catalog} from '../router/catalog.js';
 import {subagentContextReport, contextReport, type ContextReport} from '../session/context.js';
 import {compactableCount} from '../session/compactor.js';
 import {onUntrustedHooks, trustProjectHooks, type ProjectHooks} from '../hooks.js';
+import {notify} from './terminal/notify.js';
 import {editExternally} from './terminal/editor.js';
 import {addHistory, HistoryCursor, loadHistory} from '../store/history.js';
 import {askBtwSubagent, btw} from '../session/btw.js';
@@ -39,6 +40,9 @@ export const VERSION = reinVersion();
 
 /** Queue marker: deliver a finished background subagent's report (if still uncollected). */
 const DELIVER = '\u0000deliver-agent:';
+
+/** Work shorter than this finishes without a notification (you're probably still watching). */
+const NOTIFY_AFTER_MS = 20_000;
 
 export type Overlay =
   | {name: 'none'}
@@ -417,6 +421,34 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
         setGoalNote(undefined);
       });
   }, [chat.busy, queued.length, overlay.name, ready, statusTick]);
+  // Notifications: when Rein needs you (approval, question, plan, hook trust), and when work that
+  // took a while is finished (the goal loop and queued messages included, not each of its turns).
+  useEffect(() => {
+    const mode = runtime.config.notifications;
+    if (overlay.name === 'approval') notify(mode, 'Rein needs your approval', `${overlay.req.tool.label}(${overlay.req.summary})`);
+    else if (overlay.name === 'ask') notify(mode, 'Rein has a question', overlay.questions[0]?.question ?? 'The agent is waiting for your answer');
+    else if (overlay.name === 'plan') notify(mode, 'Rein has a plan for you', overlay.plan.title);
+    else if (overlay.name === 'trust') notify(mode, 'Rein', "This project's hooks need your review");
+  }, [overlay.name]);
+  const working = chat.busy || !!goalNote || queued.length > 0 || !!compacting;
+  const workStarted = useRef<number | undefined>(undefined);
+  useEffect(() => {
+    if (working) {
+      workStarted.current ??= Date.now();
+      return;
+    }
+    const started = workStarted.current;
+    if (started === undefined) return;
+    // Idle for a moment (the goal loop starts its next step right after a turn ends).
+    const t = setTimeout(() => {
+      workStarted.current = undefined;
+      if (Date.now() - started < NOTIFY_AFTER_MS) return;
+      const g = runtime.goals.goal;
+      notify(runtime.config.notifications, 'Rein is done', g?.status === 'done' ? `Goal achieved: ${g.text}` : g?.status === 'paused' ? `Goal paused: ${g.text}` : 'Ready for your next message');
+    }, 1500);
+    return () => clearTimeout(t);
+  }, [working]);
+
   useEffect(() => {
     if (chat.busy || !queued.length) return;
     const [next, ...rest] = queued;
