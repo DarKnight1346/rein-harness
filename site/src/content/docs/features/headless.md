@@ -159,7 +159,7 @@ rein -p "bump the patch version and run the tests" \
 3. Jest dependencies and config removed
 ```
 
-In `text` mode the plan is printed after the agent's reply. In `json` mode it replaces `result`. Nothing in the project changes. Your configured approval mode still governs commands that aren't on the read-only list: they're denied, or refused outright under `bypass`. Start the saved plan later in the TUI with `/plan:goal`.
+In `text` mode the plan is printed after the agent's reply. In `json` mode it replaces `result`. Nothing in the project changes. Your configured approval mode still governs commands that aren't on the read-only list: they're denied, or refused outright under `bypass`. Start the saved plan later in the TUI with `/goal:plan`.
 
 ## Exit codes
 

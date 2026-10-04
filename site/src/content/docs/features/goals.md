@@ -114,7 +114,7 @@ status: paused · 7 continuations · 1 escalation
 
 ## Goals from a plan
 
-A goal can carry out a saved [plan](../plans/). Choose **Save & start as a goal** when a plan is presented, or run `/plan:goal` and pick an unfinished plan from `.rein/plans/` (or `✎ Start a new plan`):
+A goal can carry out a saved [plan](../plans/). Choose **Save & start as a goal** when a plan is presented, or run `/goal:plan` and pick an unfinished plan from `.rein/plans/` (or `✎ Start a new plan`):
 
 ```text title="Start a plan as a goal"
 Unfinished plans in .rein/plans/ (newest first):

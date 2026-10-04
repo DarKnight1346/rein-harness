@@ -146,7 +146,7 @@ Design, findings and status: [PLAN.md](PLAN.md). Tests: `npm test`. License: [MI
 - **Undo:** `/rewind` (or esc twice) restores files and/or the conversation to before one of your messages.
 - **Plan first:** `/plan <task>` (or `/plan:deep` for big, risky changes) — the agent explores read-only, asks you
   questions, then presents a plan with milestones. Save it and implement now, save it and start it as a goal
-  (milestones verified one by one, progress in the sidebar), or save it for later (`/plan:goal` starts a saved plan).
+  (milestones verified one by one, progress in the sidebar), or save it for later (`/goal:plan` starts a saved plan).
   Plans live in `.rein/plans/`. Shift+Tab toggles plan mode.
 - **Questions:** the agent can ask you multiple-choice questions (with your own answer as an option) mid-task.
 - **Tasks and effort:** the agent keeps a task list in the sidebar for multi-step work; pick an effort level (or

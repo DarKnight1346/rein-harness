@@ -43,7 +43,7 @@ In fullscreen, commands that show information open a window over the conversatio
 | | `pause` | The current turn finishes, then the agent stops working on the goal. |
 | | `resume` | Continues a paused goal. |
 | | `clear` | Removes the goal. |
-| `/plan:goal` | — | Starts a saved, unfinished plan from `.rein/plans/` as a goal, with milestones tracked in the sidebar. You can also start planning a new one from the same window, which puts `/plan ` in the input. |
+| `/goal:plan` | — | Starts a saved, unfinished plan from `.rein/plans/` as a goal, with milestones tracked in the sidebar. You can also start planning a new one from the same window, which puts `/plan ` in the input. **Alias: `/plan:goal`** (its old name). |
 
 See [Goals](../../features/goals/) and [Plan mode](../../features/plans/).
 

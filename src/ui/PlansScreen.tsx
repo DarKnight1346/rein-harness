@@ -4,7 +4,7 @@ import {progress, type SavedPlan} from '../plans/store.js';
 import {age} from './format.js';
 import {Clickable} from './terminal/clicks.js';
 
-/** /plan:goal: pick an unfinished saved plan to start as a goal, or start planning a new one. */
+/** /goal:plan: pick an unfinished saved plan to start as a goal, or start planning a new one. */
 export function PlansScreen({plans, onPick, onNew, onCancel}: {plans: SavedPlan[]; onPick(p: SavedPlan): void; onNew(): void; onCancel(): void}) {
   const [cursor, setCursor] = useState(0);
   const rows = plans.length + 1; // + "start a new plan"

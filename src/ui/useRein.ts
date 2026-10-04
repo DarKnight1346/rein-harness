@@ -329,7 +329,7 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
           plan,
           resolve: (d) => {
             setOverlay({name: 'none'});
-            log('info', {revise: 'Keep planning — type your feedback.', implement: 'Plan saved — implementing it now (plan mode off).', goal: '◎ Plan saved and started as a goal — milestones in the sidebar (plan mode off).', save: 'Plan saved to .rein/plans/ — start it any time with /plan:goal (plan mode off).'}[d]);
+            log('info', {revise: 'Keep planning — type your feedback.', implement: 'Plan saved — implementing it now (plan mode off).', goal: '◎ Plan saved and started as a goal — milestones in the sidebar (plan mode off).', save: 'Plan saved to .rein/plans/ — start it any time with /goal:plan (plan mode off).'}[d]);
             bump();
             resolve(d);
           },
@@ -688,7 +688,7 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
       return;
     }
     // In fullscreen, commands that open a window don't echo into the history.
-    const opensWindow = ['plan:goal', 'login', 'usage', 'context', 'help', 'update', 'configure', 'shells', 'btw', 'resume', 'agents', 'agent'].includes(parsed.name) || (parsed.name === 'model' && !parsed.args);
+    const opensWindow = ['goal:plan', 'login', 'usage', 'context', 'help', 'update', 'configure', 'shells', 'btw', 'resume', 'agents', 'agent'].includes(parsed.name) || (parsed.name === 'model' && !parsed.args);
     if (!(windowed && opensWindow)) log('user', raw.trim());
     switch (parsed.name) {
       case 'mcp':
@@ -746,7 +746,7 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
         }
         break;
       }
-      case 'plan:goal': {
+      case 'goal:plan': {
         const plans = listPlans(process.cwd()).filter((p) => !p.complete);
         setOverlay({name: 'plans', plans});
         break;
@@ -1114,7 +1114,7 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
     return () => clearInterval(timer);
   }, [contextOpen, viewing]);
 
-  /** /plan:goal → a saved plan: make it the goal and start working on it. */
+  /** /goal:plan → a saved plan: make it the goal and start working on it. */
   const startPlanGoal = (p: SavedPlan) => {
     setOverlay({name: 'none'});
     if (viewing) setView('main');
@@ -1124,7 +1124,7 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
     if (chat.busy) setQueued((q) => [...q, kick]);
     else void chat.send(kick).then(bump);
   };
-  /** /plan:goal → "start a new plan": put /plan in the input for the task description. */
+  /** /goal:plan → "start a new plan": put /plan in the input for the task description. */
   const startNewPlan = () => {
     setOverlay({name: 'none'});
     prevDraft.current = '/plan ';

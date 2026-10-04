@@ -7,7 +7,7 @@ import {Clickable} from './terminal/clicks.js';
 const OPTIONS: [PlanDecision, string][] = [
   ['implement', '1 Save & implement now'],
   ['goal', '2 Save & start as a goal — tracked milestones, verified as it goes'],
-  ['save', '3 Save only — start it later with /plan:goal'],
+  ['save', '3 Save only — start it later with /goal:plan'],
   ['revise', '4 Keep planning — I\'ll give feedback'],
 ];
 
