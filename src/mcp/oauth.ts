@@ -1,4 +1,4 @@
-import {createHash, randomBytes} from 'node:crypto';
+import {randomBytes} from 'node:crypto';
 import {readFileSync} from 'node:fs';
 import {createServer, type Server as HttpServer} from 'node:http';
 import type {AddressInfo} from 'node:net';
@@ -11,15 +11,15 @@ import {reinHome} from '../store/paths.js';
 /**
  * OAuth for remote MCP servers (Linear, Notion, Atlassian, Sentry, GitHub's hosted server…), per
  * the MCP authorization spec: dynamic client registration + authorization code with PKCE, handled
- * by the MCP SDK. Rein supplies storage (`~/.rein/mcp-auth/<hash of url>.json`, owner-only) and the
+ * by the MCP SDK. Rein supplies storage (`~/.rein/mcp-auth/<host>_<path>.json`, owner-only) and the
  * browser round trip: a one-shot callback server on 127.0.0.1. Signing in is always the user's
  * action (/mcp); background connects never open a browser.
  */
 type Stored = {client?: OAuthClientInformationMixed; tokens?: OAuthTokens; verifier?: string; port?: number};
 
 /**
- * The token file for a server: named after where the server is (protocol, host, path), never after
- * credentials or query parameters a URL might carry. A filename, not a secret: any hash would do.
+ * Where a server is (protocol, host, path), without credentials or query parameters a URL might
+ * carry: the identity its tokens are stored under.
  */
 export function serverKey(url: string): string {
   try {
@@ -29,7 +29,8 @@ export function serverKey(url: string): string {
     return url.split(/[?#]/)[0]!.replace(/\/\/[^/@]*@/, '//');
   }
 }
-const authFile = (url: string) => path.join(reinHome(), 'mcp-auth', `${createHash('sha256').update(serverKey(url)).digest('hex').slice(0, 24)}.json`);
+/** `~/.rein/mcp-auth/mcp.linear.app_mcp.json`: readable, so it's clear which file signs you out. */
+const authFile = (url: string) => path.join(reinHome(), 'mcp-auth', `${serverKey(url).replace(/^[a-z]+:\/\//, '').replace(/[^A-Za-z0-9.-]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 120) || 'server'}.json`);
 
 export class ReinOAuthProvider implements OAuthClientProvider {
   private data: Stored;
