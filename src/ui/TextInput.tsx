@@ -1,7 +1,23 @@
 import React, {useRef, useState} from 'react';
 import {Box, Text, useInput, usePaste} from 'ink';
-import wrapAnsi from 'wrap-ansi';
-import {TRAILING_TOKEN_RE} from './attachments.js';
+import {
+  backspace,
+  cursorRow,
+  del,
+  deleteWordBefore,
+  insert,
+  killAfter,
+  killBefore,
+  layout,
+  left,
+  lineEnd,
+  lineStart,
+  right,
+  vertical,
+  wordLeft,
+  wordRight,
+  type EditState,
+} from './inputEdit.js';
 
 type Props = {
   placeholder?: string;
@@ -17,83 +33,115 @@ type Props = {
   onPaste?(text: string): string | Promise<string>;
   /** Ctrl+V → an `[Image #n]` placeholder for the clipboard's image, if any. */
   onImagePaste?(): Promise<string | undefined>;
+  /**
+   * ↑ on the first row / ↓ on the last: an earlier (-1) or later (1) message to put in the input,
+   * or undefined to stay. Off while a suggestion list uses the arrows.
+   */
+  onHistory?(dir: -1 | 1, current: string): string | undefined;
+  /** Ctrl+G: edit the draft in $EDITOR; returns the edited text (undefined = keep the draft). */
+  onExternalEdit?(current: string): string | undefined;
   /** Columns available: text word-wraps to fit (instead of running off-screen). */
   width?: number;
-  /** With width: show at most this many lines (the last ones, where the cursor is). */
+  /** With width: show at most this many lines (around the cursor). */
   maxLines?: number;
 };
 
-/** The input as displayed: word-wrapped to `width`, with room for the cursor after the last character. */
+/** The input as displayed, word-wrapped to `width` (one extra row when the cursor needs it). */
 export function wrapInput(value: string, width: number): string[] {
-  const w = Math.max(1, width);
-  return wrapAnsi(`${value} `, w, {hard: true, trim: false, wordWrap: true})
-    .split('\n')
-    .map((l) => (l.length > w && l.endsWith(' ') ? l.slice(0, w) : l));
+  const rows = layout(value, width);
+  const lines = rows.map((r) => value.slice(r.start, r.end));
+  return cursorRow(value, rows, value.length, width).row >= rows.length ? [...lines, ''] : lines;
 }
 
 /**
- * Minimal input; kept tiny on purpose since it lives in the dynamic region.
+ * The input box. Kept small on purpose since it lives in the dynamic region, but a real line editor:
+ * ←/→ (Option/Alt for words), Home/End and Ctrl+A/E, Backspace/Delete, Ctrl+W / Option+Backspace
+ * (word), Ctrl+U / Ctrl+K (to line start / end), ↑/↓ across rows and through message history,
+ * Ctrl+G to edit the draft in $EDITOR.
  * New line (Claude Code conventions): Shift+Enter where the terminal reports it (kitty keyboard
- * protocol), Option/Meta+Enter, Ctrl+J, or `\` then Enter. Plain Enter submits. Pasted text keeps
- * its newlines.
+ * protocol), Option/Meta+Enter, Ctrl+J, or `\` then Enter. Plain Enter submits.
  */
-export function TextInput({placeholder = '', mask = false, isActive = true, value: controlled, onChange, onSubmit, onCancel, onPaste, onImagePaste, width, maxLines}: Props) {
+export function TextInput({placeholder = '', mask = false, isActive = true, value: controlled, onChange, onSubmit, onCancel, onPaste, onImagePaste, onHistory, onExternalEdit, width, maxLines}: Props) {
   const [own, setOwn] = useState('');
   const value = controlled ?? own;
-  // Keystrokes can arrive faster than re-renders; always edit the latest value.
-  const latest = useRef(value);
-  latest.current = value;
-  const set = (v: string) => {
-    latest.current = v;
-    if (controlled === undefined) setOwn(v);
-    onChange?.(v);
+  // Keystrokes can arrive faster than re-renders; always edit the latest state.
+  const state = useRef<EditState>({value, cursor: value.length});
+  // A value changed from outside (autocomplete, history, /rewind): the cursor goes to its end.
+  if (state.current.value !== value) state.current = {value, cursor: value.length};
+  const [, setCursor] = useState(0);
+  const apply = (next: EditState) => {
+    const changed = next.value !== state.current.value;
+    state.current = next;
+    setCursor(next.cursor);
+    if (!changed) return;
+    if (controlled === undefined) setOwn(next.value);
+    onChange?.(next.value);
   };
-
-  const append = (s: string) => set(latest.current + s);
+  const replace = (v: string) => apply({value: v, cursor: v.length});
+  const add = (text: string) => apply(insert(state.current, text));
+  const cols = width ?? Number.MAX_SAFE_INTEGER;
 
   usePaste(
     (text) => {
       const plain = text.replace(/\r\n?/g, '\n');
-      if (!onPaste) return append(plain);
-      void Promise.resolve(onPaste(plain)).then(append, () => append(plain));
+      if (!onPaste) return add(plain);
+      void Promise.resolve(onPaste(plain)).then(add, () => add(plain));
     },
     {isActive},
   );
 
   useInput(
     (input, key) => {
+      const s = state.current;
       if (key.ctrl && input === 'v' && onImagePaste) {
-        void onImagePaste().then((token) => token && append(token));
+        void onImagePaste().then((token) => token && add(token));
         return;
       }
-      if (key.return && (key.shift || key.meta)) {
-        set(latest.current + '\n');
-      } else if (input === '\n' && !key.return) {
-        set(latest.current + '\n'); // Ctrl+J
-      } else if (key.return) {
-        const v = latest.current;
-        if (v.endsWith('\\')) {
-          set(v.slice(0, -1) + '\n'); // backslash-Enter: works in every terminal
+      if (key.ctrl && input === 'g' && onExternalEdit) {
+        const edited = onExternalEdit(s.value);
+        if (edited !== undefined) replace(edited);
+        return;
+      }
+      if (key.return && (key.shift || key.meta)) add('\n');
+      else if (input === '\n' && !key.return) add('\n'); // Ctrl+J
+      else if (key.return) {
+        if (s.value[s.cursor - 1] === '\\') {
+          // backslash-Enter: a new line in every terminal
+          apply(insert({value: s.value.slice(0, s.cursor - 1) + s.value.slice(s.cursor), cursor: s.cursor - 1}, '\n'));
           return;
         }
-        set('');
+        const v = s.value;
+        replace('');
         onSubmit(v);
-      } else if (key.escape) {
-        onCancel?.();
-      } else if (key.backspace || key.delete) {
-        // A placeholder token is deleted whole (its attachment goes with it).
-        const token = TRAILING_TOKEN_RE.exec(latest.current);
-        set(token ? latest.current.slice(0, token.index) : latest.current.slice(0, -1));
-      } else if (key.ctrl && input === 'u') {
-        set('');
-      } else if (input && !key.ctrl && !key.meta && !key.upArrow && !key.downArrow && !key.tab) {
+      } else if (key.escape) onCancel?.();
+      else if (key.leftArrow) apply(key.meta || key.ctrl ? wordLeft(s) : left(s));
+      else if (key.rightArrow) apply(key.meta || key.ctrl ? wordRight(s) : right(s));
+      else if (key.home || (key.ctrl && input === 'a')) apply(lineStart(s));
+      else if (key.end || (key.ctrl && input === 'e')) apply(lineEnd(s));
+      else if (key.meta && input === 'b') apply(wordLeft(s)); // Option+← in Terminal.app / iTerm2
+      else if (key.meta && input === 'f') apply(wordRight(s));
+      else if (key.backspace) apply(key.meta ? deleteWordBefore(s) : backspace(s));
+      else if (key.delete) apply(del(s));
+      else if (key.ctrl && input === 'w') apply(deleteWordBefore(s));
+      else if (key.ctrl && input === 'u') apply(killBefore(s));
+      else if (key.ctrl && input === 'k') apply(killAfter(s));
+      else if (key.upArrow || key.downArrow) {
+        const dir = key.upArrow ? -1 : 1;
+        const moved = vertical(s, cols, dir);
+        if (moved) apply(moved);
+        else if (onHistory) {
+          const recalled = onHistory(dir, s.value);
+          if (recalled !== undefined) replace(recalled);
+        }
+      } else if (input && !key.ctrl && !key.meta && !key.tab) {
         // Pasted text arrives as one chunk; normalize line endings, keep the lines.
-        set(latest.current + input.replace(/\r\n?/g, '\n'));
+        add(input.replace(/\r\n?/g, '\n'));
       }
     },
     {isActive},
   );
 
+  const {cursor} = state.current;
   if (!value) {
     return (
       <Text wrap="truncate">
@@ -102,32 +150,48 @@ export function TextInput({placeholder = '', mask = false, isActive = true, valu
       </Text>
     );
   }
-  if (width && !mask) {
-    // Wrap ourselves so the caller can size the box to the line count; the cursor sits after the
-    // last character (the trailing space wrapInput leaves room for).
-    let lines = wrapInput(value, width);
-    if (maxLines && lines.length > maxLines) lines = lines.slice(-maxLines);
+  if (mask) {
+    return (
+      <Text>
+        {'•'.repeat(Math.min(value.length, 40))}
+        <Text inverse> </Text>
+      </Text>
+    );
+  }
+  if (width) {
+    // Wrap ourselves so the caller can size the box to the line count, and so the cursor can sit
+    // anywhere: the character under it shows inverted.
+    const rows = layout(value, width);
+    const at = cursorRow(value, rows, cursor, width);
+    const lines = rows.map((r) => ({text: value.slice(r.start, r.end), start: r.start}));
+    if (at.row >= lines.length) lines.push({text: '', start: value.length});
+    let first = 0;
+    if (maxLines && lines.length > maxLines) first = Math.min(Math.max(0, at.row - maxLines + 1), lines.length - maxLines);
+    const shown = maxLines ? lines.slice(first, first + maxLines) : lines;
     return (
       <Box flexDirection="column" width={width}>
-        {lines.map((l, i) =>
-          i < lines.length - 1 ? (
-            <Text key={i} wrap="truncate">
-              {l || ' '}
-            </Text>
-          ) : (
-            <Text key={i} wrap="truncate">
-              {l.slice(0, -1)}
-              <Text inverse> </Text>
-            </Text>
-          ),
-        )}
+        {shown.map((l, i) => (
+          <Text key={first + i} wrap="truncate">
+            {first + i === at.row ? withCursor(l.text, cursor - l.start) : l.text || ' '}
+          </Text>
+        ))}
       </Box>
     );
   }
+  return <Text>{withCursor(value, cursor)}</Text>;
+}
+
+/** `text` with the character at `index` shown inverted (a space when the cursor is at the end). */
+function withCursor(text: string, index: number): React.ReactNode {
+  const i = Math.max(0, Math.min(index, text.length));
+  const cp = text.codePointAt(i);
+  const len = cp !== undefined && cp > 0xffff ? 2 : 1;
+  const under = i < text.length && text[i] !== '\n' ? text.slice(i, i + len) : ' ';
   return (
-    <Text>
-      {mask ? '•'.repeat(Math.min(value.length, 40)) : value}
-      <Text inverse> </Text>
-    </Text>
+    <>
+      {text.slice(0, i)}
+      <Text inverse>{under}</Text>
+      {i < text.length ? text.slice(i + (under === ' ' && text[i] !== ' ' ? 0 : len)) : ''}
+    </>
   );
 }

@@ -10,6 +10,8 @@ import {listTranscripts, loadTranscript, type SessionInfo} from '../session/tran
 import {catalog} from '../router/catalog.js';
 import {subagentContextReport, contextReport, type ContextReport} from '../session/context.js';
 import {compactableCount} from '../session/compactor.js';
+import {editExternally} from './terminal/editor.js';
+import {addHistory, HistoryCursor, loadHistory} from '../store/history.js';
 import {askBtwSubagent, btw} from '../session/btw.js';
 import type {Transcript} from '../session/transcript.js';
 import type {AddEntry, Entry} from './entries.js';
@@ -408,6 +410,19 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
   // Pastes, images and dropped files shown as placeholders in the input; expanded on send.
   const attachments = useRef(new Attachments(() => nodePath.join(runtime.engine.scratch, 'images')));
   const onPaste = (text: string) => attachments.current.paste(text);
+  // ↑/↓ recall of earlier messages (per project, kept across sessions); off while a list uses the arrows.
+  const history = useRef(new HistoryCursor(loadHistory(process.cwd())));
+  const onExternalEdit = (current: string) => {
+    const edited = editExternally(current, opts.renderer === 'fullscreen');
+    if (edited === undefined) log('error', 'The editor exited with an error, so the draft is unchanged. Rein uses $VISUAL or $EDITOR (else vi).');
+    else prevDraft.current = edited;
+    return edited;
+  };
+  const onHistory = (dir: -1 | 1, current: string) => {
+    const recalled = history.current.move(dir, current);
+    if (recalled !== undefined) prevDraft.current = recalled;
+    return recalled;
+  };
   const onImagePaste = async () => {
     const token = await attachments.current.pasteClipboardImage();
     if (!token) log('info', 'No image on the clipboard (Ctrl+V pastes images; drag a file in to attach it).');
@@ -869,6 +884,8 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
     prevDraft.current = '';
     setDraft('');
     setSuggestIndex(0);
+    addHistory(process.cwd(), typed);
+    history.current.reset(loadHistory(process.cwd()));
     runCommand(typed);
   };
 
@@ -959,7 +976,7 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
 
   return {
     entries, add, log, overlay, setOverlay, closeOverlay, finishImport, ready, updating, updateLog, statusTick, bump,
-    startPlanGoal, startNewPlan, draft, onDraft, onSubmit, onPaste, onImagePaste, doRewind, togglePlanMode, fileSuggestions, fileSelected, acceptFile, runCommand, suggestions, selected, setSuggestIndex, inputActive, chat, skills, openShells, queued, exitArmed, compacting, pickSession,
+    startPlanGoal, startNewPlan, draft, onDraft, onSubmit, onPaste, onImagePaste, onHistory: suggestions.length || fileSuggestions.length ? undefined : onHistory, onExternalEdit, doRewind, togglePlanMode, fileSuggestions, fileSelected, acceptFile, runCommand, suggestions, selected, setSuggestIndex, inputActive, chat, skills, openShells, queued, exitArmed, compacting, pickSession,
     view, setView, viewing, goalNote,
   };
 }

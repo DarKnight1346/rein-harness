@@ -26,8 +26,16 @@ Rein follows Claude Code's conventions wherever it can: Esc interrupts, Esc twic
 | **Option+Enter** / **Alt+Enter** | New line. |
 | **Ctrl+J** | New line. |
 | **`\` then Enter** | New line, in every terminal. |
-| **Backspace** | Deletes a character. A placeholder token such as `[Pasted text #1 +42 lines]` or `[Image #1]` is deleted whole, attachment included. |
-| **Ctrl+U** | Clears the input. |
+| **← / →** | Move the cursor. Edits happen at the cursor, anywhere in the draft. |
+| **Option+← / →** (Alt, or Ctrl+← / →) | Move by word. |
+| **Home / End**, **Ctrl+A / Ctrl+E** | Start / end of the current line. |
+| **↑ / ↓** | Move between rows of a multi-line draft. On the first row, **↑** recalls your earlier messages in this project (kept across sessions); **↓** walks forward and back to your unsent draft. |
+| **Backspace** | Deletes the character before the cursor. A placeholder token such as `[Pasted text #1 +42 lines]` or `[Image #1]` right before the cursor is deleted whole, attachment included. |
+| **Delete** (fn+Delete) | Deletes the character under the cursor. |
+| **Ctrl+W** / **Option+Backspace** | Deletes the word before the cursor. |
+| **Ctrl+U** | Deletes from the start of the line to the cursor (on a one-line draft with the cursor at the end, that clears it). |
+| **Ctrl+K** | Deletes from the cursor to the end of the line. |
+| **Ctrl+G** | Opens the draft in your editor (`$VISUAL`, then `$EDITOR`, else `vi`; Notepad on Windows). Save and quit to bring the edited text back. |
 | **Ctrl+V** | Pastes an **image** from the clipboard as `[Image #1]`. Normal text paste uses your terminal's paste. |
 | **Paste** | Long pastes (more than 3 lines or 800 characters) collapse to `[Pasted text #1 +42 lines]`. |
 | **Drag a file onto the terminal** | Attaches it: images as `[Image #n]`, other files as `[File #n: name]`. |
