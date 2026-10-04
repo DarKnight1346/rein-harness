@@ -111,7 +111,7 @@ describe('isolated subagent tool calls', () => {
     expect(w.ok).toBe(true);
     expect(existsSync(path.join(repo, 'from-agent.txt'))).toBe(false); // not in the project yet
     expect(readFileSync(path.join(wts.get(3)!.root, 'from-agent.txt'), 'utf8')).toBe('hello\n');
-    const sh = await host.call('shell', {command: `echo more >> from-agent.txt && cat ${repo}/from-agent.txt`}, agent);
+    const sh = await host.call('shell', {command: `echo more >> from-agent.txt && cat '${repo}/from-agent.txt'`}, agent);
     expect(sh.text).toContain('more');
     // git works inside the sandboxed worktree (it writes the worktree's own index in the main .git).
     const st = await host.call('shell', {command: 'git add -A && git status --short'}, agent);
