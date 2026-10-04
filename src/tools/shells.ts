@@ -121,7 +121,7 @@ export class ShellManager extends EventEmitter {
     const boxed = wrap(plain, opts.sandbox);
     if (boxed) shell.sandboxed = true;
     const sh = boxed ?? plain;
-    if (opts.tty && !isWindows) return this.startTty(shell, sh, opts);
+    if (opts.tty) return this.startTty(shell, sh, opts);
     const child = spawn(sh.file, sh.args, {
       cwd: opts.cwd,
       env: {...process.env, FORCE_COLOR: '0', CI: process.env.CI ?? '1', PAGER: 'cat', GIT_PAGER: 'cat'},
@@ -165,8 +165,10 @@ export class ShellManager extends EventEmitter {
    * command, plus the last RAW_KEEP bytes as they came, to repaint the screen when the user takes
    * over. When it goes quiet looking like a prompt, `waiting` is set and `input` emitted.
    */
-  private startTty(shell: Shell, sh: {file: string; args: string[]}, opts: {cwd: string; background: boolean; timeoutMs?: number; maxMs?: number}): {shell: Shell; done: Promise<Shell>} {
+  private startTty(shell: Shell, shellCmd: {file: string; args: string[]}, opts: {cwd: string; background: boolean; timeoutMs?: number; maxMs?: number}): {shell: Shell; done: Promise<Shell>} {
     shell.tty = true;
+    // PowerShell's -NonInteractive makes Read-Host fail: the point here is to be interactive.
+    const sh = {...shellCmd, args: shellCmd.args.filter((a) => a !== '-NonInteractive')};
     const {CI: _ci, FORCE_COLOR: _fc, NO_COLOR: _nc, ...base} = process.env;
     const env = {...base, TERM: 'xterm-256color', PAGER: 'cat', GIT_PAGER: 'cat'} as Record<string, string>;
     const cols = process.stdout.columns || 100;
@@ -224,6 +226,18 @@ export class ShellManager extends EventEmitter {
           };
           p.onData(onData);
           p.onExit(({exitCode}) => finish(exitCode));
+        } else if (isWindows) {
+          // No node-pty (and no `script`) on Windows: the command reads its answers from a plain pipe,
+          // which is enough for most prompts, but programs that need a real console won't work.
+          shell.lines.push('[no terminal is available on this system (node-pty did not load): it runs without one, answers go to its input]');
+          const child = spawn(sh.file, sh.args, {cwd: opts.cwd, env, stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true});
+          shell.pid = child.pid;
+          this.procs.set(shell.id, child);
+          term.write = (data) => child.stdin?.write(data.replace(/\r(?!\n)/g, '\r\n'));
+          child.stdout?.on('data', (b: Buffer) => onData(b.toString()));
+          child.stderr?.on('data', (b: Buffer) => onData(b.toString()));
+          child.on('error', (e) => finish(null, e.message));
+          child.on('close', (code) => finish(code));
         } else {
           // No node-pty: `script` gives the command a terminal; we talk to it over pipes.
           // macOS script refuses a socket for stdin (Node's pipes are sockets): a FIFO via `< <(cat)` works.

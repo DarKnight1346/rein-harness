@@ -96,6 +96,15 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
   const banner = (): Entry => ({id: nextId.current++, kind: 'banner', text: `Rein ${VERSION}`});
   const nextId = useRef(0);
   const [entries, setEntries] = useState<Entry[]>(() => [banner()]);
+  const entriesNow = useRef(entries);
+  entriesNow.current = entries;
+  /**
+   * While a command has the terminal (takeover.ts), Rein's drawing is dropped. The classic
+   * transcript is printed once per entry (<Static>), so entries added meanwhile would never appear:
+   * it shows only the first `terminalHold` entries until the command hands the terminal back.
+   */
+  const terminalHold = useRef<number | undefined>(undefined);
+  const [, setHoldTick] = useState(0);
   const [overlay, setOverlay] = useState<Overlay>({name: 'none'});
   const [ready, setReady] = useState(false);
   const [updating, setUpdating] = useState(false);
@@ -233,11 +242,14 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
   const openTerminal = useCallback(
     (shell: Shell) => {
       if (takeoverEnd.current || shell.background || !shell.tty || shell.status !== 'running') return;
+      terminalHold.current = entriesNow.current.length;
       takeoverEnd.current = takeOver(runtime.tools.shells, shell, {
         fullscreen: windowed,
         label: shell.origin?.name,
         onEnd: (reason) => {
           takeoverEnd.current = undefined;
+          terminalHold.current = undefined;
+          setHoldTick((n) => n + 1); // draw what was held
           if (reason === 'detach' && shell.status === 'running') log('info', `$ ${shell.command} is still running · ctrl+] to type into it again`);
         },
       });
@@ -1255,7 +1267,7 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
   };
 
   return {
-    entries, add, log, overlay, setOverlay, closeOverlay, finishImport, ready, updating, updateLog, statusTick, bump,
+    entries, transcript: terminalHold.current === undefined ? entries : entries.slice(0, terminalHold.current), add, log, overlay, setOverlay, closeOverlay, finishImport, ready, updating, updateLog, statusTick, bump,
     finishTrust, pickHistory, startPlanGoal, startNewPlan, draft, onDraft, onSubmit, onPaste, onImagePaste, onHistory: suggestions.length || fileSuggestions.length ? undefined : onHistory, onExternalEdit, doRewind, togglePlanMode, fileSuggestions, fileSelected, acceptFile, runCommand, suggestions, selected, setSuggestIndex, inputActive, chat, skills, openShells, queued, exitArmed, compacting, pickSession,
     view, setView, viewing, goalNote,
   };

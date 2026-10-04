@@ -2,7 +2,8 @@ import os from 'node:os';
 import {describe, expect, it} from 'vitest';
 import {ShellManager, waitingForInput} from '../src/tools/shells.js';
 
-const posix = process.platform !== 'win32';
+// Every platform: Windows runs these through ConPTY (node-pty) in Git Bash, as on CI.
+const posix = true;
 
 describe('interactive (terminal) commands', () => {
   it('know a prompt from a quiet build', () => {

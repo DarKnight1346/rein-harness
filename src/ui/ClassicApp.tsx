@@ -66,7 +66,7 @@ export function ClassicApp({resume}: {resume: Resume}) {
 
   return (
     <>
-      <Static key={generation} items={r.entries}>{(e) => <EntryView key={e.id} entry={e} />}</Static>
+      <Static key={generation} items={r.transcript}>{(e) => <EntryView key={e.id} entry={e} />}</Static>
       <Box flexDirection="column">
         {chat.live ? (
           <Box paddingLeft={2}>
