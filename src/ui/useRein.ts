@@ -10,6 +10,7 @@ import {listTranscripts, loadTranscript, type SessionInfo} from '../session/tran
 import {catalog} from '../router/catalog.js';
 import {subagentContextReport, contextReport, type ContextReport} from '../session/context.js';
 import {compactableCount} from '../session/compactor.js';
+import {onUntrustedHooks, trustProjectHooks, type ProjectHooks} from '../hooks.js';
 import {editExternally} from './terminal/editor.js';
 import {addHistory, HistoryCursor, loadHistory} from '../store/history.js';
 import {askBtwSubagent, btw} from '../session/btw.js';
@@ -46,6 +47,7 @@ export type Overlay =
   | {name: 'configure'}
   | {name: 'approval'; req: ApprovalRequest; resolve(d: ApprovalDecision): void; position: number; total: number}
   | {name: 'import'; rows: AccountRow[]}
+  | {name: 'trust'; hooks: ProjectHooks}
   // Fullscreen-only info windows (classic prints these into the transcript instead).
   | {name: 'usage'; data?: {rows: UsageRow[]; jev: boolean}}
   | {name: 'context'; report?: ContextReport; agent?: string}
@@ -106,6 +108,31 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
   const logMain = log;
 
   const chat = useChat(add, log, {split: opts.renderer === 'classic'});
+
+  // Project hooks run only once trusted: ask as soon as untrusted ones are skipped (at startup, or
+  // when they change mid-session), after any window that's open closes.
+  const [untrusted, setUntrusted] = useState<ProjectHooks | undefined>();
+  useEffect(() => {
+    onUntrustedHooks((p) => setUntrusted(p));
+    return () => onUntrustedHooks(undefined);
+  }, []);
+  useEffect(() => {
+    if (untrusted && overlay.name === 'none') {
+      setOverlay({name: 'trust', hooks: untrusted});
+      setUntrusted(undefined);
+    }
+  }, [untrusted, overlay.name]);
+  const finishTrust = (trust: boolean) => {
+    if (overlay.name !== 'trust') return;
+    setOverlay({name: 'none'});
+    if (!trust) {
+      log('info', "This project's hooks won't run this session. You'll be asked again next time.");
+      return;
+    }
+    trustProjectHooks(process.cwd());
+    log('info', `Trusted this project's hooks (${overlay.hooks.commands.length}). They run from now on; any change to them asks again.`);
+    void runtime.sessionStartHooks('startup', true);
+  };
 
   const refresh = useCallback(async () => {
     await runtime.refreshCatalog();
@@ -976,7 +1003,7 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
 
   return {
     entries, add, log, overlay, setOverlay, closeOverlay, finishImport, ready, updating, updateLog, statusTick, bump,
-    startPlanGoal, startNewPlan, draft, onDraft, onSubmit, onPaste, onImagePaste, onHistory: suggestions.length || fileSuggestions.length ? undefined : onHistory, onExternalEdit, doRewind, togglePlanMode, fileSuggestions, fileSelected, acceptFile, runCommand, suggestions, selected, setSuggestIndex, inputActive, chat, skills, openShells, queued, exitArmed, compacting, pickSession,
+    finishTrust, startPlanGoal, startNewPlan, draft, onDraft, onSubmit, onPaste, onImagePaste, onHistory: suggestions.length || fileSuggestions.length ? undefined : onHistory, onExternalEdit, doRewind, togglePlanMode, fileSuggestions, fileSelected, acceptFile, runCommand, suggestions, selected, setSuggestIndex, inputActive, chat, skills, openShells, queued, exitArmed, compacting, pickSession,
     view, setView, viewing, goalNote,
   };
 }

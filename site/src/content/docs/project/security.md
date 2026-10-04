@@ -64,6 +64,8 @@ These are real, and you should know them:
 - **Private-host blocking is by hostname.** `web_fetch` checks the literal host and IP; it doesn't resolve DNS. A public name that resolves to a private address isn't blocked.
 - **Sensitive-path rules apply outside the project only.** A `.env` inside your project is an ordinary project file the agent can read and edit like any other.
 - **Bypass is bypass.** In bypass mode, writes outside the working directories are allowed without asking, except sensitive paths.
+- **Project hooks need your trust once.** Hooks a repository ships run only after you trust them (and again after any change), but once trusted they run with your permissions on every event. See [Hooks](../../features/hooks/#trusting-a-projects-hooks).
+- **Project allow rules aren't gated.** A cloned repo's `.claude/settings.json` or `.rein/settings.json` can ship `permissions.allow` rules, which apply without a trust prompt. Read them before you start.
 - **Memory writes don't ask.** `remember` and `forget` edit `.rein/MEMORY.md` in the project without approval.
 - **Windows has no `O_NOFOLLOW`.** Rein checks for a symlink explicitly instead, which leaves a tiny race window.
 - **The Jev key briefly appears in a process argument list** while it's saved to the macOS Keychain (`security add-generic-password`).

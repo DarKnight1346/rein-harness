@@ -2,6 +2,7 @@ import {fstatSync} from 'node:fs';
 import {loadAccounts} from './store/accounts.js';
 import type {ApprovalMode} from './tools/host.js';
 import {runtime} from './runtime.js';
+import {onUntrustedHooks} from './hooks.js';
 import {redact} from './ui/privacy.js';
 
 /**
@@ -53,6 +54,8 @@ export async function runHeadless(argv: string[]): Promise<number> {
   const resume = ci < 0 ? false : argv[ci + 1] && !argv[ci + 1]!.startsWith('-') ? argv[ci + 1]! : true;
   const {listTranscripts} = await import('./session/transcript.js');
   const resumeId = resume === true ? (await listTranscripts({cwd: process.cwd()}))[0]?.id : resume || undefined;
+  // Nobody can review a project's hooks here: untrusted ones are skipped (trust them in `rein` first).
+  onUntrustedHooks((p) => process.stderr.write(`rein: skipping ${p.commands.length} project hook${p.commands.length === 1 ? '' : 's'} (not trusted yet). Run \`rein\` in this folder once to review and trust them.\n`));
   await runtime.init({resume: resumeId ?? false});
   await runtime.refreshCatalog();
 

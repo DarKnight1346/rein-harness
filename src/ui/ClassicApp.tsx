@@ -2,6 +2,7 @@ import React, {useState} from 'react';
 import {Box, Static, Text} from 'ink';
 import {approvalNote, compactText, routeLabel, toolResultSummary} from './format.js';
 import {ImportPrompt} from './ImportPrompt.js';
+import {TrustHooksPrompt} from './TrustHooksPrompt.js';
 import {LoginScreen} from './LoginScreen.js';
 import {ModelScreen} from './ModelScreen.js';
 import {ConfigureScreen} from './ConfigureScreen.js';
@@ -79,6 +80,7 @@ export function ClassicApp({resume}: {resume: Resume}) {
           <Working startedAt={r.goalNote.startedAt} phase="tool" tool={r.goalNote.label} />
         ) : null}
         {overlay.name === 'import' && <ImportPrompt rows={overlay.rows} onImport={() => r.finishImport(true)} onSkip={() => r.finishImport(false)} />}
+        {overlay.name === 'trust' && <TrustHooksPrompt hooks={overlay.hooks} onTrust={() => r.finishTrust(true)} onSkip={() => r.finishTrust(false)} />}
         {overlay.name === 'login' && <LoginScreen onLog={r.log} onClose={r.closeOverlay} />}
         {overlay.name === 'model' && <ModelScreen onLog={r.log} onClose={r.closeOverlay} />}
         {overlay.name === 'resume' && <ResumeScreen sessions={overlay.sessions} onPick={(id) => void r.pickSession(id)} onCancel={r.closeOverlay} />}

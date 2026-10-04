@@ -23,9 +23,29 @@ Hooks are shell commands Rein runs at fixed points in the agent's work. A hook c
   blocked by a PreToolUse hook: git push is disabled here — ask the user to push.
 ```
 
-:::danger[Project hooks run without asking]
-Hooks in a project's `.claude/settings.json`, `.claude/settings.local.json`, `.rein/settings.json` or `.rein/settings.local.json` run as soon as their event fires. Rein has **no trust prompt** for them, unlike [project MCP servers](../mcp/#project-server-approval). A `SessionStart` hook in a freshly cloned repo runs when you launch `rein` there. Read a repository's settings files before you start Rein in it.
-:::
+## Trusting a project's hooks
+
+Hooks in your own settings (`~/.claude/settings.json`, `~/.rein/settings.json`) always run. Hooks that come with a **project** (`.claude/settings.json`, `.claude/settings.local.json`, `.rein/settings.json`, `.rein/settings.local.json`) run only after you trust them, so a repo you clone can't run commands just because you started `rein` in it.
+
+The first time Rein sees a project's hooks, it lists every command and asks:
+
+```text title="rein"
+╭ This project defines hooks ──────────────────────────────────────────╮
+│ Its settings files run these commands automatically (on start, on     │
+│ prompts, around tool calls):                                          │
+│                                                                       │
+│   SessionStart     ./scripts/dev-context.sh · .claude/settings.json   │
+│   PreToolUse       ./scripts/no-push.sh · .claude/settings.json       │
+│                                                                       │
+│ 1 Trust these hooks and run them (y)                                  │
+│ 2 Don't run them (n / esc · you'll be asked again next time)          │
+╰───────────────────────────────────────────────────────────────────────╯
+```
+
+- **Trust** runs them from then on, starting with any `SessionStart` hooks that were held back.
+- **Don't run them** keeps them off for this session and asks again next launch.
+- **Any change asks again.** The trust covers the hooks exactly as you reviewed them, as a hash stored in `~/.rein/state/trusted-projects.json`. If a `git pull`, a teammate or the agent itself changes them, they stop running and Rein asks again, even mid-session.
+- **Headless runs** (`rein -p`) can't ask, so untrusted project hooks are skipped with a note on stderr. Run `rein` in the folder once to review and trust them.
 
 ## Events
 

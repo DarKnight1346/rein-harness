@@ -2,13 +2,18 @@ import {mkdirSync, mkdtempSync, readFileSync, realpathSync, writeFileSync} from 
 import os from 'node:os';
 import path from 'node:path';
 import {beforeEach, describe, expect, it} from 'vitest';
-import {runHooks} from '../src/hooks.js';
+import {onUntrustedHooks, projectHooks, runHooks, trustProjectHooks} from '../src/hooks.js';
 import {ToolHost, type ApprovalRequest} from '../src/tools/host.js';
 
 let root: string;
-const settings = (hooks: object, where = '.rein/settings.json') => {
+const write = (hooks: object, where = '.rein/settings.json') => {
   mkdirSync(path.dirname(path.join(root, where)), {recursive: true});
   writeFileSync(path.join(root, where), JSON.stringify({hooks}));
+};
+// Project hooks run only once trusted (see the trust tests at the end); these tests trust them.
+const settings = (hooks: object, where = '.rein/settings.json') => {
+  write(hooks, where);
+  trustProjectHooks(root);
 };
 const cmd = (command: string) => [{hooks: [{type: 'command', command}]}];
 beforeEach(() => {
@@ -66,5 +71,52 @@ describe('hooks', () => {
   it('Stop: decision "block" asks the agent to continue', async () => {
     settings({Stop: cmd(`echo '{"decision":"block","reason":"tests are still failing"}'`)});
     expect((await runHooks('Stop', root, {stop_hook_active: false})).block).toBe('tests are still failing');
+  });
+});
+
+describe('project hook trust', () => {
+  const marker = () => path.join(root, 'ran.txt').replace(/\\/g, '/');
+  const touch = () => cmd(`echo ran >> '${marker()}'`);
+  const ran = () => {
+    try {
+      return readFileSync(marker(), 'utf8').trim().split('\n').length;
+    } catch {
+      return 0;
+    }
+  };
+
+  it("doesn't run a cloned project's hooks until they are trusted, and asks once", async () => {
+    write({SessionStart: touch()}, '.claude/settings.json');
+    const seen: string[] = [];
+    onUntrustedHooks((p) => seen.push(p.commands.map((c) => `${c.event}: ${c.command}`).join()));
+    await runHooks('SessionStart', root, {source: 'startup'});
+    await runHooks('SessionStart', root, {source: 'startup'});
+    expect(ran()).toBe(0);
+    expect(seen).toHaveLength(1); // reported once per version of the hooks
+    expect(seen[0]).toContain('SessionStart: echo ran');
+    expect(projectHooks(root)?.trusted).toBe(false);
+
+    trustProjectHooks(root);
+    await runHooks('SessionStart', root, {source: 'startup'});
+    expect(ran()).toBe(1);
+    onUntrustedHooks(undefined);
+  });
+
+  it('a change to trusted hooks needs a new yes', async () => {
+    write({UserPromptSubmit: touch()});
+    trustProjectHooks(root);
+    await runHooks('UserPromptSubmit', root, {prompt: 'hi'});
+    expect(ran()).toBe(1);
+    write({UserPromptSubmit: touch(), Stop: cmd('echo sneaky')}); // e.g. a git pull, or the agent editing the file
+    await runHooks('UserPromptSubmit', root, {prompt: 'hi'});
+    expect(ran()).toBe(1);
+    expect(projectHooks(root)?.trusted).toBe(false);
+  });
+
+  it("the user's own hooks (~/.claude, ~/.rein) always run", async () => {
+    writeFileSync(path.join(process.env.REIN_HOME!, 'settings.json'), JSON.stringify({hooks: {UserPromptSubmit: touch()}}));
+    write({UserPromptSubmit: cmd('echo project')});
+    await runHooks('UserPromptSubmit', root, {prompt: 'hi'});
+    expect(ran()).toBe(1);
   });
 });

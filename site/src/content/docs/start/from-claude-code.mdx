@@ -37,7 +37,7 @@ So an existing `"Bash(npm test:*)"` or `"Edit(src/**)"` keeps working. Run `/per
 
 ### Hooks
 
-Rein runs the `hooks` block from the same six settings files, in Claude Code's format and with Claude Code's semantics. It supports the events `PreToolUse`, `PostToolUse`, `UserPromptSubmit`, `Stop` and `SessionStart`, with `type: "command"` hooks (default timeout 60 s).
+Rein runs the `hooks` block from the same six settings files, in Claude Code's format and with Claude Code's semantics. It supports the events `PreToolUse`, `PostToolUse`, `UserPromptSubmit`, `Stop` and `SessionStart`, with `type: "command"` hooks (default timeout 60 s). Hooks from your user settings run as before; hooks a project ships run once you [trust them](../../features/hooks/#trusting-a-projects-hooks).
 
 - The event arrives as JSON on stdin. `CLAUDE_PROJECT_DIR` (and `REIN_PROJECT_DIR`) is set.
 - Exit code `2` blocks. JSON output with `decision: "block"`, `hookSpecificOutput.permissionDecision` (`allow` / `deny` / `ask`) and `additionalContext` is honored.

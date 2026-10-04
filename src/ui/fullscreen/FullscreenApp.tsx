@@ -9,6 +9,7 @@ import {usageStore, windowLabel} from '../../store/usage.js';
 import type {Entry} from '../entries.js';
 import {accountLabel, modelLabel} from '../format.js';
 import {ImportPrompt} from '../ImportPrompt.js';
+import {TrustHooksPrompt} from '../TrustHooksPrompt.js';
 import {LoginScreen} from '../LoginScreen.js';
 import {ModelScreen} from '../ModelScreen.js';
 import {Clickable, useClickable} from '../terminal/clicks.js';
@@ -166,6 +167,12 @@ export function FullscreenApp({resume}: {resume: Resume}) {
         return (
           <Window title="Found existing logins" width={72} onClose={() => r.finishImport(false)}>
             <ImportPrompt bare rows={overlay.rows} onImport={() => r.finishImport(true)} onSkip={() => r.finishImport(false)} />
+          </Window>
+        );
+      case 'trust':
+        return (
+          <Window title="This project defines hooks" width={windowWidth} onClose={() => r.finishTrust(false)} color="yellow" dismissable={false}>
+            <TrustHooksPrompt bare hooks={overlay.hooks} onTrust={() => r.finishTrust(true)} onSkip={() => r.finishTrust(false)} />
           </Window>
         );
       case 'login':
