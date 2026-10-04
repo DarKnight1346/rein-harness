@@ -126,7 +126,7 @@ A long agentic turn (dozens or hundreds of tool calls) can fill the context long
 
 The check skips a segment's first request (nothing has happened yet that a compaction would fold away), so a continuation never triggers another compaction straight away. Tool results stored in the transcript are clipped to 4,000 characters and marked `[truncated: N characters in full …]` when there was more.
 
-To you it's one continuous turn with a "Conversation compacted" rule in the middle. The continuation is stored as a `synthetic` message: it doesn't appear in `/rewind`, and the approval judge and checkpoints keep using your real request. At most `MAX_MIDTURN_COMPACTIONS` (3) happen per turn, so one enormous tool result can't loop. A user interrupt (Esc) always wins over a pending compaction.
+To you it's one continuous turn with a "Conversation compacted" rule in the middle. The continuation is stored as a `synthetic` message: it doesn't appear in `/rewind`, and the approval judge and checkpoints keep using your real request. At most `MAX_MIDTURN_COMPACTIONS` (20) happen per turn, as a backstop against loops. A user interrupt (Esc) always wins over a pending compaction.
 
 Claude's own auto-compaction is turned off for chat sessions (`DISABLE_AUTO_COMPACT=1`), so Rein's threshold is the only one and the history never changes behind Rein's back.
 

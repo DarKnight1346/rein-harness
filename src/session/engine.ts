@@ -55,8 +55,8 @@ const CACHE_WARM_MS: Record<string, number> = {claude: 60 * 60_000, codex: 60 * 
 /** A cold switch needs the other account to be at least this much better (no flip-flopping). */
 const BALANCE_MARGIN = 15;
 const MAX_ATTEMPTS = 5;
-/** Compactions inside one turn before Rein stops compacting it (a single huge tool result can't loop). */
-const MAX_MIDTURN_COMPACTIONS = 3;
+/** Compactions inside one turn before Rein stops compacting it: a backstop (each needs progress first, see `laterRequest`). */
+const MAX_MIDTURN_COMPACTIONS = 20;
 /** Sent after a mid-turn compaction so the agent picks the task back up instead of ending its turn. */
 const CONTINUE_AFTER_COMPACTION = `<context_compacted>
 The conversation was compacted in the middle of your work because the context window was filling up. The summary above covers everything so far, including your tool calls and where you stopped. Continue the task from exactly where you left off: don't start over, don't repeat finished steps, and don't stop to ask the user unless you genuinely need their input.
