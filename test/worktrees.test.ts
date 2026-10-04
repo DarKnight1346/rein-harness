@@ -121,3 +121,39 @@ describe('isolated subagent tool calls', () => {
     host.close();
   });
 });
+
+describe('commits made inside a worktree', () => {
+  it("come home as uncommitted changes, stay reachable under refs/rein, and are reported", async () => {
+    const {mergeNote} = await import('../src/agents/worktrees.js');
+    const wts = new Worktrees(repo);
+    const wt = (await wts.ensure(4))!;
+    writeFileSync(path.join(wt.root, 'feature.txt'), 'committed by the agent\n');
+    git(wt.root, 'add', 'feature.txt');
+    git(wt.root, 'commit', '-q', '-m', 'Add the feature');
+    const r = (await wts.settle(4))!;
+    expect(r.merged).toEqual(['feature.txt']);
+    expect(r.commits).toHaveLength(1);
+    expect(r.commits![0]).toMatch(/^[0-9a-f]+ Add the feature$/);
+    expect(git(repo, 'log', '-1', '--format=%s', r.ref!).trim()).toBe('Add the feature');
+    expect(git(repo, 'log', '-1', '--format=%s').trim()).toBe('init'); // the user's branch didn't move
+    expect(git(repo, 'status', '--porcelain')).toContain('?? feature.txt');
+    expect(mergeNote(r)).toContain('NOT on the user\'s branch');
+  });
+});
+
+describe('ignored build output', () => {
+  it('is copied into the worktree (not linked), and never merged back', async () => {
+    mkdirSync(path.join(repo, 'dist', 'lib'), {recursive: true});
+    writeFileSync(path.join(repo, 'dist', 'lib', 'app.js'), 'built();\n');
+    const wts = new Worktrees(repo);
+    const wt = (await wts.ensure(5))!;
+    const copy = path.join(wt.root, 'dist', 'lib', 'app.js');
+    expect(readFileSync(copy, 'utf8')).toBe('built();\n');
+    expect(lstatSync(path.join(wt.root, 'dist')).isSymbolicLink()).toBe(false);
+    writeFileSync(copy, 'rebuilt by the agent();\n'); // its own build doesn't touch the project's
+    expect(readFileSync(path.join(repo, 'dist', 'lib', 'app.js'), 'utf8')).toBe('built();\n');
+    const r = (await wts.settle(5))!;
+    expect(r.merged).toEqual([]);
+    expect(readFileSync(path.join(repo, 'dist', 'lib', 'app.js'), 'utf8')).toBe('built();\n');
+  });
+});

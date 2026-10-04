@@ -1,6 +1,8 @@
 import {execFile} from 'node:child_process';
 import {randomBytes} from 'node:crypto';
 import {chmodSync, copyFileSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, readlinkSync, realpathSync, rmSync, statSync, symlinkSync, unlinkSync, utimesSync, writeFileSync} from 'node:fs';
+import {constants as fsConstants} from 'node:fs';
+import fsp from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import {promisify} from 'node:util';
@@ -37,7 +39,11 @@ export type Worktree = {
   writable: string[];
 };
 
-export type MergeResult = {merged: string[]; conflicts: string[]; kept?: string};
+/**
+ * `commits`: commits the subagent made in its worktree ("abc1234 subject"); they aren't on the
+ * user's branch (their changes come back uncommitted), so `ref` keeps them reachable.
+ */
+export type MergeResult = {merged: string[]; conflicts: string[]; kept?: string; commits?: string[]; ref?: string};
 
 /** Folders shared with the project by a symlink (dependencies: big, and only read by most work). */
 const DEP_DIRS = new Set(['node_modules', '.venv', 'venv', '.tox', 'vendor', 'Pods', '.bundle', 'bower_components', 'jspm_packages', '.pnpm-store', '.yarn']);
@@ -45,6 +51,38 @@ const DEP_DIRS = new Set(['node_modules', '.venv', 'venv', '.tox', 'vendor', 'Po
 const BIG_FILE = 20 * 1024 * 1024;
 /** Small ignored files (.env, local config) are copied so the worktree runs like the project. */
 const SMALL_IGNORED = 1024 * 1024;
+/**
+ * Other ignored folders (build output: dist/, target/, .next/…) are copied too, so tests that need a
+ * built project work, as copy-on-write clones where the filesystem can (APFS, btrfs: instant, no
+ * extra space). Up to this much in all; past it the subagent rebuilds what it needs.
+ */
+const IGNORED_DIRS_BUDGET = {files: 20_000, bytes: 500 * 1024 * 1024};
+
+/** Files and bytes under a folder, or undefined once it's over the budget left. */
+async function measure(dir: string, budget: {files: number; bytes: number}): Promise<{files: number; bytes: number} | undefined> {
+  let files = 0;
+  let bytes = 0;
+  const stack = [dir];
+  while (stack.length) {
+    const d = stack.pop()!;
+    let entries: import('node:fs').Dirent[];
+    try {
+      entries = await fsp.readdir(d, {withFileTypes: true});
+    } catch {
+      continue;
+    }
+    for (const e of entries) {
+      const p = path.join(d, e.name);
+      if (e.isDirectory()) stack.push(p);
+      else if (e.isFile()) {
+        files++;
+        bytes += (await fsp.lstat(p).catch(() => undefined))?.size ?? 0;
+        if (files > budget.files || bytes > budget.bytes) return undefined;
+      }
+    }
+  }
+  return {files, bytes};
+}
 
 async function git(cwd: string, args: string[], env?: NodeJS.ProcessEnv): Promise<string> {
   const {stdout} = await run('git', args, {cwd, env: {...process.env, ...env, GIT_TERMINAL_PROMPT: '0'}, maxBuffer: 256 * 1024 * 1024, encoding: 'utf8'});
@@ -117,17 +155,28 @@ async function furnish(top: string, dir: string, big: string[]): Promise<Set<str
     if (existsSync(target)) return;
     mkdirSync(path.dirname(target), {recursive: true});
     try {
-      symlinkSync(path.join(top, rel), target);
+      // A junction on Windows: directory symlinks there need admin rights or developer mode.
+      symlinkSync(path.join(top, rel), target, 'junction');
       linked.add(rel);
     } catch {}
   };
   for (const f of big) link(f);
   const ignored = (await git(top, ['ls-files', '--others', '--ignored', '--exclude-standard', '--directory', '-z']).catch(() => '')).split('\0').filter(Boolean);
   let copied = 0;
+  const budget = {...IGNORED_DIRS_BUDGET};
   for (const entry of ignored) {
     const rel = entry.replace(/\/$/, '');
     if (entry.endsWith('/')) {
       if (DEP_DIRS.has(path.basename(rel))) link(rel);
+      else {
+        const size = await measure(path.join(top, rel), budget);
+        if (!size) continue;
+        try {
+          await fsp.cp(path.join(top, rel), path.join(dir, rel), {recursive: true, mode: fsConstants.COPYFILE_FICLONE, verbatimSymlinks: true});
+          budget.files -= size.files;
+          budget.bytes -= size.bytes;
+        } catch {}
+      }
       continue;
     }
     if (copied >= 200) continue;
@@ -348,6 +397,10 @@ export function retarget<T>(args: T, from: string, to: string): T {
 /** The note added to a subagent's report after its changes were merged back. */
 export function mergeNote(r: MergeResult): string | undefined {
   const parts: string[] = [];
+  if (r.commits?.length)
+    parts.push(
+      `It worked in a private copy of the project, so the commit${r.commits.length > 1 ? 's' : ''} it made there (${r.commits.slice(0, 5).join('; ')}${r.commits.length > 5 ? '; …' : ''}) are NOT on the user's branch: their changes are in the working tree, uncommitted. Commit them yourself if a commit is wanted (the originals are kept at ${r.ref}).`,
+    );
   if (r.merged.length) parts.push(`Its file changes were merged into the project: ${r.merged.slice(0, 20).join(', ')}${r.merged.length > 20 ? ` and ${r.merged.length - 20} more` : ''}.`);
   if (r.conflicts.length && r.kept)
     parts.push(
@@ -368,7 +421,27 @@ const alive = (pid: number) => {
 
 /** Merge a worktree's changes into the project; delete it unless there were conflicts. */
 async function finish(top: string, dir: string, base: string, result: string, linked: ReadonlySet<string>): Promise<MergeResult> {
+  const kept = await keepCommits(top, dir, base);
   const {merged, conflicts} = await mergeInto(top, base, result, linked);
+  return {...(await finishMerged(top, dir, merged, conflicts)), ...kept};
+}
+
+/**
+ * Commits the subagent made in its worktree (its HEAD moved past the snapshot). Done in place they
+ * would sit on the user's branch; here they'd vanish with the worktree. Keep them under
+ * refs/rein/worktrees/<name> so they can be cherry-picked, and report them.
+ */
+async function keepCommits(top: string, dir: string, base: string): Promise<{commits: string[]; ref: string} | undefined> {
+  const head = await git(dir, ['rev-parse', '--verify', '-q', 'HEAD']).then((s) => s.trim()).catch(() => '');
+  if (!head || head === base) return undefined;
+  const log = (await git(dir, ['log', '--format=%h %s', `${base}..${head}`]).catch(() => '')).trim();
+  if (!log) return undefined;
+  const ref = `refs/rein/worktrees/${path.basename(dir)}`;
+  await git(top, ['update-ref', ref, head]).catch(() => '');
+  return {commits: log.split('\n'), ref};
+}
+
+async function finishMerged(top: string, dir: string, merged: string[], conflicts: string[]): Promise<MergeResult> {
   if (conflicts.length) {
     // Kept for the conflicting files; no longer a pending job.
     rmSync(`${dir}.json`, {force: true});
