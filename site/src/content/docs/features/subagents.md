@@ -111,7 +111,7 @@ The agent receives it wrapped in `<subagent_report id="1" name="parser-tests" st
 After each subagent turn, the [decision model](../../internals/decision-model/) gets the task, the final report and the last 40 tool calls, and answers one question: *has the subagent fully completed the task it was given? Actually done, not just planned, partially done, or blocked?*
 
 - At **0.5 or above** the work is accepted.
-- Below that, the subagent is told: *"A completion check found that the task is not finished yet. Re-read the task, do whatever is still missing, and then give your final report."*
+- Below that, the subagent is told: *"A completion check found that the task is not finished yet. Re-read the task, do whatever is still missing, and then give your final report."* With an [advisor](../routing/) set, Rein first asks it what's most likely missing (with the subagent's task and work as context), and that advice goes along, so the subagent gets direction rather than just "keep going". It also shows in the subagent's view as `Advisor: …`.
 - This repeats **at most 3 extra rounds**. After that the subagent stops with `Stopped after 3 continuation rounds.` and its report goes back as-is.
 
 Each verdict shows in the subagent's view, e.g. `completion check: not complete (0.31 via jev) → continuing`. The report header tells the main agent how many continuation rounds it took. If the check itself fails (say no decision model is reachable), the work is accepted rather than blocked.

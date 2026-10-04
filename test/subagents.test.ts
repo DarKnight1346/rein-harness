@@ -29,7 +29,7 @@ function fakeSession(replies: (prompt: string) => ChatEvent[], prompts: string[]
   };
 }
 
-function manager(opts: {verdicts?: boolean[]; limit?: number; replies?: (p: string) => ChatEvent[]}) {
+function manager(opts: {verdicts?: boolean[]; limit?: number; replies?: (p: string) => ChatEvent[]; advice?: string}) {
   const prompts: string[] = [];
   const finished: Subagent[] = [];
   const verdicts = [...(opts.verdicts ?? [])];
@@ -42,6 +42,7 @@ function manager(opts: {verdicts?: boolean[]; limit?: number; replies?: (p: stri
       const v = verdicts.length ? verdicts.shift()! : true;
       return {complete: v, note: v ? 'complete (0.9)' : 'not complete (0.2)'};
     },
+    advise: async () => opts.advice,
     onActivity: () => () => {},
     finished: (a) => finished.push({...a}),
     killShells: () => {},
@@ -87,5 +88,14 @@ describe('SubagentManager', () => {
     expect((await first.done).status).toBe('cancelled');
     expect(m.running()).toHaveLength(0);
     expect(() => m.spawn({task: 'c', mode: 'new', model: 'auto'})).not.toThrow();
+  });
+
+  it('a failed completion check asks the advisor, and its advice goes into the continuation', async () => {
+    const {m, prompts} = manager({verdicts: [false, true], advice: 'You never ran the tests; run npm test and fix the two failures.'});
+    const a = await m.spawn({task: 'fix the build', mode: 'new', model: 'auto'}).done;
+    expect(a.rounds).toBe(2);
+    expect(prompts[1]).toContain('A completion check found that the task is not finished yet');
+    expect(prompts[1]).toContain('You never ran the tests; run npm test');
+    expect(a.events.some((e) => e.kind === 'note' && e.text.startsWith('Advisor: You never ran'))).toBe(true);
   });
 });

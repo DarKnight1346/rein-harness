@@ -26,7 +26,7 @@ export function milestoneDoneTool(goals: GoalManager): ToolDef {
       if (!Number.isInteger(n) || typeof args?.evidence !== 'string') throw new ToolError('milestone (number) and evidence are required');
       if (goals.goal?.status !== 'active' || !goals.goal.plan) throw new ToolError('there is no active goal from a saved plan');
       const r = await goals.reviewMilestone(n, args.evidence);
-      if (!r.accepted) return {ok: false, text: `Milestone ${n} not accepted — ${r.note}. Show concrete proof (run the checks), then call milestone_done again.`};
+      if (!r.accepted) return {ok: false, text: `Milestone ${n} not accepted — ${r.note}. Show concrete proof (run the checks), then call milestone_done again.${r.advice ? `\n\nThe advisor's take on what's missing:\n${r.advice}` : ''}`};
       return {ok: true, text: `Milestone ${n} done (${r.note}). ${r.remaining ? `${r.remaining} to go — continue with the next one.` : 'All milestones are done: verify the whole goal and call goal_done with evidence.'}`};
     },
   };
@@ -54,10 +54,10 @@ export function goalDoneTool(goals: GoalManager): ToolDef {
     async run(_ctx, args) {
       if (typeof args?.summary !== 'string' || typeof args?.evidence !== 'string') throw new ToolError('summary and evidence are required');
       if (goals.goal?.status !== 'active') throw new ToolError('there is no active goal');
-      const {accepted, note} = await goals.reviewClaim(args.summary, args.evidence);
+      const {accepted, note, advice} = await goals.reviewClaim(args.summary, args.evidence);
       return accepted
         ? {ok: true, text: `Goal accepted as complete (${note}). Tell the user what was achieved.`}
-        : {ok: false, text: `Not accepted — ${note}: the evidence in context doesn't show the goal is fully achieved. Keep working; produce concrete proof (run the tests/checks, show the output), then call goal_done again.`};
+        : {ok: false, text: `Not accepted — ${note}: the evidence in context doesn't show the goal is fully achieved. Keep working; produce concrete proof (run the tests/checks, show the output), then call goal_done again.${advice ? `\n\nThe advisor's take on what's missing:\n${advice}` : ''}`};
     },
   };
 }

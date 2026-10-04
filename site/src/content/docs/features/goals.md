@@ -74,6 +74,8 @@ and answers: *do the tool results and evidence in context concretely show that t
 
 The claim is accepted at probability **≥ 0.7**. Below that, the tool returns `Not accepted — rejected (0.42 via jev): the evidence in context doesn't show the goal is fully achieved. Keep working; produce concrete proof (run the tests/checks, show the output), then call goal_done again.` — and the loop carries on.
 
+When an advisor is set (`/model` → Advisor), a rejection doesn't stop at "keep working": Rein asks the advisor what's most likely missing and which steps would prove it, and appends its answer (`The advisor's take on what's missing: …`). Rejected `milestone_done` calls get the same treatment.
+
 Because the evidence window is the tool calls *since the goal started*, a test run from before you typed `/goal` doesn't count. The agent has to actually run the check.
 
 ## "Impossible" is not a completion

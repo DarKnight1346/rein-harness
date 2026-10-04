@@ -54,6 +54,8 @@ export type SubagentDeps = {
   bind(agent: Subagent): {binding: ToolBinding; close(): void};
   /** Decision model: has the subagent actually finished? */
   judge(agent: Subagent): Promise<CompletionVerdict>;
+  /** When the check says "not finished": the advisor's view of what's missing (undefined = no advisor). */
+  advise?(agent: Subagent, verdict: CompletionVerdict): Promise<string | undefined>;
   /** Tool activity of this subagent (from the tool host). */
   onActivity(agentId: number, fn: (a: {phase: 'start' | 'end'; id: number; label: string; summary: string; ok?: boolean; result?: string; diff?: DiffLine[]}) => void): () => void;
   /** Called once when a subagent ends (fold tokens, persist the record). */
@@ -254,7 +256,10 @@ export class SubagentManager extends EventEmitter {
           agent.events.push({kind: 'note', text: `Stopped after ${MAX_CONTINUATIONS} continuation rounds.`});
           break;
         }
-        prompt = CONTINUE_PROMPT;
+        // Direction, not just "keep going": the advisor (if set) says what's likely missing.
+        const advice = (await this.deps.advise?.(agent, verdict).catch(() => undefined))?.trim();
+        if (advice) agent.events.push({kind: 'note', text: `Advisor: ${advice}`});
+        prompt = advice ? `${CONTINUE_PROMPT}\n\nA more capable reviewer looked at your work and says:\n${advice}` : CONTINUE_PROMPT;
       }
       agent.status = 'done';
     } catch (err) {

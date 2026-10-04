@@ -144,7 +144,16 @@ export class GoalManager extends EventEmitter {
   }
 
   /** `goal_done`: the decision model accepts only if the evidence in context shows the goal achieved. */
-  async reviewClaim(summary: string, evidence: string): Promise<{accepted: boolean; note: string}> {
+  /**
+   * After the decision model rejects a claim: ask the advisor (if one is set) what's most likely
+   * missing, so the agent gets direction, not just "keep going".
+   */
+  private async adviseOnRejection(what: string, note: string, evidence: string): Promise<string | undefined> {
+    const question = `The decision model rejected my claim that ${what} is done (${note}). My evidence: ${evidence.slice(0, 2000)}\nWhat is most likely missing or wrong, and which concrete steps would produce convincing proof? Be brief and specific.`;
+    return (await this.deps.advise(question).catch(() => undefined))?.trim() || undefined;
+  }
+
+  async reviewClaim(summary: string, evidence: string): Promise<{accepted: boolean; note: string; advice?: string}> {
     const g = this.goal;
     if (!g || g.status === 'done') return {accepted: false, note: 'there is no active goal'};
     const open = this.plan()?.milestones.map((m, i) => ({...m, n: i + 1})).filter((m) => !m.done) ?? [];
@@ -171,7 +180,8 @@ export class GoalManager extends EventEmitter {
       g.doneAt = Date.now();
     }
     this.persist();
-    return {accepted, note};
+    const advice = accepted ? undefined : await this.adviseOnRejection(`the goal "${g.text}"`, note, `${summary}\n${evidence}`);
+    return {accepted, note, ...(advice ? {advice} : {})};
   }
 
   /**
@@ -231,7 +241,7 @@ export class GoalManager extends EventEmitter {
   }
 
   /** `milestone_done`: tick milestone `n` (1-based) if the evidence in context shows it's achieved. */
-  async reviewMilestone(n: number, evidence: string): Promise<{accepted: boolean; note: string; remaining: number}> {
+  async reviewMilestone(n: number, evidence: string): Promise<{accepted: boolean; note: string; remaining: number; advice?: string}> {
     const g = this.goal;
     const p = this.plan();
     if (!g || g.status !== 'active' || !p) return {accepted: false, note: 'no active goal with a plan', remaining: 0};
@@ -255,7 +265,8 @@ export class GoalManager extends EventEmitter {
     g.checks.push({at: Date.now(), kind: 'claim', verdict: `milestone ${n}: ${note}`});
     if (accepted) setMilestone(p.file, n - 1, true);
     this.persist();
-    return {accepted, note, remaining: p.milestones.filter((x, i) => !x.done && !(accepted && i === n - 1)).length};
+    const advice = accepted ? undefined : await this.adviseOnRejection(`milestone ${n} ("${m.text}")`, note, evidence);
+    return {accepted, note, remaining: p.milestones.filter((x, i) => !x.done && !(accepted && i === n - 1)).length, ...(advice ? {advice} : {})};
   }
 
   private persist(): void {

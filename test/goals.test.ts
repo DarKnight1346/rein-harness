@@ -82,4 +82,13 @@ describe('goals', () => {
     expect(capped.g.resume()).toBe(true);
     expect(capped.g.goal?.rounds).toBe(0);
   });
+
+  it('a rejected goal_done comes back with the advisor\'s take on what is missing', async () => {
+    const {t, g} = setup({noul: [0.2], advisor: 'The e2e suite was never run; run it and show the output.'});
+    g.set('all tests pass');
+    t.messages.push({role: 'assistant', text: 'unit tests pass', at: 1, tools: [{label: 'Shell', summary: '$ npm run unit', ok: true, result: '10 passed'}]});
+    const res = await goalDoneTool(g).run({} as any, {summary: 'done', evidence: 'unit tests pass'});
+    expect(res.ok).toBe(false);
+    expect(res.text).toContain("The advisor's take on what's missing:\nThe e2e suite was never run");
+  });
 });

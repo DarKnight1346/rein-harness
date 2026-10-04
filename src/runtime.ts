@@ -186,6 +186,12 @@ export class Runtime {
       };
     },
     judge: (agent) => this.judgeCompletion(agent),
+    advise: async (agent, verdict) => {
+      if (!advisorRef(this.config)) return undefined;
+      const question = `A completion check says my task isn't finished (${verdict.note}). What is most likely missing, and what should I do next? Be brief and specific.`;
+      const res = await this.tools.call('advisor', {question}, {agentId: agent.id, name: agent.name});
+      return res.ok ? res.text : undefined;
+    },
     onActivity: (agentId, fn) => {
       const h = (a: ToolActivity) => {
         if (a.origin?.agentId === agentId) fn(a);
