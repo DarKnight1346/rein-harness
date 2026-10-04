@@ -50,7 +50,7 @@ and `codex` binaries**, so you don't need a subscription to work on most of it.
 
 | Path | What lives there |
 |---|---|
-| `src/cli.tsx`, `src/headless.ts` | Entry point, flags, `rein -p` |
+| `src/cli.ts`, `src/app.tsx`, `src/headless.ts` | Entry point (production React), flags and renderer loop, `rein -p` |
 | `src/runtime.ts` | Wires a session together: tools, decision model, goals, subagents, hooks |
 | `src/session/engine.ts` | The turn loop: routing, failover, load balancing, context carry, compaction triggers |
 | `src/providers/claude/` | Drives `claude -p` over stream-json; MCP proxy for tools |

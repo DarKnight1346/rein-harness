@@ -1,7 +1,9 @@
-#!/usr/bin/env node
 import React from 'react';
 import {render, type RenderOptions} from 'ink';
+import {appendFileSync, mkdirSync} from 'node:fs';
+import path from 'node:path';
 import {loadConfig} from './store/config.js';
+import {paths} from './store/paths.js';
 import {ClassicApp} from './ui/ClassicApp.js';
 import {FullscreenApp, lastEntries} from './ui/fullscreen/FullscreenApp.js';
 import {entryLines} from './ui/fullscreen/lines.js';
@@ -55,6 +57,17 @@ if (!process.stdin.isTTY) {
   console.error('rein needs an interactive terminal (or use rein -p "…" for headless mode).');
   process.exit(1);
 }
+
+// Node prints runtime warnings (MaxListenersExceeded, perf_hooks, deprecations…) straight to the
+// terminal, under Ink's feet: the frame ends up a row off and parts of it show twice. Interactive
+// sessions log them to ~/.rein/state/warnings.log instead.
+process.removeAllListeners('warning');
+process.on('warning', (w) => {
+  try {
+    mkdirSync(paths.state(), {recursive: true});
+    appendFileSync(path.join(paths.state(), 'warnings.log'), `${new Date().toISOString()} ${w.name}: ${w.message}\n`);
+  } catch {}
+});
 
 const cfg = await loadConfig();
 let renderer: Renderer = args.includes('--classic') ? 'classic' : args.includes('--fullscreen') ? 'fullscreen' : (cfg.tui ?? 'fullscreen');

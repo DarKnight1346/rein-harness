@@ -66,6 +66,8 @@ export type Config = {
   jevModel: string;
   /** Get your attention when Rein needs you or finished a long task: terminal bell + OSC 9, also a desktop notification, or off. */
   notifications: 'terminal' | 'system' | 'off';
+  /** Every this many minutes of a background command's life, a fork of the agent checks it's still needed and stops it if not; 0 = off. */
+  backgroundCheckMinutes: number;
 };
 
 export const DEFAULT_CONFIG: Config = {
@@ -91,6 +93,7 @@ export const DEFAULT_CONFIG: Config = {
   goalMaxRounds: 0,
   jevModel: 'jev-1.13.0',
   notifications: 'terminal',
+  backgroundCheckMinutes: 60,
 };
 
 export async function loadConfig(): Promise<Config> {

@@ -84,7 +84,7 @@ const CHOICE_TABS: ChoiceTabDef[] = [
   {
     title: 'Compaction',
     key: 'autoCompactPct',
-    description: "Summarize older messages automatically when the context reaches this share of the model's window.",
+    description: "Summarize the conversation automatically when the context reaches this share of the model's window — mid-turn too: the agent keeps working from the summary.",
     choices: [0, 50, 60, 70, 80, 90, 95].map((v) => ({
       value: v,
       label: v === 0 ? 'Off (only /compact, or when a model rejects a full context)' : `At ${v}% of the context window${v === 80 ? '  (default)' : ''}`,

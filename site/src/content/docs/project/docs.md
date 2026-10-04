@@ -46,7 +46,7 @@ same PR.
 - every **built-in skill** in `skills/` must appear in *Slash commands* and *Skills*
 - every **config key** in `src/store/config.ts` must appear in *Configuration*
 - every **tool** the model can call must appear in *Tool reference*
-- every **CLI flag** in `src/cli.tsx` and `src/headless.ts` must appear in *CLI flags*
+- every **CLI flag** in `src/app.tsx` and `src/headless.ts` must appear in *CLI flags*
 - the **sidebar** and the **pages** must match one to one
 - links between pages must be **relative** and must **resolve**
 

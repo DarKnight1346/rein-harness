@@ -63,10 +63,10 @@ for (const file of walk(path.join(repo, 'src'))) {
 }
 for (const t of tools) if (!mentions(toolsPage, t)) fail(`reference/tools: tool \`${t}\` is not documented`);
 
-// 5. CLI flags (src/cli.tsx + src/headless.ts) → reference/cli.
+// 5. CLI flags (src/app.tsx + src/headless.ts) → reference/cli.
 const cliPage = page('reference/cli');
 const flags = new Set();
-for (const f of ['src/cli.tsx', 'src/headless.ts']) for (const m of read(path.join(repo, f)).matchAll(/['"`\s(](--[a-z][a-zA-Z-]+)/g)) flags.add(m[1]);
+for (const f of ['src/app.tsx', 'src/headless.ts']) for (const m of read(path.join(repo, f)).matchAll(/['"`\s(](--[a-z][a-zA-Z-]+)/g)) flags.add(m[1]);
 for (const f of flags) if (!cliPage.includes(f)) fail(`reference/cli: flag ${f} is not documented`);
 
 // 6. Sidebar ↔ pages.

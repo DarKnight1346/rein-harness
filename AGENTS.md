@@ -17,7 +17,7 @@ on Node 22+.
 
 ```sh
 npm install
-npm run dev          # run from source (tsx src/cli.tsx)
+npm run dev          # run from source (tsx src/cli.ts)
 npm run typecheck    # tsc --noEmit
 npm test             # vitest; uses fake CLIs in test/fixtures, no subscription needed
 npm run build        # tsc → dist/
@@ -33,7 +33,7 @@ node scripts/check-docs.mjs   # docs drift check, also runs in CI
 
 | Path | What lives there |
 |---|---|
-| `src/cli.tsx`, `src/headless.ts` | Entry point, flags, `rein -p` |
+| `src/cli.ts`, `src/app.tsx`, `src/headless.ts` | Entry point (production React), flags and renderer loop, `rein -p` |
 | `src/runtime.ts` | Wires everything together for a session |
 | `src/session/` | Engine (turn loop, failover, carry), transcript, compaction, `/btw`, checkpoints, snapshots, system prompt |
 | `src/providers/{claude,codex}/` | CLI drivers: Claude stream-json, Codex app-server JSON-RPC |
@@ -72,7 +72,7 @@ update the docs in the same PR.
 | If you change… | Update |
 |---|---|
 | A slash command (`src/commands/index.ts`, `src/ui/useRein.ts`) | `reference/commands.md` and the feature page |
-| A CLI flag or env var (`src/cli.tsx`, `src/headless.ts`) | `reference/cli.md`, `reference/files.md` (env), `features/headless.md` |
+| A CLI flag or env var (`src/app.tsx`, `src/headless.ts`) | `reference/cli.md`, `reference/files.md` (env), `features/headless.md` |
 | A config key or default (`src/store/config.ts`) or a `/configure` / `/model` tab | `reference/configuration.md` and the feature page |
 | A tool, its parameters or approval behaviour (`src/tools/`, `src/agents/tools.ts`, …) | `reference/tools.md`, `features/tools.md`, `features/permissions.md` if approvals change |
 | Permission rules, sensitive paths, approval modes (`src/tools/host.ts`, `permissions.ts`) | `features/permissions.md`, `project/security.md` |

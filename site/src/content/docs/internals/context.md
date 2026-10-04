@@ -93,12 +93,14 @@ GOAL: what the user is trying to accomplish.
 KEY FACTS & DECISIONS: everything established so far, including names, numbers, file paths, code identifiers and exact values (verbatim).
 USER PREFERENCES: tone, format, constraints the user asked for.
 CODE & ARTIFACTS: essential code or text produced, verbatim if short, otherwise its gist and key signatures.
-OPEN QUESTIONS / NEXT STEPS: what was pending when the transcript ends.
+OPEN QUESTIONS / NEXT STEPS: what was pending when the transcript ends. If it ends in the middle of a task, say exactly where the work stopped and what the next step is.
 ```
+
+The compaction model sees each message's text plus a one-line trace per tool call with a short excerpt of its result (`renderForSummary`), so a summary of a tool-heavy turn knows what was read, run and changed.
 
 Details worth knowing:
 
-- **Kept messages.** The last `KEEP_RECENT` (4) messages stay verbatim. `/compact` keeps 2.
+- **Kept messages.** The last `KEEP_RECENT` (4) messages stay verbatim. `/compact` keeps 2. A mid-turn compaction keeps none: the turn itself is what filled the context.
 - **Chunked folding.** No more than `CHUNK_TOKENS` (60,000) of transcript goes into one call. Longer histories are folded chunk by chunk: each call gets `EXISTING SUMMARY` plus `NEW TRANSCRIPT TO FOLD IN`. A 500k-token conversation compacts on a model with a much smaller window.
 - **Nothing is deleted.** Messages stay on disk. Only `summary = {text, coversUpTo}` is added, and `native` is cleared.
 - **Subfolder instructions reset.** After a compaction, scoped `AGENTS.md`/`CLAUDE.md` files are delivered again on the next tool call that touches them, because the summary may not keep them word for word.
@@ -108,11 +110,27 @@ Details worth knowing:
 | Reason | When | Line shown after it |
 | --- | --- | --- |
 | `manual` | You run `/compact` | `You ran /compact · the next reply starts from the summary · /context for details` |
+| `midturn` | While the agent works, a request's input reaches `autoCompactPct` of the window. The agent carries on (see below) | `Compacted mid-task at 80% of the context window — the agent carries on from the summary` |
 | `auto` | After a turn, input tokens ≥ `autoCompactPct` of the window (default 80%) | `Auto-compacted at 80% of the context window · change it in /configure → Compaction` |
 | `handoff` | A carry into a new session would exceed 24k tokens | `Compacted before handing the conversation to another model` |
-| `context` | The model rejected the prompt as too long (Claude: "prompt is too long"; Codex: `contextWindowExceeded`). The engine compacts and retries once | `The model's context window was full — compacted and retried` |
+| `context` | The model rejected the prompt as too long (Claude: "prompt is too long"; Codex: `contextWindowExceeded`). If the agent had already done work in the turn, it's kept and the agent carries on like a mid-turn compaction; otherwise the engine compacts and retries the request once | `The model's context window was full — compacted, and the agent carries on` |
 
-The auto trigger (`maybeAutoCompact`) uses the provider's measured input tokens for the last request when available, and falls back to a ~4 chars/token estimate. The window is the model's real one, learned from the CLI (`result.modelUsage[*].contextWindow` on Claude, `models_cache.json` on Codex) and remembered in `~/.rein/state/context-windows.json`. If nothing is known, 200k is assumed. With `autoCompactPct: 0`, auto-compaction is off; `/compact` and the `context` retry still work.
+### Compacting without stopping the agent
+
+A long agentic turn (dozens or hundreds of tool calls) can fill the context long before the agent ends its turn. Rein watches the input size of every request inside a turn. When one reaches `autoCompactPct` of the window, the engine (`Engine.send`):
+
+1. **stops the turn between steps.** It interrupts the native session right as a new request starts, or as soon as a running tool finishes. It never stops a tool mid-run;
+2. **saves the work so far** as an assistant message, with its tool calls;
+3. **compacts** everything into the summary, keeping no messages verbatim;
+4. **sends a continuation** in a fresh session: the summary, then a `<context_compacted>` note telling the agent to pick up exactly where it stopped instead of starting over or asking you, followed by its most recent tool results verbatim (newest first, within the 12k-token carry budget) so it keeps its working memory.
+
+The check skips a segment's first request (nothing has happened yet that a compaction would fold away), so a continuation never triggers another compaction straight away. Tool results stored in the transcript are clipped to 4,000 characters and marked `[truncated: N characters in full …]` when there was more.
+
+To you it's one continuous turn with a "Conversation compacted" rule in the middle. The continuation is stored as a `synthetic` message: it doesn't appear in `/rewind`, and the approval judge and checkpoints keep using your real request. At most `MAX_MIDTURN_COMPACTIONS` (20) happen per turn, as a backstop against loops. A user interrupt (Esc) always wins over a pending compaction.
+
+Claude's own auto-compaction is turned off for chat sessions (`DISABLE_AUTO_COMPACT=1`), so Rein's threshold is the only one and the history never changes behind Rein's back.
+
+The auto trigger (`maybeAutoCompact`) uses the provider's measured input tokens for the last request when available, and falls back to a ~4 chars/token estimate. The window is the model's real one, learned from the CLI (`result.modelUsage[*].contextWindow` on Claude, `models_cache.json` on Codex) and remembered in `~/.rein/state/context-windows.json`. If nothing is known, 200k is assumed. With `autoCompactPct: 0`, auto-compaction is off, both after turns and mid-turn; `/compact` and the `context` recovery still work.
 
 While it runs you see `Compacting N messages…`, then a rule:
 
