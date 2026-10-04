@@ -17,6 +17,8 @@ export type Message = {
   interrupted?: boolean;
   /** Written by Rein, not the user (the nudge to carry on after a mid-turn compaction). */
   synthetic?: boolean;
+  /** Rebuilt after Rein stopped mid-turn (crash, killed terminal): the reply and tool calls so far. */
+  cutOff?: boolean;
   /** Tool calls made while producing this reply (kept for the record and for session search). */
   tools?: {label: string; summary: string; ok: boolean; result: string; diff?: DiffLine[]}[];
   /** Images attached to a user message (files in the session's scratch folder). */
@@ -79,6 +81,8 @@ export const scratchDir = (id: string) => path.join(reinHome(), 'scratch', id);
  * `sessions/<id>.meta.json` is a small index entry for listing. Saving appends only what's new, so a
  * long conversation never gets rewritten; search and paging stream the JSONL instead of parsing it.
  * Legacy `<id>.json` files are converted on first load/list.
+ * While a turn runs, `{"t":"progress","i":N,...}` lines record each tool call and the reply text so
+ * far, so a crash mid-turn doesn't lose the work: loading rebuilds the cut-off reply from them.
  */
 const jsonlFile = (id: string) => path.join(paths.sessions(), `${id}.jsonl`);
 const indexFile = (id: string) => path.join(paths.sessions(), `${id}.meta.json`);
@@ -130,6 +134,23 @@ async function appendNew(t: Transcript): Promise<void> {
   await writeJson(indexFile(t.id), indexOf(t));
 }
 
+export type Progress = {tool?: NonNullable<Message['tools']>[number]; text?: string; model?: ModelRef; accountId?: string};
+
+/**
+ * Record a running turn's progress for the reply that will be message `index` (append-only, small:
+ * one tool call and the text since the last record). Superseded once the finished reply is saved.
+ */
+export function recordProgress(t: Transcript, index: number, p: Progress): Promise<void> {
+  if (!p.tool && !p.text) return Promise.resolve();
+  const prev = writing.get(t.id) ?? Promise.resolve();
+  const next = prev
+    .then(() => appendNew(t)) // the user message first, so the log reads in order
+    .then(() => appendFile(jsonlFile(t.id), JSON.stringify({t: 'progress', i: index, ...p}) + '\n', {mode: 0o600}))
+    .catch(() => {});
+  writing.set(t.id, next);
+  return next;
+}
+
 /**
  * /rewind: drop messages from `to` on. The log keeps every earlier line (history is never lost);
  * a `truncate` marker makes loading stop there, and new messages reuse those indices.
@@ -154,6 +175,8 @@ export function truncateTranscript(t: Transcript, to: number): Promise<void> {
 async function readJsonl(id: string): Promise<Transcript | undefined> {
   if (!existsSync(jsonlFile(id))) return undefined;
   const t = {id, createdAt: 0, messages: [], native: {}} as Transcript;
+  // Progress of a turn that hadn't finished, by the index its reply would have taken.
+  const progress = new Map<number, {text: string; tools: NonNullable<Message['tools']>; model?: ModelRef; accountId?: string}>();
   const rl = readline.createInterface({input: createReadStream(jsonlFile(id), {encoding: 'utf8'}), crlfDelay: Infinity});
   for await (const line of rl) {
     if (!line) continue;
@@ -166,8 +189,17 @@ async function readJsonl(id: string): Promise<Transcript | undefined> {
     if (rec.t === 'msg') {
       const {t: _t, i, ...m} = rec;
       t.messages[i] = m;
+      progress.delete(i);
+    } else if (rec.t === 'progress') {
+      const p = progress.get(rec.i) ?? {text: '', tools: []};
+      if (rec.text) p.text += rec.text;
+      if (rec.tool) p.tools.push(rec.tool);
+      p.model ??= rec.model;
+      p.accountId ??= rec.accountId;
+      progress.set(rec.i, p);
     } else if (rec.t === 'truncate') {
       t.messages.length = Math.min(t.messages.length, rec.to); // /rewind (older lines stay in the log)
+      for (const i of progress.keys()) if (i >= rec.to) progress.delete(i);
     } else if (rec.t === 'meta') {
       const {t: _t, ...meta} = rec;
       Object.assign(t, meta);
@@ -175,6 +207,12 @@ async function readJsonl(id: string): Promise<Transcript | undefined> {
   }
   t.messages = t.messages.filter(Boolean);
   persisted.set(t, {count: t.messages.length, meta: JSON.stringify(metaOf(t))});
+  // Rein stopped in the middle of the last turn: keep its work as a cut-off reply (saved on the next
+  // write), so the agent and /resume see what was already done instead of starting over.
+  const cut = progress.get(t.messages.length);
+  if (cut && t.messages.at(-1)?.role === 'user') {
+    t.messages.push({role: 'assistant', text: cut.text, at: Date.now(), model: cut.model, accountId: cut.accountId, tools: cut.tools.length ? cut.tools : undefined, interrupted: true, cutOff: true});
+  }
   return t;
 }
 

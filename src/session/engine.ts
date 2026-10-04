@@ -8,7 +8,7 @@ import type {Config} from '../store/config.js';
 import {DANGER_HEADROOM, headroom, usageStore} from '../store/usage.js';
 import {compactableCount, compactTranscript, type CompactReason, type CompactResult} from './compactor.js';
 import {systemPrompt} from './prompt.js';
-import {buildCarry, carryStart, estimateTokens, newTranscript, saveTranscript, scratchDir, truncateTranscript, type Message, type Transcript} from './transcript.js';
+import {buildCarry, carryStart, estimateTokens, newTranscript, recordProgress, saveTranscript, scratchDir, truncateTranscript, type Message, type Transcript} from './transcript.js';
 import {CARRY_TOOL_BUDGET, carriedTools, selectCarriedTools, type CarrySelector} from './carry.js';
 
 export type Route = {ref: ModelRef; reason: 'fixed' | 'auto' | 'sticky' | 'default' | 'failover'; confidence?: number};
@@ -234,6 +234,7 @@ export class Engine {
     if (hook?.context) text = `${text}\n\n<hook_context>\n${hook.context}\n</hook_context>`;
     let images = attached;
     t.messages.push({role: 'user', text, at: Date.now(), ...(images.length ? {images} : {})});
+    void saveTranscript(t); // on disk before the turn starts, so a crash mid-turn keeps the request
     let userIndex = t.messages.length - 1;
     this.interruptRequested = false;
 
@@ -288,6 +289,7 @@ export class Engine {
 
       yield {type: 'route', route, account, effort: session.effort};
       let reply = '';
+      let savedText = 0; // reply text already in a progress record
       const replyTools: NonNullable<Message['tools']> = [];
       const fullResults: string[] = []; // unclipped, for the continuation after a mid-turn compaction
       let failure: {kind: string; message: string; resetsAt?: number} | undefined;
@@ -315,6 +317,9 @@ export class Engine {
             toolsRunning = Math.max(0, toolsRunning - 1);
             replyTools.push({label: a.label, summary: a.summary, ok: a.ok, result: clipResult(a.result), diff: a.diff});
             fullResults.push(a.result);
+            // Crash safety: each finished tool call (and the text before it) goes to the log now.
+            void recordProgress(t, t.messages.length, {tool: replyTools.at(-1), text: reply.slice(savedText), model: route.ref, accountId: account.id});
+            savedText = reply.length;
           }
           yield ev;
           if (compactDue) stopForCompaction();

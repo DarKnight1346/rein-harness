@@ -27,7 +27,7 @@ Set `REIN_HOME` to move the whole folder, for example to keep a test setup apart
 | `state/context-windows.json` | Context windows learned from real responses (`result.modelUsage` on Claude), remembered across restarts |
 | `state/claude-models-<id>.json` | Model list the `claude` CLI reported for that account. Refreshed in the background once a day |
 | `state/codex-catalog/<id>.json` | Rein's rewritten Codex model catalog with the built-in tools stripped. See [drivers](../../internals/drivers/) |
-| `sessions/<id>.jsonl` | Conversation transcripts, append-only: one line per message, plus meta lines (summary, native session refs, tokens, subagents, goal) |
+| `sessions/<id>.jsonl` | Conversation transcripts, append-only: one line per message, plus meta lines (summary, native session refs, tokens, subagents, goal) and `progress` lines that record a running turn's tool calls, so a crash mid-turn loses nothing |
 | `sessions/<id>.meta.json` | Small index entry per conversation, used for listing and `/resume` |
 | `scratch/<id>/` | The session's scratchpad. The agent can write here without approval. Pasted and dropped images are copied to `scratch/<id>/images/` |
 | `checkpoints/<id>/` | [`/rewind`](../../features/rewind/) data: `tree.git` (a private git store of whole-project snapshots, never your project's `.git`), `trees.json`, and per-file checkpoints (`index.jsonl` + content-addressed `blobs/`, ≤ 10 MB per file) |

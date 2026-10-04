@@ -1105,6 +1105,7 @@ function replay(t: Transcript, add: AddEntry): void {
         add({kind: 'tool', ...tool, ...(plan ? {plan} : {})});
       }
       add({kind: 'assistant', text: m.text, first: true});
+      if (m.cutOff) add({kind: 'info', text: `Rein stopped in the middle of this turn; its work so far was saved (${m.tools?.length ?? 0} tool call${m.tools?.length === 1 ? '' : 's'}). Say "continue" and the agent picks up from there.`});
     }
   }
 }
