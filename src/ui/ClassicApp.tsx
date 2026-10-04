@@ -2,6 +2,7 @@ import React, {useState} from 'react';
 import {Box, Static, Text} from 'ink';
 import {approvalNote, compactText, routeLabel, toolResultSummary} from './format.js';
 import {ImportPrompt} from './ImportPrompt.js';
+import {TrustHooksPrompt} from './TrustHooksPrompt.js';
 import {LoginScreen} from './LoginScreen.js';
 import {ModelScreen} from './ModelScreen.js';
 import {ConfigureScreen} from './ConfigureScreen.js';
@@ -79,6 +80,7 @@ export function ClassicApp({resume}: {resume: Resume}) {
           <Working startedAt={r.goalNote.startedAt} phase="tool" tool={r.goalNote.label} />
         ) : null}
         {overlay.name === 'import' && <ImportPrompt rows={overlay.rows} onImport={() => r.finishImport(true)} onSkip={() => r.finishImport(false)} />}
+        {overlay.name === 'trust' && <TrustHooksPrompt hooks={overlay.hooks} onTrust={() => r.finishTrust(true)} onSkip={() => r.finishTrust(false)} />}
         {overlay.name === 'login' && <LoginScreen onLog={r.log} onClose={r.closeOverlay} />}
         {overlay.name === 'model' && <ModelScreen onLog={r.log} onClose={r.closeOverlay} />}
         {overlay.name === 'resume' && <ResumeScreen sessions={overlay.sessions} onPick={(id) => void r.pickSession(id)} onCancel={r.closeOverlay} />}
@@ -91,7 +93,7 @@ export function ClassicApp({resume}: {resume: Resume}) {
         {overlay.name === 'approval' && <ApprovalPrompt req={overlay.req} onDecide={overlay.resolve} />}
         <Box borderStyle="round" borderColor={r.inputActive ? 'gray' : 'blackBright'} paddingX={1}>
           <Text color="gray">{'> '}</Text>
-          <TextInput isActive={r.inputActive} value={r.draft} onChange={r.onDraft} onPaste={r.onPaste} onImagePaste={r.onImagePaste} placeholder={!r.ready ? 'starting…' : chat.busy ? 'queue a message, or /btw <question>' : 'message or /help'} onSubmit={r.onSubmit} />
+          <TextInput isActive={r.inputActive} value={r.draft} onChange={r.onDraft} onPaste={r.onPaste} onImagePaste={r.onImagePaste} onHistory={r.onHistory} onExternalEdit={r.onExternalEdit} placeholder={!r.ready ? 'starting…' : chat.busy ? 'queue a message, or /btw <question>' : 'message or /help'} onSubmit={r.onSubmit} />
         </Box>
         {r.inputActive && r.suggestions.length > 0 ? (
           <Box flexDirection="column" paddingLeft={2}>

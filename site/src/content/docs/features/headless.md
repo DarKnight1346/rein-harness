@@ -3,7 +3,7 @@ title: Headless mode
 description: Run Rein non-interactively with rein -p for scripts and CI — piping, output formats, permissions without a human, plan-only runs and exit codes.
 ---
 
-`rein -p` runs one prompt with no UI and prints the result, the same way `claude -p` does. You still get routing across your accounts, failover, every tool, your rules and your hooks, which makes it useful in shell scripts, git hooks and CI jobs.
+`rein -p` runs one prompt with no UI and prints the result, the same way `claude -p` does. You still get routing across your accounts, failover, every tool, your rules and your hooks, which makes it useful in shell scripts, git hooks and CI jobs. (Hooks a project ships run only once you've [trusted them](../hooks/#trusting-a-projects-hooks) in an interactive `rein`; untrusted ones are skipped with a note on stderr.)
 
 ```sh
 git diff --staged | rein -p "review this diff for bugs; be brief"

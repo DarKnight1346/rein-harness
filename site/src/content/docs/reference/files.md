@@ -21,6 +21,9 @@ Set `REIN_HOME` to move the whole folder, for example to keep a test setup apart
 | `accounts/claude/<id>/` | `CLAUDE_CONFIG_DIR` for a Claude account you added with `/login` (`claude-1`, `claude-2`, …) |
 | `accounts/codex/<id>/` | `CODEX_HOME` for a Codex account you added (`codex-1`, …) |
 | `state/usage.json` | Last-known usage windows per account, plus limit cooldowns (account unusable until a time) |
+| `state/codex-compat.json` | Result of the compatibility check for the installed `codex` version (and its feature flags). Delete it to re-check |
+| `state/trusted-projects.json` | Projects whose hooks you trusted, with a hash of the hooks as reviewed (a change asks again) |
+| `state/input-history.json` | Messages you sent, per project (the last 200), for `↑` recall in the input |
 | `state/context-windows.json` | Context windows learned from real responses (`result.modelUsage` on Claude), remembered across restarts |
 | `state/claude-models-<id>.json` | Model list the `claude` CLI reported for that account. Refreshed in the background once a day |
 | `state/codex-catalog/<id>.json` | Rein's rewritten Codex model catalog with the built-in tools stripped. See [drivers](../../internals/drivers/) |

@@ -10,6 +10,11 @@ import {listTranscripts, loadTranscript, type SessionInfo} from '../session/tran
 import {catalog} from '../router/catalog.js';
 import {subagentContextReport, contextReport, type ContextReport} from '../session/context.js';
 import {compactableCount} from '../session/compactor.js';
+import {onUntrustedHooks, trustProjectHooks, type ProjectHooks} from '../hooks.js';
+import {notify} from './terminal/notify.js';
+import {incompatibleMessage} from '../providers/codex/compat.js';
+import {editExternally} from './terminal/editor.js';
+import {addHistory, HistoryCursor, loadHistory} from '../store/history.js';
 import {askBtwSubagent, btw} from '../session/btw.js';
 import type {Transcript} from '../session/transcript.js';
 import type {AddEntry, Entry} from './entries.js';
@@ -38,6 +43,8 @@ export const VERSION = reinVersion();
 /** Queue marker: deliver a finished background subagent's report (if still uncollected). */
 const DELIVER = '\u0000deliver-agent:';
 
+/** Work shorter than this finishes without a notification (you're probably still watching). */
+const NOTIFY_AFTER_MS = 20_000;
 /** Background commands running at least this long are mentioned (once) when a turn ends. */
 const BACKGROUND_REMINDER_MS = 5 * 60_000;
 
@@ -48,6 +55,7 @@ export type Overlay =
   | {name: 'configure'}
   | {name: 'approval'; req: ApprovalRequest; resolve(d: ApprovalDecision): void; position: number; total: number}
   | {name: 'import'; rows: AccountRow[]}
+  | {name: 'trust'; hooks: ProjectHooks}
   // Fullscreen-only info windows (classic prints these into the transcript instead).
   | {name: 'usage'; data?: {rows: UsageRow[]; jev: boolean}}
   | {name: 'context'; report?: ContextReport; agent?: string}
@@ -109,6 +117,31 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
 
   const chat = useChat(add, log, {split: opts.renderer === 'classic'});
 
+  // Project hooks run only once trusted: ask as soon as untrusted ones are skipped (at startup, or
+  // when they change mid-session), after any window that's open closes.
+  const [untrusted, setUntrusted] = useState<ProjectHooks | undefined>();
+  useEffect(() => {
+    onUntrustedHooks((p) => setUntrusted(p));
+    return () => onUntrustedHooks(undefined);
+  }, []);
+  useEffect(() => {
+    if (untrusted && overlay.name === 'none') {
+      setOverlay({name: 'trust', hooks: untrusted});
+      setUntrusted(undefined);
+    }
+  }, [untrusted, overlay.name]);
+  const finishTrust = (trust: boolean) => {
+    if (overlay.name !== 'trust') return;
+    setOverlay({name: 'none'});
+    if (!trust) {
+      log('info', "This project's hooks won't run this session. You'll be asked again next time.");
+      return;
+    }
+    trustProjectHooks(process.cwd());
+    log('info', `Trusted this project's hooks (${overlay.hooks.commands.length}). They run from now on; any change to them asks again.`);
+    void runtime.sessionStartHooks('startup', true);
+  };
+
   const refresh = useCallback(async () => {
     await runtime.refreshCatalog();
     bump();
@@ -124,6 +157,10 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
       if (rows?.length) setOverlay({name: 'import', rows});
       else if (rows) await skipImport();
       await refresh();
+      // A codex whose app-server protocol changed under Rein is switched off (see compat.ts).
+      const compat = catalog.codexCompat;
+      if (compat?.ok === false) log('error', incompatibleMessage(compat));
+      else for (const w of compat?.warnings ?? []) log('info', `Codex ${compat!.version}: ${w}`);
       const shadowed = shadowedSkills(loadSkills());
       if (shadowed.length) log('info', `Skill${shadowed.length > 1 ? 's' : ''} ${shadowed.map((s) => `"${s.name}"`).join(', ')} hidden by built-in command${shadowed.length > 1 ? 's' : ''}; rename to use ${shadowed.length > 1 ? 'them' : 'it'}.`);
       setReady(true);
@@ -392,6 +429,34 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
         setGoalNote(undefined);
       });
   }, [chat.busy, queued.length, overlay.name, ready, statusTick]);
+  // Notifications: when Rein needs you (approval, question, plan, hook trust), and when work that
+  // took a while is finished (the goal loop and queued messages included, not each of its turns).
+  useEffect(() => {
+    const mode = runtime.config.notifications;
+    if (overlay.name === 'approval') notify(mode, 'Rein needs your approval', `${overlay.req.tool.label}(${overlay.req.summary})`);
+    else if (overlay.name === 'ask') notify(mode, 'Rein has a question', overlay.questions[0]?.question ?? 'The agent is waiting for your answer');
+    else if (overlay.name === 'plan') notify(mode, 'Rein has a plan for you', overlay.plan.title);
+    else if (overlay.name === 'trust') notify(mode, 'Rein', "This project's hooks need your review");
+  }, [overlay.name]);
+  const working = chat.busy || !!goalNote || queued.length > 0 || !!compacting;
+  const workStarted = useRef<number | undefined>(undefined);
+  useEffect(() => {
+    if (working) {
+      workStarted.current ??= Date.now();
+      return;
+    }
+    const started = workStarted.current;
+    if (started === undefined) return;
+    // Idle for a moment (the goal loop starts its next step right after a turn ends).
+    const t = setTimeout(() => {
+      workStarted.current = undefined;
+      if (Date.now() - started < NOTIFY_AFTER_MS) return;
+      const g = runtime.goals.goal;
+      notify(runtime.config.notifications, 'Rein is done', g?.status === 'done' ? `Goal achieved: ${g.text}` : g?.status === 'paused' ? `Goal paused: ${g.text}` : 'Ready for your next message');
+    }, 1500);
+    return () => clearTimeout(t);
+  }, [working]);
+
   // Background commands run until stopped (no timeout). When a turn ends, mention any that have been
   // going for a while, once each, so a forgotten dev server or emulator doesn't run unnoticed.
   const announcedBg = useRef(new Set<number>());
@@ -453,6 +518,19 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
   // Pastes, images and dropped files shown as placeholders in the input; expanded on send.
   const attachments = useRef(new Attachments(() => nodePath.join(runtime.engine.scratch, 'images')));
   const onPaste = (text: string) => attachments.current.paste(text);
+  // ↑/↓ recall of earlier messages (per project, kept across sessions); off while a list uses the arrows.
+  const history = useRef(new HistoryCursor(loadHistory(process.cwd())));
+  const onExternalEdit = (current: string) => {
+    const edited = editExternally(current, opts.renderer === 'fullscreen');
+    if (edited === undefined) log('error', 'The editor exited with an error, so the draft is unchanged. Rein uses $VISUAL or $EDITOR (else vi).');
+    else prevDraft.current = edited;
+    return edited;
+  };
+  const onHistory = (dir: -1 | 1, current: string) => {
+    const recalled = history.current.move(dir, current);
+    if (recalled !== undefined) prevDraft.current = recalled;
+    return recalled;
+  };
   const onImagePaste = async () => {
     const token = await attachments.current.pasteClipboardImage();
     if (!token) log('info', 'No image on the clipboard (Ctrl+V pastes images; drag a file in to attach it).');
@@ -914,6 +992,8 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
     prevDraft.current = '';
     setDraft('');
     setSuggestIndex(0);
+    addHistory(process.cwd(), typed);
+    history.current.reset(loadHistory(process.cwd()));
     runCommand(typed);
   };
 
@@ -1004,7 +1084,7 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
 
   return {
     entries, add, log, overlay, setOverlay, closeOverlay, finishImport, ready, updating, updateLog, statusTick, bump,
-    startPlanGoal, startNewPlan, draft, onDraft, onSubmit, onPaste, onImagePaste, doRewind, togglePlanMode, fileSuggestions, fileSelected, acceptFile, runCommand, suggestions, selected, setSuggestIndex, inputActive, chat, skills, openShells, queued, exitArmed, compacting, pickSession,
+    finishTrust, startPlanGoal, startNewPlan, draft, onDraft, onSubmit, onPaste, onImagePaste, onHistory: suggestions.length || fileSuggestions.length ? undefined : onHistory, onExternalEdit, doRewind, togglePlanMode, fileSuggestions, fileSelected, acceptFile, runCommand, suggestions, selected, setSuggestIndex, inputActive, chat, skills, openShells, queued, exitArmed, compacting, pickSession,
     view, setView, viewing, goalNote,
   };
 }

@@ -57,6 +57,16 @@ export class Runtime {
     return compactTranscript(t, this.config, opts);
   };
 
+  /**
+   * SessionStart hooks: their output becomes context for the first message. Also run right after
+   * the user trusts the project's hooks (untrusted ones were skipped at startup).
+   */
+  async sessionStartHooks(source: 'startup' | 'resume', projectOnly = false): Promise<void> {
+    if (!hasHooks('SessionStart', process.cwd(), {projectOnly})) return;
+    const out = await runHooks('SessionStart', process.cwd(), {source}, {projectOnly}).catch(() => undefined);
+    if (out?.context) this.sessionContext = [this.sessionContext, out.context].filter(Boolean).join('\n');
+  }
+
   /** Plan mode (/plan, Shift+Tab, --permission-mode plan): read-only until a plan is approved. */
   planMode = false;
   /** Set by the UI: shows a presented plan and resolves with the user's decision. */
@@ -365,11 +375,7 @@ Drop superseded reads of the same file, routine listings, and output that no lon
       imageTool(() => this.config),
     );
     this.config = await loadConfig();
-    // SessionStart hooks: their output becomes context for the first message.
-    if (hasHooks('SessionStart', process.cwd())) {
-      const out = await runHooks('SessionStart', process.cwd(), {source: typeof opts.resume === 'string' ? 'resume' : 'startup'}).catch(() => undefined);
-      this.sessionContext = out?.context;
-    }
+    await this.sessionStartHooks(typeof opts.resume === 'string' ? 'resume' : 'startup');
     // MCP servers connect in the background; their tools appear as they come up.
     this.tools.addSource(() => this.mcp.tools());
     let mcpToolSet = '';

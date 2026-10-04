@@ -9,6 +9,7 @@ import {usageStore, windowLabel} from '../../store/usage.js';
 import type {Entry} from '../entries.js';
 import {accountLabel, modelLabel} from '../format.js';
 import {ImportPrompt} from '../ImportPrompt.js';
+import {TrustHooksPrompt} from '../TrustHooksPrompt.js';
 import {LoginScreen} from '../LoginScreen.js';
 import {ModelScreen} from '../ModelScreen.js';
 import {Clickable, useClickable} from '../terminal/clicks.js';
@@ -166,6 +167,12 @@ export function FullscreenApp({resume}: {resume: Resume}) {
         return (
           <Window title="Found existing logins" width={72} onClose={() => r.finishImport(false)}>
             <ImportPrompt bare rows={overlay.rows} onImport={() => r.finishImport(true)} onSkip={() => r.finishImport(false)} />
+          </Window>
+        );
+      case 'trust':
+        return (
+          <Window title="This project defines hooks" width={windowWidth} onClose={() => r.finishTrust(false)} color="yellow" dismissable={false}>
+            <TrustHooksPrompt bare hooks={overlay.hooks} onTrust={() => r.finishTrust(true)} onSkip={() => r.finishTrust(false)} />
           </Window>
         );
       case 'login':
@@ -405,7 +412,7 @@ export function FullscreenApp({resume}: {resume: Resume}) {
       <Box borderStyle="round" borderColor={r.inputActive ? 'cyan' : 'gray'} paddingX={1} width={cols} height={draftLines + 2} flexShrink={0} overflow="hidden">
         <Text color="cyan">{'> '}</Text>
         <Box flexDirection="column" width={inputWidth} justifyContent="flex-end" overflow="hidden">
-          <TextInput width={inputWidth} maxLines={MAX_INPUT_LINES} isActive={r.inputActive} value={r.draft} onChange={r.onDraft} onPaste={r.onPaste} onImagePaste={r.onImagePaste} placeholder={!r.ready ? 'starting…' : viewing ? `message ${viewing.name} (subagent)…` : chat.busy ? 'queue a message, or /btw <question>' : 'message, / for commands'} onSubmit={r.onSubmit} />
+          <TextInput width={inputWidth} maxLines={MAX_INPUT_LINES} isActive={r.inputActive} value={r.draft} onChange={r.onDraft} onPaste={r.onPaste} onImagePaste={r.onImagePaste} onHistory={r.onHistory} onExternalEdit={r.onExternalEdit} placeholder={!r.ready ? 'starting…' : viewing ? `message ${viewing.name} (subagent)…` : chat.busy ? 'queue a message, or /btw <question>' : 'message, / for commands'} onSubmit={r.onSubmit} />
         </Box>
       </Box>
       <Box height={1} paddingX={1}>

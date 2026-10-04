@@ -57,6 +57,9 @@ node scripts/check-docs.mjs   # docs drift check, also runs in CI
 - Branch from `main` and open a PR. Every merge to `main` publishes the next patch to npm automatically
   (`.github/workflows/publish.yml`), so `main` must always be releasable.
 - Pin GitHub Actions to full commit SHAs with a version comment. The repo is scored by OpenSSF Scorecard.
+- Using a new part of Codex's app-server protocol (a method, notification or field)? Add it to `REQUIRED` in
+  `src/providers/codex/compat.ts`, so Rein switches Codex off cleanly on a release that lacks it instead of
+  breaking mid-chat. Disabling a new Codex feature goes in `appServerArgs` (`src/providers/codex/catalog.ts`).
 
 ## Docs are part of the change
 

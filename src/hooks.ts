@@ -1,5 +1,8 @@
 import {spawn} from 'node:child_process';
+import {createHash} from 'node:crypto';
 import {readFileSync} from 'node:fs';
+import path from 'node:path';
+import {trustedHooksHash, trustHooks} from './store/trust.js';
 import {settingsFiles} from './tools/permissions.js';
 import {isWindows, shellFor} from './util/platform.js';
 
@@ -12,6 +15,10 @@ import {isWindows, shellFor} from './util/platform.js';
  * reported but don't block. JSON on stdout can also decide: {"decision": "block", "reason": …},
  * PreToolUse {"hookSpecificOutput": {"permissionDecision": "allow" | "deny" | "ask", …}}, and
  * {"hookSpecificOutput": {"additionalContext": …}} / plain stdout for context events.
+ *
+ * Hooks from the project's own settings files run only once the user has trusted them: a cloned
+ * repo must not be able to run commands just because `rein` was started in it (same idea as the
+ * approval for `.mcp.json` servers). The trust covers the hooks as reviewed; any change asks again.
  */
 export type HookEvent = 'PreToolUse' | 'PostToolUse' | 'UserPromptSubmit' | 'Stop' | 'SessionStart';
 
@@ -45,16 +52,60 @@ const CLAUDE_NAMES: Record<string, string[]> = {
   todo_write: ['TodoWrite'],
 };
 
-function readHooks(root: string): Partial<Record<HookEvent, HookGroup[]>> {
+function hooksIn(file: string): Record<string, unknown> | undefined {
+  try {
+    const hooks = JSON.parse(readFileSync(file, 'utf8'))?.hooks;
+    return hooks && typeof hooks === 'object' && Object.keys(hooks).length ? hooks : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/** The project's own settings files (a cloned repo can ship these); the first two are the user's. */
+const projectFiles = (root: string) => settingsFiles(root).slice(2);
+
+export type ProjectHooks = {hash: string; trusted: boolean; commands: {event: string; command: string; file: string}[]};
+
+/** Hooks defined by the project's settings files, and whether the user trusted them as they are now. */
+export function projectHooks(root: string): ProjectHooks | undefined {
+  const found = projectFiles(root).flatMap((file) => {
+    const hooks = hooksIn(file);
+    return hooks ? [{file, hooks}] : [];
+  });
+  if (!found.length) return undefined;
+  const hash = createHash('sha256').update(JSON.stringify(found.map((f) => [path.relative(root, f.file), f.hooks]))).digest('hex');
+  const commands = found.flatMap(({file, hooks}) =>
+    Object.entries(hooks).flatMap(([event, groups]) =>
+      (Array.isArray(groups) ? groups : []).flatMap((g: any) => (Array.isArray(g?.hooks) ? g.hooks : []).filter((h: any) => typeof h?.command === 'string').map((h: any) => ({event, command: h.command as string, file: path.relative(root, file)}))),
+    ),
+  );
+  return {hash, trusted: trustedHooksHash(root) === hash, commands};
+}
+
+/** Trust the project's hooks as they are now (they run from then on, until they change). */
+export function trustProjectHooks(root: string): void {
+  const p = projectHooks(root);
+  if (p) trustHooks(root, p.hash);
+}
+
+/** Called when untrusted project hooks are skipped (once per version of them), so the UI can ask. */
+let onUntrusted: ((p: ProjectHooks) => void) | undefined;
+let reported: string | undefined;
+export function onUntrustedHooks(fn: ((p: ProjectHooks) => void) | undefined): void {
+  onUntrusted = fn;
+}
+
+function readHooks(root: string, projectOnly = false): Partial<Record<HookEvent, HookGroup[]>> {
   const out: Partial<Record<HookEvent, HookGroup[]>> = {};
-  for (const file of settingsFiles(root)) {
-    let hooks: any;
-    try {
-      hooks = JSON.parse(readFileSync(file, 'utf8'))?.hooks;
-    } catch {
-      continue;
-    }
-    if (!hooks || typeof hooks !== 'object') continue;
+  const project = projectHooks(root);
+  if (project && !project.trusted && reported !== project.hash) {
+    reported = project.hash;
+    onUntrusted?.(project);
+  }
+  const files = settingsFiles(root);
+  for (const file of project?.trusted ? files.slice(projectOnly ? 2 : 0) : projectOnly ? [] : files.slice(0, 2)) {
+    const hooks = hooksIn(file);
+    if (!hooks) continue;
     for (const [event, groups] of Object.entries(hooks)) {
       if (!Array.isArray(groups)) continue;
       (out[event as HookEvent] ??= []).push(...(groups as HookGroup[]).filter((g) => Array.isArray(g?.hooks)));
@@ -104,8 +155,8 @@ function runCommand(cmd: HookCommand, input: object, root: string): Promise<{cod
 }
 
 /** Run every hook for `event` (matching `tool`), in order; the first block wins. */
-export async function runHooks(event: HookEvent, root: string, payload: {tool?: string} & Record<string, unknown>): Promise<HookOutcome> {
-  const groups = (readHooks(root)[event] ?? []).filter((g) => matches(g.matcher, payload.tool));
+export async function runHooks(event: HookEvent, root: string, payload: {tool?: string} & Record<string, unknown>, opts: {projectOnly?: boolean} = {}): Promise<HookOutcome> {
+  const groups = (readHooks(root, opts.projectOnly)[event] ?? []).filter((g) => matches(g.matcher, payload.tool));
   const outcome: HookOutcome = {errors: []};
   const context: string[] = [];
   const input = {hook_event_name: event, cwd: root, ...(payload.tool ? {tool_name: payload.tool} : {}), ...payload};
@@ -143,6 +194,6 @@ export async function runHooks(event: HookEvent, root: string, payload: {tool?: 
 }
 
 /** Whether any hook is configured for an event (skips the work when none are). */
-export function hasHooks(event: HookEvent, root: string): boolean {
-  return (readHooks(root)[event] ?? []).length > 0;
+export function hasHooks(event: HookEvent, root: string, opts: {projectOnly?: boolean} = {}): boolean {
+  return (readHooks(root, opts.projectOnly)[event] ?? []).length > 0;
 }

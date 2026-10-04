@@ -83,7 +83,7 @@ See [Goals](../../features/goals/) and [Plan mode](../../features/plans/).
 
 | Command | Arguments | What it does |
 |---|---|---|
-| `/configure` | — | Settings in ten tabs: Status line, Sidebar, Approvals, Shell, Subagents, Goals, Load balancing, Updates, Privacy, Compaction. **Aliases: `/config`, `/settings`.** |
+| `/configure` | — | Settings in eleven tabs: Status line, Sidebar, Approvals, Shell, Subagents, Goals, Load balancing, Notifications, Updates, Privacy, Compaction. **Aliases: `/config`, `/settings`.** |
 | `/tui` | `fullscreen` \| `classic` | Switches renderer and carries the conversation over. With no argument, shows which renderer is active. *Waits for idle.* |
 | `/update` | — | Updates the `claude` and `codex` CLIs, checks the Codex app-server protocol, then updates Rein. *Waits for idle.* |
 | `/help` | — | Commands and skills. |

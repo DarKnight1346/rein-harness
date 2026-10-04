@@ -51,6 +51,16 @@ Rein only works with a **ChatGPT login** for Codex. A Codex home signed in any o
 
 Rein checks login state through Codex's app-server (`account/read`), not `codex login status`. That command can claim "Logged in" even when the refresh token is dead.
 
+### `Codex … changed its app-server protocol … Codex is switched off`
+
+Your `codex` CLI was updated to a version whose app-server protocol is missing something Rein relies on (the message lists what). Rein switched Codex off so chats don't break; Claude keeps working and handles everything. Either update Rein (`/update` or `rein --update`; a fixed release usually follows quickly), or go back to the Codex line Rein verified:
+
+```sh
+npm install -g @openai/codex@0.160
+```
+
+Rein checks each Codex version once and remembers the result in `~/.rein/state/codex-compat.json`.
+
 ### Can I add the same account twice?
 
 No. Rein rejects a second account with the same email.

@@ -175,7 +175,7 @@ The input box grows up to six lines and has a few tricks:
 - **Backspace** after a token deletes the whole token and its attachment.
 - **`@mentions`.** Type `@` and part of a path to get fuzzy matches from your project's files and folders (from `rg --files`, so `.gitignore` is respected). `Tab` or `Enter` inserts the selected match. On send, a mentioned file's contents, image or folder listing goes along with your message.
 - **Slash commands.** Type `/` for a list of commands and skills. `↑↓` selects and `Tab` completes.
-- **`Ctrl+U`** clears the input.
+- **A real line editor.** Move with `←/→` (by word with `Option`/`Alt`), `Home`/`End` or `Ctrl+A`/`Ctrl+E`, delete words with `Ctrl+W`, and edit anywhere in the draft. `↑` on the first row recalls earlier messages in this project, even from past sessions. `Ctrl+G` opens the draft in `$EDITOR` for long prompts. Full list in [Keyboard & mouse](../../reference/keys/).
 - **Queueing.** While the agent is busy, messages you send are queued and run in order when it finishes. The placeholder reads `queue a message, or /btw <question>`. [`/btw`](../btw/) runs right away. `/clear`, `/compact`, `/tui`, `/update` and `/resume` wait until the agent is idle.
 
 ## Stopping and exiting
@@ -200,7 +200,7 @@ To see real emails and paths, go to `/configure → Privacy` (or set `hidePerson
 
 ## /configure
 
-`/configure` opens a window with ten tabs (`/config` and `/settings` also work). Changes save to `~/.rein/config.json` right away, and the bar and sidebar behind the window update as you toggle. `←→` or `Tab` switches tabs, `Enter`, `Space` or a click chooses, and `Esc` closes.
+`/configure` opens a window with eleven tabs (`/config` and `/settings` also work). Changes save to `~/.rein/config.json` right away, and the bar and sidebar behind the window update as you toggle. `←→` or `Tab` switches tabs, `Enter`, `Space` or a click chooses, and `Esc` closes.
 
 | Tab | Options (default in bold) | Config key |
 |---|---|---|
@@ -211,6 +211,7 @@ To see real emails and paths, go to `/configure → Privacy` (or set `hidePerson
 | **Subagents** | How many may run at once: 1, 2, 3, 5, **10**, 20 | `subagentLimit` |
 | **Goals** | Automatic continuations before a `/goal` pauses itself: **Unlimited**, 10, 25, 50, 100, 250 | `goalMaxRounds` |
 | **Load balancing** | **Balanced** (cache-aware) · Sticky (stay on one account until it hits a limit) | `loadBalancing` |
+| **Notifications** | **Terminal** (bell + terminal notification) · Desktop (also macOS / Linux notifications) · Off. Fires when Rein needs you (approval, question, plan, hook trust) and when work that took 20 s or more finishes | `notifications` |
 | **Updates** | **Auto-update Rein** on launch · Only when I run `/update` | `autoUpdate` |
 | **Privacy** | **Hide personal info** · Show emails and paths | `hidePersonalInfo` |
 | **Compaction** | Auto-compact at 50, 60, 70, **80**, 90 or 95% of the context window (mid-turn too; the agent keeps working), or Off (only `/compact`, or when a model rejects a full context) | `autoCompactPct` |

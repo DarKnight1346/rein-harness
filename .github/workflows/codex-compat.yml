@@ -1,0 +1,32 @@
+name: Codex compatibility
+
+# Rein drives `codex app-server`, an experimental protocol that changes between releases. Weekly,
+# and on PRs that touch the Codex driver, check the newest Codex release against everything Rein
+# uses (scripts/check-codex-compat.mts; no login needed). A failure here means users who update
+# Codex would get it switched off until Rein catches up.
+on:
+  schedule:
+    - cron: '23 8 * * 1' # weekly, Monday
+  pull_request:
+    paths: ['src/providers/codex/**', 'scripts/check-codex-compat.mts', '.github/workflows/codex-compat.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  latest-codex:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Install the newest Codex
+        run: npm install -g @openai/codex@latest
+      - name: Check the app-server protocol
+        run: npx tsx scripts/check-codex-compat.mts

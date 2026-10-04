@@ -1,9 +1,12 @@
 import {mkdtempSync} from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import {beforeAll, describe, expect, it} from 'vitest';
+import {beforeAll, describe, expect, it, vi} from 'vitest';
 import {runUpdate, type UpdateLine} from '../src/commands/update.js';
 import {acct, tempHome} from './fakes.js';
+
+// Each run spawns the fake CLIs several times (versions, updates, schema, features): slow under load.
+vi.setConfig({testTimeout: 30_000});
 
 beforeAll(async () => {
   process.env.REIN_CLAUDE_BIN = path.resolve('test/fixtures/fake-claude.mjs');
@@ -25,7 +28,7 @@ describe('/update', () => {
     expect(text).toContain('info claude update');
     expect(text).toContain('output Claude Code is up to date');
     expect(text).toContain('info codex update');
-    expect(text).toMatch(/ok Codex app-server protocol OK \(1 models\)/);
+    expect(text).toMatch(/ok Codex app-server protocol OK \(everything Rein uses is there; 1 models\)/);
     expect(text).toMatch(/rein .*(without a remote|no update source|up to date)/i);
   });
 
@@ -34,6 +37,19 @@ describe('/update', () => {
     const lines: UpdateLine[] = [];
     for await (const l of runUpdate(() => {})) lines.push(l);
     delete process.env.FAKE_CODEX_VERSION;
-    expect(lines.some((l) => l.level === 'warn' && /tested 0\.160/.test(l.text))).toBe(true);
+    expect(lines.some((l) => l.level === 'warn' && /verified 0\.160/.test(l.text))).toBe(true);
+  });
+
+  it('switches Codex off with a clear message when its protocol lacks what Rein needs', async () => {
+    process.env.FAKE_CODEX_VERSION = '0.171.0';
+    process.env.FAKE_CODEX_SCHEMA = 'broken';
+    const lines: UpdateLine[] = [];
+    for await (const l of runUpdate(() => {})) lines.push(l);
+    delete process.env.FAKE_CODEX_VERSION;
+    delete process.env.FAKE_CODEX_SCHEMA;
+    const err = lines.find((l) => l.level === 'error')?.text ?? '';
+    expect(err).toContain('Codex 0.171.0 changed its app-server protocol');
+    expect(err).toContain('request thread/fork');
+    expect(err).toContain('npm install -g @openai/codex@0.160');
   });
 });

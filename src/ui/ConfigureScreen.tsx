@@ -11,7 +11,7 @@ const TABS: Tab[] = [
   {id: 'sidebar', title: 'Sidebar', items: SIDEBAR_ITEMS, defaults: DEFAULT_SIDEBAR, key: 'sidebarSections'},
 ];
 type Choice = {value: string | number | boolean; label: string};
-type ChoiceTabDef = {title: string; key: 'autoCompactPct' | 'toolApproval' | 'shellMaxMinutes' | 'subagentLimit' | 'goalMaxRounds' | 'hidePersonalInfo' | 'autoUpdate' | 'loadBalancing'; description: string; choices: Choice[]};
+type ChoiceTabDef = {title: string; key: 'autoCompactPct' | 'toolApproval' | 'shellMaxMinutes' | 'subagentLimit' | 'goalMaxRounds' | 'hidePersonalInfo' | 'autoUpdate' | 'loadBalancing' | 'notifications'; description: string; choices: Choice[]};
 const CHOICE_TABS: ChoiceTabDef[] = [
   {
     title: 'Approvals',
@@ -51,6 +51,16 @@ const CHOICE_TABS: ChoiceTabDef[] = [
     choices: [
       {value: 'balanced', label: 'Balanced  (default) — cache-aware'},
       {value: 'sticky', label: 'Sticky — stay on one account until it hits a limit'},
+    ],
+  },
+  {
+    title: 'Notifications',
+    key: 'notifications',
+    description: 'Get your attention when Rein needs you (an approval, a question, a plan to review) or finishes a task that took a while.',
+    choices: [
+      {value: 'terminal', label: 'Terminal — bell + terminal notification (iTerm2, WezTerm, kitty, Ghostty…)  (default)'},
+      {value: 'system', label: 'Desktop — also a macOS / Linux desktop notification'},
+      {value: 'off', label: 'Off'},
     ],
   },
   {

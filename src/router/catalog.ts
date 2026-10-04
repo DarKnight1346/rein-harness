@@ -1,4 +1,6 @@
 import {adapters} from '../providers/index.js';
+import {codexCompat, type CompatReport} from '../providers/codex/compat.js';
+import {readModelsCache} from '../providers/codex/catalog.js';
 import type {Account, ModelInfo, ModelRef} from '../providers/types.js';
 import {refKey} from '../providers/types.js';
 import {loadAccounts} from '../store/accounts.js';
@@ -26,6 +28,8 @@ export class ModelCatalog {
   loaded = false;
   /** Accounts that failed auth at runtime; skipped until re-login. */
   readonly authFailed = new Set<string>();
+  /** The installed codex's compatibility check (see providers/codex/compat.ts); ok false = Codex off. */
+  codexCompat: CompatReport | undefined;
 
   async refresh(): Promise<void> {
     if (!this.windowsLoaded) {
@@ -37,8 +41,16 @@ export class ModelCatalog {
     this.accounts = accounts;
     this.authFailed.clear(); // refresh follows /login changes: give re-authenticated accounts a new chance
     const next = new Map<string, CatalogModel>();
+    // A codex whose app-server protocol lacks what Rein needs is switched off: Claude keeps working.
+    const codexAccounts = accounts.filter((a) => a.provider === 'codex');
+    if (codexAccounts.length) {
+      const compat = await codexCompat(async () => (await readModelsCache(codexAccounts[0]!))?.models).catch(() => undefined);
+      this.codexCompat = compat?.report;
+    }
+    const codexOff = this.codexCompat?.ok === false;
     await Promise.all(
       accounts.map(async (account) => {
+        if (codexOff && account.provider === 'codex') return;
         let list: ModelInfo[] = [];
         try {
           list = await adapters[account.provider].listModels(account);

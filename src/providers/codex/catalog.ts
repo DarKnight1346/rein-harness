@@ -68,14 +68,20 @@ export async function contextWindows(account: Account): Promise<Map<string, numb
 /** Relative cost tier from the model's own description (Codex exposes no prices). */
 export const codexTier = (_id: string, description = '') => tierFrom(description);
 
-/** App-server flags that remove Codex's built-in tools and extra prompt sections. */
-export function appServerArgs(catalogPath: string | undefined): string[] {
-  const disable = [
+/**
+ * App-server flags that remove Codex's built-in tools and extra prompt sections. `known`: the
+ * feature flags this codex has (`codex features list`). Codex refuses to start on an unknown
+ * `--disable` name, so a feature a newer release removed or renamed is left out instead of taking
+ * Codex down (there is nothing left to disable).
+ */
+export function appServerArgs(catalogPath: string | undefined, known?: readonly string[]): string[] {
+  const all = [
     'apps', 'browser_use', 'browser_use_external', 'computer_use', 'image_generation', 'multi_agent',
     'plugins', 'remote_plugin', 'shell_tool', 'unified_exec', 'view_image', 'goals', 'sleep_tool',
     'tool_suggest', 'skill_search', 'collaboration_modes', 'hooks', 'in_app_browser',
     'workspace_dependencies', 'worktrees', 'code_mode_host',
   ];
+  const disable = known ? all.filter((f) => known.includes(f)) : all;
   const config = [
     'web_search="disabled"',
     'include_permissions_instructions=false',
