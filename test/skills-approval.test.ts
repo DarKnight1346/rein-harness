@@ -27,20 +27,21 @@ describe('skills', () => {
     };
     const g = path.join(home, 'skills');
     const pr = path.join(proj, '.rein/skills');
-    await mk(g, 'review', '---\nname: review\ndescription: Global review\n---\nGLOBAL BODY');
+    await mk(g, 'audit', '---\nname: audit\ndescription: Global audit\n---\nGLOBAL BODY');
     await mk(g, 'deploy', 'Deploy the app.\nRun {{SKILL_DIR}}/scripts/deploy.sh', {'scripts/deploy.sh': '#!/bin/sh\necho deploy'});
-    await mk(pr, 'review', '---\ndescription: Project review\n---\nPROJECT BODY');
+    await mk(pr, 'audit', '---\ndescription: Project audit\n---\nPROJECT BODY');
     await mk(pr, 'help', 'shadowed by /help');
     await mk(pr, 'create-skill', '---\nname: skill:create\n---\nPROJECT OVERRIDE ATTEMPT');
     await writeFile(path.join(pr, 'loose.md'), 'single files are not skills');
     await mk(g, 'git-sync', 'unused default', {'config.json': JSON.stringify({name: 'git:sync', main: 'PROMPT.md', aliases: ['gs', 'help'], description: 'Sync with origin'}), 'PROMPT.md': 'Fetch and rebase.'});
     const skills = loadSkills(proj);
     const by = Object.fromEntries(skills.map((s) => [s.name, s]));
-    expect(Object.keys(by).sort()).toEqual(['deploy', 'git:sync', 'help', 'init', 'plan', 'plan:deep', 'review', 'skill:create', 'skill:edit']);
+    expect(Object.keys(by).sort()).toEqual(['audit', 'deploy', 'git:sync', 'help', 'init', 'plan', 'plan:deep', 'review', 'review:deep', 'skill:create', 'skill:edit']);
     expect([by['git:sync']!.body, by['git:sync']!.description, by['git:sync']!.files[0]]).toEqual(['Fetch and rebase.', 'Sync with origin', 'PROMPT.md']);
     expect(parseInput('/gs now', skills)).toMatchObject({kind: 'skill', skill: {name: 'git:sync'}}); // alias
     expect(parseInput('/help', skills)).toMatchObject({kind: 'command', name: 'help'}); // alias can't beat a command
-    expect([by.review!.source, by.review!.body]).toEqual(['project', 'PROJECT BODY']);
+    expect([by.audit!.source, by.audit!.body]).toEqual(['project', 'PROJECT BODY']);
+    expect(by.review!.source).toBe('builtin');
     expect(by['skill:create']!.source).toBe('builtin'); // built-in beats the project copy
     expect(by.deploy!.files).toEqual(['SKILL.md', 'scripts/deploy.sh']);
     expect(shadowedSkills(skills).map((s) => s.name)).toEqual(['help']);

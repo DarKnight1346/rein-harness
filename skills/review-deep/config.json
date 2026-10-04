@@ -1,0 +1,5 @@
+{
+  "name": "review:deep",
+  "description": "Deep review: a reviewer per area on each signed-in provider's best model, every finding checked with the advisor and you, then a plan to fix only the real ones",
+  "planMode": true
+}

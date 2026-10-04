@@ -5,7 +5,7 @@ description: Every built-in Rein slash command, its arguments and aliases, plus 
 
 Type `/` in the input to see the list. It filters as you type. **Tab** or **Enter** fills in the highlighted entry so you can add arguments, and a command typed out in full runs right away. You can also click an entry in fullscreen. `/help` shows everything, including your skills.
 
-Rein has **23 built-in commands** and **4 built-in skills**. Commands are handled by Rein itself. Skills are prompts sent to the agent (see [Built-in skills](#built-in-skills)).
+Rein has **26 built-in commands** and **7 built-in skills**. Commands are handled by Rein itself. Skills are prompts sent to the agent (see [Built-in skills](#built-in-skills)).
 
 ## While the agent is working
 
@@ -100,13 +100,15 @@ Start a message with `!` to run a shell command yourself, like Claude Code's bas
 
 ## Built-in skills
 
-These four entries look like commands but are **skills**. Each one sends a prepared prompt to the agent, so it queues like a message while the agent is busy. In the autocomplete list they're tagged `built-in skill`.
+These entries look like commands but are **skills**. Each one sends a prepared prompt to the agent, so it queues like a message while the agent is busy. In the autocomplete list they're tagged `built-in skill`.
 
 | Skill | Arguments | What it does |
 |---|---|---|
 | `/init` | `[guidance]` | Has the agent look through the project and write (or improve) `AGENTS.md`: what the project is, the real build/test/lint commands, a map, conventions and gotchas. With a `CLAUDE.md` but no `AGENTS.md`, it moves the shared rules into `AGENTS.md` and leaves `CLAUDE.md` as an `@AGENTS.md` import. |
 | `/plan` | `<task>` | Plans a change before making it. Turns plan mode on, and the agent explores read-only, asks you questions, then presents a plan for approval. |
 | `/plan:deep` | `<task>` | Thorough planning for big or risky changes: deeper exploration (parallel subagents), more questions and advisor reviews, then a plan for approval. Also turns on plan mode. |
+| `/review` | `[what to review]` | Reviews the current changes (uncommitted plus this branch's commits; the whole project if there are none, or whatever you name) for bugs, security issues, test coverage gaps and copyright/licensing problems. One read-only reviewer per area, each on the single best model for it. The agent checks every finding against the code, drops what doesn't hold up, reports the rest, and asks which to fix. Nothing is fixed unless you pick it. → [Reviewing code](../../features/skills/#reviewing-code-review-and-reviewdeep) |
+| `/review:deep` | `[what to review]` | The thorough version, in plan mode: a reviewer per area **on each provider you're signed into**, each on that provider's best model for the area. Findings are merged, checked against the code, then checked with the [advisor](../../features/subagents/) and with you. You pick which to fix (none is fine), and only those go into a `/plan:deep`-style plan for approval. |
 | `/skill:create` | `<what it should do>` | Has the agent create a new Rein skill, global or for this project. |
 | `/skill:edit` | `<skill and change>` | Has the agent edit an existing Rein skill. |
 

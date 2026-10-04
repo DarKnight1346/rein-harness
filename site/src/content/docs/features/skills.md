@@ -140,8 +140,37 @@ Fix issue #$1 with priority $2. Recent changes: !`git log --oneline -5`
 | `/init [guidance]` | The agent studies the project and writes or improves `AGENTS.md` (commands that actually exist, a map, conventions, gotchas), then reads it back to check every command and path. |
 | `/plan <task>` | Plan mode on. Restate the goal, explore read-only (with subagents for wide areas), ask clarifying questions with `ask_user`, then present a plan with 2–10 checkable milestones. |
 | `/plan:deep <task>` | The thorough version for big or risky work: broader exploration with parallel subagents, more questions, an [advisor](../subagents/) review of the approach *and* of the draft plan (when an advisor is configured), risks, rollback, and 3–10 milestones. |
+| `/review [what]` | Reviews the current changes for bugs, security, test coverage and copyright/licensing, one reviewer per area on the best model for it, then reports verified findings and asks which to fix. See [Reviewing code](#reviewing-code-review-and-reviewdeep). |
+| `/review:deep [what]` | Plan mode on. A reviewer per area on each signed-in provider, every finding checked with the advisor and you, then a plan that fixes only what you picked. |
 | `/skill:create <what>` | The agent writes a new skill for you, project or global. |
 | `/skill:edit <which, what>` | The agent edits an existing project or global skill. Built-ins are off-limits; it offers to make a differently named copy instead. |
+
+## Reviewing code: `/review` and `/review:deep`
+
+Both review **the current changes** by default: uncommitted work plus this branch's commits since it left the default branch. With no changes they review the whole project. Name something after the command to review that instead (`/review src/auth`, `/review:deep PR 42`, `/review everything`), or add an area (`/review also check performance`).
+
+Reviewers look at four areas:
+
+| Area | What they look for |
+|---|---|
+| **Bugs** | Logic errors, unhandled errors and edge cases, races, leaks, broken contracts between callers, behaviour that contradicts the docs. |
+| **Security** | Injection, secrets in code or logs, missing validation at trust boundaries, unsafe file handling, SSRF, weak crypto. |
+| **Test coverage** | Behaviour no test exercises, tests that can't fail, missing edge-case and failure-path tests, with the exact tests that should exist. |
+| **Copyright & licensing** | Copied code without its notice or under an incompatible license, missing headers, unattributed vendored files, dependency licenses that conflict with the project's. |
+
+Reviewers only read, they must quote the code behind every finding, and each finding comes with a severity, a concrete failure scenario, a suggested fix and how to confirm it.
+
+| | `/review` | `/review:deep` |
+|---|---|---|
+| Reviewers | One per area, on the **single best model** for that area | One per area **on each provider you're signed into** (Claude and Codex), each on that provider's best model for the area, so every area gets independent eyes from different model families |
+| Checking findings | The agent verifies each against the code and drops what doesn't hold up | The same, then the [advisor](../subagents/) challenges the verdicts and looks for missed problems, then you confirm |
+| Fixing | You pick findings to fix with a multi-select; the agent fixes those and runs the tests | Plan mode: you pick findings (none is fine), and only those go into a `/plan:deep`-style plan with milestones for approval. The rest are listed under "Not fixed" |
+
+:::tip
+Some findings will be false positives. Nothing gets fixed unless you pick it, and picking none is a fine outcome.
+:::
+
+If only one provider is signed in, or you've fixed one subagent model in `/model`, `/review:deep` runs one reviewer per area and says so. The deep review starts up to eight subagents at once, within your subagent limit (`/settings` → **Subagents**).
 
 ## Write your first skill
 
