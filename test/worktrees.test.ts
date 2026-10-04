@@ -11,6 +11,7 @@ beforeEach(() => {
   process.env.REIN_HOME = mkdtempSync(path.join(os.tmpdir(), 'rein-wt-home-'));
   repo = mkdtempSync(path.join(os.tmpdir(), 'rein-wt-repo-'));
   git(repo, 'init', '-q');
+  git(repo, 'config', 'core.autocrlf', 'false'); // the same bytes on every platform (Windows CI defaults to true)
   writeFileSync(path.join(repo, '.gitignore'), 'node_modules/\n.env\ndist/\n');
   writeFileSync(path.join(repo, 'a.txt'), 'one\ntwo\nthree\nfour\nfive\n');
   writeFileSync(path.join(repo, 'b.txt'), 'b\n');
@@ -77,6 +78,7 @@ describe('subagent worktrees', () => {
 
   it("point the project's absolute paths at the worktree", () => {
     expect(retarget({path: '/p/proj/src/a.ts', command: 'cd /p/proj && ls /p/project-other'}, '/p/proj', '/w/x')).toEqual({path: '/w/x/src/a.ts', command: 'cd /w/x && ls /p/project-other'});
+    expect(retarget({path: 'C:\\p\\proj\\src\\a.ts', other: 'C:\\p\\project2'}, 'C:\\p\\proj', 'C:\\w\\x')).toEqual({path: 'C:\\w\\x\\src\\a.ts', other: 'C:\\p\\project2'});
   });
 });
 
@@ -155,5 +157,26 @@ describe('ignored build output', () => {
     const r = (await wts.settle(5))!;
     expect(r.merged).toEqual([]);
     expect(readFileSync(path.join(repo, 'dist', 'lib', 'app.js'), 'utf8')).toBe('built();\n');
+  });
+});
+
+describe('line endings (core.autocrlf, the Windows default)', () => {
+  it("merge without false conflicts, and keep each file's own line endings", async () => {
+    git(repo, 'config', 'core.autocrlf', 'true');
+    writeFileSync(path.join(repo, 'crlf.txt'), 'one\r\ntwo\r\nthree\r\nfour\r\nfive\r\n');
+    writeFileSync(path.join(repo, 'lf.txt'), 'alpha\nbeta\n');
+    git(repo, 'add', 'crlf.txt', 'lf.txt');
+    git(repo, 'commit', '-q', '-m', 'files');
+    const wts = new Worktrees(repo);
+    const wt = (await wts.ensure(6))!;
+    const inWt = (f: string) => readFileSync(path.join(wt.root, f), 'utf8');
+    writeFileSync(path.join(wt.root, 'crlf.txt'), inWt('crlf.txt').replace('one', 'ONE')); // agent: line 1
+    writeFileSync(path.join(wt.root, 'lf.txt'), inWt('lf.txt').replace('alpha', 'ALPHA'));
+    writeFileSync(path.join(repo, 'crlf.txt'), 'one\r\ntwo\r\nthree\r\nfour\r\nFIVE\r\n'); // main: line 5
+    const r = (await wts.settle(6))!;
+    expect(r.conflicts).toEqual([]);
+    expect(r.merged.sort()).toEqual(['crlf.txt', 'lf.txt']);
+    expect(readFileSync(path.join(repo, 'crlf.txt'), 'utf8')).toBe('ONE\r\ntwo\r\nthree\r\nfour\r\nFIVE\r\n');
+    expect(readFileSync(path.join(repo, 'lf.txt'), 'utf8')).toBe('ALPHA\nbeta\n');
   });
 });

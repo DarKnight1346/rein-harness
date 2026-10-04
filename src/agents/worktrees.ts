@@ -1,6 +1,6 @@
 import {execFile} from 'node:child_process';
 import {randomBytes} from 'node:crypto';
-import {chmodSync, copyFileSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, readlinkSync, realpathSync, rmSync, statSync, symlinkSync, unlinkSync, utimesSync, writeFileSync} from 'node:fs';
+import {chmodSync, copyFileSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, readlinkSync, realpathSync, renameSync, rmdirSync, rmSync, statSync, symlinkSync, unlinkSync, utimesSync, writeFileSync} from 'node:fs';
 import {constants as fsConstants} from 'node:fs';
 import fsp from 'node:fs/promises';
 import os from 'node:os';
@@ -211,13 +211,17 @@ async function modeIn(top: string, commit: string, rel: string): Promise<string 
   return line ? line.split(/\s/)[0] : undefined;
 }
 
-function readCurrent(file: string): Buffer | undefined {
+/** A file's bytes, or a symlink's target, as it is now (no check-then-read: each call either works or throws). */
+function readCurrent(file: string): {bytes: Buffer; link: boolean} | undefined {
   try {
-    const st = lstatSync(file);
-    if (st.isSymbolicLink()) return Buffer.from(readlinkSync(file));
-    return st.isFile() ? readFileSync(file) : undefined;
+    return {bytes: Buffer.from(readlinkSync(file)), link: true};
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code !== 'EINVAL' && (err as NodeJS.ErrnoException).code !== 'UNKNOWN') return undefined; // missing
+  }
+  try {
+    return {bytes: readFileSync(file), link: false};
   } catch {
-    return undefined;
+    return undefined; // a folder, or gone
   }
 }
 
@@ -230,12 +234,40 @@ function writeFile(file: string, content: Buffer, mode: string | undefined): voi
     symlinkSync(content.toString(), file);
     return;
   }
-  // Replace a symlink rather than writing through it (lstat, not exists-then-check).
+  // Write beside it, then rename over it: atomic, and a symlink there is replaced, not written through.
+  const tmp = `${file}.rein-${randomBytes(4).toString('hex')}`;
+  writeFileSync(tmp, content, {flag: 'wx', mode: mode === '100755' ? 0o755 : 0o644});
   try {
-    if (lstatSync(file).isSymbolicLink()) unlinkSync(file);
-  } catch {}
-  writeFileSync(file, content);
-  if (mode === '100755') chmodSync(file, 0o755);
+    renameSync(tmp, file);
+  } catch (err) {
+    rmSync(tmp, {force: true});
+    throw err;
+  }
+}
+
+/** A working file as git would store it (its clean filters and line-ending rules applied). */
+async function stored(top: string, rel: string, file: string, raw: Buffer): Promise<Buffer> {
+  try {
+    const id = (await git(top, ['hash-object', '-w', `--path=${rel}`, '--', file])).trim();
+    return (await gitBuf(top, ['cat-file', 'blob', id])) ?? raw;
+  } catch {
+    return raw;
+  }
+}
+
+/**
+ * Stored content as it should be written into the project: in the existing file's line endings
+ * when there is one (CRLF stays CRLF, LF stays LF), else as git would check it out.
+ */
+async function inUserStyle(top: string, commit: string, rel: string, content: Buffer, existing: Buffer | undefined): Promise<Buffer> {
+  if (content.includes(0)) return content;
+  if (existing !== undefined) {
+    const crlf = existing.includes('\r\n');
+    const text = content.toString('utf8');
+    return Buffer.from(crlf ? text.replace(/\r?\n/g, '\r\n') : text.replace(/\r\n/g, '\n'), 'utf8');
+  }
+  // A new file: git's own checkout form (core.autocrlf, .gitattributes) for this path.
+  return (await gitBuf(top, ['cat-file', '--filters', `${commit}:${rel}`])) ?? content;
 }
 
 /** Three-way merge of one text file; undefined = conflict (or not text). */
@@ -266,20 +298,25 @@ export async function mergeInto(top: string, base: string, result: string, linke
   for (const {status, path: rel} of await changes(top, base, result)) {
     if (linked.has(rel) || [...linked].some((l) => rel.startsWith(l + '/'))) continue;
     const file = path.join(top, rel);
+    // Compared and merged as git stores them, so line-ending conversion (core.autocrlf, .gitattributes)
+    // doesn't make an untouched file look changed; written back in the file's own line endings.
     const before = status.startsWith('A') ? undefined : await gitBuf(top, ['show', `${base}:${rel}`]);
     const after = status.startsWith('D') ? undefined : await gitBuf(top, ['show', `${result}:${rel}`]);
-    const ours = readCurrent(file);
+    const current = readCurrent(file);
+    // A symlink is stored as its target path; a file through git's clean rules.
+    const ours = !current ? undefined : current.link ? current.bytes : await stored(top, rel, file, current.bytes);
+    const write = async (content: Buffer) => writeFile(file, current?.link ? content : await inUserStyle(top, result, rel, content, current?.bytes), await modeIn(top, result, rel));
     if (same(ours, after)) continue; // already the same
     if (same(ours, before)) {
       // Untouched in the project since the snapshot: take the subagent's version.
       if (after === undefined) rmSync(file, {force: true});
-      else writeFile(file, after, await modeIn(top, result, rel));
+      else await write(after);
       merged.push(rel);
       continue;
     }
     const combined = ours && before && after ? await mergeText(ours, before, after) : undefined;
     if (combined) {
-      writeFile(file, combined, await modeIn(top, result, rel));
+      await write(combined);
       merged.push(rel);
     } else conflicts.push(rel);
   }
@@ -395,7 +432,7 @@ export class Worktrees {
  */
 export function retarget<T>(args: T, from: string, to: string): T {
   if (from === to) return args;
-  const re = new RegExp(`${from.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?=$|[/\\s"'\`:;)])`, 'g');
+  const re = new RegExp(`${from.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?=$|[/\\\\\\s"'\`:;)])`, 'g');
   const walk = (v: unknown): unknown =>
     typeof v === 'string' ? v.replace(re, to) : Array.isArray(v) ? v.map(walk) : v && typeof v === 'object' ? Object.fromEntries(Object.entries(v).map(([k, x]) => [k, walk(x)])) : v;
   return walk(args) as T;
@@ -430,7 +467,7 @@ const alive = (pid: number) => {
 async function finish(top: string, dir: string, base: string, result: string, linked: ReadonlySet<string>): Promise<MergeResult> {
   const kept = await keepCommits(top, dir, base);
   const {merged, conflicts} = await mergeInto(top, base, result, linked);
-  return {...(await finishMerged(top, dir, merged, conflicts)), ...kept};
+  return {...(await finishMerged(top, dir, merged, conflicts, linked)), ...kept};
 }
 
 /**
@@ -448,13 +485,26 @@ async function keepCommits(top: string, dir: string, base: string): Promise<{com
   return {commits: log.split('\n'), ref};
 }
 
-async function finishMerged(top: string, dir: string, merged: string[], conflicts: string[]): Promise<MergeResult> {
+async function finishMerged(top: string, dir: string, merged: string[], conflicts: string[], linked: ReadonlySet<string>): Promise<MergeResult> {
   if (conflicts.length) {
     // Kept for the conflicting files; no longer a pending job.
     rmSync(`${dir}.json`, {force: true});
     return {merged, conflicts, kept: dir};
   }
-  await git(top, ['worktree', 'remove', '--force', dir]).catch(() => rmSync(dir, {recursive: true, force: true}));
+  // Remove our links (node_modules…) first: deleting the worktree must never reach through one
+  // into the project's own folders (a Windows junction especially).
+  for (const rel of linked) {
+    const link = path.join(dir, rel);
+    try {
+      unlinkSync(link);
+    } catch {
+      try {
+        rmdirSync(link); // a junction on Windows
+      } catch {}
+    }
+  }
+  await git(top, ['worktree', 'remove', '--force', dir]).catch(() => '');
+  rmSync(dir, {recursive: true, force: true}); // whatever git left behind (it can't always on Windows)
   await git(top, ['worktree', 'prune']).catch(() => '');
   rmSync(`${dir}.json`, {force: true});
   return {merged, conflicts};

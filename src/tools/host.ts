@@ -81,7 +81,7 @@ const MAX_RESULT_CHARS = 60_000;
  */
 const realRoot = (p: string) => {
   try {
-    return realpathSync(p);
+    return realpathSync.native(p); // the long form on Windows (not RUNNER~1)
   } catch {
     return p;
   }
