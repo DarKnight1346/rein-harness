@@ -64,6 +64,8 @@ export type Config = {
   autoCompactPct: number;
   /** Pinned Jev model id (keeps thresholds calibrated). */
   jevModel: string;
+  /** Every this many minutes of a background command's life, a fork of the agent checks it's still needed and stops it if not; 0 = off. */
+  backgroundCheckMinutes: number;
 };
 
 export const DEFAULT_CONFIG: Config = {
@@ -88,6 +90,7 @@ export const DEFAULT_CONFIG: Config = {
   subagentLimit: 10,
   goalMaxRounds: 0,
   jevModel: 'jev-1.13.0',
+  backgroundCheckMinutes: 60,
 };
 
 export async function loadConfig(): Promise<Config> {
