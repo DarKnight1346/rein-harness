@@ -24,6 +24,8 @@ import {PLAN_MODE_CONTEXT, presentPlanTool, type PlanDecision, type PresentedPla
 import {askUserTool, type AskAnswer, type AskQuestion} from './tools/ask.js';
 import {decideTool} from './decider/tool.js';
 import {startUsageRefresh} from './accounts/usage.js';
+import path from 'node:path';
+import {findIdes, IdeConnection} from './ide/connection.js';
 import {hasHooks, runHooks} from './hooks.js';
 import {goalDoneTool, milestoneDoneTool} from './goals/tool.js';
 import {webTools} from './tools/web.js';
@@ -268,13 +270,42 @@ Drop superseded reads of the same file, routine listings, and output that no lon
   /** SessionStart hook context, added to the first message of the session. */
   private sessionContext: string | undefined;
 
+  /** The connected editor (Claude Code IDE extension protocol), if any. */
+  ide: IdeConnection | undefined;
+  /** Called when the editor connects, disconnects, or its selection changes (UI refresh). */
+  onIdeChange?: () => void;
+  onIdeMention?: (m: {filePath: string; lineStart?: number; lineEnd?: number}) => void;
+
+  /** Connect to the editor whose workspace holds this project; returns what happened. */
+  async connectIde(): Promise<string> {
+    const lock = findIdes()[0];
+    if (!lock) return "No editor found for this project. Install the Claude Code extension in VS Code, Cursor, Windsurf or a JetBrains IDE and open this folder there.";
+    await this.ide?.close();
+    this.ide = undefined;
+    const conn = await IdeConnection.connect(lock);
+    this.ide = conn;
+    conn.on('selection', () => this.onIdeChange?.());
+    conn.on('mention', (m) => this.onIdeMention?.(m));
+    conn.on('close', () => {
+      if (this.ide === conn) this.ide = undefined;
+      this.onIdeChange?.();
+    });
+    this.onIdeChange?.();
+    return `Connected to ${lock.ideName}: your selection goes with your messages, file changes open as diffs there, and the agent can read its diagnostics.`;
+  }
+
   private async beforePrompt(text: string): Promise<{block?: string; context?: string}> {
     const root = process.cwd();
     // Snapshot the project before this message runs, so /rewind can undo everything it causes.
     if (this.engine) await this.snapshots.snapshot(this.engine.transcript.messages.length);
     const session_id = this.engine?.transcript.id;
     const out = hasHooks('UserPromptSubmit', root) ? await runHooks('UserPromptSubmit', root, {session_id, prompt: text}) : {errors: []};
-    const context = [this.sessionContext, out.context, this.planMode ? PLAN_MODE_CONTEXT : undefined].filter(Boolean).join('\n');
+    // What you have selected in the editor right now goes along (like Claude Code's "⧉ selected").
+    const sel = this.ide?.selection;
+    const selection = sel
+      ? `<ide_selection file="${path.relative(root, sel.filePath) || sel.filePath}" lines="${sel.startLine}-${sel.endLine}">\n${sel.text.slice(0, 20_000)}\n</ide_selection>\nThe user has this selected in their editor; it may or may not be what the message is about.`
+      : undefined;
+    const context = [this.sessionContext, out.context, selection, this.planMode ? PLAN_MODE_CONTEXT : undefined].filter(Boolean).join('\n');
     if (!out.block) this.sessionContext = undefined;
     return {block: out.block, context: context || undefined};
   }
@@ -378,6 +409,20 @@ Drop superseded reads of the same file, routine listings, and output that no lon
         },
       }),
       imageTool(() => this.config),
+      {
+        name: 'ide_diagnostics',
+        label: 'Diagnostics',
+        description: "Problems (errors, warnings) your user's editor reports: type errors, lint findings and so on, from its language servers. For one file (path) or the whole workspace. Use it after changes to check you didn't break anything.",
+        inputSchema: {type: 'object', properties: {path: {type: 'string', description: 'A file (project-relative or absolute); omit for the whole workspace'}}},
+        mutating: false,
+        enabled: () => !!this.ide,
+        summarize: (a: any) => a?.path ?? 'workspace',
+        run: async (_ctx: unknown, a: any) => {
+          if (!this.ide) return {ok: false, text: 'no editor is connected'};
+          const file = typeof a?.path === 'string' ? path.resolve(process.cwd(), a.path) : undefined;
+          return {ok: true, text: (await this.ide.diagnostics(file)) || 'No problems reported.'};
+        },
+      },
     );
     this.config = await loadConfig();
     await this.sessionStartHooks(typeof opts.resume === 'string' ? 'resume' : 'startup');
@@ -483,6 +528,7 @@ Drop superseded reads of the same file, routine listings, and output that no lon
 
   shutdown(): void {
     void this.mcp.closeAll();
+    void this.ide?.close();
     this.stopUsageRefresh();
     this.agents.closeAll();
     this.engine?.shutdown();

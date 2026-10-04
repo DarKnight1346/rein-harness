@@ -110,6 +110,21 @@ export class ToolHost extends EventEmitter {
     return [...TOOLS, ...this.extra, ...this.dynamic.flatMap((f) => f())];
   }
 
+  /**
+   * Versions of a file the user edited in their editor's diff view before accepting (see
+   * src/ide): the approved write/edit writes that version instead of the agent's.
+   */
+  private editorVersions = new Map<string, string>();
+  useEditorVersion(absPath: string, contents: string): void {
+    this.editorVersions.set(absPath, contents);
+  }
+
+  /** The resolved (real, absolute) paths a call would touch, as approvals and rules see them. */
+  pathsFor(name: string, args: unknown): string[] {
+    const tool = this.find(name);
+    return tool ? (this.subject({...this.context()}, tool, args).paths ?? []) : [];
+  }
+
   private find(name: string): ToolDef | undefined {
     const n = name.replace(/^mcp__rein__/, '');
     return toolByName(n) ?? this.extra.find((t) => t.name === n) ?? this.dynamic.flatMap((f) => f()).find((t) => t.name === n);
@@ -227,7 +242,12 @@ export class ToolHost extends EventEmitter {
       if (ruleTool(tool.name) === 'edit' && this.opts.checkpoint && approvedBy !== 'scratchpad') {
         for (const p of subject.paths ?? []) await this.opts.checkpoint(p).catch(() => {});
       }
-      result = await tool.run(ctx, args ?? {});
+      const edited = (tool.name === 'write' || tool.name === 'edit') && subject.paths?.length === 1 ? this.editorVersions.get(subject.paths[0]!) : undefined;
+      if (edited !== undefined) {
+        this.editorVersions.delete(subject.paths![0]!);
+        result = await toolByName('write')!.run(ctx, {path: subject.paths![0], content: edited});
+        if (result.ok) result = {...result, text: `${result.text}\n(The user changed your edit in their editor before accepting it: the file now has their version. Read it again before further edits.)`};
+      } else result = await tool.run(ctx, args ?? {});
       // PostToolUse hooks: feedback (exit 2 / decision "block") and context go back to the model.
       if (hasHooks('PostToolUse', this.opts.root)) {
         const post = await runHooks('PostToolUse', this.opts.root, {...hookInput, tool_response: {ok: result.ok, text: result.text.slice(0, 20_000)}});

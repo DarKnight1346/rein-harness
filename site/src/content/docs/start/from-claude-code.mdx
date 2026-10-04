@@ -92,6 +92,7 @@ On Windows the agent's shell and your hooks use Git Bash when it's installed, as
 - **`.claude/commands/*.md`** (the project's and `~/.claude/commands`) become slash commands, sub-folders included. `$ARGUMENTS` and `$1`…`$9` are filled in like in Claude Code, and `description` / `argument-hint` show in the command list. A ``!`cmd` `` line, which Claude Code runs before sending, becomes an instruction to run that command first, so it goes through Rein's approvals. `allowed-tools` and `model` aren't used; Rein's permissions and routing apply. A Rein skill with the same name wins. → [Skills](../../features/skills/#claude-code-custom-commands)
 - **`.claude/agents/*.md`** (and `~/.claude/agents`) become specialized subagents the agent can spawn by name, with their role prompt, their `tools` list and their `model` (`sonnet`/`opus`/`haiku`/`inherit`). → [Subagents](../../features/subagents/#named-subagent-definitions)
 - **`CLAUDE.local.md`** is read with the other instruction files.
+- **The Claude Code extension** in VS Code, Cursor, Windsurf or JetBrains connects to Rein too: selection context, diffs in the editor, "mention in chat", diagnostics. → [Editor integration](../../features/ide/)
 
 ## What doesn't carry over
 

@@ -667,6 +667,21 @@ function TopBar(props: {cols: number; tick: number; sidebarOpen: boolean; onTogg
         </Seg>
       ),
     });
+  // The connected editor, and how much is selected there (that selection goes with the next message).
+  if (runtime.ide) {
+    const sel = runtime.ide.selection;
+    const ideText = `⧉ ${runtime.ide.lock.ideName}${sel ? ` · ${sel.endLine - sel.startLine + 1} lines` : ''}`;
+    parts.push({
+      key: 'ide',
+      width: 3 + stringWidth(ideText),
+      drop: 850,
+      node: (
+        <Seg key="ide" onClick={() => props.run('/ide')}>
+          <Text color="cyan">{ideText}</Text>
+        </Seg>
+      ),
+    });
+  }
   const goal = runtime.goals.goal;
   const goalPlan = goal?.plan ? runtime.goals.plan() : undefined;
   const goalText = goal ? `◎ goal · ${goal.status}${goalPlan ? ` · ${progress(goalPlan).done}/${progress(goalPlan).total}` : ''}` : '';

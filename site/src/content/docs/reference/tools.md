@@ -283,6 +283,16 @@ Ticks milestone *N* (`- [x]` in the plan file) after the same evidence check (p 
 
 ## Subagents and helpers
 
+### `ide_diagnostics`
+
+Label `Diagnostics`. Approval: none (read-only). **Only listed while an editor is connected** ([editor integration](../../features/ide/)).
+
+| Parameter | Type | Notes |
+| --- | --- | --- |
+| `path` | string | A file, project-relative or absolute. Omit for the whole workspace |
+
+Returns the errors and warnings the editor's language servers report (the extension's `getDiagnostics`).
+
 ### `agent`
 
 Label `Agent`. Approval: none. Spawning has no side effects, but the subagent's own tool calls do go through approval. **Main agent only.**

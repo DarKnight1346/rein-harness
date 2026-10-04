@@ -40,6 +40,7 @@ export function StatusBar({tick}: {tick: number}) {
       {'  '}rein{parts.length ? ` · ${parts.join(' · ')}` : ''}
       {background ? <Text color="yellow"> · ● {background} background (/shells)</Text> : null}
       {runtime.planMode ? <Text color="yellow"> · ⏸ plan mode</Text> : null}
+      {runtime.ide ? <Text color="cyan"> · ⧉ {runtime.ide.lock.ideName}{runtime.ide.selection ? ` · ${runtime.ide.selection.endLine - runtime.ide.selection.startLine + 1} lines selected` : ''}</Text> : null}
       {runtime.goals.goal ? <Text color="cyan"> · ◎ goal {runtime.goals.goal.status}</Text> : null}
     </Text>
   );
