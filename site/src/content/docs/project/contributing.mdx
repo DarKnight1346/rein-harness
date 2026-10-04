@@ -1,0 +1,133 @@
+---
+title: Contributing
+description: Hack on Rein. Set up from source, run the tests without a subscription, find your way around the code and ship your first PR.
+---
+
+import { Steps, Card, CardGrid, LinkCard } from '@astrojs/starlight/components';
+
+Rein is young, moves fast, and every merged PR ships to npm within minutes. The codebase is about
+13k lines of TypeScript, small enough to read in an afternoon. The tests run against **fake `claude`
+and `codex` binaries**, so you don't need a subscription to work on most of it.
+
+## Get set up
+
+<Steps>
+
+1. **Clone and install.** You need Node.js 22 or newer.
+
+   ```sh
+   git clone https://github.com/DarKnight1346/rein-harness.git
+   cd rein-harness
+   npm install
+   ```
+
+2. **Run the tests.** They use vitest and the fakes in `test/fixtures/`.
+
+   ```sh
+   npm run typecheck
+   npm test
+   ```
+
+3. **Run Rein from source** in any project folder. Real chats need at least one signed-in `claude`
+   or `codex` CLI.
+
+   ```sh
+   npm run dev
+   # or build and link the binary:
+   npm run build && npm link && rein
+   ```
+
+4. **Try a change in isolation.** Point Rein at a throwaway state folder so your real accounts and
+   history stay untouched:
+
+   ```sh
+   REIN_HOME=$(mktemp -d) npm run dev
+   ```
+
+</Steps>
+
+## Find your way around
+
+| Path | What lives there |
+|---|---|
+| `src/cli.tsx`, `src/headless.ts` | Entry point, flags, `rein -p` |
+| `src/runtime.ts` | Wires a session together: tools, decision model, goals, subagents, hooks |
+| `src/session/engine.ts` | The turn loop: routing, failover, load balancing, context carry, compaction triggers |
+| `src/providers/claude/` | Drives `claude -p` over stream-json; MCP proxy for tools |
+| `src/providers/codex/` | Drives `codex app-server` over JSON-RPC; dynamic tools, rewritten model catalog |
+| `src/router/`, `src/decider/` | Model catalog, auto routing, Jev and LLM decision backends |
+| `src/tools/` | The tool host (approvals, permissions, checkpoints) and every tool |
+| `src/agents/`, `src/goals/`, `src/plans/` | Subagents and advisor, `/goal`, saved plans |
+| `src/mcp/`, `src/hooks.ts`, `src/skills/` | MCP client, Claude Code-compatible hooks, skills |
+| `src/ui/` | Ink UI: fullscreen and classic renderers, windows, input, markdown, diffs |
+| `skills/` | Built-in skills shipped in the npm package |
+| `test/` | vitest suites; `test/fakes.ts` builds scripted fake providers |
+| `PLAN.md` | Design history and verified protocol findings. Read it before touching the drivers |
+
+The [architecture overview](../../internals/architecture/) explains how the pieces fit, and
+[Driving the CLIs](../../internals/drivers/) covers the protocol details.
+
+## Where to start
+
+<CardGrid>
+  <Card title="Add a tool" icon="puzzle">
+    One `ToolDef` in `src/tools/` reaches every model: Claude through the MCP proxy, Codex through
+    dynamic tools. Set `mutating` and `paths()` correctly and the approval system handles the rest.
+  </Card>
+  <Card title="Ship a skill" icon="star">
+    Built-in skills are folders under `skills/` with a `SKILL.md`. Great first PR: a workflow you
+    use every day.
+  </Card>
+  <Card title="Polish the TUI" icon="laptop">
+    `src/ui/` is Ink and React. Keep it flicker-free: no large re-renders per token (see `PLAN.md`
+    §4 and §12).
+  </Card>
+  <Card title="New providers" icon="rocket">
+    The adapter interface (`ProviderAdapter` in `src/providers/types.ts`) was designed with more CLIs
+    in mind. A new provider also touches the `ProviderId` union, the adapter map and the catalog, so
+    open an issue first to discuss the design.
+  </Card>
+</CardGrid>
+
+## Testing
+
+- **Unit and integration tests** live in `test/*.test.ts`. `test/fakes.ts` provides `fakeAdapter()`
+  (a scripted provider that records prompts, sessions and model switches) and `tempHome()` (an
+  isolated `REIN_HOME` with preset accounts).
+- **CLI stand-ins:** `test/fixtures/fake-claude.mjs` and `fake-codex.mjs` emulate the parts of each
+  binary the tests touch. `test/fixtures/mcp-server.mjs` is a tiny MCP server.
+- **Never call real accounts from tests.** Protocol behaviour verified against the real CLIs is
+  recorded in `PLAN.md` along with how it was verified.
+- CI runs type-check and tests on **Linux, macOS and Windows**. All three are required checks.
+
+## The PR flow
+
+<Steps>
+
+1. Branch from `main` and make one coherent change, with tests for behaviour changes.
+
+2. **Update the docs in the same PR.** See [Keeping docs current](../docs/). CI runs the docs drift
+   check and builds this site on every PR.
+
+3. Open the PR and fill in the checklist. CI must be green on all three operating systems.
+
+4. Once it's merged to `main`, the publish workflow releases the next patch version to npm with
+   provenance, tags it `vX.Y.Z` and creates a GitHub Release. Users get it through auto-update.
+
+</Steps>
+
+:::tip[Working with an AI agent?]
+`AGENTS.md` at the repo root is written for agents (Rein, Claude Code, Codex) and humans alike:
+commands, a code map, conventions and the docs-update rules. `CLAUDE.md` imports it. Rein loads it
+into its own system prompt when you run Rein inside this repo.
+:::
+
+## Ground rules
+
+- **Never extract or reuse OAuth tokens.** All model traffic goes through the official binaries.
+  This is a hard rule.
+- Match the surrounding code: naming, comment density, terse doc comments that explain *why*.
+- Pin GitHub Actions to full commit SHAs. The repo is scored by OpenSSF Scorecard.
+- Report security problems privately. See [Security](../security/).
+
+<LinkCard title="Browse open issues" href="https://github.com/DarKnight1346/rein-harness/issues" description="Find something to pick up, or open an issue to propose an idea." />

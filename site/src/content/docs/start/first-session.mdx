@@ -1,0 +1,177 @@
+---
+title: Your first session
+description: A guided tour of Rein, from importing your logins and picking a model to approving the first file change and resuming later.
+---
+
+import { Steps } from '@astrojs/starlight/components';
+
+Ten minutes from now you'll have Rein serving your accounts, an approved file change in your project, and a conversation you can pick up tomorrow. Start Rein from the project you want to work on:
+
+```sh
+cd ~/code/my-project
+rein
+```
+
+## 1. Import your existing logins
+
+On first launch Rein looks for the logins your `claude` and `codex` CLIs already have and offers to use them:
+
+```text title="Found existing logins"
+  Claude Claude Account 1 · max
+  Codex  Codex Account 1 · plus
+
+Rein uses them in place (nothing is copied) and never logs them out.
+Import? (Y/n)
+```
+
+Press **Enter** (or `y`) to import. "In place" means Rein uses your normal CLI login directly. Removing it from Rein later only makes Rein forget it.
+
+:::note[Privacy mode is on]
+Rein shows accounts as "Claude Account 1" and your home folder as `~`, so screenshots are safe to share. Switch it off in `/configure` → **Privacy**.
+:::
+
+## 2. Add more accounts with `/login`
+
+Type `/login` to open **Accounts**. It lists every account with its plan and a `● signed in` / `● signed out` dot, plus rows to add more:
+
+```text title="Accounts"
+❯ Claude Claude Account 1 · max · imported  ● signed in
+  Codex  Codex Account 1 · plus · imported  ● signed in
+  + Add Claude account
+  + Add Codex account
+  + Add Jev API key (decisions)
+
+click or ↑↓ select · enter open · esc close
+```
+
+- **+ Add Claude account** opens the browser for a second (or third…) Claude subscription. Paste the code it shows back into Rein (`paste the code and press enter · esc cancels`).
+- **+ Add Codex account** signs in a ChatGPT account through the browser (`waiting for browser… · esc cancels`).
+- **+ Add Jev API key (decisions)** is optional. A [Jev](https://typesafe.ai) key makes Jev the fast decision model for routing. Without one, the cheapest model you're signed in to makes those decisions.
+
+Pick an existing account to re-authenticate or remove it. Rein keeps each added account in its own config folder under `~/.rein/accounts/`. The same email can't be added twice.
+
+→ More in [Accounts & failover](../../features/accounts/).
+
+## 3. Pick a model with `/model`
+
+`/model` opens **Models** with seven sections (switch with ←→ or Tab): **Chat model**, **Subagents**, **Subagent priority**, **Decision model**, **Compaction model**, **Advisor** and **Web**. For now, look at **Chat model**:
+
+- **auto**: the decision model picks per message: the cheapest model that will answer it well.
+- **A specific model**: every model from every signed-in account, Claude and GPT side by side.
+
+After you choose a chat model, Rein asks for an **effort** level (or *Auto*, which lets the decision model choose). Shortcut without the window: `/model auto`, or `/model` followed by a model's name as listed.
+
+→ More in [Model routing](../../features/routing/).
+
+## 4. Send a message and read the route line
+
+Type a message and press **Enter**. While the agent works, the line above the input shows what it's doing:
+
+```text title="rein"
+▇▅▃▁ Thinking… (12s · ↑ 8.2k ↓ 1.1k · esc to interrupt · /btw to ask)
+```
+
+Each reply starts with a dim **route line** that tells you exactly who answered:
+
+```text title="rein"
+  → Sonnet · effort high · Claude Account 1 (auto · 0.86)
+```
+
+| Part | Meaning |
+|---|---|
+| `Sonnet` | The model that answered |
+| `effort high` | The reasoning effort used (when the model has levels) |
+| `Claude Account 1` | The account it ran on |
+| `(auto · 0.86)` | Picked by auto routing, with the decision model's confidence |
+| `(auto · stayed)` | Auto routing kept the current model for this follow-up |
+| `(failover)` | The first account hit a limit and Rein switched |
+| `(default)` | Your default model was used, because no chat model is set or auto routing wasn't confident enough |
+| *(nothing)* | You picked this model yourself in `/model` |
+
+:::tip
+You can keep typing while the agent works. Plain messages queue (`1 queued` shows on the working line) and send when the current reply finishes. `/btw <question>` runs at once, on the side. See [/btw](../../features/btw/).
+:::
+
+## 5. Approve a file change
+
+When the agent wants to change a file or run a command, Rein stops and asks:
+
+```text title="Approve file change"
+Rein wants to Edit src/app.ts
+
++ import {loadConfig} from './config.js';
+- import {loadConfig} from './old-config.js';
+
+[1 Allow]  [2 Allow all changes & commands this session]  [3 Always allow edit(src/**) (this project)]  [4 Deny]
+enter/1 allow · 2 allow session · 3 always · esc/4 deny
+```
+
+| Key | Option | What happens |
+|---|---|---|
+| `1`, `y` or Enter | **Allow** | This one call runs |
+| `2` or `a` | **Allow all changes & commands this session** | Everything is allowed until you quit, including requests already queued |
+| `3` | **Always allow …** | Saves the suggested rule (such as `edit(src/**)` or `shell(npm test:*)`) to `.rein/settings.json`, so it's never asked again in this project |
+| `4`, `n` or Esc | **Deny** | The call is refused, and the agent is told to ask you how to proceed |
+
+You can also click the buttons. Option 3 appears only when Rein has a rule to suggest. Option 2 is hidden for credentials and secrets outside the project, and in plan mode. For paths outside the project, option 2 becomes *Allow this folder this session* or *Allow reads outside the project this session*.
+
+After a change, the history shows the call, who approved it and the diff:
+
+```text title="rein"
+⏺ Edit(src/app.ts) · you approved
+```
+
+Tired of saying yes? `/configure` → **Approvals** offers **Auto** (the decision model approves changes that clearly match your request and asks you otherwise) and **Bypass**. → [Permissions](../../features/permissions/).
+
+## 6. Get to know the screen
+
+Rein's default **fullscreen** UI has four parts:
+
+```text title="rein"
+▁▃▅▇ Rein │ Sonnet │ Claude Account 1 │ 5h 12% · weekly 40% │ ctx 18%      [≡]
+```
+
+- **Top bar.** It shows the model, the account, that account's usage windows and how full the context is (`ctx` turns yellow at 50% and red at 80%). **Everything is clickable:** the model opens `/model`, the account and usage open `/usage`, and `ctx` opens `/context`. Extra badges appear when relevant: `⏸ plan mode`, `◎ goal · active · 3/5`, `● 2 agents`, `● 1 background`.
+- **History.** Scroll with the wheel or PgUp/PgDn. Drag to select text, and releasing copies it (`✓ Copied 120 characters`).
+- **Sidebar** (Ctrl+B or click `[≡]`). It shows agents, accounts, models and the session, plus goal and task progress when they exist. It hides itself in terminals narrower than 96 columns. Choose its sections in `/configure` → **Sidebar**.
+- **Input and footer.** Type `/` for commands, `@` to attach a file, Shift+Enter (or Option+Enter, or `\` then Enter) for a new line.
+
+Prefer your terminal's native scrollback? `rein --classic` or `/tui classic` switches to the inline renderer. → [The terminal UI](../../features/tui/).
+
+## 7. Check your usage
+
+`/usage` shows every account's windows: 5-hour, weekly and, where the provider reports one, 30-day. Each comes with a bar, the percentage used and when it resets. Accounts that are rate-limited show `limited until …`.
+
+`/usage refresh` re-checks now. For Claude accounts that means a tiny request on their cheapest model, because Claude reports usage only alongside a request.
+
+## 8. Stop, interrupt, exit
+
+| Key | Does |
+|---|---|
+| **Esc** | Interrupts the current reply (or closes the open window). The conversation stays. |
+| **Esc Esc** | With an empty input and nothing running: opens `/rewind`. |
+| **Ctrl+C** | Stops everything: the reply, foreground commands, subagents, pending approvals (denied), and pauses a goal. |
+| **Ctrl+C** twice within 2 s | Exits Rein. The footer warns `Press Ctrl+C again to exit`. |
+
+When you leave fullscreen, the conversation is printed into your normal terminal scrollback.
+
+## 9. Pick up where you left off
+
+Every conversation is saved per project. To continue one:
+
+```sh
+rein --continue        # opens a picker of this project's conversations
+rein --continue <id>   # continue a specific one
+```
+
+Inside Rein, `/resume` opens the same picker (`click/enter continue · ↑↓ select · esc start a new conversation`). Rein replays the last ten messages so you can see where you were.
+
+:::tip[Terminal.app]
+If clicks and the scroll wheel do nothing, turn on **View → Allow Mouse Reporting**. Rein's fullscreen UI needs mouse reporting for clicking, scrolling and drag-to-copy.
+:::
+
+## Where next
+
+- [Coming from Claude Code](../from-claude-code/): what carries over and what's new
+- [Goals](../../features/goals/) and [Plan mode](../../features/plans/): longer, hands-off work
+- [Slash commands](../../reference/commands/) and [Keyboard & mouse](../../reference/keys/)

@@ -1,0 +1,143 @@
+---
+title: Coming from Claude Code
+description: What carries over from Claude Code into Rein automatically, what works differently, and how the commands map.
+---
+
+If you already live in Claude Code, Rein will feel familiar within a minute. The input box, Esc to interrupt, Esc twice to rewind and Shift+Tab for plan mode all work the same way. Your project setup comes along too: permission rules, hooks, `CLAUDE.md` and MCP servers. What you gain is every other subscription behind the same prompt.
+
+## What carries over automatically
+
+You don't need to migrate anything. Rein reads Claude Code's files where they already are.
+
+### Permission rules
+
+Rein merges the `permissions.allow` / `permissions.deny` lists from six files, and **deny always wins**:
+
+| File | Scope |
+|---|---|
+| `~/.claude/settings.json` | Your Claude Code user rules |
+| `~/.rein/settings.json` | Your Rein user rules |
+| `<project>/.claude/settings.json` | Claude Code project rules |
+| `<project>/.claude/settings.local.json` | Claude Code local project rules |
+| `<project>/.rein/settings.json` | Rein project rules (where "Always allow" saves) |
+| `<project>/.rein/settings.local.json` | Rein local project rules |
+
+Rules use Claude Code's `Tool(specifier)` format, and **Claude Code tool names are accepted**. They map to Rein's tools:
+
+| Claude Code name in a rule | Rein tool |
+|---|---|
+| `Bash` | `shell` |
+| `Edit`, `Write`, `MultiEdit` | `edit` (covers edit, write, delete and image generation) |
+| `Read` | `read` |
+| `WebFetch` | `web_fetch` |
+| `WebSearch` | `web_search` |
+| `mcp__server`, `mcp__server__tool` | same |
+
+So an existing `"Bash(npm test:*)"` or `"Edit(src/**)"` keeps working. Run `/permissions` to see every rule in effect and which file it came from. → [Permissions](../../features/permissions/)
+
+### Hooks
+
+Rein runs the `hooks` block from the same six settings files, in Claude Code's format and with Claude Code's semantics. It supports the events `PreToolUse`, `PostToolUse`, `UserPromptSubmit`, `Stop` and `SessionStart`, with `type: "command"` hooks (default timeout 60 s).
+
+- The event arrives as JSON on stdin. `CLAUDE_PROJECT_DIR` (and `REIN_PROJECT_DIR`) is set.
+- Exit code `2` blocks. JSON output with `decision: "block"`, `hookSpecificOutput.permissionDecision` (`allow` / `deny` / `ask`) and `additionalContext` is honored.
+- **Matchers written for Claude Code still match.** A matcher is tested against Rein's tool name *and* its Claude Code names:
+
+| Rein tool | Also matches |
+|---|---|
+| `shell` | `Bash` |
+| `edit` | `Edit`, `MultiEdit` |
+| `write` | `Write` |
+| `read` | `Read` |
+| `search` | `Grep` |
+| `list` | `Glob`, `LS` |
+| `web_fetch` | `WebFetch` |
+| `web_search` | `WebSearch` |
+| `agent` | `Task` |
+| `todo_write` | `TodoWrite` |
+
+:::caution
+The hook-matcher names (`Grep`, `Glob`, `LS`, `Task`, `TodoWrite`) are **not** accepted in permission rules. Rules know only the names in the first table.
+:::
+
+→ [Hooks](../../features/hooks/)
+
+### `CLAUDE.md` and `AGENTS.md`
+
+These instruction files go into the system prompt, most general first. Each file can be up to 64 KB, and duplicates are included once:
+
+1. `~/.rein/AGENTS.md` and `~/.claude/CLAUDE.md`
+2. From the git root down to the folder you started in: `AGENTS.md`, `CLAUDE.md` and `.claude/CLAUDE.md` in each directory
+
+`AGENTS.md` / `CLAUDE.md` files in **subfolders** are delivered the first time the agent touches a file under them, scoped to that folder, as in Claude Code. → [Memory & instructions](../../features/memory/)
+
+### MCP servers
+
+Rein loads servers in Claude Code's `mcpServers` format (stdio, `http` and `sse`, with `${VAR}` and `${VAR:-default}` expansion) from:
+
+- **`<project>/.mcp.json`**: the project's shared servers. Each one needs your approval once, because a repo shouldn't be able to launch commands on its own. Approvals you already gave in Claude Code (`enabledMcpjsonServers` in `.claude/settings.local.json`) count.
+- **`~/.rein/mcp.json`**: your own Rein servers.
+- **`~/.claude.json`**: servers added with **`claude mcp add`**, both user scope and this project's scope.
+
+Open `/mcp` to see their status and tools, approve project servers and reconnect. → [MCP servers](../../features/mcp/)
+
+### Git Bash on Windows
+
+On Windows the agent's shell and your hooks use Git Bash when it's installed, as Claude Code does. Rein looks for it via `REIN_GIT_BASH_PATH`, then **`CLAUDE_CODE_GIT_BASH_PATH`**, then the standard install locations and `bash.exe` next to `git` on your PATH. Without Git Bash it falls back to PowerShell.
+
+## What doesn't carry over
+
+Rein starts `claude` with `--setting-sources ""` and `--disable-slash-commands`, and with its own tools in place of Claude's. Inside a Rein session, Claude Code's own settings, commands and built-in tools are therefore off. Rein reads the pieces listed above itself. It does **not** read:
+
+- **Custom slash commands and skills** in `.claude/commands/` or `.claude/skills/`. Rein has its own [skills](../../features/skills/) in `<project>/.rein/skills/` and `~/.rein/skills/`. Ask `/skill:create` to write one.
+- **Custom subagent definitions** in `.claude/agents/`. Rein's agent spawns [subagents](../../features/subagents/) on demand, on any model.
+- **`CLAUDE.local.md`.** Use `CLAUDE.md`, `AGENTS.md`, or Rein's project memory (`/memory`).
+
+## What's different (and new)
+
+### Rein's tool names
+The model sees Rein's tools, not Claude Code's: `read`, `list`, `write`, `edit`, `delete`, `search`, `shell`, `shell_logs`, `shell_kill`, `web_search`, `web_fetch`, `image_generate`, `agent`, `ask_user`, `todo_write`, `remember`, and more. In the history they appear as `Read(…)`, `Edit(…)`, `Shell(…)` and so on. MCP tools stay `mcp__<server>__<tool>`. → [Tool reference](../../reference/tools/)
+
+### Many accounts, two vendors
+Sign in to several Claude subscriptions **and** ChatGPT (Codex) accounts. Pick any of their models in `/model`, or set `auto` and let a decision model route each message. When an account hits a limit, Rein fails over to the next one. → [Accounts & failover](../../features/accounts/)
+
+### Plan mode is a toggle
+**Shift+Tab** turns plan mode on and off; it doesn't cycle through permission modes. The approval mode (Ask / Auto / Bypass) lives in `/configure` → **Approvals**. `/plan <task>` and `/plan:deep <task>` start a planning run. The plan ends in a window where you choose *Save & implement now*, *Save & start as a goal*, *Save only* or *Keep planning*. → [Plan mode](../../features/plans/)
+
+### `/btw` forks the agent
+In Rein, `/btw <question>` **forks the live session**. A copy of the agent, with the full context, answers on the side using read-only tools while the main agent keeps working. The answer never enters the conversation. → [/btw](../../features/btw/)
+
+### Goals
+`/goal <text>` keeps the agent working turn after turn until the decision model checks its evidence and confirms the goal is done. → [Goals](../../features/goals/)
+
+### Rewind covers shell changes
+Rein snapshots the **whole project** before each of your messages, in a private git store that never touches your repo's `.git`. `/rewind` (or Esc Esc) therefore also undoes changes made by shell commands, not only file edits. → [Rewind](../../features/rewind/)
+
+### Approval prompt
+Rein's approval prompt has four options: **1** allow once, **2** allow all changes and commands this session, **3** always allow (saves a rule to `.rein/settings.json`), **4** deny. Credentials and secrets outside the project always ask, even in Bypass mode.
+
+## Command mapping
+
+| Claude Code | Rein | Notes |
+|---|---|---|
+| `/login`, `/logout` | `/login` | One screen to add, re-authenticate and remove Claude and Codex accounts |
+| `/model` | `/model` | Also sets subagent, decision, compaction, advisor and web models, plus effort |
+| `/resume`, `claude --continue` | `/resume`, `rein --continue` | `rein --continue` opens a picker; `rein --continue <id>` continues one |
+| `/rewind`, Esc Esc | `/rewind`, Esc Esc | Restores code, conversation, or both |
+| `/compact` | `/compact` | Uses the compaction model you pick in `/model` |
+| `/context` | `/context` | Live context grid |
+| `/clear` | `/clear` | Also stops every subagent |
+| `/permissions` | `/permissions` | Lists rules and their source files |
+| `/mcp` | `/mcp` | Status, tools, approve project servers |
+| `/memory` | `/memory` | Shows Rein's project memory (`.rein/MEMORY.md`) |
+| `/agents` | `/agents` | Lists the subagents the agent has spawned in this session |
+| `/add-dir` | `/add-dir`, `rein --add-dir` | Extra working directories |
+| `/config` | `/configure` (`/config`, `/settings`) | Status line, sidebar, approvals, shell, subagents, goals, load balancing, updates, privacy, compaction |
+| `/help` | `/help` | Commands and skills |
+| `/exit` | `/exit` | Or Ctrl+C twice |
+| *(usage is limited)* | `/usage` | Every account's 5h / weekly windows and reset times |
+| — | `/goal`, `/btw`, `/plan`, `/plan:goal`, `/shells`, `/agent`, `/update`, `/tui` | New in Rein |
+| `/init`, `/cost`, `/status`, `/doctor`, `/review` | — | No equivalent |
+| `claude -p` | `rein -p` | `--output-format`, `--permission-mode`, `--allowedTools`, `--disallowedTools`, `--model`, `-c` |
+
+→ Full list: [Slash commands](../../reference/commands/) · [CLI flags](../../reference/cli/)

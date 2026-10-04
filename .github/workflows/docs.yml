@@ -1,0 +1,51 @@
+name: Docs
+
+# Every PR: the docs drift check (code ↔ docs) and a full site build. Pushes to main that touch the
+# docs or the code they describe also ask the site repo to rebuild (see site/deploy/README.md).
+on:
+  push:
+    branches: [main]
+    paths: ['site/**', 'src/**', 'skills/**', 'AGENTS.md', '.github/workflows/docs.yml']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: site
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: site/package-lock.json
+      - name: Docs drift check
+        run: node scripts/check-docs.mjs
+      - run: npm ci
+      - run: npm run build
+
+  publish:
+    # Nudge the Pages repo (rein-harness/rein-harness.github.io) to rebuild from main. Skipped
+    # until the SITE_DISPATCH_TOKEN secret exists; that repo also rebuilds daily on its own.
+    needs: check
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger site rebuild
+        env:
+          GH_TOKEN: ${{ secrets.SITE_DISPATCH_TOKEN }}
+        run: |
+          if [ -z "$GH_TOKEN" ]; then echo "::notice::SITE_DISPATCH_TOKEN not set; skipping"; exit 0; fi
+          gh api repos/rein-harness/rein-harness.github.io/dispatches -f event_type=docs-updated

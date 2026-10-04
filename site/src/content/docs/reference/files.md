@@ -1,0 +1,162 @@
+---
+title: Files & environment
+description: What Rein stores in ~/.rein and in each project's .rein folder, which settings and instruction files it reads, every environment variable, and what is safe to delete.
+---
+
+Rein keeps all of its own state in one folder, `~/.rein`, plus a small `.rein/` folder inside each project for things you may want to commit (plans, rules, project memory, skills). It never copies your `claude` or `codex` credentials. Imported logins stay exactly where the CLIs put them.
+
+```sh
+ls ~/.rein
+# accounts/  accounts.json  checkpoints/  config.json  scratch/  sessions/  state/
+```
+
+## `~/.rein` (`REIN_HOME`)
+
+Set `REIN_HOME` to move the whole folder, for example to keep a test setup apart from your real one. Files Rein writes here are created `0600` in `0700` directories, written atomically (temp file + rename).
+
+| Path | What it is |
+| --- | --- |
+| `config.json` | Your settings. See [Configuration](../configuration/) |
+| `accounts.json` | Account registry: `{id, provider, home, imported, email, plan}` per account, plus `importOffered` (the first-run import prompt is shown once). `home: null` means "the CLI's default folder, env var unset". |
+| `accounts/claude/<id>/` | `CLAUDE_CONFIG_DIR` for a Claude account you added with `/login` (`claude-1`, `claude-2`, …) |
+| `accounts/codex/<id>/` | `CODEX_HOME` for a Codex account you added (`codex-1`, …) |
+| `state/usage.json` | Last-known usage windows per account, plus limit cooldowns (account unusable until a time) |
+| `state/context-windows.json` | Context windows learned from real responses (`result.modelUsage` on Claude), remembered across restarts |
+| `state/claude-models-<id>.json` | Model list the `claude` CLI reported for that account. Refreshed in the background once a day |
+| `state/codex-catalog/<id>.json` | Rein's rewritten Codex model catalog with the built-in tools stripped. See [drivers](../../internals/drivers/) |
+| `sessions/<id>.jsonl` | Conversation transcripts, append-only: one line per message, plus meta lines (summary, native session refs, tokens, subagents, goal) |
+| `sessions/<id>.meta.json` | Small index entry per conversation, used for listing and `/resume` |
+| `scratch/<id>/` | The session's scratchpad. The agent can write here without approval. Pasted and dropped images are copied to `scratch/<id>/images/` |
+| `checkpoints/<id>/` | [`/rewind`](../../features/rewind/) data: `tree.git` (a private git store of whole-project snapshots, never your project's `.git`), `trees.json`, and per-file checkpoints (`index.jsonl` + content-addressed `blobs/`, ≤ 10 MB per file) |
+| `skills/` | Global skills, one folder each with a `SKILL.md` |
+| `mcp.json` | User-scope MCP servers (`mcp_add` with `scope: "user"`) |
+| `settings.json` | Global permission rules and hooks (Claude Code format) |
+| `AGENTS.md` | Global instructions added to every session's system prompt |
+| `system-prompt.md` | Optional. Replaces Rein's **base** system prompt only. Tools, project info, memory and instruction files are still appended |
+| `secrets/jev.key` | Jev API key fallback file (`0600`), used only when the Keychain / DPAPI isn't available. On Windows the DPAPI-encrypted key is `secrets/jev.key.dpapi` |
+| `update.lock` | Held for up to 10 minutes while a background auto-update installs, so several Rein windows don't install at once |
+
+Session ids look like `2026-10-03-14-22-05-1a2b3c4d`. Sessions are listed per project by the folder they ran in.
+
+:::note[Where the Jev key lives]
+On macOS the Jev key goes into the Keychain as `rein-jev-api-key`, not into `~/.rein`. On Windows it is a DPAPI-encrypted file that only your Windows user can decrypt. `TYPESAFE_API_KEY` in the environment overrides both. With `REIN_HOME` set, Rein skips the Keychain and DPAPI and uses `secrets/jev.key`, so test setups never touch your real key.
+:::
+
+### Imported logins
+
+When Rein imports your existing `claude` and `codex` logins on first run, it registers them **in place** (`claude-default`, `codex-default`, with `home: null`). Rein runs those CLIs with `CLAUDE_CONFIG_DIR` / `CODEX_HOME` unset, because pointing `CLAUDE_CONFIG_DIR` at `~/.claude` explicitly reads as logged out. Removing an imported account in `/login` only unregisters it. Rein never logs it out or deletes its folder.
+
+## Per-project `.rein/`
+
+| Path | What it is | Commit it? |
+| --- | --- | --- |
+| `.rein/settings.json` | Project permission rules and hooks. "Always allow" in an approval prompt saves rules here | Yes, if the team shares rules |
+| `.rein/settings.local.json` | Personal project rules, plus `enabledMcpjsonServers` (the project `.mcp.json` servers you approved) | No |
+| `.rein/MEMORY.md` | [Project memory](../../features/memory/): facts the agent saved with `remember`, loaded into every session here. Edit it freely | Usually |
+| `.rein/plans/` | Saved plans, `YYYY-MM-DD-<slug>.md`, with `## Milestones` checkboxes | Yes |
+| `.rein/skills/` | Project skills | Yes |
+| `.mcp.json` *(project root)* | Project MCP servers (`mcp_add` default scope). Each one needs your one-time approval before it runs | Yes |
+
+## Files Rein reads
+
+### Settings (permission rules and hooks)
+
+All six files are merged, global first. Deny rules win wherever they appear. Hooks come from the same files and are re-read live.
+
+1. `~/.claude/settings.json`
+2. `~/.rein/settings.json`
+3. `<project>/.claude/settings.json`
+4. `<project>/.claude/settings.local.json`
+5. `<project>/.rein/settings.json`
+6. `<project>/.rein/settings.local.json`
+
+Existing Claude Code rules and hooks keep working: `Bash(npm test:*)`, `Edit(src/**)` and matchers like `Bash` all map onto Rein's tools. See [permissions](../../features/permissions/) and [hooks](../../features/hooks/).
+
+### MCP servers
+
+Earlier sources win on a name clash: `<project>/.mcp.json`, then `~/.rein/mcp.json`, then `~/.claude.json` (servers added with `claude mcp add`). `${VAR}` and `${VAR:-default}` are expanded from your environment. See [MCP](../../features/mcp/).
+
+### Instruction files
+
+Added to the system prompt for every provider, up to 64 KB each, duplicates removed:
+
+1. `~/.rein/AGENTS.md`
+2. `~/.claude/CLAUDE.md`
+3. From the git root down to the current folder: `AGENTS.md`, `CLAUDE.md`, `.claude/CLAUDE.md` in each folder
+
+`AGENTS.md` / `CLAUDE.md` files in subfolders are delivered with the first tool result that touches that folder, once per conversation (again after a compaction). Codex's own project-doc loading is switched off (`project_doc_max_bytes=0`) so nothing is injected twice.
+
+## Environment variables
+
+### For users
+
+| Variable | Effect |
+| --- | --- |
+| `REIN_HOME` | Root of Rein's state instead of `~/.rein`. Also disables Keychain/DPAPI for the Jev key |
+| `REIN_CLAUDE_BIN` | Path to the `claude` binary (default: `claude` on `PATH`) |
+| `REIN_CODEX_BIN` | Path to the `codex` binary (default: `codex` on `PATH`) |
+| `REIN_NO_AUTOUPDATE` | Any value turns off the launch-time auto-update |
+| `REIN_NO_BROWSER` | Don't open a browser for login URLs; Rein still shows the URL |
+| `REIN_NO_USAGE_REFRESH` | Turn off background usage refresh (the occasional tiny Claude ping and Codex usage reads) |
+| `REIN_GIT_BASH_PATH`, `CLAUDE_CODE_GIT_BASH_PATH` | Windows: which `bash.exe` the shell tool and hooks use. Otherwise Rein looks in the standard Git for Windows locations, then next to `git` on `PATH`, then falls back to PowerShell |
+| `TYPESAFE_API_KEY` | Jev API key, which overrides the stored one |
+| `TYPESAFE_BASE_URL` | Jev API base URL (default `https://api.typesafe.ai`) |
+
+### Set by Rein for child processes
+
+| Variable | Where |
+| --- | --- |
+| `CLAUDE_CONFIG_DIR` / `CODEX_HOME` | Set to the account's folder for accounts you added. **Removed** for imported accounts |
+| `REIN_TOOL_SOCKET` | Given to the MCP proxy that `claude` launches: the unix socket (named pipe on Windows) back to Rein's tool host |
+| `MCP_TOOL_TIMEOUT` | 24 h for Claude sessions with tools, so Rein's own shell cap is what applies |
+| `MAX_THINKING_TOKENS=0` | Fast Claude one-shots (decisions, carry selection, page reading) |
+| `CI=1`, `PAGER=cat`, `GIT_PAGER=cat`, `FORCE_COLOR=0` | The agent's shell commands |
+| `REIN_PROJECT_DIR`, `CLAUDE_PROJECT_DIR` | Hook commands |
+
+### Removed before launching a CLI
+
+So the account's own subscription login is always what's used, Rein strips these from the environment of every `claude` / `codex` process (`src/providers/env.ts`):
+
+- Claude: `ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN`, `CLAUDE_CODE_OAUTH_TOKEN`, `CLAUDE_CONFIG_DIR`
+- Codex: `CODEX_API_KEY`, `OPENAI_API_KEY`, `CODEX_ACCESS_TOKEN`, `CODEX_HOME`
+
+:::caution
+This applies to the CLIs Rein launches, not to commands the agent runs. The `shell` tool inherits your full environment, API keys included. See [security](../../project/security/).
+:::
+
+A few more variables (`CODEX_HOME_DEFAULT`, `REIN_CLAUDE_SETTINGS`, `REIN_CLAUDE_JSON`, `REIN_CLAUDE_GLOBAL`, `REIN_CLIPBOARD_FILE`, `REIN_CLIPBOARD_IMAGE`, `REIN_INSTALL_ROOT`) exist only so the test suite never touches your real files. Don't set them.
+
+## What's safe to delete
+
+Quit Rein first.
+
+| Delete | Safe? | What you lose |
+| --- | --- | --- |
+| `state/` | Yes | Usage snapshots and cooldowns (refetched on use), learned context windows, cached model lists, the Codex catalog (all regenerated) |
+| `scratch/` | Mostly | Agent scratch files, and the attached images that resumed conversations point to |
+| `checkpoints/` | Yes | `/rewind` for past conversations |
+| `sessions/` | Yes | Conversation history: `/resume`, `rein --continue`, `sessions_search` |
+| `config.json` | Yes | Your settings (defaults return) |
+| `accounts/<provider>/<id>/` | **No.** Use `/login` → remove | The login of an account you added. Deleting it by hand leaves `accounts.json` pointing at a missing folder |
+| `accounts.json` | Careful | The account registry. Rein offers to import your default logins again; folders under `accounts/` become orphans |
+
+### Resetting Rein completely
+
+```sh
+rm -rf ~/.rein
+```
+
+This wipes conversations, settings and the CLI logins of accounts you **added** in Rein. Your own `~/.claude` and `~/.codex` logins are untouched. On macOS, also remove the Jev key from the Keychain if you stored one:
+
+```sh
+security delete-generic-password -s rein-jev-api-key -a rein
+```
+
+Project folders keep their `.rein/` (rules, memory, plans, skills). Delete those per project if you want them gone.
+
+## Related
+
+- [Configuration](../configuration/): every `config.json` key
+- [Accounts](../../features/accounts/): adding, importing and removing accounts
+- [Security](../../project/security/): what Rein can and can't touch
+- [FAQ](../../project/faq/): troubleshooting

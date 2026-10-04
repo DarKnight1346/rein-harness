@@ -11,6 +11,8 @@ A terminal chat harness that looks like Claude Code and drives the official `cla
 CLIs across one or more subscription accounts, with per-task model routing (Jev or a cheap model)
 and a compaction model. No OAuth tokens are extracted: all traffic goes through the CLIs.
 
+**📖 Full documentation: [rein-harness.github.io](https://rein-harness.github.io/)** · [Contributing](CONTRIBUTING.md)
+
 ## Install
 
 **Requirements**
