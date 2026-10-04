@@ -51,7 +51,7 @@ Interactive Rein needs a terminal. Run without one (in a pipe or CI) and it exit
 | `--model` | `auto` or a model ref | Chat model for this run only. |
 | `--effort` | a level (`low`, `medium`, `high`, `xhigh`, `max`…), `auto` or `default` | Effort for this run only. Levels the model doesn't support are clamped. |
 | `--output-format` | `text` *(default)*, `json`, `stream-json` | How the result is printed (see below). |
-| `--permission-mode` | `ask`, `auto`, `bypass`, `plan` | How approvals are handled. Defaults to your `/configure` → Approvals setting. |
+| `--permission-mode` | `ask`, `auto`, `bypass`, `plan` | How approvals are handled. Defaults to your `/settings` → Approvals setting. |
 | `--allowedTools` | comma-separated rules | Extra allow rules for this run, such as `"shell(npm test:*),edit(src/**)"`. |
 | `--disallowedTools` | comma-separated rules | Extra deny rules for this run. Deny wins. |
 | `-c`, `--continue` | `[id]` | Continues the **latest** conversation in this project, or the given one. No picker. |
@@ -71,7 +71,7 @@ There is no one to ask in headless mode, so anything that would need your yes is
 | `plan` | Read-only exploration. The agent's plan is the result, and nothing is changed. |
 
 :::caution
-`--permission-mode` defaults to your configured approval mode, not to `ask`. If you set **Bypass** in `/configure`, `rein -p` runs in bypass too. Pass `--permission-mode` explicitly in scripts.
+`--permission-mode` defaults to your configured approval mode, not to `ask`. If you set **Bypass** in `/settings`, `rein -p` runs in bypass too. Pass `--permission-mode` explicitly in scripts.
 :::
 
 ### Output formats

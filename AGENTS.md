@@ -74,7 +74,7 @@ update the docs in the same PR.
 |---|---|
 | A slash command (`src/commands/index.ts`, `src/ui/useRein.ts`) | `reference/commands.md` and the feature page |
 | A CLI flag or env var (`src/app.tsx`, `src/headless.ts`) | `reference/cli.md`, `reference/files.md` (env), `features/headless.md` |
-| A config key or default (`src/store/config.ts`) or a `/configure` / `/model` tab | `reference/configuration.md` and the feature page |
+| A config key or default (`src/store/config.ts`) or a `/settings` / `/model` tab | `reference/configuration.md` and the feature page |
 | A tool, its parameters or approval behaviour (`src/tools/`, `src/agents/tools.ts`, …) | `reference/tools.md`, `features/tools.md`, `features/permissions.md` if approvals change |
 | Permission rules, sensitive paths, approval modes (`src/tools/host.ts`, `permissions.ts`) | `features/permissions.md`, `project/security.md` |
 | Hooks, MCP, skills, AGENTS.md/CLAUDE.md loading | `features/hooks.md`, `features/mcp.md`, `features/skills.md`, `features/memory.md`, `start/from-claude-code.md` |

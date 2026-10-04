@@ -95,7 +95,7 @@ In Terminal.app make sure View → Allow Mouse Reporting is on.
 | `/update` | Update Rein (npm), `claude` and `codex`, then check the Codex protocol |
 | `/context` | Context window usage grid |
 | `/add-dir` | Add a working directory for this session (no path: list them) |
-| `/configure` | Choose/reorder status-line segments and sidebar sections (alias `/config`) |
+| `/settings` | Settings: status line, sidebar, approvals, sandbox, shell, subagents, goals and more |
 | `/tui` | `/tui fullscreen` or `/tui classic` |
 | `/clear`, `/help`, `/exit` | |
 
@@ -106,7 +106,7 @@ A custom system prompt can go in `~/.rein/system-prompt.md`.
 Agent tools: list · read · write · edit · delete · search · shell (foreground/background, `/shells`).
 They work freely inside the project and its working directories (`/add-dir <path>`, `rein --add-dir <path>`,
 or `additionalDirectories` in `~/.rein/config.json`); paths anywhere else ask first — reads can be allowed
-for the session, writes always need a yes, and credentials/secrets always ask, even in bypass mode. File changes and commands need approval: `/configure` → Approvals
+for the session, writes always need a yes, and credentials/secrets always ask, even in bypass mode. File changes and commands need approval: `/settings` → Approvals
 (ask / auto via the decision model / bypass). `/btw <question>` forks the agent to answer on the side.
 Ctrl+C stops the agent; press it twice to exit.
 Subagents: the agent can delegate with its `agent` tool (fork the conversation, or a new session on any
@@ -135,10 +135,10 @@ Design, findings and status: [PLAN.md](PLAN.md). Tests: `npm test`. License: [MI
 
 ### Privacy
 - On by default: emails show as "Claude Account 1" / "Codex Account 1" and your home folder as `~`, so
-  screenshots are shareable. Toggle in /configure → Privacy.
+  screenshots are shareable. Toggle in /settings → Privacy.
 
 ### Updates
-- Auto-update on launch can be turned off in /configure → Updates.
+- Auto-update on launch can be turned off in /settings → Updates.
 
 ### Getting the most out of a project
 - **Permissions:** "Always allow" in an approval prompt saves a rule (`shell(npm test:*)`, `edit(src/**)`) to

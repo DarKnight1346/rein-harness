@@ -118,7 +118,7 @@ Each verdict shows in the subagent's view, e.g. `completion check: not complete 
 
 ## Limits
 
-- **Concurrency.** At most `subagentLimit` subagents run at once (default **10**). Set it in [`/configure`](../tui/) → Subagents: 1, 2, 3, 5, 10 or 20. The agent is told the limit. When it's reached, `agent` returns an error telling it to wait with `agent_result` or do the work itself.
+- **Concurrency.** At most `subagentLimit` subagents run at once (default **10**). Set it in [`/settings`](../tui/) → Subagents: 1, 2, 3, 5, 10 or 20. The agent is told the limit. When it's reached, `agent` returns an error telling it to wait with `agent_result` or do the work itself.
 - **No nesting.** Subagents can't spawn subagents. `agent`, `agent_result`, `ask_user`, `todo_write`, `present_plan`, `milestone_done` and `goal_done` belong to the main agent only. Forks still see those definitions, because their history references them, but calling one fails with `only available to the main agent`.
 - **`/model` targets the main agent.** Changing the chat model while you're viewing a subagent changes the main agent's model; the subagent keeps its own.
 - **No questions.** Subagents are told the user won't answer questions, so they work autonomously and report what's left undone and why.

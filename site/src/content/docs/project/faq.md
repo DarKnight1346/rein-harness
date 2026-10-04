@@ -17,7 +17,7 @@ echo 'export PATH="$HOME/.npm-global/bin:$PATH"' >> ~/.zshrc   # or ~/.bashrc
 npm install -g rein-harness
 ```
 
-Auto-update hits the same wall. When it does, Rein tells you: `Rein <version> is available, but npm can't write to the global folder. Run sudo npm install -g rein-harness@latest (or turn off auto-update in /configure).`
+Auto-update hits the same wall. When it does, Rein tells you: `Rein <version> is available, but npm can't write to the global folder. Run sudo npm install -g rein-harness@latest (or turn off auto-update in /settings).`
 
 Rein needs **Node.js 22+**. Check with `node --version`.
 
@@ -96,7 +96,7 @@ With more than one Claude account and balanced load balancing, Rein also pings i
 
 ### What does privacy mode hide?
 
-Privacy mode is on by default (`/configure` → Privacy). Accounts show as `Claude Account 1` and `Codex Account 1` instead of emails. Known emails in any displayed text become those names, your home folder shows as `~`, and your OS username as `user`. It changes the **display only**: saved transcripts and config files are untouched. See [Configuration](../../reference/configuration/).
+Privacy mode is on by default (`/settings` → Privacy). Accounts show as `Claude Account 1` and `Codex Account 1` instead of emails. Known emails in any displayed text become those names, your home folder shows as `~`, and your OS username as `user`. It changes the **display only**: saved transcripts and config files are untouched. See [Configuration](../../reference/configuration/).
 
 ### Where does Rein keep its data?
 

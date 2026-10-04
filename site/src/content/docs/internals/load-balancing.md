@@ -112,7 +112,7 @@ The refresher does nothing in `sticky` mode, and `REIN_NO_USAGE_REFRESH` disable
 
 ## Sticky mode
 
-`/configure` → **Load balancing** → **Sticky** (`"loadBalancing": "sticky"`) restores the simple behaviour. A conversation stays on its account until that account is unhealthy, meaning rejected, on cooldown or past `maxUsedPct`. New conversations and subagents still start on the best-scoring account, because `healthyAccounts()` always sorts by score. Only the mid-conversation moves and the background refresher are switched off.
+`/settings` → **Load balancing** → **Sticky** (`"loadBalancing": "sticky"`) restores the simple behaviour. A conversation stays on its account until that account is unhealthy, meaning rejected, on cooldown or past `maxUsedPct`. New conversations and subagents still start on the best-scoring account, because `healthyAccounts()` always sorts by score. Only the mid-conversation moves and the background refresher are switched off.
 
 :::note
 The **Load balancing** tab's description says a conversation moves when its cache "has gone cold (idle 5+ min)". The code uses 60 minutes, based on the measurements above.

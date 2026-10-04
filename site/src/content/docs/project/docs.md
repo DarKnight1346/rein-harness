@@ -18,7 +18,7 @@ same PR.
 |---|---|
 | A slash command | `reference/commands.md` and its feature page |
 | A CLI flag or env var | `reference/cli.md`, `reference/files.md`, `features/headless.md` |
-| A config key, default, or `/configure` / `/model` tab | `reference/configuration.md` and the feature page |
+| A config key, default, or `/settings` / `/model` tab | `reference/configuration.md` and the feature page |
 | A tool or its approval behaviour | `reference/tools.md`, `features/tools.md`, `features/permissions.md` |
 | Permissions, sensitive paths, approval modes | `features/permissions.md`, `project/security.md` |
 | Hooks, MCP, skills, AGENTS.md / CLAUDE.md loading | the matching `features/*.md` page and `start/from-claude-code.md` |

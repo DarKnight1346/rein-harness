@@ -49,9 +49,9 @@ export type ToolHostOptions = {
   /** Current session's scratchpad (created on demand); file changes inside it skip approval. */
   scratch?: () => string | undefined;
   sessionId?: () => string | undefined;
-  /** Foreground shell cap in ms (0 = none), read per call so /configure applies at once. */
+  /** Foreground shell cap in ms (0 = none), read per call so /settings applies at once. */
   shellMaxMs?: () => number;
-  /** The sandbox mode for the agent's shell commands (/configure → Sandbox). */
+  /** The sandbox mode for the agent's shell commands (/settings → Sandbox). */
   sandbox?: () => import('./sandbox.js').SandboxMode;
   /** `auto` mode: the decision model's verdict; `ask` falls through to the user. */
   judge?: (req: ApprovalRequest) => Promise<{allow: boolean; note: string}>;

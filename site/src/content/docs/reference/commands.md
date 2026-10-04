@@ -84,14 +84,14 @@ See [Goals](../../features/goals/) and [Plan mode](../../features/plans/).
 
 | Command | Arguments | What it does |
 |---|---|---|
-| `/configure` | — | Settings in twelve tabs: Status line, Sidebar, Approvals, Sandbox, Shell, Subagents, Goals, Load balancing, Notifications, Updates, Privacy, Compaction. **Aliases: `/config`, `/settings`.** |
+| `/settings` | — | Settings in twelve tabs: Status line, Sidebar, Approvals, Sandbox, Shell, Subagents, Goals, Load balancing, Notifications, Updates, Privacy, Compaction. |
 | `/tui` | `fullscreen` \| `classic` | Switches renderer and carries the conversation over. With no argument, shows which renderer is active. *Waits for idle.* |
 | `/update` | — | Updates the `claude` and `codex` CLIs, checks the Codex app-server protocol, then updates Rein. *Waits for idle.* |
 | `/export` | `[file]` | Saves the whole conversation as Markdown (every message, each reply's tool calls as a list) and copies it to the clipboard. Default file: `~/.rein/exports/<id>.md`; a path is relative to the project. |
 | `/help` | — | Commands and skills. |
 | `/exit` | — | Quits. Ctrl+C twice also exits. |
 
-`/config` and `/settings` are the only aliases. An unknown command prints `Unknown command /<name>. Try /help.`
+Rein has no command aliases. An unknown command prints `Unknown command /<name>. Try /help.`
 
 ## Shell commands with `!`
 

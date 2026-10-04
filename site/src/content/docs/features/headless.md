@@ -117,7 +117,7 @@ One JSON object per line as things happen, then the same `result` object as `jso
 You may also see `notice` (`{"type":"notice","text":"…"}`), `compact` and `error` events. Tool events from subagents appear in the stream too.
 
 :::caution[Privacy redaction applies to JSON output]
-With **Hide personal info** on (the default, `/configure` → **Privacy**), `json` and `stream-json` output is redacted like the UI: your home folder becomes `~`, account emails become `Claude Account 1`, and a username of 5 or more characters becomes `user`, **including inside the model's reply**. If a script needs exact paths, turn privacy off. Plain `text` output of the reply isn't redacted.
+With **Hide personal info** on (the default, `/settings` → **Privacy**), `json` and `stream-json` output is redacted like the UI: your home folder becomes `~`, account emails become `Claude Account 1`, and a username of 5 or more characters becomes `user`, **including inside the model's reply**. If a script needs exact paths, turn privacy off. Plain `text` output of the reply isn't redacted.
 :::
 
 ## Permissions
@@ -132,7 +132,7 @@ Nobody is there to answer a prompt, so **anything that would ask is denied**. Th
 | `plan` | Read-only exploration. The result is the plan (see below). |
 
 :::danger[Omitting --permission-mode uses your interactive setting]
-Without `--permission-mode`, a headless run uses `toolApproval` from `~/.rein/config.json`, whatever you last picked in `/configure` → **Approvals**. If that's `bypass`, **`rein -p` runs every command and file change without asking.** In scripts and CI, always pass `--permission-mode` explicitly.
+Without `--permission-mode`, a headless run uses `toolApproval` from `~/.rein/config.json`, whatever you last picked in `/settings` → **Approvals**. If that's `bypass`, **`rein -p` runs every command and file change without asking.** In scripts and CI, always pass `--permission-mode` explicitly.
 :::
 
 `--allowedTools` and `--disallowedTools` take the same [rule syntax](../permissions/#rule-syntax) as settings files and are combined with them. Deny still wins, and a deny in your settings beats an `--allowedTools` allow:

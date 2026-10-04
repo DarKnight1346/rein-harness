@@ -203,14 +203,14 @@ It moves when:
 - the cache is gone anyway (after compaction, or 60 minutes idle) **and** another account scores at least
   15 points better.
 
-Switch to `Sticky` in `/configure → Load balancing` to stay on one account until it can't continue. The full
+Switch to `Sticky` in `/settings → Load balancing` to stay on one account until it can't continue. The full
 algorithm is in [Load balancing](../../internals/load-balancing/).
 
 ## Privacy
 
 Privacy mode is on by default. Accounts show as `Claude Account 1`, `Codex Account 1` and so on everywhere,
 including notices and windows, so you can share screenshots safely. Turn it off in
-`/configure → Privacy` to see emails instead.
+`/settings → Privacy` to see emails instead.
 
 ## Gotchas
 

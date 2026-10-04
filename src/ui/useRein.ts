@@ -57,7 +57,7 @@ export type Overlay =
   | {name: 'none'}
   | {name: 'login'}
   | {name: 'model'}
-  | {name: 'configure'}
+  | {name: 'settings'}
   | {name: 'approval'; req: ApprovalRequest; resolve(d: ApprovalDecision): void; position: number; total: number}
   | {name: 'import'; rows: AccountRow[]}
   | {name: 'trust'; hooks: ProjectHooks}
@@ -732,7 +732,7 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
       return;
     }
     // In fullscreen, commands that open a window don't echo into the history.
-    const opensWindow = ['goal:plan', 'login', 'usage', 'context', 'help', 'update', 'configure', 'shells', 'btw', 'resume', 'agents', 'agent'].includes(parsed.name) || (parsed.name === 'model' && !parsed.args);
+    const opensWindow = ['goal:plan', 'login', 'usage', 'context', 'help', 'update', 'settings', 'shells', 'btw', 'resume', 'agents', 'agent'].includes(parsed.name) || (parsed.name === 'model' && !parsed.args);
     if (!(windowed && opensWindow)) log('user', raw.trim());
     switch (parsed.name) {
       case 'mcp':
@@ -1005,8 +1005,8 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
         void runtime.setConfig({tui: want}).then(() => exit({switchTo: want, sessionId: runtime.engine.transcript.messages.length ? runtime.engine.transcript.id : undefined} satisfies ExitResult));
         break;
       }
-      case 'configure':
-        setOverlay({name: 'configure'});
+      case 'settings':
+        setOverlay({name: 'settings'});
         break;
       case 'agents': {
         const all = runtime.agents.list();

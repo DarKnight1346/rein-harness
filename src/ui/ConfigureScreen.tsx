@@ -104,7 +104,7 @@ const CHOICE_TABS: ChoiceTabDef[] = [
 const TAB_TITLES = [...TABS.map((t) => t.title), ...CHOICE_TABS.map((t) => t.title)];
 
 /**
- * `/configure`: choose and order what the status line and sidebar show. Changes save immediately
+ * `/settings`: choose and order what the status line and sidebar show. Changes save immediately
  * and apply live (the bar and sidebar behind the window update as you toggle).
  */
 export function ConfigureScreen({onClose, onChange, bare}: {onClose(): void; onChange(): void; bare?: boolean}) {

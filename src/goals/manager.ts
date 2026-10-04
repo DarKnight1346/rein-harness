@@ -194,7 +194,7 @@ export class GoalManager extends EventEmitter {
     const cap = this.deps.maxRounds();
     if (cap && g.rounds >= cap) {
       g.status = 'paused';
-      g.checks.push({at: Date.now(), kind: 'turn', verdict: `paused after ${cap} automatic continuations (limit in /configure → Goals)`});
+      g.checks.push({at: Date.now(), kind: 'turn', verdict: `paused after ${cap} automatic continuations (limit in /settings → Goals)`});
       this.persist();
       return undefined;
     }

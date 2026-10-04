@@ -96,7 +96,7 @@ export function ClassicApp({resume}: {resume: Resume}) {
         {overlay.name === 'ask' && <AskScreen questions={overlay.questions} onDone={overlay.resolve} />}
         {overlay.name === 'plan' && <PlanScreen plan={overlay.plan} width={(process.stdout.columns ?? 100) - 4} onDecide={overlay.resolve} />}
         {overlay.name === 'rewind' && <RewindScreen points={overlay.points} onPick={(i, m) => void r.doRewind(i, m)} onCancel={r.closeOverlay} />}
-        {overlay.name === 'configure' && <ConfigureScreen onClose={r.closeOverlay} onChange={r.bump} />}
+        {overlay.name === 'settings' && <ConfigureScreen onClose={r.closeOverlay} onChange={r.bump} />}
         {overlay.name === 'approval' && <ApprovalPrompt req={overlay.req} onDecide={overlay.resolve} />}
         <Box borderStyle="round" borderColor={r.inputActive ? 'gray' : 'blackBright'} paddingX={1}>
           <Text color="gray">{'> '}</Text>

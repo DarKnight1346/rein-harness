@@ -1,6 +1,6 @@
 import type {Skill} from '../skills/index.js';
 
-export type CommandName = 'export' | 'ide' | 'memory' | 'mcp' | 'rewind' | 'permissions' | 'add-dir' | 'goal' | 'goal:plan' | 'btw' | 'agents' | 'agent' | 'resume' | 'login' | 'usage' | 'model' | 'context' | 'compact' | 'shells' | 'configure' | 'update' | 'tui' | 'clear' | 'help' | 'exit';
+export type CommandName = 'export' | 'ide' | 'memory' | 'mcp' | 'rewind' | 'permissions' | 'add-dir' | 'goal' | 'goal:plan' | 'btw' | 'agents' | 'agent' | 'resume' | 'login' | 'usage' | 'model' | 'context' | 'compact' | 'shells' | 'settings' | 'update' | 'tui' | 'clear' | 'help' | 'exit';
 
 export const COMMANDS: {name: CommandName; description: string}[] = [
   {name: 'export', description: 'Save the conversation as Markdown and copy it to the clipboard: /export [file] (default ~/.rein/exports/<id>.md)'},
@@ -22,7 +22,7 @@ export const COMMANDS: {name: CommandName; description: string}[] = [
   {name: 'context', description: 'Show what the current context holds and how full it is'},
   {name: 'compact', description: 'Summarize the conversation with the compaction model'},
   {name: 'shells', description: 'Shell commands the agent started; open one to see its logs (/shells <id>)'},
-  {name: 'configure', description: 'Choose what the status line and sidebar show (alias /config)'},
+  {name: 'settings', description: 'Settings: status line, sidebar, approvals, sandbox, shell, subagents, goals, load balancing, notifications, updates, privacy, compaction'},
   {name: 'update', description: 'Update the claude and codex CLIs and Rein'},
   {name: 'tui', description: 'Switch renderer: /tui fullscreen or /tui classic'},
   {name: 'clear', description: 'Clear the conversation'},
@@ -39,7 +39,7 @@ export type Parsed =
 /** An autocomplete row: a built-in command or a skill. */
 export type Suggestion = {name: string; description: string; skill?: Skill};
 
-const ALIASES: Record<string, CommandName> = {config: 'configure', settings: 'configure'};
+const ALIASES: Record<string, CommandName> = {};
 
 /** Built-in commands win over skills with the same name. */
 export const shadowedSkills = (skills: Skill[]) => skills.filter((s) => isCommandName(s.name));

@@ -30,7 +30,7 @@ That means reading `.env` *inside* your project never prompts. Rein treats the p
 
 ## The command sandbox
 
-Approvals decide *whether* a command runs. The sandbox limits *what it can do* once it runs, which is what makes long unattended runs (bypass mode, `/goal`) safe. It's **on by default** (`/configure` → **Sandbox**):
+Approvals decide *whether* a command runs. The sandbox limits *what it can do* once it runs, which is what makes long unattended runs (bypass mode, `/goal`) safe. It's **on by default** (`/settings` → **Sandbox**):
 
 | Mode | The agent's shell commands… |
 |---|---|
@@ -46,7 +46,7 @@ macOS uses `sandbox-exec` (Seatbelt), as Claude Code and Codex do. Linux uses bu
 
 ## Approval modes
 
-Pick a mode in `/configure` → **Approvals** (saved as `toolApproval` in `~/.rein/config.json`). The mode only decides what happens to mutating calls that nothing else (a rule, a hook, the scratchpad, the read-only list) has already settled.
+Pick a mode in `/settings` → **Approvals** (saved as `toolApproval` in `~/.rein/config.json`). The mode only decides what happens to mutating calls that nothing else (a rule, a hook, the scratchpad, the read-only list) has already settled.
 
 | Mode | What happens |
 |---|---|
@@ -57,7 +57,7 @@ Pick a mode in `/configure` → **Approvals** (saved as `toolApproval` in `~/.re
 The `auto` judge sees only your latest message, the action (`Shell $ npm run build`) and a clipped preview of the change. For shell commands it's told to refuse deletions, force-pushes, installing system software, touching credentials and contacting unexpected hosts. For file changes it's told to refuse deleting or overwriting unrelated work.
 
 :::note
-The `/configure` screen describes approvals in terms of file changes. The mode applies to **every** mutating tool, including `shell` and MCP tools.
+The `/settings` screen describes approvals in terms of file changes. The mode applies to **every** mutating tool, including `shell` and MCP tools.
 :::
 
 ### What bypass still stops

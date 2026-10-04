@@ -283,7 +283,7 @@ export function FullscreenApp({resume}: {resume: Resume}) {
         return <ShellWindow id={overlay.id} width={windowWidth} onClose={r.closeOverlay} />;
       case 'shells':
         return <ShellsWindow width={windowWidth} agent={viewing} onOpen={(id) => r.setOverlay({name: 'shell', id})} onClose={r.closeOverlay} />;
-      case 'configure':
+      case 'settings':
         return (
           <Window title="Configure" width={windowWidth} height={TABBED_HEIGHT} onClose={r.closeOverlay}>
             <ConfigureScreen bare onClose={r.closeOverlay} onChange={r.bump} />
@@ -620,7 +620,7 @@ function TopBar(props: {cols: number; tick: number; sidebarOpen: boolean; onTogg
         );
       case 'approvals':
         return (
-          <Seg key={id} onClick={() => props.run('/configure')}>
+          <Seg key={id} onClick={() => props.run('/settings')}>
             <Text dimColor>edits: </Text>
             <Text color={info.approvals === 'bypass' ? 'red' : info.approvals === 'auto' ? 'yellow' : 'green'}>{info.approvals}</Text>
           </Seg>
@@ -776,7 +776,7 @@ function Heading({children}: {children: string}) {
   );
 }
 
-/** Sidebar: the sections chosen in /configure, in order. */
+/** Sidebar: the sections chosen in /settings, in order. */
 function Sidebar({width, height, tick, run, view, setView}: {width: number; height: number; tick: number; run(cmd: string): void; view: 'main' | number; setView(v: 'main' | number): void}) {
   const [, setUsageTick] = useState(0);
   useEffect(() => usageStore.subscribe(() => setUsageTick((t) => t + 1)), []);
@@ -824,8 +824,8 @@ function Sidebar({width, height, tick, run, view, setView}: {width: number; heig
         </Box>
       ))}
       {!sections.length && (
-        <Clickable onClick={() => run('/configure')}>
-          <Text dimColor>empty · /configure</Text>
+        <Clickable onClick={() => run('/settings')}>
+          <Text dimColor>empty · /settings</Text>
         </Clickable>
       )}
     </Box>
@@ -1025,8 +1025,8 @@ function SessionSection({run}: {run(cmd: string): void}) {
       <Clickable onClick={() => run('/login')}>
         <Text color="gray">⚙ accounts</Text>
       </Clickable>
-      <Clickable onClick={() => run('/configure')}>
-        <Text color="gray">☰ configure</Text>
+      <Clickable onClick={() => run('/settings')}>
+        <Text color="gray">☰ settings</Text>
       </Clickable>
     </>
   );

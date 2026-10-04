@@ -27,7 +27,7 @@ Import? (Y/n)
 Press **Enter** (or `y`) to import. "In place" means Rein uses your normal CLI login directly. Removing it from Rein later only makes Rein forget it.
 
 :::note[Privacy mode is on]
-Rein shows accounts as "Claude Account 1" and your home folder as `~`, so screenshots are safe to share. Switch it off in `/configure` → **Privacy**.
+Rein shows accounts as "Claude Account 1" and your home folder as `~`, so screenshots are safe to share. Switch it off in `/settings` → **Privacy**.
 :::
 
 ## 2. Add more accounts with `/login`
@@ -121,7 +121,7 @@ After a change, the history shows the call, who approved it and the diff:
 ⏺ Edit(src/app.ts) · you approved
 ```
 
-Tired of saying yes? `/configure` → **Approvals** offers **Auto** (the decision model approves changes that clearly match your request and asks you otherwise) and **Bypass**. → [Permissions](../../features/permissions/).
+Tired of saying yes? `/settings` → **Approvals** offers **Auto** (the decision model approves changes that clearly match your request and asks you otherwise) and **Bypass**. → [Permissions](../../features/permissions/).
 
 ## 6. Get to know the screen
 
@@ -133,7 +133,7 @@ Rein's default **fullscreen** UI has four parts:
 
 - **Top bar.** It shows the model, the account, that account's usage windows and how full the context is (`ctx` turns yellow at 50% and red at 80%). **Everything is clickable:** the model opens `/model`, the account and usage open `/usage`, and `ctx` opens `/context`. Extra badges appear when relevant: `⏸ plan mode`, `◎ goal · active · 3/5`, `● 2 agents`, `● 1 background`.
 - **History.** Scroll with the wheel or PgUp/PgDn. Drag to select text, and releasing copies it (`✓ Copied 120 characters`).
-- **Sidebar** (Ctrl+B or click `[≡]`). It shows agents, accounts, models and the session, plus goal and task progress when they exist. It hides itself in terminals narrower than 96 columns. Choose its sections in `/configure` → **Sidebar**.
+- **Sidebar** (Ctrl+B or click `[≡]`). It shows agents, accounts, models and the session, plus goal and task progress when they exist. It hides itself in terminals narrower than 96 columns. Choose its sections in `/settings` → **Sidebar**.
 - **Input and footer.** Type `/` for commands, `@` to attach a file, Shift+Enter (or Option+Enter, or `\` then Enter) for a new line.
 
 Prefer your terminal's native scrollback? `rein --classic` or `/tui classic` switches to the inline renderer. → [The terminal UI](../../features/tui/).

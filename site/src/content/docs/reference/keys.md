@@ -75,7 +75,7 @@ Rein follows Claude Code's conventions wherever it can: Esc interrupts, Esc twic
 | **Click a top-bar segment** | Model → `/model`, account or usage → `/usage`, `ctx` → `/context`, `⏸ plan mode` → turns it off, `◎ goal` → `/goal`, `● N agents` → `/agents`, `● N background` → the shell's logs (or the list, if several are running), `◂ main` → back to the main agent, `[≡]` → sidebar. |
 | **Click in the sidebar** | Opens an agent's view, an account's usage, switches to a listed model, or runs the section's action (compact, accounts, configure). |
 | **Click a suggestion** | Runs that command, or inserts that file. |
-| **Click a button or menu row** | Picks it, in approval prompts, `/login`, `/model`, `/configure` and other windows. |
+| **Click a button or menu row** | Picks it, in approval prompts, `/login`, `/model`, `/settings` and other windows. |
 | **Click `[×]` or outside a window** | Closes the window. |
 | **`↓ N lines below` (when scrolled up)** | Click to jump to the latest message. |
 
@@ -93,7 +93,7 @@ Commands like `/usage`, `/help`, `/context` and `/shells` open a centered window
 |---|---|
 | **Esc** | Closes the window. In info windows **q** and **Enter** close it too. |
 | **↑ / ↓**, **PgUp / PgDn**, wheel | Scroll the window's content. |
-| **← / →** or **Tab** | Switch sections in `/model`. **← / →** switch tabs in `/configure`. |
+| **← / →** or **Tab** | Switch sections in `/model`. **← / →** switch tabs in `/settings`. |
 | **Enter** | Choose the highlighted row. |
 | **k** | In `/agents`: stop the subagent. In `/shells`: kill the command. |
 

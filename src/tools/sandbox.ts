@@ -5,7 +5,7 @@ import path from 'node:path';
 import {isWindows} from '../util/platform.js';
 
 /**
- * OS-level sandbox for the agent's shell commands, on by default (/configure → Sandbox):
+ * OS-level sandbox for the agent's shell commands, on by default (/settings → Sandbox):
  *   write  — writes only inside the project, its working directories, the session scratchpad, temp
  *            folders and package-manager caches; the network is open.
  *   strict — the same, and no network except localhost.
