@@ -38,8 +38,7 @@ export type Parsed =
 /** An autocomplete row: a built-in command or a skill. */
 export type Suggestion = {name: string; description: string; skill?: Skill};
 
-// `plan:goal`: the old name of /goal:plan.
-const ALIASES: Record<string, CommandName> = {config: 'configure', settings: 'configure', 'plan:goal': 'goal:plan'};
+const ALIASES: Record<string, CommandName> = {config: 'configure', settings: 'configure'};
 
 /** Built-in commands win over skills with the same name. */
 export const shadowedSkills = (skills: Skill[]) => skills.filter((s) => isCommandName(s.name));
