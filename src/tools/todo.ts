@@ -8,13 +8,31 @@ export type Todo = {content: string; status: TodoStatus; activeForm?: string};
 const STATUSES: TodoStatus[] = ['pending', 'in_progress', 'completed'];
 const MARK: Record<TodoStatus, string> = {pending: '☐', in_progress: '◐', completed: '☑'};
 
+const STOP = new Set(['the', 'a', 'an', 'and', 'or', 'to', 'of', 'in', 'on', 'for', 'with', 'it', 'is', 'be', 'that', 'this', 'all', 'up']);
+const words = (s: string) => new Set(s.toLowerCase().replace(/[`'"*_]/g, '').split(/[^a-z0-9.]+/).filter((w) => w && !STOP.has(w)));
+
+/**
+ * A task that restates a plan milestone. Agents (Claude especially) copy a goal's milestones into
+ * todo_write and then tick only the milestones, so the copies would sit in the sidebar undone.
+ */
+export function sameTask(task: string, milestone: string): boolean {
+  const a = words(task);
+  const b = words(milestone.replace(/^\s*\d+[.)]\s*/, ''));
+  if (!a.size || !b.size) return false;
+  let shared = 0;
+  for (const w of a) if (b.has(w)) shared++;
+  return shared / Math.min(a.size, b.size) >= 0.75 || shared / Math.max(a.size, b.size) >= 0.6;
+}
+
+export const isMilestoneCopy = (t: Todo, milestones: string[]) => milestones.some((m) => sameTask(t.content, m) || (!!t.activeForm && sameTask(t.activeForm, m)));
+
 export const todoLine = (t: Todo) => `${MARK[t.status]} ${t.status === 'in_progress' && t.activeForm ? t.activeForm : t.content}`;
 
 /**
  * `todo_write` (main agent): the task list for multi-step work, like Claude Code's TodoWrite. Each
  * call replaces the whole list; it's saved with the conversation and shown in the sidebar.
  */
-export function todoTool(deps: {transcript(): Transcript | undefined; changed(): void}): ToolDef {
+export function todoTool(deps: {transcript(): Transcript | undefined; changed(): void; milestones?(): string[] | undefined}): ToolDef {
   return {
     name: 'todo_write',
     label: 'Tasks',
@@ -25,6 +43,7 @@ export function todoTool(deps: {transcript(): Transcript | undefined; changed():
         '- Statuses: pending, in_progress, completed. Keep exactly one task in_progress while working; mark each completed as soon as it is done (don\'t batch).',
         '- content: imperative ("Run the tests"); activeForm: present continuous shown while in progress ("Running the tests").',
         '- Skip it for single, trivial requests.',
+        "- While a goal works from a plan, its milestones are the task list (the user sees them): use this only for sub-steps of the current milestone, never to copy the milestones.",
       ].join('\n'),
     inputSchema: {
       type: 'object',
@@ -62,7 +81,11 @@ export function todoTool(deps: {transcript(): Transcript | undefined; changed():
       if (t) t.todos = todos;
       deps.changed();
       const active = todos.filter((x) => x.status === 'in_progress').length;
-      const note = active > 1 ? '\nNote: keep only one task in_progress at a time.' : todos.length && !active && todos.some((x) => x.status === 'pending') ? '\nNote: mark the task you are working on in_progress.' : '';
+      const milestones = deps.milestones?.() ?? [];
+      const copies = milestones.length ? todos.filter((x) => isMilestoneCopy(x, milestones)).length : 0;
+      const note = copies
+        ? `\nNote: ${copies} of these repeat the plan's milestones, which already track progress (milestone_done ticks them, and the sidebar hides the copies). Use the task list only for sub-steps of the current milestone.`
+        : active > 1 ? '\nNote: keep only one task in_progress at a time.' : todos.length && !active && todos.some((x) => x.status === 'pending') ? '\nNote: mark the task you are working on in_progress.' : '';
       return {ok: true, text: `Task list updated:\n${todos.map(todoLine).join('\n') || '(empty)'}${note}`};
     },
   };

@@ -146,7 +146,7 @@ Each `<goal_reminder>` re-lists the milestones with the next one marked `→`, s
 ## Where you see it
 
 - **Top bar** (fullscreen): `◎ goal · active`, plus `· 3/5` milestones for a plan goal. Cyan while active, yellow when paused, green when done. Click it to open the Goal window.
-- **Sidebar**: a plan goal gets a **GOAL** section at the top — `GOAL · 3/5`, the plan title, a progress bar with a percentage, and up to 12 milestones (`✓` done, `▸` next, `○` later). Click the heading for the Goal window. If the agent keeps a task list with `todo_write`, a **TASKS** section follows it.
+- **Sidebar**: a plan goal gets a **GOAL** section at the top — `GOAL · 3/5`, the plan title, a progress bar with a percentage, and up to 12 milestones (`✓` done, `▸` next, `○` later). Click the heading for the Goal window. The milestones are the goal's task list: the agent is told not to copy them into `todo_write`. If it keeps a task list anyway (for sub-steps), a **TASKS** section follows, without the tasks that repeat a milestone; those are marked completed when their milestone is accepted.
 - **Classic mode**: the status bar shows `◎ goal active`.
 
 ## Limits and gotchas

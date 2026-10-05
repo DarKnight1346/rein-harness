@@ -31,7 +31,7 @@ import {findIdes, IdeConnection} from './ide/connection.js';
 import {hasHooks, runHooks} from './hooks.js';
 import {goalDoneTool, milestoneDoneTool} from './goals/tool.js';
 import {webTools} from './tools/web.js';
-import {todoTool} from './tools/todo.js';
+import {isMilestoneCopy, todoTool} from './tools/todo.js';
 import {imageGenRef, imageTool} from './tools/image.js';
 import {newTranscript, saveTranscript} from './session/transcript.js';
 import {setExtraWorkingDirs, systemPrompt} from './session/prompt.js';
@@ -427,7 +427,13 @@ Drop superseded reads of the same file, routine listings, and output that no lon
       ...agentTools(this.agents, () => this.config),
       advisorTool({config: () => this.config, engine: () => this.engine, agents: this.agents}),
       goalDoneTool(this.goals),
-      milestoneDoneTool(this.goals),
+      milestoneDoneTool(this.goals, (milestone) => {
+        // Tasks the agent copied from this milestone are done with it.
+        const t = this.engine?.transcript;
+        if (!t?.todos?.some((x) => x.status !== 'completed' && isMilestoneCopy(x, [milestone]))) return;
+        t.todos = t.todos.map((x) => (x.status !== 'completed' && isMilestoneCopy(x, [milestone]) ? {...x, status: 'completed'} : x));
+        void saveTranscript(t).catch(() => {});
+      }),
       ...webTools(() => this.config),
       skillTool(() => process.cwd(), () => (this.planMode = true)),
       ...memoryTools(() => process.cwd()),
@@ -448,6 +454,7 @@ Drop superseded reads of the same file, routine listings, and output that no lon
       ...mcpTools({mcp: this.mcp, root: () => process.cwd(), call: (name, args, origin) => this.tools.call(name, args, origin)}),
       todoTool({
         transcript: () => this.engine?.transcript,
+        milestones: () => (this.goals.goal?.status === 'active' ? this.goals.plan()?.milestones.map((m) => m.text) : undefined),
         changed: () => {
           if (this.engine) void saveTranscript(this.engine.transcript).catch(() => {});
         },

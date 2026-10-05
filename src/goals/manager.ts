@@ -120,6 +120,7 @@ export class GoalManager extends EventEmitter {
         `<plan file="${p.file}">Read the plan file first: it has the approach and steps. Milestones:\n${this.milestoneList(p)}\n</plan>`,
         'Work through the milestones in order and keep going until all are done. Rein will keep you on it across turns.',
         '- After finishing each milestone, call milestone_done with its number and concrete evidence (what you ran/checked and what it showed). It is verified before it is ticked off.',
+        "- The milestones are your task list (the user sees them ticked off): don't copy them into todo_write. Use todo_write only for sub-steps of the current milestone, if at all.",
         '- When every milestone is done, call goal_done with evidence for the whole goal.',
         '- "Impossible" or "can\'t be done" is not a way to finish: look for another approach, consult the advisor tool if available, or break the problem down.',
       ].join('\n');

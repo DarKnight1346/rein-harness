@@ -4,6 +4,8 @@ import path from 'node:path';
 import {beforeEach, describe, expect, it} from 'vitest';
 import {listPlans, progress, readPlan, savePlan, setMilestone} from '../src/plans/store.js';
 import {GoalManager} from '../src/goals/manager.js';
+import {milestoneDoneTool} from '../src/goals/tool.js';
+import {isMilestoneCopy, sameTask, todoTool} from '../src/tools/todo.js';
 
 let root: string;
 beforeEach(() => {
@@ -60,5 +62,22 @@ describe('goals from a plan', () => {
     const r = await goals.reviewMilestone(1, 'I think it works');
     expect(r.accepted).toBe(false);
     expect(readPlan(file)!.milestones[0]!.done).toBe(false);
+  });
+
+  it('tasks copied from the milestones are flagged, and completed when the milestone is', async () => {
+    const {goals} = setup(0.95);
+    const milestones = goals.plan()!.milestones.map((m) => m.text);
+    expect(sameTask('Parse the flag', 'flag parsed')).toBe(false); // different words: kept
+    expect(sameTask('Tests pass', 'tests pass')).toBe(true);
+    expect(sameTask('Add the --shout flag to the CLI parser', 'Add --shout flag to CLI parser')).toBe(true);
+    expect(sameTask('Write the docs page', 'Add --shout flag to CLI parser')).toBe(false);
+    const t: any = {todos: []};
+    const todo = todoTool({transcript: () => t, changed: () => {}, milestones: () => milestones});
+    const r = await todo.run({} as any, {todos: [{content: 'flag parsed', status: 'in_progress'}, {content: 'Tests pass', status: 'pending'}, {content: 'Read cli.ts', status: 'pending'}]});
+    expect(r.text).toContain("2 of these repeat the plan's milestones");
+    expect(t.todos.filter((x: any) => !isMilestoneCopy(x, milestones)).map((x: any) => x.content)).toEqual(['Read cli.ts']); // what the sidebar shows
+    const done: string[] = [];
+    await milestoneDoneTool(goals, (m) => done.push(m)).run({} as any, {milestone: 1, evidence: 'node cli.js --shout hi → HI'});
+    expect(done).toEqual(['flag parsed']);
   });
 });

@@ -3,7 +3,7 @@ import type {ToolDef} from '../tools/registry.js';
 import type {GoalManager} from './manager.js';
 
 /** `milestone_done` (main agent, while a goal works from a plan): tick a milestone after the decision model checks the evidence. */
-export function milestoneDoneTool(goals: GoalManager): ToolDef {
+export function milestoneDoneTool(goals: GoalManager, accepted?: (milestone: string) => void): ToolDef {
   return {
     name: 'milestone_done',
     label: 'Milestone',
@@ -26,6 +26,7 @@ export function milestoneDoneTool(goals: GoalManager): ToolDef {
       if (!Number.isInteger(n) || typeof args?.evidence !== 'string') throw new ToolError('milestone (number) and evidence are required');
       if (goals.goal?.status !== 'active' || !goals.goal.plan) throw new ToolError('there is no active goal from a saved plan');
       const r = await goals.reviewMilestone(n, args.evidence);
+      if (r.accepted) accepted?.(goals.plan()?.milestones[n - 1]?.text ?? '');
       if (!r.accepted) return {ok: false, text: `Milestone ${n} not accepted — ${r.note}. Show concrete proof (run the checks), then call milestone_done again.${r.advice ? `\n\nThe advisor's take on what's missing:\n${r.advice}` : ''}`};
       return {ok: true, text: `Milestone ${n} done (${r.note}). ${r.remaining ? `${r.remaining} to go — continue with the next one.` : 'All milestones are done: verify the whole goal and call goal_done with evidence.'}`};
     },
