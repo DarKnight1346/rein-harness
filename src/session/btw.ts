@@ -4,7 +4,7 @@ import {catalog} from '../router/catalog.js';
 import {defaultRef} from '../router/index.js';
 import type {Config} from '../store/config.js';
 import type {Engine} from './engine.js';
-import {estimateTokens, renderMessages} from './transcript.js';
+import {estimateTokens, renderMessages, summaryForModel} from './transcript.js';
 import type {Subagent} from '../agents/manager.js';
 import {subagentConversation} from './context.js';
 
@@ -74,7 +74,7 @@ export async function askBtw(engine: Engine, cfg: Config, question: string): Pro
   }
   const working = engine.isBusy ? '\n\n(The assistant is still working on the last user message.)' : '';
   const prompt = [
-    t.summary ? `<summary_of_earlier_conversation>\n${t.summary.text}\n</summary_of_earlier_conversation>` : '',
+    t.summary ? `<summary_of_earlier_conversation>\n${summaryForModel(t.summary)}\n</summary_of_earlier_conversation>` : '',
     `<conversation>\n${renderMessages(picked) || '(empty)'}${working}\n</conversation>`,
     `Side question: ${question}`,
   ]

@@ -1,3 +1,4 @@
+import stripAnsi from 'strip-ansi';
 import os from 'node:os';
 import {describe, expect, it} from 'vitest';
 import {ShellManager, waitingForInput} from '../src/tools/shells.js';
@@ -21,7 +22,8 @@ describe('interactive (terminal) commands', () => {
     const {done} = shells.start('[ -t 0 ] && echo tty-yes; printf "Name: "; read n && echo "hi $n"', {cwd: os.tmpdir(), background: false, tty: true});
     const id = await asked;
     expect(shells.get(id)!.waiting).toBe(true);
-    expect(shells.screen(id)).toContain('Name: ');
+    // Windows' ConPTY repaints with cursor moves: compare the text, not the raw bytes.
+    expect(stripAnsi(shells.screen(id)).replace(/\s+/g, ' ')).toContain('Name:');
     shells.write(id, 'bob\r');
     const s = await done;
     expect(s.exitCode).toBe(0);

@@ -165,8 +165,8 @@ export class Engine {
   }
 
   /** `/compact`: summarize now; the next turn starts a fresh native session from the summary. */
-  async compactNow(): Promise<CompactResult> {
-    const res = await compactTranscript(this.transcript, this.deps.config(), {keepRecent: 2});
+  async compactNow(focus?: string): Promise<CompactResult> {
+    const res = await compactTranscript(this.transcript, this.deps.config(), {keepRecent: 2, focus});
     if (!('skipped' in res)) {
       this.closeActive();
       this.cacheBroken = true;

@@ -35,7 +35,8 @@ export type Transcript = {
   cwd?: string;
   messages: Message[];
   /** Compactor output covering `messages[0..coversUpTo)`. */
-  summary?: {text: string; coversUpTo: number};
+  /** `map`: the parts the summary covers, by message number, for the recall tool (session/compactor.ts). */
+  summary?: {text: string; coversUpTo: number; map?: string};
   /** Keyed by `${provider}:${accountId}`, for resume after restart. */
   native: Record<string, NativeRef>;
   /** Auto-routing task tag (one line), set by the router. */
@@ -295,7 +296,7 @@ export function carryStart(t: Transcript, coversUpTo: number): number {
  * Messages with their tool calls: results whose key (`message:index`) is in `keep` are included in
  * full, the rest as one-line traces, so a new session knows what was read, run and changed.
  */
-function renderWithTools(messages: Message[], from: number, keep: ReadonlySet<string>): string {
+export function renderWithTools(messages: Message[], from: number, keep: ReadonlySet<string>): string {
   return messages
     .map((m, i) => {
       const tools = (m.tools ?? []).map((x, j) =>
@@ -306,6 +307,9 @@ function renderWithTools(messages: Message[], from: number, keep: ReadonlySet<st
     })
     .join('\n\n');
 }
+
+/** The summary as the model sees it: the text, then the map of what it covers (restorable with recall). */
+export const summaryForModel = (s: {text: string; map?: string}): string => (s.map ? `${s.text}\n\n${s.map}` : s.text);
 
 /**
  * Context to prepend when a native session hasn't seen part of the conversation (new session,
@@ -320,7 +324,7 @@ export function buildCarry(t: Transcript, coversUpTo: number, upTo: number, budg
   const head = [
     '<earlier_conversation>',
     'This conversation started before you joined it (another model or session). Continue it naturally; do not mention the handoff. Tool calls you see here were made by you earlier; results not shown in full can be re-read if needed.',
-    summary ? `<summary>\n${summary.text}\n</summary>` : '',
+    summary ? `<summary>\n${summaryForModel(summary)}\n</summary>` : '',
   ].filter(Boolean);
   const textOnly = [...head, missing.length ? renderWithTools(missing, from, new Set()) : '', '</earlier_conversation>'].filter(Boolean).join('\n\n');
   const text = [...head, missing.length ? renderWithTools(missing, from, keep) : '', '</earlier_conversation>'].filter(Boolean).join('\n\n') + '\n\n';

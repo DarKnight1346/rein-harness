@@ -2,7 +2,7 @@ import {adapters} from '../providers/index.js';
 import {parseRef} from '../providers/types.js';
 import {catalog} from '../router/catalog.js';
 import type {Engine} from '../session/engine.js';
-import {estimateTokens, renderMessages} from '../session/transcript.js';
+import {estimateTokens, renderMessages, summaryForModel} from '../session/transcript.js';
 import type {Config} from '../store/config.js';
 import {ToolError} from '../tools/fs.js';
 import type {ToolDef} from '../tools/registry.js';
@@ -35,7 +35,7 @@ function mainContext(engine: Engine): string {
     used += cost;
     picked.unshift({...m, text: tools ? `${tools}\n${m.text}` : m.text});
   }
-  return [t.summary ? `<summary>\n${t.summary.text}\n</summary>` : '', renderMessages(picked)].filter(Boolean).join('\n\n');
+  return [t.summary ? `<summary>\n${summaryForModel(t.summary)}\n</summary>` : '', renderMessages(picked)].filter(Boolean).join('\n\n');
 }
 
 /**

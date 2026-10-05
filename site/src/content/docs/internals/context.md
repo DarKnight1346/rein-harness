@@ -104,7 +104,18 @@ Details worth knowing:
 
 - **Kept messages.** The last `KEEP_RECENT` (4) messages stay verbatim. `/compact` keeps 2. A mid-turn compaction keeps none: the turn itself is what filled the context.
 - **Chunked folding.** No more than `CHUNK_TOKENS` (60,000) of transcript goes into one call. Longer histories are folded chunk by chunk: each call gets `EXISTING SUMMARY` plus `NEW TRANSCRIPT TO FOLD IN`. A 500k-token conversation compacts on a model with a much smaller window.
-- **Nothing is deleted.** Messages stay on disk. Only `summary = {text, coversUpTo}` is added, and `native` is cleared.
+- **Nothing is deleted.** Messages stay on disk. Only `summary = {text, coversUpTo, map}` is added, and `native` is cleared.
+- **A map of what was summarized.** Next to the summary, Rein keeps a list of the parts it covers, one per message you sent, with the files each part changed. It's built from the transcript, not by the model, so it stays exact across repeated compactions:
+
+  ```text
+  EARLIER PARTS OF THIS CONVERSATION (summarized above; the full messages are kept — restore one with recall {from, to}, or find something with recall {query}):
+  #1-2 "Fix the date parser in src/date.ts" · changed src/date.ts
+  #3-4 "Now add a CLI flag --week" · changed src/cli.ts
+  ```
+
+  The model gets the map with the summary. When the summary isn't enough (exact code, an error message, the reasoning behind a decision), the agent brings a part back verbatim with the `recall` tool, tool results included. Very long conversations list their first 10 and last 30 parts.
+- **A file too.** Each compaction writes the summary and map to `summary.md` in the session's [scratchpad](../../reference/files/), for you to read.
+- **Focus.** `/compact what to keep` tells the compaction model to keep everything about that in full detail and be brief about the rest.
 - **Subfolder instructions reset.** After a compaction, scoped `AGENTS.md`/`CLAUDE.md` files are delivered again on the next tool call that touches them, because the summary may not keep them word for word.
 
 ### Triggers
