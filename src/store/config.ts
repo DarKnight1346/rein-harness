@@ -78,6 +78,8 @@ export type Config = {
   lspServers?: Record<string, {command: string; args?: string[]}>;
   /** Every account at its limit: wait for the reset (up to 12 hours) and continue, instead of stopping. */
   waitForLimits: boolean;
+  /** Run simple shell reads and searches the agent writes (cat, head, grep -rn, sed -n, ls, find -name) as the built-in tools. */
+  steerShell: boolean;
   /** Commits and pull requests the agent writes credit Rein (a "Co-Authored by [Rein Harness](…)" line). */
   attribution: boolean;
   /** whisper.cpp model for voice input (hold Ctrl+Space): `base.en-q5_1` (English, default), or e.g. `base-q5_1` / `small-q5_1` for other languages. */
@@ -119,6 +121,7 @@ export const DEFAULT_CONFIG: Config = {
   collapsePastes: true,
   attribution: true,
   waitForLimits: true,
+  steerShell: true,
   voiceModel: 'base.en-q5_1',
   lsp: 'auto',
   lspIdleMinutes: 10,

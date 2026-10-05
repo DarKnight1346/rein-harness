@@ -166,6 +166,21 @@ Every command runs:
 - with ANSI codes stripped and `\r` progress bars collapsed to their final state, keeping the last 5000 lines while it runs and the last 2000 once it ends (only the 50 most recent finished commands keep output). Output that never sends a newline, like a firmware console or a spinner, is cut into lines so it can't grow without bound;
 - in its own process group, so stopping it takes down its children. Stopping sends SIGTERM, then SIGKILL after 3 seconds.
 
+### Reads and searches run as tools
+
+Models often reach for `cat`, `grep` or `sed -n` in the shell when a built-in tool does the same job. When the agent runs one of these exact, simple forms, Rein runs the matching tool instead:
+
+| The agent runs | Rein runs |
+|---|---|
+| `cat FILE` | `read` |
+| `head -n N FILE`, `head -N FILE`, `tail -n N FILE` | `read` with `limit` / `offset` |
+| `sed -n 'A,Bp' FILE` | `read` from line A to B |
+| `ls [-l] [-a] [DIR]` | `list` |
+| `grep -rn PATTERN DIR` (also `-i`, `-F`; a single file without `-r`), `rg PATTERN [DIR]` | `search` |
+| `find DIR -name 'PATTERN' [-type f]` | `search` over file names |
+
+The answer is the same, but line-numbered like any read. It needs no shell approval, and the file counts as read, so an `edit` that follows doesn't fail with "read it again". Anything else runs in the shell as written: pipes, redirects, `;` / `&&`, `$(…)` or `$VAR`, unquoted globs, other flags (`grep -c`, `grep -l`), more than one file. The first time it happens in a session, the agent is told so it can call the tool directly. To turn it off, set `"steerShell": false` in `config.json`.
+
 ### Commands that need you
 
 Some commands can't run without a person: a login, an SSH passphrase, an installer with no flag for its choices, `git rebase -i`. For those the agent sets `interactive: true` (and when a command fails with "not a tty" or similar, Rein suggests it). The command then runs in a real terminal (a pseudo-terminal, without `CI=1`, so tools ask their questions instead of skipping them).
