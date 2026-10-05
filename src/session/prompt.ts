@@ -3,7 +3,7 @@ import {readFileSync} from 'node:fs';
 import {readFile} from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import {reinHome} from '../store/paths.js';
+import {reinConfigDir} from '../store/paths.js';
 import {memoryFacts} from '../tools/memory.js';
 
 const BASE_PROMPT = `You are Rein, a coding assistant working in the user's project from a terminal chat.
@@ -52,7 +52,7 @@ export async function agentsFiles(cwd = process.cwd()): Promise<{path: string; t
     if (parent === dir) break;
     dir = parent;
   }
-  const candidates = [path.join(reinHome(), 'AGENTS.md'), claudeGlobal(), ...dirs.flatMap((d) => PROJECT_FILES.map((f) => path.join(d, f)))];
+  const candidates = [path.join(reinConfigDir(), 'AGENTS.md'), claudeGlobal(), ...dirs.flatMap((d) => PROJECT_FILES.map((f) => path.join(d, f)))];
   const out: {path: string; text: string}[] = [];
   const seen = new Set<string>();
   for (const file of [...new Set(candidates)]) {
@@ -71,7 +71,7 @@ export async function agentsFiles(cwd = process.cwd()): Promise<{path: string; t
 export async function systemPrompt(opts: {tools?: boolean; scratch?: string} = {}): Promise<string> {
   let base = BASE_PROMPT;
   try {
-    const custom = (await readFile(path.join(reinHome(), 'system-prompt.md'), 'utf8')).trim();
+    const custom = (await readFile(path.join(reinConfigDir(), 'system-prompt.md'), 'utf8')).trim();
     if (custom) base = custom;
   } catch {}
   const sections = [base];

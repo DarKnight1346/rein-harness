@@ -3,7 +3,7 @@ import {checkCodex, incompatibleMessage, resetCodexCompat, SUPPORTED_CODEX} from
 import {readModelsCache} from '../providers/codex/catalog.js';
 import {spawn} from '../util/platform.js';
 import {existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync} from 'node:fs';
-import {reinHome} from '../store/paths.js';
+import {paths, reinHome} from '../store/paths.js';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {adapters} from '../providers/index.js';
@@ -207,7 +207,7 @@ export async function autoUpdate(notify: (text: string) => void): Promise<void> 
     notify(`Rein ${latest} is on npm (this checkout is ${current}) — git pull to update.`);
     return;
   }
-  const lock = path.join(reinHome(), 'update.lock');
+  const lock = path.join(paths.state(), 'update.lock');
   try {
     if (Date.now() - statSync(lock).mtimeMs < LOCK_MS) return; // another window is installing
   } catch {}

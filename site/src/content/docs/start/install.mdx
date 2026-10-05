@@ -97,6 +97,18 @@ rein            # or, without linking: npm run dev
 
 A source checkout updates itself with `git pull` (see below).
 
+## Behind a corporate proxy
+
+Rein honors the standard proxy variables: `HTTPS_PROXY`, `HTTP_PROXY`, `ALL_PROXY` (upper or lower case) and `NO_PROXY`. Its own requests (updates, the decision model, web fetch, remote MCP servers) go through the proxy, and local connections (`localhost`, `127.0.0.1`) never do. The `claude` and `codex` CLIs, MCP servers and the agent's commands inherit the same variables.
+
+If your proxy inspects TLS with its own certificate, point Node at it:
+
+```sh
+export HTTPS_PROXY=http://proxy.example.com:8080
+export NODE_EXTRA_CA_CERTS=/path/to/corporate-ca.pem
+rein
+```
+
 ## Updating
 
 Rein keeps itself current:

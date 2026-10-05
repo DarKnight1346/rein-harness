@@ -12,7 +12,19 @@ ls ~/.rein
 
 ## `~/.rein` (`REIN_HOME`)
 
-Set `REIN_HOME` to move the whole folder, for example to keep a test setup apart from your real one. Files Rein writes here are created `0600` in `0700` directories, written atomically (temp file + rename).
+Set `REIN_HOME` to move the whole folder, for example to keep a test setup apart from your real one.
+
+:::note[Linux: XDG base directories]
+On Linux (or anywhere the `XDG_*` variables are set), a new install follows the [XDG Base Directory spec](https://specifications.freedesktop.org/basedir-spec/latest/) instead of one `~/.rein` folder:
+
+| What | Where |
+|---|---|
+| What you write: `config.json`, `settings.json`, `mcp.json`, `AGENTS.md`, `system-prompt.md`, `skills/`, `agents/` | `$XDG_CONFIG_HOME/rein` (default `~/.config/rein`) |
+| What Rein keeps: conversations, accounts, checkpoints, exports, secrets, MCP sign-ins | `$XDG_DATA_HOME/rein` (default `~/.local/share/rein`) |
+| Bookkeeping: usage, input history, trusted projects, the update lock (`state/` below) | `$XDG_STATE_HOME/rein` (default `~/.local/state/rein`) |
+
+An existing `~/.rein` keeps being used as it is, and so does `REIN_HOME`. To switch an existing install to the XDG layout, move its files into those folders and remove `~/.rein`. The paths below are relative to whichever folder holds them.
+::: Files Rein writes here are created `0600` in `0700` directories, written atomically (temp file + rename).
 
 | Path | What it is |
 | --- | --- |
@@ -100,6 +112,9 @@ Added to the system prompt for every provider, up to 64 KB each, duplicates remo
 | `REIN_HOME` | Root of Rein's state instead of `~/.rein`. Also disables Keychain/DPAPI for the Jev key |
 | `REIN_CLAUDE_BIN` | Path to the `claude` binary (default: `claude` on `PATH`) |
 | `REIN_CODEX_BIN` | Path to the `codex` binary (default: `codex` on `PATH`) |
+| `HTTPS_PROXY`, `HTTP_PROXY`, `ALL_PROXY`, `NO_PROXY` | Route Rein's own requests through a proxy (never local connections). See [Install → Behind a corporate proxy](../../start/install/#behind-a-corporate-proxy) |
+| `NODE_EXTRA_CA_CERTS` | A PEM file of extra CA certificates, for a TLS-inspecting proxy (read by Node at startup) |
+| `XDG_CONFIG_HOME`, `XDG_DATA_HOME`, `XDG_STATE_HOME` | Where a new install keeps its config, data and state on Linux (see above) |
 | `REIN_NO_AUTOUPDATE` | Any value turns off the launch-time auto-update |
 | `REIN_NO_BROWSER` | Don't open a browser for login URLs; Rein still shows the URL |
 | `REIN_NO_USAGE_REFRESH` | Turn off background usage refresh (the occasional tiny Claude ping and Codex usage reads) |

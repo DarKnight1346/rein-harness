@@ -2,7 +2,7 @@ import {existsSync, readdirSync, readFileSync} from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import {parseSkillFile, skillName} from '../skills/index.js';
-import {reinHome} from '../store/paths.js';
+import {reinConfigDir} from '../store/paths.js';
 import {loadPlugins, pluginVars} from '../plugins/index.js';
 
 /**
@@ -24,7 +24,7 @@ export type AgentDefinition = {
 
 export const agentDefinitionDirs = (cwd = process.cwd()) => [
   path.join(os.homedir(), '.claude', 'agents'),
-  path.join(reinHome(), 'agents'),
+  path.join(reinConfigDir(), 'agents'),
   path.join(cwd, '.claude', 'agents'),
   path.join(cwd, '.rein', 'agents'),
 ];
