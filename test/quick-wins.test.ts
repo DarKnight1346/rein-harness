@@ -13,7 +13,7 @@ describe('XDG base directories', () => {
   const home = mkdtempSync(path.join(os.tmpdir(), 'rein-xdg-'));
   it('split config, data and state on Linux when there is no ~/.rein', () => {
     expect(layoutFor({}, home, 'linux')).toEqual({config: path.join(home, '.config', 'rein'), data: path.join(home, '.local', 'share', 'rein'), state: path.join(home, '.local', 'state', 'rein')});
-    expect(layoutFor({XDG_CONFIG_HOME: '/x/cfg', XDG_DATA_HOME: '/x/data', XDG_STATE_HOME: '/x/state'}, home, 'linux')).toEqual({config: '/x/cfg/rein', data: '/x/data/rein', state: '/x/state/rein'});
+    expect(layoutFor({XDG_CONFIG_HOME: '/x/cfg', XDG_DATA_HOME: '/x/data', XDG_STATE_HOME: '/x/state'}, home, 'linux')).toEqual({config: path.join('/x/cfg', 'rein'), data: path.join('/x/data', 'rein'), state: path.join('/x/state', 'rein')});
   });
   it('keep one folder for existing installs, macOS defaults and REIN_HOME', () => {
     const one = (dir: string) => ({config: dir, data: dir, state: path.join(dir, 'state')});
