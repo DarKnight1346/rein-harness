@@ -93,6 +93,8 @@ export type Config = {
   trackers: import('../trackers/types.js').TrackerConfig[];
   /** How often to look for new issues, in minutes (default 2). */
   trackerPollMinutes: number;
+  /** A URL Rein POSTs to when it needs you or finished something (ntfy, Slack, Discord, or any JSON webhook). */
+  notifyUrl: string;
   /** Commits and pull requests the agent writes credit Rein (a "Co-Authored by [Rein Harness](…)" line). */
   attribution: boolean;
   /** whisper.cpp model for voice input (hold Ctrl+Space): `base.en-q5_1` (English, default), or e.g. `base-q5_1` / `small-q5_1` for other languages. */
@@ -142,6 +144,7 @@ export const DEFAULT_CONFIG: Config = {
   remotePort: 7377,
   trackers: [],
   trackerPollMinutes: 2,
+  notifyUrl: '',
   voiceModel: 'base.en-q5_1',
   lsp: 'auto',
   lspIdleMinutes: 10,

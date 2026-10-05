@@ -203,6 +203,19 @@ To see real emails and paths, go to `/settings → Privacy` (or set `hidePersona
 Replies render Markdown. **LaTeX math** in them (`$x^2$`, `$$…$$`, `\(…\)`, `\[…\]`) is shown with Unicode, since a terminal can't typeset it: `$\frac{a+b}{c} \le \sqrt{x^2+1}$` reads `(a+b)/c ≤ √(x²+1)`, and `$\sum_{i=1}^{n} i$` reads `∑ᵢ₌₁ⁿ i`. This covers Greek letters, operators, relations, arrows, sets, `\mathbb`, fractions, roots, and sub- and superscripts. Anything else is shown as written, and so are prices like `$5 and $10`.
 
 **Right-to-left text** (Hebrew, Arabic) is laid out right to left in terminals that don't do it themselves: VS Code, Windows Terminal, kitty, Ghostty, Alacritty, WezTerm and iTerm2. Terminal.app, GNOME's terminal, Konsole and mlterm do it natively, so Rein leaves them alone. It changes only what's shown: copying a line copies the text as written. Reordered lines show without colors. If your terminal reverses Hebrew twice (iTerm2 with its own bidi turned on), set `"rtl": "off"` in `config.json`; `"on"` forces it.
+## Phone notifications
+
+Set `notifyUrl` in `config.json` and Rein pings your phone:
+
+- when an **approval has waited 30 seconds** unanswered (you're probably away from the keyboard);
+- when **work that took a while is done** (the same rule as the terminal notifications: more than 20 seconds, goals and queued messages included).
+- when an issue from an [issue tracker](../trackers/) is done or failed.
+
+```json title="~/.rein/config.json"
+{"notifyUrl": "https://ntfy.sh/a-long-random-topic-only-you-know"}
+```
+
+[ntfy](https://ntfy.sh) is the easiest: install its app, subscribe to a topic with a long random name, and use that URL. Slack and Discord incoming-webhook URLs work as they are. Any other URL gets a JSON POST: `{"title": "Rein needs your approval", "message": "Shell(npm test) in my-project", "source": "rein"}`. Messages are short, never contain file contents, and are masked like everything else ([vault](../vault/) secrets show as `[secret:NAME]`). Treat the URL as a secret: anyone who has it can read the notifications.
 
 ## /settings
 

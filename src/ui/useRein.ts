@@ -555,7 +555,15 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
   // took a while is finished (the goal loop and queued messages included, not each of its turns).
   useEffect(() => {
     const mode = runtime.config.notifications;
-    if (overlay.name === 'approval') notify(mode, 'Rein needs your approval', `${overlay.req.tool.label}(${overlay.req.summary})`);
+    if (overlay.name === 'approval') {
+      notify(mode, 'Rein needs your approval', `${overlay.req.tool.label}(${overlay.req.summary})`);
+      // Your phone, if nobody answers here within 30 s (you're probably away).
+      const req = overlay.req;
+      const t = setTimeout(() => {
+        runtime.notifyRemote('Rein needs your approval', `${req.tool.label}(${req.summary}) in ${nodePath.basename(process.cwd())}`); // (answered sooner: the effect's cleanup cancels this)
+      }, 30_000);
+      return () => clearTimeout(t);
+    }
     else if (overlay.name === 'ask') notify(mode, 'Rein has a question', overlay.questions[0]?.question ?? 'The agent is waiting for your answer');
     else if (overlay.name === 'plan') notify(mode, 'Rein has a plan for you', overlay.plan.title);
     else if (overlay.name === 'trust') notify(mode, 'Rein', "This project's hooks need your review");
@@ -574,7 +582,9 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
       workStarted.current = undefined;
       if (Date.now() - started < NOTIFY_AFTER_MS) return;
       const g = runtime.goals.goal;
-      notify(runtime.config.notifications, 'Rein is done', g?.status === 'done' ? `Goal achieved: ${g.text}` : g?.status === 'paused' ? `Goal paused: ${g.text}` : 'Ready for your next message');
+      const what = g?.status === 'done' ? `Goal achieved: ${g.text}` : g?.status === 'paused' ? `Goal paused: ${g.text}` : 'Ready for your next message';
+      notify(runtime.config.notifications, 'Rein is done', what);
+      runtime.notifyRemote('Rein is done', `${what} (${nodePath.basename(process.cwd())})`);
     }, 1500);
     return () => clearTimeout(t);
   }, [working]);
