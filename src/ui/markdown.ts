@@ -4,6 +4,7 @@ import hljs from 'highlight.js';
 import {marked, type Token, type Tokens} from 'marked';
 import stringWidth from 'string-width';
 import wrapAnsi from 'wrap-ansi';
+import {BLOCK_MATH, INLINE_MATH, latexToUnicode} from './latex.js';
 
 /**
  * Markdown → styled terminal lines, the way Claude Code does it: `marked` tokenizes, a recursive
@@ -13,6 +14,39 @@ import wrapAnsi from 'wrap-ansi';
 
 // Inline code / accents (Claude Code's "permission" blue-violet).
 const ACCENT = chalk.hex('#b1b9f9');
+const MATH = chalk.hex('#e5c07b');
+
+// LaTeX math → Unicode (latex.ts): `$x^2$` inline, `$$…$$` as its own block.
+marked.use({
+  extensions: [
+    {
+      name: 'math',
+      level: 'inline',
+      start: (src: string) => {
+        const a = src.indexOf('$');
+        const b = src.indexOf('\\(');
+        return a < 0 ? (b < 0 ? undefined : b) : b < 0 ? a : Math.min(a, b);
+      },
+      tokenizer(src: string) {
+        const m = INLINE_MATH.exec(src);
+        return m ? {type: 'math', raw: m[0], text: m[1] ?? m[2] ?? ''} : undefined;
+      },
+    },
+    {
+      name: 'mathBlock',
+      level: 'block',
+      start: (src: string) => {
+        const a = src.indexOf('$$');
+        const b = src.indexOf('\\[');
+        return a < 0 ? (b < 0 ? undefined : b) : b < 0 ? a : Math.min(a, b);
+      },
+      tokenizer(src: string) {
+        const m = BLOCK_MATH.exec(src);
+        return m ? {type: 'mathBlock', raw: m[0], text: (m[1] ?? m[2] ?? '').trim()} : undefined;
+      },
+    },
+  ],
+});
 
 // One-Dark-ish palette for highlight.js scopes.
 const SCOPES: Record<string, (s: string) => string> = {
@@ -117,6 +151,8 @@ function inlineToken(t: Token): string {
       return chalk.strikethrough(inline((t as Tokens.Del).tokens));
     case 'codespan':
       return ACCENT((t as Tokens.Codespan).text);
+    case 'math':
+      return MATH(latexToUnicode((t as unknown as {text: string}).text));
     case 'br':
       return '\n';
     case 'link': {
@@ -169,6 +205,10 @@ function block(t: Token, width: number, depth: number): string[] {
       const x = t as Tokens.Text;
       return wrapTo(x.tokens ? inline(x.tokens) : x.text, width);
     }
+    case 'mathBlock':
+      return latexToUnicode((t as unknown as {text: string}).text)
+        .split('\n')
+        .flatMap((l) => wrapTo(MATH(l.trim()), width - 4).map((x) => `    ${x}`));
     case 'code': {
       const c = t as Tokens.Code;
       const lang = c.lang?.trim();

@@ -4,6 +4,8 @@ import React, {useEffect, useRef, useState} from 'react';
 import {skillSourceLabel} from '../skills/index.js';
 import {Box, Static, Text, useStdout} from 'ink';
 import {detectGraphics, imagePaths, inlineImage} from './terminal/images.js';
+import {Box, Static, Text} from 'ink';
+import {needsBidi, visualOrder} from './bidi.js';
 import {approvalNote, compactText, routeLabel, toolResultSummary} from './format.js';
 import {ImportPrompt} from './ImportPrompt.js';
 import {TrustHooksPrompt} from './TrustHooksPrompt.js';
@@ -78,6 +80,8 @@ function useInlineImages(entries: readonly {id: number; kind: string}[]) {
   }, [entries, write]);
 }
 const IMAGE_TOOLS = new Set(['ImageGen', 'Read']);
+/** Right-to-left text in visual order, for terminals that don't lay it out themselves (bidi.ts). */
+const rtl = (text: string) => (needsBidi(process.env, runtime.config.rtl ?? 'auto') ? text.split('\n').map(visualOrder).join('\n') : text);
 
 export function ClassicApp({resume}: {resume: Resume}) {
   // <Static> only prints items past the count it has already rendered; remount it on /clear.
@@ -181,11 +185,11 @@ function EntryView({entry: raw}: {entry: Entry}) {
       return (
         <Box marginTop={1}>
           <Text color="gray">{'> '}</Text>
-          <Text>{entry.text}</Text>
+          <Text>{rtl(entry.text)}</Text>
         </Box>
       );
     case 'assistant': {
-      const md = renderMarkdown(entry.text.replace(/\s+$/, ''), (process.stdout.columns ?? 100) - 4).join('\n');
+      const md = rtl(renderMarkdown(entry.text.replace(/\s+$/, ''), (process.stdout.columns ?? 100) - 4).join('\n'));
       return entry.first ? (
         <Box marginTop={1}>
           <Text>⏺ </Text>

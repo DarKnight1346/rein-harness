@@ -1,4 +1,5 @@
 import {VaultPrompt} from '../VaultPrompt.js';
+import {needsBidi, visualOrder} from '../bidi.js';
 import {voiceNote} from '../useRein.js';
 import React, {useEffect, useMemo, useRef, useState, type ReactNode} from 'react';
 import {Box, Text, useBoxMetrics, useInput, useWindowSize} from 'ink';
@@ -468,6 +469,9 @@ type HistoryProps = {
  * terminal's own selection is unavailable while mouse reporting is on); release copies it.
  * Dragging past the top/bottom edge scrolls.
  */
+/** Right-to-left text in visual order where the terminal doesn't do it (display only: copying uses the text as written). */
+const rtlLine = (line: string) => (needsBidi(process.env, runtime.config.rtl ?? 'auto') ? visualOrder(line) : line);
+
 function History({width, lines, scroll, onScroll, selection, onSelect, onCopy, splash}: HistoryProps) {
   const ref = useRef(null);
   const {height} = useBoxMetrics(ref);
@@ -522,7 +526,7 @@ function History({width, lines, scroll, onScroll, selection, onSelect, onCopy, s
           // Backstop: a line wider than the pane would widen the column and push the sidebar.
           return (
             <Text key={i} wrap="truncate">
-              {(stringWidth(line) > width ? cliTruncate(line, width) : line) || ' '}
+              {(stringWidth(line) > width ? cliTruncate(rtlLine(line), width) : rtlLine(line)) || ' '}
             </Text>
           );
         }

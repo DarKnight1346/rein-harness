@@ -198,9 +198,17 @@ Privacy mode is on by default, so you can share screenshots without editing them
 
 To see real emails and paths, go to `/settings → Privacy` (or set `hidePersonalInfo` to `false`).
 
+## Math and right-to-left text
+
+Replies render Markdown. **LaTeX math** in them (`$x^2$`, `$$…$$`, `\(…\)`, `\[…\]`) is shown with Unicode, since a terminal can't typeset it: `$\frac{a+b}{c} \le \sqrt{x^2+1}$` reads `(a+b)/c ≤ √(x²+1)`, and `$\sum_{i=1}^{n} i$` reads `∑ᵢ₌₁ⁿ i`. This covers Greek letters, operators, relations, arrows, sets, `\mathbb`, fractions, roots, and sub- and superscripts. Anything else is shown as written, and so are prices like `$5 and $10`.
+
+**Right-to-left text** (Hebrew, Arabic) is laid out right to left in terminals that don't do it themselves: VS Code, Windows Terminal, kitty, Ghostty, Alacritty, WezTerm and iTerm2. Terminal.app, GNOME's terminal, Konsole and mlterm do it natively, so Rein leaves them alone. It changes only what's shown: copying a line copies the text as written. Reordered lines show without colors. If your terminal reverses Hebrew twice (iTerm2 with its own bidi turned on), set `"rtl": "off"` in `config.json`; `"on"` forces it.
+
 ## /settings
 
 `/settings` opens a window with tabs. Changes save to `~/.rein/config.json` right away, and the bar and sidebar behind the window update as you toggle. `←→` or `Tab` switches tabs, `Enter`, `Space` or a click chooses, and `Esc` closes.
+
+`/settings export [file]` saves your settings to one file (`rein-settings.json` by default), and `/settings import <file>` sets another machine up the same way. See [Moving to another machine](../../reference/configuration/#moving-to-another-machine).
 
 | Tab | Options (default in bold) | Config key |
 |---|---|---|
