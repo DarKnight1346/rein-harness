@@ -38,11 +38,11 @@ export function words(command: string): string[] | undefined {
   return out;
 }
 
-const lines = (file: string, root: string): number | undefined => {
+/** A file's text (read once: nothing can change between a check and the read); big files: undefined. */
+const textOf = (file: string, root: string): string | undefined => {
   try {
-    const p = path.resolve(root, file);
-    if (statSync(p).size > 8 * 1024 * 1024) return undefined; // big files: leave them to the shell
-    return readFileSync(p, 'utf8').split('\n').length;
+    const data = readFileSync(path.resolve(root, file));
+    return data.length > 8 * 1024 * 1024 ? undefined : data.toString('utf8'); // big files: leave them to the shell
   } catch {
     return undefined;
   }
@@ -90,10 +90,11 @@ export function steer(command: string, root: string): Steered | undefined {
       }
       if (!file || !isFile(file, root) || n < 1) return undefined;
       if (cmd === 'head') return {tool: 'read', args: {path: file, limit: Math.min(n, 2000)}};
-      const total = lines(file, root);
-      if (total === undefined || n > 2000) return undefined;
+      const text = textOf(file, root);
+      if (text === undefined || n > 2000) return undefined;
       // A trailing newline leaves an empty last "line": tail counts real lines.
-      const real = readFileSync(path.resolve(root, file), 'utf8').endsWith('\n') ? total - 1 : total;
+      const total = text.split('\n').length;
+      const real = text.endsWith('\n') ? total - 1 : total;
       return {tool: 'read', args: {path: file, offset: Math.max(1, real - n + 1), limit: n}};
     }
     case 'sed': {
