@@ -37,13 +37,15 @@ export type Worktree = {
   linked: Set<string>;
   /** Git's own folders the worktree writes to (its admin folder, the shared objects): for the sandbox. */
   writable: string[];
+  /** A visible branch (issue work): committed and kept when the agent finishes, never merged into the project. */
+  branch?: string;
 };
 
 /**
  * `commits`: commits the subagent made in its worktree ("abc1234 subject"); they aren't on the
  * user's branch (their changes come back uncommitted), so `ref` keeps them reachable.
  */
-export type MergeResult = {merged: string[]; conflicts: string[]; kept?: string; commits?: string[]; ref?: string};
+export type MergeResult = {merged: string[]; conflicts: string[]; kept?: string; commits?: string[]; ref?: string; branch?: string};
 
 /** Folders shared with the project by a symlink (dependencies: big, and only read by most work). */
 const DEP_DIRS = new Set(['node_modules', '.venv', 'venv', '.tox', 'vendor', 'Pods', '.bundle', 'bower_components', 'jspm_packages', '.pnpm-store', '.yarn']);
@@ -369,6 +371,33 @@ export class Worktrees {
   }
 
   /**
+   * A worktree on a new branch (`git worktree add -b`), from the project's current commit: for work
+   * that should come back as a branch to review (a triggered issue), not as changes in your tree.
+   * Attach it to the agent with `adopt` right after spawning, before its first tool call.
+   */
+  async createBranch(branch: string): Promise<Worktree | undefined> {
+    const top = await (this.top ??= repoTop(this.root));
+    if (!top) return undefined;
+    const dir = path.join(reinHome(), 'worktrees', path.basename(top), branch.replace(/[^\w.-]+/g, '-'));
+    mkdirSync(path.dirname(dir), {recursive: true});
+    await git(top, ['worktree', 'add', '--quiet', '-b', branch, dir, 'HEAD']);
+    const linked = await furnish(top, dir, []);
+    let real = this.root;
+    try {
+      real = realpathSync.native(this.root);
+    } catch {}
+    const sub = path.relative(realpathSync.native(top), real);
+    const gitDir = (await git(dir, ['rev-parse', '--absolute-git-dir'])).trim();
+    const common = path.resolve(dir, (await git(dir, ['rev-parse', '--git-common-dir'])).trim());
+    const base = (await git(dir, ['rev-parse', 'HEAD'])).trim();
+    return {root: sub ? path.join(dir, sub) : dir, dir, base, linked, writable: [gitDir, path.join(common, 'objects'), path.join(common, 'refs'), path.join(common, 'logs')], branch};
+  }
+
+  adopt(agentId: number, wt: Worktree): void {
+    this.byAgent.set(agentId, wt);
+  }
+
+  /**
    * The agent ended: merge its changes into the project and delete the worktree. On conflicts the
    * worktree stays (its path is in `kept`) so the main agent can merge those files by hand.
    */
@@ -377,6 +406,7 @@ export class Worktrees {
     const wt = this.byAgent.get(agentId);
     if (!wt) return undefined;
     this.byAgent.delete(agentId);
+    if (wt.branch) return keepBranch(wt);
     const top = (await this.top)!;
     const {commit} = await snapshot(wt.dir, wt.linked);
     return finish(top, wt.dir, wt.base, commit, wt.linked);
@@ -440,6 +470,8 @@ export function retarget<T>(args: T, from: string, to: string): T {
 
 /** The note added to a subagent's report after its changes were merged back. */
 export function mergeNote(r: MergeResult): string | undefined {
+  if (r.branch)
+    return `[Its work is on the branch ${r.branch}${r.commits?.length ? ` (${r.commits.length} commit${r.commits.length > 1 ? 's' : ''}: ${r.commits.slice(0, 5).join('; ')})` : ' (no commits)'}, in the worktree ${r.kept}. Nothing was merged into the project.]`;
   const parts: string[] = [];
   if (r.commits?.length)
     parts.push(
@@ -510,3 +542,18 @@ async function finishMerged(top: string, dir: string, merged: string[], conflict
   return {merged, conflicts};
 }
 
+const ARTIFACTS = ['**/__pycache__/**', '**/*.pyc', '**/.pytest_cache/**', '**/.DS_Store', '**/.mypy_cache/**', '**/.ruff_cache/**'];
+
+/** Issue work: commit what's left on its branch and keep the worktree; nothing touches the project. */
+async function keepBranch(wt: Worktree): Promise<MergeResult> {
+  const linked = [...wt.linked];
+  // Build leftovers (tests ran there) aren't the agent's work.
+  const exclude = [...linked.map((p) => `:(exclude)${p}`), ...ARTIFACTS.map((g) => `:(exclude,glob)${g}`)];
+  const status = (await git(wt.dir, ['status', '--porcelain', '--', '.', ...exclude])).split('\n').filter((l) => l.trim());
+  if (status.length) {
+    await git(wt.dir, ['add', '-A', '--', '.', ...exclude]);
+    await git(wt.dir, ['-c', 'user.name=Rein', '-c', 'user.email=rein@localhost', 'commit', '--quiet', '-m', `Rein: work in progress on ${wt.branch}`]).catch(() => '');
+  }
+  const commits = (await git(wt.dir, ['log', '--format=%h %s', `${wt.base}..HEAD`])).split('\n').filter(Boolean);
+  return {merged: [], conflicts: [], kept: wt.dir, branch: wt.branch, commits};
+}

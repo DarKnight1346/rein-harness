@@ -68,6 +68,8 @@ export type ToolHostOptions = {
   /** Plan mode: does this command only read? (decision model) — lets unlisted queries run. */
   readOnlyJudge?: (command: string) => Promise<{readOnly: boolean; note: string}>;
   planMode?: () => boolean;
+  /** Calls from this origin are untrusted (work started by an issue): approvals always ask. */
+  untrusted?: (origin: Origin) => boolean;
   /** Save a file's state before a tool changes it (checkpoints for /rewind). */
   checkpoint?: (file: string) => Promise<void>;
   /** Run simple shell reads/searches (cat, grep, sed -n…) as the built-in tools (default on). */
@@ -175,6 +177,10 @@ export class ToolHost extends EventEmitter {
 
   /** The agent was told once that a shell read ran as a tool. */
   private steeredOnce = false;
+  /** Untrusted work (an issue from a tracker) always asks, whatever mode the user chose. */
+  private modeFor(origin: Origin | undefined): ApprovalMode {
+    return origin && this.opts.untrusted?.(origin) ? 'ask' : this.opts.mode();
+  }
 
   async call(name: string, rawArgs: unknown, origin?: Origin): Promise<ToolResult> {
     // `cat F`, `grep -rn x src`, `sed -n '10,40p' F`…: run as the built-in tool (tools/steer.ts).
@@ -241,7 +247,7 @@ export class ToolHost extends EventEmitter {
           judge = `read-only, ${v.note}`;
         }
       }
-      if (planAsk && this.opts.mode() === 'bypass')
+      if (planAsk && this.modeFor(origin) === 'bypass')
         throw new ToolError('plan mode is on — this command may change things, so it waits for the plan\'s approval. Use plain read-only commands (one per call, no loops or substitutions) to explore, then call present_plan.');
       if (pre?.allow && !pre.ask) approvedBy = 'hook';
       const suggestion = suggestRule(subject, (p) => this.ruleRel(p));
@@ -253,7 +259,7 @@ export class ToolHost extends EventEmitter {
       const outside = this.outsidePaths(ctx, tool, args);
       if (outside.length && approvedBy === 'hook') ctx.outsideAllowed = outside;
       if (outside.length && !approvedBy) {
-        const mode = this.opts.mode();
+        const mode = this.modeFor(origin);
         const sensitive = outside.some(isSensitivePath);
         const req = {tool, args, summary, preview: preview(tool, args), origin, outside, sensitive, suggestion: sensitive ? undefined : suggestion};
         if (verdict === 'allow') approvedBy = 'rule';
@@ -280,7 +286,7 @@ export class ToolHost extends EventEmitter {
       // (After the outside-path check: a read-only command in an outside cwd still asks about access.)
       if (readOnly && !pre?.ask && !approvedBy) approvedBy = 'read-only';
       if (tool.mutating && !approvedBy) {
-        const mode = this.opts.mode();
+        const mode = this.modeFor(origin);
         const req = planAsk ? {tool, args, summary, preview: preview(tool, args), origin, planMode: true} : {tool, args, summary, preview: preview(tool, args), origin, suggestion};
         // Leaving the sandbox is always the user's call: no rule, session allowance, judge or bypass covers it.
         const forceAsk = !!pre?.ask || planAsk || unsandboxed || !!tool.askEvenInBypass; // a PreToolUse hook asked for the prompt, plan mode, leaving the sandbox, or installing software
