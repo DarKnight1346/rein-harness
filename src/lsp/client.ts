@@ -121,6 +121,11 @@ export class LspClient {
     return this.diags.get(this.uri(file))?.list;
   }
 
+  /** The files the server has open. */
+  openFiles(): string[] {
+    return [...this.versions.keys()].map((uri) => fileURLToPath(uri));
+  }
+
   /** Every file with diagnostics (the open ones). */
   allDiagnostics(): {file: string; list: Diagnostic[]}[] {
     return [...this.diags].map(([uri, d]) => ({file: fileURLToPath(uri), list: d.list}));
