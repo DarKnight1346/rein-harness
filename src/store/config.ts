@@ -70,6 +70,8 @@ export type Config = {
   worktrees: 'auto' | 'off';
   /** API accounts (pay per use): 'fallback' = only when no subscription can serve the model (default), 'always' = alongside subscriptions (after them). */
   apiAccounts: 'fallback' | 'always';
+  /** Big pastes (more than 3 lines or 800 characters) become a `[Pasted text #1 +40 lines]` placeholder in the input; false pastes the text as-is. */
+  collapsePastes: boolean;
   /** OS sandbox for the agent's shell commands: 'write' (default: writes limited to the project), 'strict' (also no network), 'off'. */
   sandbox: 'write' | 'strict' | 'off';
   /** Every this many minutes of a background command's life, a fork of the agent checks it's still needed and stops it if not; 0 = off. */
@@ -102,6 +104,7 @@ export const DEFAULT_CONFIG: Config = {
   backgroundCheckMinutes: 60,
   sandbox: 'write',
   apiAccounts: 'fallback',
+  collapsePastes: true,
   worktrees: 'auto',
 };
 

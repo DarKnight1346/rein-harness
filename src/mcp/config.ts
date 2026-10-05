@@ -1,7 +1,7 @@
 import {readFileSync} from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import {reinHome} from '../store/paths.js';
+import {reinConfigDir} from '../store/paths.js';
 import {updateJsonFileSync} from '../store/json.js';
 import {loadPlugins} from '../plugins/index.js';
 
@@ -63,7 +63,7 @@ export function loadServers(root: string): ServerEntry[] {
   const claudeJson = process.env.REIN_CLAUDE_JSON ?? path.join(os.homedir(), '.claude.json');
   const sources: [ServerSource, Record<string, ServerConfig>][] = [
     ['project', servers(path.join(root, '.mcp.json'))],
-    ['rein', servers(path.join(reinHome(), 'mcp.json'))],
+    ['rein', servers(path.join(reinConfigDir(), 'mcp.json'))],
     ['claude', {...servers(claudeJson), ...servers(claudeJson, (j) => j?.projects?.[root]?.mcpServers)}],
     // Installed plugins' servers (installing the plugin was the consent), as `<plugin>-<name>`.
     ['plugin', Object.fromEntries(loadPlugins(root).flatMap((p) => Object.entries(p.mcpServers ?? {}).map(([n, c]) => [`${p.name}-${n}`, c as ServerConfig])))],
@@ -81,7 +81,7 @@ export function loadServers(root: string): ServerEntry[] {
 export type ServerScope = 'project' | 'user';
 
 /** Where a scope's servers live: the project's shared .mcp.json, or the user's ~/.rein/mcp.json. */
-export const scopeFile = (root: string, scope: ServerScope) => (scope === 'project' ? path.join(root, '.mcp.json') : path.join(reinHome(), 'mcp.json'));
+export const scopeFile = (root: string, scope: ServerScope) => (scope === 'project' ? path.join(root, '.mcp.json') : path.join(reinConfigDir(), 'mcp.json'));
 
 export const validServerName = (name: string) => /^[A-Za-z0-9_-]{1,40}$/.test(name);
 

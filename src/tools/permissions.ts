@@ -1,7 +1,7 @@
 import {readFileSync} from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import {reinHome} from '../store/paths.js';
+import {reinConfigDir} from '../store/paths.js';
 import {updateJsonFileSync} from '../store/json.js';
 
 /**
@@ -49,7 +49,7 @@ function readRules(file: string): Rules {
 export function settingsFiles(root: string): string[] {
   return [
     process.env.REIN_CLAUDE_SETTINGS ?? path.join(os.homedir(), '.claude', 'settings.json'),
-    path.join(reinHome(), 'settings.json'),
+    path.join(reinConfigDir(), 'settings.json'),
     path.join(root, '.claude', 'settings.json'),
     path.join(root, '.claude', 'settings.local.json'),
     path.join(root, '.rein', 'settings.json'),

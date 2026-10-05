@@ -35,7 +35,8 @@ export class Attachments {
   private next = 1;
   private items = new Map<number, Attachment>();
 
-  constructor(private readonly imageDir: () => string) {}
+  /** `collapse`: whether big pastes become a placeholder (config collapsePastes; on by default). */
+  constructor(private readonly imageDir: () => string, private readonly collapse: () => boolean = () => true) {}
 
   private add(a: Attachment): number {
     const id = this.next++;
@@ -56,7 +57,7 @@ export class Attachments {
       return tokens.join(' ') + ' ';
     }
     const lines = text.split('\n').length;
-    if (lines > PASTE_LINES || text.length > PASTE_CHARS) {
+    if (this.collapse() && (lines > PASTE_LINES || text.length > PASTE_CHARS)) {
       const id = this.add({kind: 'text', text});
       return `[Pasted text #${id} +${lines} line${lines === 1 ? '' : 's'}]`;
     }

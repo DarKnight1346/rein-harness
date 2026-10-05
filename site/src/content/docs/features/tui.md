@@ -212,6 +212,7 @@ To see real emails and paths, go to `/settings → Privacy` (or set `hidePersona
 | **Goals** | Automatic continuations before a `/goal` pauses itself: **Unlimited**, 10, 25, 50, 100, 250 | `goalMaxRounds` |
 | **Load balancing** | **Balanced** (cache-aware) · Sticky (stay on one account until it hits a limit) | `loadBalancing` |
 | **Sandbox** | **On**: the agent's commands can only write inside the project, scratchpad, temp folders and package caches · Strict: also no network except localhost · Off | `sandbox` |
+| **Paste** | **Placeholder**: big pastes show as `[Pasted text #1 +40 lines]` · Plain text: pasted into the input as-is | `collapsePastes` |
 | **Worktrees** | **Automatic**: parallel subagents get their own git worktree, merged back when they finish · Off | `worktrees` |
 | **API accounts** | **Fallback**: pay-per-use API accounts only when no subscription can serve the model · Always: alongside subscriptions (after them) | `apiAccounts` |
 | **Notifications** | **Terminal** (bell + terminal notification) · Desktop (also macOS / Linux notifications) · Off. Fires when Rein needs you (approval, question, plan, hook trust) and when work that took 20 s or more finishes | `notifications` |

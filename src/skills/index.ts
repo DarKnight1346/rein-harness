@@ -2,7 +2,7 @@ import {existsSync, readdirSync, readFileSync, statSync} from 'node:fs';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import os from 'node:os';
-import {reinHome} from '../store/paths.js';
+import {reinConfigDir} from '../store/paths.js';
 import {codexSkillRoots, loadPlugins, pluginVars} from '../plugins/index.js';
 
 /** `claude-project` / `claude-user`: Claude Code custom commands (`.claude/commands/*.md`), run as skills. */
@@ -48,7 +48,7 @@ export const builtinSkillsDir = () => path.resolve(path.dirname(fileURLToPath(im
 
 export const skillDirs = (cwd = process.cwd()) => ({
   builtin: builtinSkillsDir(),
-  global: path.join(reinHome(), 'skills'),
+  global: path.join(reinConfigDir(), 'skills'),
   project: path.join(cwd, '.rein', 'skills'),
 });
 

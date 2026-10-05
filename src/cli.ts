@@ -14,4 +14,7 @@ await import('react/jsx-runtime');
 await import('ink');
 if (userNodeEnv === undefined) delete process.env.NODE_ENV;
 else process.env.NODE_ENV = userNodeEnv;
+// Behind a corporate proxy, Rein's own requests go through it too (see util/proxy.ts).
+const {installProxy} = await import('./util/proxy.js');
+installProxy();
 await import('./app.js');

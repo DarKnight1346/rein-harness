@@ -607,7 +607,7 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
 
   const prevDraft = useRef('');
   // Pastes, images and dropped files shown as placeholders in the input; expanded on send.
-  const attachments = useRef(new Attachments(() => nodePath.join(runtime.engine.scratch, 'images')));
+  const attachments = useRef(new Attachments(() => nodePath.join(runtime.engine.scratch, 'images'), () => runtime.config.collapsePastes !== false));
   const onPaste = (text: string) => attachments.current.paste(text);
   // Ctrl+R: reverse search through this project's sent messages.
   useInput(
