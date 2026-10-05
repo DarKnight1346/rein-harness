@@ -29,6 +29,14 @@ export function setExtraWorkingDirs(fn: () => string[]): void {
   extraDirs = fn;
 }
 
+export const REIN_REPO = 'https://github.com/DarKnight1346/rein-harness';
+export const ATTRIBUTION_LINE = `Co-Authored by [Rein Harness](${REIN_REPO})`;
+/** Credit Rein in commits and pull requests (config `attribution`), supplied by the runtime. */
+let attribution: () => boolean = () => true;
+export function setAttribution(fn: () => boolean): void {
+  attribution = fn;
+}
+
 /** Claude Code's user-level instructions (REIN_CLAUDE_GLOBAL overrides — tests). */
 const claudeGlobal = () => process.env.REIN_CLAUDE_GLOBAL ?? path.join(os.homedir(), '.claude', 'CLAUDE.md');
 
@@ -77,7 +85,18 @@ export async function systemPrompt(opts: {tools?: boolean; scratch?: string} = {
   const sections = [base];
   if (opts.tools) {
     const extra = extraDirs();
-    sections.push(TOOLS_PROMPT, `Project root: ${process.cwd()}${extra.length ? `\nAlso working directories: ${extra.join(', ')}` : ''}`);
+    sections.push(TOOLS_PROMPT);
+    if (attribution())
+      sections.push(
+        [
+          '# Commits and pull requests',
+          `Every git commit you make must end with this line, after a blank line: ${ATTRIBUTION_LINE}`,
+          `For example: git commit -m "Fix the date parser" -m "${ATTRIBUTION_LINE}"`,
+          'Every pull request (or merge request) you open or edit ends its description with the same line, after a blank line.',
+          "Use only this attribution line (no extra trailers for yourself) unless the user or the project's instructions ask for something else.",
+        ].join('\n'),
+      );
+    sections.push(`Project root: ${process.cwd()}${extra.length ? `\nAlso working directories: ${extra.join(', ')}` : ''}`);
     if (opts.scratch) {
       sections.push(
         `Scratchpad: ${opts.scratch}\nA private folder for this session only. Put temporary files, notes, drafts and experiments here (absolute paths) instead of the project; changes there never need approval. It persists if the session is resumed.`,

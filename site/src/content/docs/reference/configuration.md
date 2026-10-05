@@ -65,6 +65,7 @@ How these play together is covered in [load balancing](../../internals/load-bala
 | `lsp` | `"auto"` \| `"off"` | `"auto"` | Built-in [code intelligence](../../features/code-intelligence/): Rein runs language servers itself and reports new problems after each edit. `"off"` never starts one. | `~/.rein/config.json` |
 | `lspIdleMinutes` | number | `10` | Stop a built-in language server after this many minutes unused. | `~/.rein/config.json` |
 | `lspServers` | object | — | Use your own server command instead of Rein's, per server id: `{"python": {"command": "/path/to/server", "args": ["--stdio"]}}`. | `~/.rein/config.json` |
+| `attribution` | boolean | `true` | Commits and pull requests the agent writes end with the line `Co-Authored by [Rein Harness](https://github.com/DarKnight1346/rein-harness)` (Rein's system prompt asks for it). `false` drops the instruction. | `/settings` → Attribution |
 | `collapsePastes` | boolean | `true` | Big pastes (more than 3 lines or 800 characters) show in the input as a `[Pasted text #1 +40 lines]` placeholder and are sent in full with your message. `false` pastes the text into the input as-is. | `/settings` → Paste |
 | `apiAccounts` | string | `"fallback"` | When pay-per-use API accounts (Console, Bedrock, Vertex, OpenAI key) are used. `fallback`: only when no subscription account can serve the model. `always`: alongside subscriptions, after them. Subscriptions always come first. | `/settings` → API accounts |
 | `sandbox` | string | `"write"` | OS sandbox around the agent's shell commands. `write`: commands can only write inside the project, its working directories, the session scratchpad, temp folders and package caches (git hooks/config and agent/editor settings stay read-only). `strict`: the same, and no network except localhost. `off`: no sandbox. macOS uses `sandbox-exec`, Linux bubblewrap; Windows runs unsandboxed. | `/settings` → Sandbox |
@@ -122,6 +123,7 @@ Valid `sidebarSections` ids: `agents`, `accounts`, `models` (chat model picker),
 | **Sandbox** | `sandbox` | On *(default)* · Strict · Off |
 | **Worktrees** | `worktrees` | Automatic *(default)* · Off |
 | **Paste** | `collapsePastes` | Placeholder *(default)* · Plain text |
+| **Attribution** | `attribution` | On *(default)* · Off |
 | **API accounts** | `apiAccounts` | Fallback *(default)* · Always |
 | **Notifications** | `notifications` | Terminal *(default)* · Desktop · Off |
 | **Updates** | `autoUpdate` | Auto-update Rein *(default)* · Only when I run `/update` |
