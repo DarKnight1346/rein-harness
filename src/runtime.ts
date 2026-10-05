@@ -158,7 +158,10 @@ export class Runtime {
     pollMinutes: () => this.config.trackerPollMinutes ?? 2,
     make: (cfg) => makeTracker(cfg, this.vault.env()),
     work: (issue, _tracker, cfg) => this.issueSession(issue, cfg),
-    log: (text, kind) => this.trackerLog?.(text, kind),
+    log: (text, kind) => {
+      this.trackerLog?.(text, kind);
+      if (/: done|failed:/.test(text)) this.notifyRemote('Rein finished an issue', text.replace(/^⇢\s*/, '')); // your phone too
+    },
   });
   /** Where tracker news goes (the UI's transcript). */
   trackerLog: ((text: string, kind?: 'info' | 'error') => void) | undefined;
@@ -182,6 +185,8 @@ export class Runtime {
     // The branch note is for agents (it names a local path): the issue comment says the branch itself.
     const report = (finished.output || '(no report)').replace(/\n*\[Its work is on the branch [^\]]*\]\s*$/, '').trim();
     return {report: report || '(no report)', branch};
+  }
+
   /** Tell your phone (config notifyUrl): approvals waiting, work finished, issues done. */
   notifyRemote(title: string, message: string): void {
     void sendWebhook(this.config.notifyUrl, title, this.vault.mask(message));

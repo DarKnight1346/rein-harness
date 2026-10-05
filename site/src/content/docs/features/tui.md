@@ -209,6 +209,7 @@ Set `notifyUrl` in `config.json` and Rein pings your phone:
 
 - when an **approval has waited 30 seconds** unanswered (you're probably away from the keyboard);
 - when **work that took a while is done** (the same rule as the terminal notifications: more than 20 seconds, goals and queued messages included).
+- when an issue from an [issue tracker](../trackers/) is done or failed.
 
 ```json title="~/.rein/config.json"
 {"notifyUrl": "https://ntfy.sh/a-long-random-topic-only-you-know"}
