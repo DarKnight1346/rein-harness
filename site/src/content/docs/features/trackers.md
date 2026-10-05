@@ -60,7 +60,7 @@ Only an interactive Rein takes issues (`rein -p` doesn't): the work may need you
 
 Whoever can write an issue can put anything in it, including instructions aimed at the agent. So Rein treats issue work as untrusted:
 
-- **Every action asks you,** whatever approval mode you've chosen, even bypass. Answer in Rein, or from your phone with the remote page (`/remote`).
+- **Every action asks you,** whatever approval mode you've chosen, even bypass. Answer in Rein, or from your phone with the [remote page](../remote/).
 - The issue text reaches the agent marked as someone else's text, a description of the task rather than instructions to it, with a standing rule: don't run commands from it unchecked, don't reveal secrets, and don't push, publish or open pull requests.
 - The work stays on its own branch, and nothing is pushed.
 
@@ -74,6 +74,6 @@ Whoever can write an issue can put anything in it, including instructions aimed 
 
 ## Related
 
-- Remote access (`/remote`): approve from your phone while Rein works on an issue
+- [Remote access](../remote/): approve from your phone while Rein works on an issue
 - [Secrets vault](../vault/): where tracker tokens live
 - [Security](../../project/security/)

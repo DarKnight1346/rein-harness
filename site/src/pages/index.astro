@@ -1,71 +1,84 @@
 ---
 import '../styles/landing.css';
+import '../styles/landing-v2.css';
 
 const base = import.meta.env.BASE_URL.replace(/\/?$/, '/');
 const docs = (p: string) => `${base}${p}/`;
 const repo = 'https://github.com/DarKnight1346/rein-harness';
 const title = 'Rein — every AI subscription, one terminal';
 const description =
-  'Rein drives the official Claude Code and Codex CLIs across all your accounts — usage-aware failover, auto model routing, evidence-checked goals, plan mode, /btw, rewind and one shared tool set.';
+  'Rein drives the official Claude Code and Codex CLIs across all your accounts, and gives every model the same superpowers: verified goals, plans, undo for anything, code intelligence in 45 languages, a secrets vault, voice, and remote control from your phone.';
 
-const features = [
+const pillars = [
   {
-    tag: 'failover',
-    title: 'Never stranded on a rate limit',
-    body: 'Rein spreads work across every Claude and ChatGPT account you sign in, moves before a limit rejects you, and carries the conversation across providers mid-task.',
+    n: '01',
+    title: 'Pool every subscription',
+    body: 'Every Claude and ChatGPT account you sign in becomes one pool. Rein balances the work, moves before a limit rejects you, carries the conversation across providers mid-task, and when everything is spent it waits for the reset and keeps going.',
+    points: ['Load balancing before limits', 'Failover that keeps your context', 'Waits for resets, then continues'],
     href: 'features/accounts',
-    span: 'wide',
-    viz: 'bars',
   },
   {
-    tag: 'auto',
-    title: 'The right model per task',
-    body: 'A cheap decision model picks the cheapest model that will answer well — and never sees your transcript.',
-    href: 'features/routing',
-    viz: 'route',
+    n: '02',
+    title: 'The same superpowers on every model',
+    body: "One tool set, implemented once, reaches Claude and GPT alike. Goals that need evidence to finish, plans before edits, undo that covers shell commands, subagents in their own worktrees, and a code check before the agent says it's done.",
+    points: ['Verified goals & milestone plans', '/rewind for any change', 'Code intelligence in 45 languages'],
+    href: 'features/tools',
   },
   {
-    tag: '/goal',
-    title: 'Done means proven',
-    body: 'The agent keeps going until a reviewer accepts evidence — passing tests, verified output. "Impossible" escalates instead of ending.',
-    href: 'features/goals',
-    viz: 'goal',
-  },
-  {
-    tag: '/plan',
-    title: 'Plan before you touch a file',
-    body: 'Read-only exploration, multiple-choice questions, then a milestone plan saved to .rein/plans/ that can run as a verified goal.',
-    href: 'features/plans',
-    viz: 'plan',
-  },
-  {
-    tag: '/btw',
-    title: 'Ask without interrupting',
-    body: 'A side question forks the live session — full history, read-only tools — while the main agent keeps working.',
-    href: 'features/btw',
-    viz: 'btw',
-  },
-  {
-    tag: '/rewind',
-    title: 'Undo anything. Even shell commands.',
-    body: 'Whole-project snapshots before every message, in a private git store that never touches your repo.',
-    href: 'features/rewind',
-    viz: 'rewind',
-  },
-  {
-    tag: 'agents',
-    title: 'Subagents on any model',
-    body: 'Fork the conversation or spin up a fresh session on any signed-in model. Click into one and keep talking.',
-    href: 'features/subagents',
-    viz: 'agents',
-    span: 'wide',
+    n: '03',
+    title: 'Run it from anywhere',
+    body: 'Pair your phone with the page your own Rein serves. Watch the work, answer approvals, send the next message. Label an issue and Rein takes it on its own branch, then reports back on the issue.',
+    points: ['Remote page, no hosted service', 'GitHub, Linear, GitLab, Jira, Azure DevOps', 'Pings your phone when it needs you'],
+    href: 'features/remote',
   },
 ];
 
-const chips = [
-  'Claude Code', 'Codex', 'multi-account', 'cache-aware failover', 'auto routing', 'Jev', 'effort auto', '/goal', '/plan', '/btw',
-  '/rewind', 'subagents', 'advisor', 'MCP', 'hooks', 'skills', 'AGENTS.md', 'CLAUDE.md', 'web_search', 'image_generate', 'rein -p',
-  'Windows', 'privacy mode', 'mouse', 'markdown', 'diffs',
+const features = [
+  {tag: 'failover', title: 'Never stranded on a rate limit', body: 'Spread work across every account, switch before a limit hits, and carry the conversation across Claude and Codex mid-task.', href: 'features/accounts', span: 'wide', viz: 'bars'},
+  {tag: 'auto', title: 'The right model per task', body: 'Auto mode routes each message to a model and effort that fits it, and keeps your prompt cache warm while it does.', href: 'features/routing', viz: 'route'},
+  {tag: 'code check', title: "Doesn't stop with your build broken", body: 'Language servers for 45 languages check what the turn changed, and the files that import it. New errors go back to the agent before it finishes.', href: 'features/code-intelligence', viz: 'lsp', span: 'tall'},
+  {tag: '/goal', title: 'Done means proven', body: 'The agent keeps going until a reviewer accepts evidence: passing tests, verified output.', href: 'features/goals', viz: 'goal'},
+  {tag: 'vault', title: 'Secrets it uses but never sees', body: 'Store a token once. Every command gets it as $NAME; anything that would show it to the model shows [secret:NAME].', href: 'features/vault', viz: 'vault'},
+  {tag: '/plan', title: 'Plan before you touch a file', body: 'Read-only exploration, questions, then a milestone plan that runs as a verified goal.', href: 'features/plans', viz: 'plan'},
+  {tag: '/rewind', title: 'Undo anything. Even shell commands.', body: 'Whole-project snapshots before every message, in a private store that never touches your repo.', href: 'features/rewind', viz: 'rewind'},
+  {tag: 'remote', title: 'Your session, on your phone', body: 'A page your Rein serves, paired with a one-time code. Approvals show on both; first answer wins.', href: 'features/remote', viz: 'remote', span: 'wide'},
+  {tag: 'issues', title: 'Label an issue. Get a branch.', body: 'Assign it with the rein label; Rein works on a new branch and comments its report. Every action asks: issue text is untrusted.', href: 'features/trackers', viz: 'tracker'},
+  {tag: 'voice', title: 'Hold Ctrl+Space and talk', body: 'Speech to text on your machine with whisper.cpp. Nothing is uploaded; the text lands in the input.', href: 'features/voice', viz: 'voice'},
+  {tag: 'sampling', title: 'MCP servers use your subscriptions', body: 'Servers that need a model ask Rein, and get one of your signed-in models instead of needing their own API key.', href: 'features/mcp', viz: 'sampling'},
+  {tag: '/btw', title: 'Ask without interrupting', body: 'A side question forks the live session while the main agent keeps working.', href: 'features/btw', viz: 'btw'},
+  {tag: 'agents', title: 'Subagents on any model', body: 'Fork the conversation or start fresh on any signed-in model. Parallel ones get private worktrees that merge back on their own.', href: 'features/subagents', viz: 'agents', span: 'full'},
+];
+
+const compat = ['Claude Code', 'Codex CLI', 'VS Code', 'Cursor', 'JetBrains', 'Neovim', 'MCP', 'GitHub', 'Linear', 'GitLab', 'Jira', 'Azure DevOps', 'ntfy', 'Tailscale'];
+
+const compare = [
+  ['Accounts', 'One account per CLI install', 'Every Claude and ChatGPT account in one balanced pool'],
+  ['Models', "One provider's models", 'Claude and GPT in the same conversation, context carried over'],
+  ['Hitting a limit', 'Wait, or start over in another tool', 'Moves before it hits; waits for the reset and continues'],
+  ['Tools & workflows', "Each CLI's own", 'One tool set, goals, plans and rewind, identical on every model'],
+  ['Before "done"', 'Up to the model', 'Language servers check what changed; new errors go back to the agent'],
+  ['Secrets', 'In files and env vars the model can read', 'In a vault: used by commands, masked from the model'],
+  ['Away from the keyboard', '—', 'Phone page, issue triggers, notifications'],
+];
+
+const proof = [
+  {big: '10 / 10', small: 'refactors compiled with the end-of-turn code check, vs 8 / 10 without it', note: 'Haiku · 5 multi-file tasks · 20 runs'},
+  {big: '+5%', small: 'input tokens for that check, down from +74% for after-every-edit notes', note: 'same experiment'},
+  {big: '45', small: 'languages with built-in code intelligence, most installed by Rein on request', note: 'clangd · gopls · rust-analyzer · pyright · …'},
+  {big: '0', small: 'OAuth tokens touched. Every request goes through the official claude and codex binaries', note: 'by design'},
+];
+
+const trust = [
+  {title: 'Official CLIs only', body: 'Rein never reads or reuses your login tokens. It drives claude and codex the way you would, signed in the normal way.'},
+  {title: 'Secrets stay secret', body: 'Vault values go into commands, never into the conversation, transcripts or provider logs. Common encodings are masked too.'},
+  {title: 'Untrusted work always asks', body: "Work started by an issue asks before every action, whatever mode you're in, and stays on its own branch."},
+  {title: 'Remote, locked down', body: 'This computer only by default. One-time pairing codes, a random token, CSRF-safe requests, no hosted service.'},
+];
+
+const steps = [
+  {cmd: 'npm install -g rein-harness', txt: 'Node 22+, on macOS, Linux and Windows'},
+  {cmd: 'rein', txt: 'in any project; it finds your claude and codex logins'},
+  {cmd: '/login', txt: 'add more accounts to the pool, any time'},
 ];
 ---
 
@@ -79,7 +92,8 @@ const chips = [
     <meta property="og:title" content={title} />
     <meta property="og:description" content={description} />
     <meta property="og:type" content="website" />
-    <meta name="theme-color" content="#09090c" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="theme-color" content="#07070a" />
     <link rel="icon" href={`${base}favicon.svg`} type="image/svg+xml" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -98,10 +112,10 @@ const chips = [
         <span>rein</span>
       </a>
       <nav>
+        <a href="#features">Features</a>
+        <a href="#compare">Why Rein</a>
+        <a href="#trust">Security</a>
         <a href={docs('start/introduction')}>Docs</a>
-        <a href={docs('features/accounts')}>Features</a>
-        <a href={docs('internals/architecture')}>How it works</a>
-        <a href={docs('project/contributing')}>Contribute</a>
         <a class="gh" href={repo} aria-label="GitHub">
           <svg viewBox="0 0 16 16" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
           <span>GitHub</span>
@@ -113,7 +127,7 @@ const chips = [
       <!-- HERO -->
       <section class="hero">
         <div class="eyebrow">
-          <span class="dot"></span> <span class="hide-xs">Open source · MIT · </span>drives the official <b>claude</b> &amp; <b>codex</b> CLIs
+          <span class="dot"></span> <span class="hide-xs">Open source · </span>drives the official <b>claude</b> &amp; <b>codex</b> CLIs
         </div>
         <div class="bars xl" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
         <h1>
@@ -121,8 +135,9 @@ const chips = [
           <span class="rainbow-text">One terminal.</span>
         </h1>
         <p class="lede">
-          Rein drives the official <code>claude</code> and <code>codex</code> CLIs across <em>all</em> your accounts. It routes each task to
-          the right model, fails over before a limit hits, and gives every model the same tools, goals, plans and undo.
+          Rein drives the official <code>claude</code> and <code>codex</code> CLIs across <em>all</em> your accounts, and gives every model
+          the same superpowers: verified goals, undo for anything, code intelligence in 45 languages, a secrets vault, voice, and your
+          session on your phone.
         </p>
         <div class="cta">
           <button class="install" data-copy="npm install -g rein-harness" aria-label="Copy install command">
@@ -192,42 +207,42 @@ const chips = [
         </div>
       </section>
 
-      <!-- MARQUEE -->
-      <section class="marquee" aria-label="Feature keywords">
-        <div class="track">
-          {[...chips, ...chips].map((c) => <span class="chip">{c}</span>)}
-        </div>
+      <!-- WORKS WITH -->
+      <section class="works" aria-label="Works with">
+        <span class="works-h">Works with</span>
+        <div class="works-row">{compat.map((c) => <span>{c}</span>)}</div>
       </section>
 
-      <!-- PITCH -->
-      <section class="pitch">
-        <div class="pitch-card">
-          <div class="kicker">The problem</div>
-          <h2>You pay for Claude <em>and</em> ChatGPT.<br />You still hit the wall.</h2>
-          <p>
-            Each CLI only knows its own account. Hit the 5-hour limit and you wait. Switch tools and you lose your context, your
-            permissions, your hooks, your flow.
-          </p>
+      <!-- PILLARS -->
+      <section class="pillars">
+        <div class="section-head">
+          <div class="kicker">Why it's different</div>
+          <h2>Not another agent.<br /><span class="rainbow-text">The harness around them all.</span></h2>
+          <p>Rein doesn't replace Claude Code or Codex. It runs them, and adds what neither does on its own.</p>
         </div>
-        <div class="pitch-arrow" aria-hidden="true">→</div>
-        <div class="pitch-card fix">
-          <div class="kicker">The fix</div>
-          <h2>One harness that treats your subscriptions as <span class="rainbow-text">one pool</span>.</h2>
-          <p>
-            Rein keeps its own transcript as the source of truth and treats each CLI session as a disposable cache. When it switches account
-            or provider, the conversation comes with it.
-          </p>
+        <div class="pillar-grid">
+          {
+            pillars.map((p) => (
+              <a class="pillar" href={docs(p.href)}>
+                <span class="pillar-n">{p.n}</span>
+                <h3>{p.title}</h3>
+                <p>{p.body}</p>
+                <ul>{p.points.map((x) => <li>{x}</li>)}</ul>
+                <span class="pillar-more">Learn more →</span>
+              </a>
+            ))
+          }
         </div>
       </section>
 
       <!-- BENTO -->
-      <section class="features">
+      <section class="features" id="features">
         <div class="section-head">
           <div class="kicker">What you get</div>
           <h2>Built like a power tool.</h2>
           <p>Every feature below works the same on every model, Claude or Codex.</p>
         </div>
-        <div class="bento">
+        <div class="bento v2">
           {
             features.map((f) => (
               <a class={`tile ${f.span ?? ''}`} href={docs(f.href)}>
@@ -241,22 +256,54 @@ const chips = [
                     </div>
                   )}
                   {f.viz === 'route' && (
-                    <pre><span class="t-dim">› rename this variable</span>{'\n'}<span class="t-dim">→ Haiku · Claude Account 2 (auto · 0.97)</span>{'\n'}<span class="t-dim">› design the cache layer</span>{'\n'}<span class="t-dim">→ </span><span class="t-cyan">Opus · effort high</span><span class="t-dim"> (auto · 0.91)</span></pre>
+                    <pre><span class="t-dim">› rename this variable</span>{'\n'}<span class="t-dim">→ Haiku · Claude Account 2</span>{'\n'}<span class="t-dim">› design the cache layer</span>{'\n'}<span class="t-dim">→ </span><span class="t-cyan">Opus · effort high</span></pre>
+                  )}
+                  {f.viz === 'lsp' && (
+                    <pre><span class="t-green">⏺</span> <b>Edit</b><span class="t-dim">(math.ts)</span>{'\n'}<span class="t-green">⏺</span> <b>Edit</b><span class="t-dim">(cart.ts)</span>{'\n'}<span class="t-yellow">Code check:</span> <span class="t-dim">your changes left 1 problem</span>{'\n'}  <span class="t-pink">main.ts:2:14</span> <span class="t-dim">error ts 2322</span>{'\n'}  <span class="t-dim">Type 'string' is not assignable</span>{'\n'}  <span class="t-dim">to type 'number'.</span>{'\n'}<span class="t-green">⏺</span> <b>Edit</b><span class="t-dim">(main.ts)</span>{'\n'}<span class="t-green">✓ compiles</span>{'\n\n'}<span class="t-dim">clangd · gopls · rust-analyzer</span>{'\n'}<span class="t-dim">pyright · tsc · zls · jdtls · …</span></pre>
                   )}
                   {f.viz === 'goal' && (
-                    <pre><span class="t-green">⏺</span> <b>Shell</b><span class="t-dim">(npm test)</span>{'\n'}  <span class="t-green">✓ 48 passed</span>{'\n'}<span class="t-green">◎ Goal achieved and verified</span>{'\n'}  <span class="t-dim">accepted (0.96 via jev)</span></pre>
+                    <pre><span class="t-green">⏺</span> <b>Shell</b><span class="t-dim">(npm test)</span>{'\n'}  <span class="t-green">✓ 48 passed</span>{'\n'}<span class="t-green">◎ Goal achieved and verified</span></pre>
+                  )}
+                  {f.viz === 'vault' && (
+                    <pre><span class="t-dim">$</span> curl -H "Bearer $GITHUB_TOKEN" …{'\n'}<span class="t-dim">$</span> echo $GITHUB_TOKEN{'\n'}<span class="t-cyan">[secret:GITHUB_TOKEN]</span></pre>
                   )}
                   {f.viz === 'plan' && (
-                    <pre><span class="t-yellow">⏸ plan mode</span>{'\n'}<span class="t-dim">## Milestones</span>{'\n'}- [x] Map the auth flow{'\n'}- [x] Add refresh tokens{'\n'}- [ ] Migrate sessions</pre>
+                    <pre><span class="t-yellow">⏸ plan mode</span>{'\n'}<span class="t-dim">## Milestones</span>{'\n'}- [x] Map the auth flow{'\n'}- [ ] Migrate sessions</pre>
+                  )}
+                  {f.viz === 'rewind' && (
+                    <pre><span class="t-cyan">Restore code and conversation</span>{'\n'}<span class="t-dim">Restore conversation only</span>{'\n'}<span class="t-dim">esc esc · 4 files</span></pre>
+                  )}
+                  {f.viz === 'remote' && (
+                    <div class="v-remote">
+                      <div class="phone">
+                        <div class="p-top">Rein · api · Opus</div>
+                        <div class="p-msg you">add rate limiting to /login</div>
+                        <div class="p-msg">Added a sliding-window limiter…</div>
+                        <div class="p-ask">
+                          <b>Rein wants to Shell</b><span>npm test</span>
+                          <div class="p-btns"><i class="ok">Allow</i><i>Session</i><i class="no">Deny</i></div>
+                        </div>
+                      </div>
+                      <pre class="v-remote-term"><span class="t-dim">› /remote</span>{'\n'}<span class="t-dim">⎿</span> Remote page: http://localhost:7377{'\n'}  pairing code <span class="t-cyan">482913</span> (5 minutes){'\n'}<span class="t-dim">⎿ ⇢ from the remote page</span></pre>
+                    </div>
+                  )}
+                  {f.viz === 'tracker' && (
+                    <pre><span class="t-dim">⇢ github #2 "Add multiply"</span>{'\n'}<span class="t-dim">  started · labelled </span><span class="t-violet">rein</span>{'\n'}<span class="t-green">⇢ done</span> <span class="t-dim">· branch</span> <span class="t-cyan">rein/issue-2</span>{'\n'}<span class="t-dim">  the report is on the issue</span></pre>
+                  )}
+                  {f.viz === 'voice' && (
+                    <div class="v-voice">
+                      <div class="wave">{Array.from({length: 24}, (_, i) => <i style={`--d:${(i * 37) % 11}`} />)}</div>
+                      <span class="t-red">● Recording… let go of Ctrl+Space</span>
+                    </div>
+                  )}
+                  {f.viz === 'sampling' && (
+                    <pre><span class="t-dim">MCP server "notes" wants a model</span>{'\n'}<span class="t-dim">→</span> <span class="t-cyan">Haiku 4.5</span> <span class="t-dim">· your subscription</span>{'\n'}<span class="t-dim">no API key needed</span></pre>
                   )}
                   {f.viz === 'btw' && (
                     <div class="v-btw">
                       <div class="v-main"><span class="t-dim">main</span> ▇▅▃▁ Responding…</div>
                       <div class="v-fork"><span class="t-cyan">btw ·</span> what's left?<br /><span class="t-dim">forked agent · not added</span></div>
                     </div>
-                  )}
-                  {f.viz === 'rewind' && (
-                    <pre><span class="t-cyan">Restore code and conversation</span>{'\n'}<span class="t-dim">Restore conversation only</span>{'\n'}<span class="t-dim">Restore code only</span>{'\n'}<span class="t-dim">esc esc · 4 files</span></pre>
                   )}
                   {f.viz === 'agents' && (
                     <div class="v-agents">
@@ -279,12 +326,59 @@ const chips = [
         </div>
 
         <div class="mini-grid">
-          <a href={docs('features/tools')}><b>One tool set, every model</b><span>read · write · edit · search · shell · web · images · memory</span></a>
-          <a href={docs('start/from-claude-code')}><b>Claude Code compatible</b><span>.claude/settings.json rules &amp; hooks, CLAUDE.md, .mcp.json</span></a>
-          <a href={docs('features/permissions')}><b>Approvals that learn</b><span>ask · auto via decision model · bypass · saved rules</span></a>
-          <a href={docs('features/mcp')}><b>MCP, managed by the agent</b><span>"add the GitHub MCP server" — it asks, then does it</span></a>
-          <a href={docs('features/skills')}><b>Skills</b><span>folders with SKILL.md — /skill:create writes them for you</span></a>
+          <a href={docs('features/tools')}><b>One tool set, every model</b><span>read · edit · search · shell · web · images · memory</span></a>
+          <a href={docs('start/from-claude-code')}><b>Claude Code compatible</b><span>settings, hooks, CLAUDE.md, plugins, .mcp.json</span></a>
+          <a href={docs('features/ide')}><b>Your editor</b><span>VS Code, Cursor, JetBrains, Neovim: selection, diffs, diagnostics</span></a>
+          <a href={docs('features/permissions')}><b>Approvals that learn</b><span>ask · auto via a decision model · bypass · saved rules · sandbox</span></a>
+          <a href={docs('features/web-and-images')}><b>Images inline</b><span>generated and pasted images, right in kitty, Ghostty, iTerm2</span></a>
           <a href={docs('features/headless')}><b>Headless &amp; CI</b><span>rein -p "…" --output-format json</span></a>
+        </div>
+      </section>
+
+      <!-- PROOF -->
+      <section class="proof">
+        <div class="section-head">
+          <div class="kicker">Measured, not claimed</div>
+          <h2>We test the features on real models.</h2>
+          <p>When a feature didn't pay for itself, we changed it. The numbers come from the runs that decided it.</p>
+        </div>
+        <div class="proof-grid">
+          {
+            proof.map((p) => (
+              <div class="proof-card">
+                <b>{p.big}</b>
+                <span>{p.small}</span>
+                <em>{p.note}</em>
+              </div>
+            ))
+          }
+        </div>
+      </section>
+
+      <!-- COMPARE -->
+      <section class="compare" id="compare">
+        <div class="section-head">
+          <div class="kicker">With or without Rein</div>
+          <h2>Everything the official CLIs do.<br />Plus everything around them.</h2>
+          <p>Rein runs <code>claude</code> and <code>codex</code> as they are, so you keep what they're good at, and gain this.</p>
+        </div>
+        <div class="cmp" role="table">
+          <div class="cmp-row cmp-head" role="row">
+            <span role="columnheader"></span>
+            <span role="columnheader">A CLI by itself</span>
+            <span role="columnheader" class="us">
+              <span class="bars sm" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span> With Rein
+            </span>
+          </div>
+          {
+            compare.map(([what, alone, rein]) => (
+              <div class="cmp-row" role="row">
+                <span role="rowheader">{what}</span>
+                <span role="cell" class="alone">{alone}</span>
+                <span role="cell" class="us">{rein}</span>
+              </div>
+            ))
+          }
         </div>
       </section>
 
@@ -293,17 +387,17 @@ const chips = [
         <div class="section-head">
           <div class="kicker">How it works</div>
           <h2>No tokens extracted. Ever.</h2>
-          <p>All model traffic goes through the official binaries, signed in the normal way. Rein only orchestrates.</p>
+          <p>All model traffic goes through the official binaries, signed in the normal way. Rein orchestrates.</p>
         </div>
         <div class="flow">
           <div class="node-card">
             <div class="n-h">You</div>
-            <div class="n-b">fullscreen TUI · <code>rein -p</code></div>
+            <div class="n-b">fullscreen TUI · phone · issues · <code>rein -p</code></div>
           </div>
           <div class="pipe"><span></span></div>
           <div class="node-card hl">
             <div class="n-h"><span class="t-rainbow">Rein</span></div>
-            <div class="n-b">transcript · router · decision model · account pool · tool host · approvals</div>
+            <div class="n-b">transcript · router · account pool · tool host · approvals · vault · language servers</div>
           </div>
           <div class="pipe split"><span></span></div>
           <div class="node-stack">
@@ -311,13 +405,48 @@ const chips = [
             <div class="node-card"><div class="n-h">codex</div><div class="n-b">app-server · dynamic tools</div></div>
           </div>
         </div>
-        <div class="stats">
-          <div><b>0</b><span>OAuth tokens touched</span></div>
-          <div><b>60&nbsp;min</b><span>prompt-cache window Rein protects before switching</span></div>
-          <div><b>3</b><span>OSes in CI on every PR</span></div>
-          <div><b>∞</b><span>accounts in the pool</span></div>
-        </div>
         <div class="center"><a class="btn ghost" href={docs('internals/architecture')}>Read the architecture →</a></div>
+      </section>
+
+      <!-- TRUST -->
+      <section class="trust" id="trust">
+        <div class="section-head">
+          <div class="kicker">Security</div>
+          <h2>Powerful, and careful about it.</h2>
+        </div>
+        <div class="trust-grid">
+          {
+            trust.map((t) => (
+              <div class="trust-card">
+                <span class="shield" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" width="20" height="20"><path fill="none" stroke="currentColor" stroke-width="1.8" d="M12 3l7 3v6c0 4.5-3 7.7-7 9-4-1.3-7-4.5-7-9V6l7-3z"/><path fill="none" stroke="currentColor" stroke-width="1.8" d="M8.5 12l2.5 2.5 4.5-5"/></svg>
+                </span>
+                <h3>{t.title}</h3>
+                <p>{t.body}</p>
+              </div>
+            ))
+          }
+        </div>
+        <div class="center"><a class="btn ghost" href={docs('project/security')}>The security model →</a></div>
+      </section>
+
+      <!-- START -->
+      <section class="start">
+        <div class="section-head">
+          <div class="kicker">Get started</div>
+          <h2>Running in a minute.</h2>
+        </div>
+        <ol class="steps">
+          {
+            steps.map((s, i) => (
+              <li>
+                <span class="step-n">{i + 1}</span>
+                <code>{s.cmd}</code>
+                <span>{s.txt}</span>
+              </li>
+            ))
+          }
+        </ol>
       </section>
 
       <!-- CONTRIBUTE -->
@@ -329,19 +458,10 @@ const chips = [
             TypeScript, Ink and React. Tests run against fake <code>claude</code> and <code>codex</code> binaries, so you don't need a
             subscription to hack on it. Every merged PR ships to npm automatically.
           </p>
-          <div class="ideas">
-            <div><b>New providers</b><span>The adapter interface was designed for more CLIs than two.</span></div>
-            <div><b>New tools</b><span>One implementation reaches every model.</span></div>
-            <div><b>Skills &amp; recipes</b><span>Share the workflows that make you fast.</span></div>
-            <div><b>Docs</b><span>This site is in the repo — fix a page in one PR.</span></div>
-          </div>
           <div class="cta left">
             <a class="btn primary" href={docs('project/contributing')}>Start contributing →</a>
             <a class="btn ghost" href={`${repo}/issues`}>Browse issues</a>
           </div>
-          <pre class="clone"><span class="t-dim">$</span> git clone {repo}.git
-<span class="t-dim">$</span> cd rein-harness &amp;&amp; npm install &amp;&amp; npm test
-<span class="t-dim">$</span> npm run dev</pre>
         </div>
       </section>
 
@@ -360,7 +480,7 @@ const chips = [
     <footer class="foot">
       <div>
         <span class="bars sm" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span>
-        Rein · MIT licensed
+        Rein · open source
       </div>
       <div class="links">
         <a href={docs('start/introduction')}>Docs</a>
