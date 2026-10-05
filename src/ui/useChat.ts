@@ -38,6 +38,7 @@ export function useChat(commit: (e: NewEntry<ChatEntry>) => void, notice: (kind:
   const [busy, setBusy] = useState(false);
   const [startedAt, setStartedAt] = useState(0);
   const [phase, setPhase] = useState<Phase>('thinking');
+  const [waitUntil, setWaitUntil] = useState<number | undefined>(undefined);
   /** Tool currently running, e.g. `Edit(src/a.ts)`. */
   const [toolLabel, setToolLabel] = useState<string | undefined>();
   /** Tokens of the call in flight: sent (incl. cached) / received. */
@@ -89,6 +90,7 @@ export function useChat(commit: (e: NewEntry<ChatEntry>) => void, notice: (kind:
       let route: {route: Route; account: Account; effort?: string} | undefined;
       try {
         for await (const ev of runtime.engine.send(text, images)) {
+          if (ev.type !== 'waiting' && ev.type !== 'notice') setWaitUntil(undefined);
           if (ev.type === 'route') {
             route = ev;
             setPhase('thinking');
@@ -126,7 +128,10 @@ export function useChat(commit: (e: NewEntry<ChatEntry>) => void, notice: (kind:
               setPhase('responding');
             }
           }
-          else if (ev.type === 'notice') {
+          else if (ev.type === 'waiting') {
+            setWaitUntil(ev.until);
+            setPhase('waiting');
+          } else if (ev.type === 'notice') {
             flush(true);
             firstSegment.current = true;
             notice('info', ev.text);
@@ -166,5 +171,5 @@ export function useChat(commit: (e: NewEntry<ChatEntry>) => void, notice: (kind:
     runtime.agents.cancelAll({foregroundOnly: true}); // the main turn is waiting on them
     runtime.engine.interrupt();
   };
-  return {live, busy, startedAt, phase, toolLabel, tokens, send, interrupt};
+  return {live, busy, startedAt, phase, toolLabel, tokens, send, interrupt, waitUntil};
 }

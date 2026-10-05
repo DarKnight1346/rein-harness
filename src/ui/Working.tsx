@@ -1,9 +1,9 @@
 import React, {useEffect, useState} from 'react';
 import {Text} from 'ink';
 
-export type Phase = 'routing' | 'thinking' | 'responding' | 'tool';
+export type Phase = 'routing' | 'thinking' | 'responding' | 'tool' | 'waiting';
 
-const LABEL: Record<Phase, string> = {routing: 'Routing', thinking: 'Thinking', responding: 'Responding', tool: 'Running'};
+const LABEL: Record<Phase, string> = {routing: 'Routing', thinking: 'Thinking', responding: 'Responding', tool: 'Running', waiting: 'Waiting'};
 
 /** 59s · 2m 05s · 1h 04m · 2d 3h */
 export function elapsedText(ms: number): string {
@@ -45,12 +45,24 @@ export const rainbow = (i: number, tick: number) => hueHex(wrapHue(i * 24 - tick
  * brighter band sweeping the label. One short line re-rendering at ~9 fps; incremental rendering
  * rewrites only that line.
  */
-export function Working({startedAt, phase, tool, tokens, queued = 0}: {startedAt: number; phase: Phase; tool?: string; tokens?: {input: number; cached: number; output: number}; queued?: number}) {
+export function Working({startedAt, phase, tool, tokens, queued = 0, waitUntil}: {startedAt: number; phase: Phase; tool?: string; tokens?: {input: number; cached: number; output: number}; queued?: number; waitUntil?: number}) {
   const [tick, setTick] = useState(0);
+  const waiting = phase === 'waiting' && waitUntil !== undefined;
   useEffect(() => {
-    const t = setInterval(() => setTick((n) => n + 1), TICK_MS);
+    // Waiting for a limit can take hours: a still line, refreshed twice a minute (each frame redraws the screen).
+    const t = setInterval(() => setTick((n) => n + 1), waiting ? 30_000 : TICK_MS);
     return () => clearInterval(t);
-  }, []);
+  }, [waiting]);
+  if (waiting) {
+    const at = new Date(waitUntil);
+    const time = at.toLocaleTimeString([], {hour: 'numeric', minute: '2-digit'});
+    const day = at.toDateString() === new Date().toDateString() ? '' : ` ${at.toLocaleDateString([], {weekday: 'short'})}`;
+    return (
+      <Text color="yellow">
+        ◷ Every account is at its limit · continuing at {time}{day} (in {elapsedText(Math.max(0, waitUntil - Date.now()))}) <Text dimColor>· esc to stop</Text>
+      </Text>
+    );
+  }
   const bar = barFrame(tick);
   const label = phase === 'tool' && tool ? `${tool}…` : `${LABEL[phase]}…`;
   const band = tick % (label.length + 8);

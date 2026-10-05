@@ -77,7 +77,7 @@ export function ClassicApp({resume}: {resume: Resume}) {
         ) : null}
         <ForegroundTail />
         {chat.busy ? (
-          <Working startedAt={chat.startedAt} phase={chat.phase} tool={chat.toolLabel} tokens={chat.tokens} queued={r.queued.length} />
+          <Working startedAt={chat.startedAt} phase={chat.phase} tool={chat.toolLabel} tokens={chat.tokens} queued={r.queued.length} waitUntil={chat.waitUntil} />
         ) : r.compacting ? (
           <Working startedAt={r.compacting.startedAt} phase="tool" tool={r.compacting.label} />
         ) : r.goalNote ? (

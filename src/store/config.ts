@@ -76,6 +76,8 @@ export type Config = {
   lspIdleMinutes: number;
   /** Use a specific language server command instead of Rein's: {"typescript": {"command": "/path/to/server", "args": ["--stdio"]}}. */
   lspServers?: Record<string, {command: string; args?: string[]}>;
+  /** Every account at its limit: wait for the reset (up to 12 hours) and continue, instead of stopping. */
+  waitForLimits: boolean;
   /** Commits and pull requests the agent writes credit Rein (a "Co-Authored by [Rein Harness](…)" line). */
   attribution: boolean;
   /** whisper.cpp model for voice input (hold Ctrl+Space): `base.en-q5_1` (English, default), or e.g. `base-q5_1` / `small-q5_1` for other languages. */
@@ -116,6 +118,7 @@ export const DEFAULT_CONFIG: Config = {
   apiAccounts: 'fallback',
   collapsePastes: true,
   attribution: true,
+  waitForLimits: true,
   voiceModel: 'base.en-q5_1',
   lsp: 'auto',
   lspIdleMinutes: 10,

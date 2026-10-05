@@ -65,6 +65,7 @@ How these play together is covered in [load balancing](../../internals/load-bala
 | `lsp` | `"auto"` \| `"off"` | `"auto"` | Built-in [code intelligence](../../features/code-intelligence/): Rein runs language servers itself and, when the agent finishes a turn, sends back problems its changes left. `"off"` never starts one. | `~/.rein/config.json` |
 | `lspIdleMinutes` | number | `10` | Stop a built-in language server after this many minutes unused. | `~/.rein/config.json` |
 | `lspServers` | object | — | Use your own server command instead of Rein's, per server id: `{"python": {"command": "/path/to/server", "args": ["--stdio"]}}`. | `~/.rein/config.json` |
+| `waitForLimits` | boolean | `true` | When every account for the model is at its limit and no other model can take over, wait for the earliest reset (up to 12 hours) and continue the turn. `false` stops with `Every account for … is at its limit`. | `/settings` → Limits |
 | `attribution` | boolean | `true` | Commits and pull requests the agent writes end with the line `Co-Authored by [Rein Harness](https://github.com/DarKnight1346/rein-harness)` (Rein's system prompt asks for it). `false` drops the instruction. | `/settings` → Attribution |
 | `voiceModel` | string | `"base.en-q5_1"` | The whisper.cpp model for [voice input](../../features/voice/). English-only by default; `"base-q5_1"`, `"small-q5_1"` and so on understand other languages. Run `/voice setup` after changing it to download it. | `~/.rein/config.json` |
 | `collapsePastes` | boolean | `true` | Big pastes (more than 3 lines or 800 characters) show in the input as a `[Pasted text #1 +40 lines]` placeholder and are sent in full with your message. `false` pastes the text into the input as-is. | `/settings` → Paste |
@@ -124,6 +125,7 @@ Valid `sidebarSections` ids: `agents`, `accounts`, `models` (chat model picker),
 | **Sandbox** | `sandbox` | On *(default)* · Strict · Off |
 | **Worktrees** | `worktrees` | Automatic *(default)* · Off |
 | **Paste** | `collapsePastes` | Placeholder *(default)* · Plain text |
+| **Limits** | `waitForLimits` | Wait for the reset and continue *(default)* · Stop and tell me |
 | **Attribution** | `attribution` | On *(default)* · Off |
 | **API accounts** | `apiAccounts` | Fallback *(default)* · Always |
 | **Notifications** | `notifications` | Terminal *(default)* · Desktop · Off |

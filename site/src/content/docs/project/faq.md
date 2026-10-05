@@ -76,7 +76,7 @@ Claude Account 1 hit its limit (resets 3:45 PM) — retrying
 (partial reply discarded)
 ```
 
-The account cools down until its reset time (15 minutes if no reset time could be read). If no account offers that model, Rein switches to another model: auto mode re-routes, otherwise it picks the closest model in cost tier (`No Sonnet account available — switching to …`). A turn gets up to 5 attempts, then `gave up after several failovers`. When every account for the model is out, you see `Every account for Sonnet is at its limit — earliest reset …`.
+The account cools down until its reset time (15 minutes if no reset time could be read). If no account offers that model, Rein switches to another model: auto mode re-routes, otherwise it picks the closest model in cost tier (`No Sonnet account available — switching to …`). A turn gets up to 5 attempts, then `gave up after several failovers`. When every account for the model is out and no other model can take over, Rein waits for the earliest reset (up to 12 hours) and continues the turn by itself; Esc stops the wait, and `/settings` → Limits turns it off.
 
 Rein usually moves *before* a rejection: an account under 10% headroom hands the conversation to a better one. See [Load balancing](../../internals/load-balancing/).
 
