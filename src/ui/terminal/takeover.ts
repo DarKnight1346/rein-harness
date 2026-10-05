@@ -65,7 +65,7 @@ export function takeOver(shells: ShellManager, shell: Shell, opts: {fullscreen: 
     for (const l of saved.data) stdin.on('data', l as (d: Buffer) => void);
     if (saved.data.length && !saved.readable.length) stdin.resume(); // the fullscreen reader is a 'data' listener
     out.write = original;
-    write((opts.fullscreen ? '\x1b[2J\x1b[H' + MOUSE_ON : '\x1b[?1049l') + '\x1b[>1u');
+    write((opts.fullscreen ? '\x1b[2J\x1b[H' + MOUSE_ON : '\x1b[?1049l') + '\x1b[>3u');
     redrawAfterTakeover(out, frame);
     opts.onEnd(reason);
   }

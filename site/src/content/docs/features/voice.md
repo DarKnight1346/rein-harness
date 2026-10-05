@@ -5,9 +5,22 @@ sidebar:
   badge: New
 ---
 
-Press **Ctrl+T** in the input, say what you want, and press **Ctrl+T** again. Rein turns your speech into text **on your machine** with [whisper.cpp](https://github.com/ggml-org/whisper.cpp) and puts it in the input at the cursor. It's never sent on its own: read it, fix it, press Enter.
+**Hold Ctrl+Space**, say what you want, and **let go**. Rein turns your speech into text **on your machine** with [whisper.cpp](https://github.com/ggml-org/whisper.cpp) and adds it to the input. It's never sent on its own: read it, fix it, press Enter.
 
-While it records, the footer shows `● Recording… Ctrl+T to stop (up to 2 min) · Ctrl+C cancels`, then `Transcribing…`. Recordings stop on their own after 2 minutes. Nothing is uploaded, and the recording is deleted once it's transcribed.
+While you hold it, the footer shows `● Recording… let go of Ctrl+Space to stop · Ctrl+C cancels`, then `Transcribing…`. A quick **tap** of Ctrl+Space starts a hands-free recording instead (`press Ctrl+Space to stop`); tap again to finish. Recordings stop on their own after 2 minutes. Nothing is uploaded, and the recording is deleted once it's transcribed.
+
+## How "let go" is detected
+
+| Terminal | How Rein knows you let go |
+|---|---|
+| kitty, WezTerm, Ghostty, foot, recent iTerm2 (the [kitty keyboard protocol](https://sw.kovidgoyal.net/kitty/keyboard-protocol/)) | The terminal reports the key release itself |
+| Terminal.app, VS Code, most others | While a key is held, the system repeats it; the recording stops a quarter-second after the repeats stop. The first repeat comes after your key-repeat delay, so a hold shorter than that counts as a tap |
+
+With key repeat turned off (System Settings → Keyboard), every press is a tap: tap to start, tap to stop.
+
+:::caution[If Ctrl+Space does nothing]
+Something before Rein took the key. On macOS, **Ctrl+Space switches input sources** when that shortcut is on (System Settings → Keyboard → Keyboard Shortcuts → Input Sources): turn it off, or use `/voice`. Some editors' terminals bind it too (for suggestions); unbind it there, or use `/voice`.
+:::
 
 ## Setting it up
 
@@ -37,7 +50,7 @@ Any model name from the whisper.cpp repository works (`small.en-q5_1`, `small-q5
 
 ## Without the key
 
-`/voice` starts and stops a recording too, once voice is set up. The text goes into the input the same way.
+`/voice` starts a recording too, once voice is set up, and `/voice` again stops it. The text goes into the input the same way.
 
 ## Related
 

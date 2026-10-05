@@ -19,6 +19,7 @@ import {diffTabName, proposedChange} from '../ide/review.js';
 import {takeOver} from './terminal/takeover.js';
 import {preloadPty} from '../tools/shells.js';
 import {rmSync} from 'node:fs';
+import {PushToTalk, voiceKeys, type VoiceKeyEvent} from './terminal/voiceKey.js';
 import {DEFAULT_MODEL, detect, downloadModel, installHint, MAX_RECORD_SECONDS, Recording, transcribe, voiceDir} from '../voice/voice.js';
 import {NAME_RE} from '../vault/vault.js';
 import {installedVersion, resolveServer, SERVERS} from '../lsp/servers.js';
@@ -60,8 +61,13 @@ const NOTIFY_AFTER_MS = 20_000;
 /** Background commands running at least this long are mentioned (once) when a turn ends. */
 const BACKGROUND_REMINDER_MS = 5 * 60_000;
 
-export type VoiceState = 'idle' | 'recording' | 'transcribing';
-export const voiceNote = (v: VoiceState) => (v === 'recording' ? `● Recording… Ctrl+T to stop (up to ${MAX_RECORD_SECONDS / 60} min) · Ctrl+C cancels` : 'Transcribing…');
+export type VoiceState = 'idle' | 'holding' | 'recording' | 'transcribing';
+export const voiceNote = (v: VoiceState) =>
+  v === 'holding'
+    ? '● Recording… let go of Ctrl+Space to stop · Ctrl+C cancels'
+    : v === 'recording'
+      ? `● Recording… press Ctrl+Space to stop (up to ${MAX_RECORD_SECONDS / 60} min) · Ctrl+C cancels`
+      : 'Transcribing…';
 
 export type Overlay =
   | {name: 'none'}
@@ -662,11 +668,14 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
     if (recalled !== undefined) prevDraft.current = recalled;
     return recalled;
   };
-  // Voice input (voice/voice.ts): Ctrl+T or /voice starts recording, the same again stops it; the
-  // text lands in the input (never sent on its own).
+  // Voice input (voice/voice.ts): hold Ctrl+Space to talk, let go to stop (terminal/voiceKey.ts);
+  // a tap, or /voice, toggles. The text lands in the input (never sent on its own).
   const [voice, setVoice] = useState<VoiceState>('idle');
-  const recording = useRef<{rec: Recording; timer: NodeJS.Timeout; insert(text: string): void} | undefined>(undefined);
+  const recording = useRef<{rec: Recording; timer: NodeJS.Timeout} | undefined>(undefined);
+  const ptt = useRef(new PushToTalk());
+  const insertVoice = (text: string) => setDraft((d) => (d && !/\s$/.test(d) ? `${d} ${text}` : d + text));
   const stopVoice = async () => {
+    ptt.current.reset();
     const r = recording.current;
     if (!r) return;
     recording.current = undefined;
@@ -676,7 +685,7 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
       const s = detect(runtime.config.voiceModel || DEFAULT_MODEL);
       const wav = await r.rec.stop();
       const text = await transcribe(s.whisper!, s.model, wav).finally(() => rmSync(wav, {force: true}));
-      if (text) r.insert(text);
+      if (text) insertVoice(text);
       else log('info', 'No speech was recognized.');
     } catch (err) {
       log('error', `Voice: ${(err as Error).message}`);
@@ -684,17 +693,20 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
       setVoice('idle');
     }
   };
-  const onVoice = (insert: (text: string) => void) => {
-    if (voice === 'transcribing') return;
-    if (recording.current) return void stopVoice();
+  const startVoice = (held: boolean) => {
+    if (recording.current || voice === 'transcribing') return;
     const s = detect(runtime.config.voiceModel || DEFAULT_MODEL);
     const hint = installHint(s);
-    if (hint || !s.modelReady) return log('info', `${hint ? hint.text : `Voice needs its speech model (${s.model}, about 60 MB, downloaded once).`} Run /voice setup${hint?.command ? ' to install it' : ''}.`);
-    const rec = new Recording(s.recorder!);
-    recording.current = {rec, insert, timer: setTimeout(() => void stopVoice(), MAX_RECORD_SECONDS * 1000)};
-    setVoice('recording');
+    if (hint || !s.modelReady) {
+      ptt.current.reset();
+      log('info', `${hint ? hint.text : `Voice needs its speech model (${s.model}, about 60 MB, downloaded once).`} Run /voice setup${hint?.command ? ' to install it' : ''}.`);
+      return;
+    }
+    recording.current = {rec: new Recording(s.recorder!), timer: setTimeout(() => void stopVoice(), MAX_RECORD_SECONDS * 1000)};
+    setVoice(held ? 'holding' : 'recording');
   };
   const cancelVoice = () => {
+    ptt.current.reset();
     const r = recording.current;
     if (!r) return false;
     recording.current = undefined;
@@ -703,6 +715,26 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
     setVoice('idle');
     return true;
   };
+  // Ctrl+Space comes from the stdin filter; only while the input box has the keyboard.
+  const inputActiveRef = useRef(true);
+  inputActiveRef.current = inputActive;
+  useEffect(() => {
+    const p = ptt.current;
+    const onKey = (ev: VoiceKeyEvent) => (inputActiveRef.current || p.recording) && p.key(ev);
+    const onStart = () => startVoice(true);
+    const onToggled = () => recording.current && setVoice('recording');
+    const onStop = () => void stopVoice();
+    voiceKeys.on('key', onKey);
+    p.on('start', onStart);
+    p.on('toggled', onToggled);
+    p.on('stop', onStop);
+    return () => {
+      voiceKeys.off('key', onKey);
+      p.off('start', onStart);
+      p.off('toggled', onToggled);
+      p.off('stop', onStop);
+    };
+  });
 
   const onImagePaste = async () => {
     const token = await attachments.current.pasteClipboardImage();
@@ -857,14 +889,14 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
             return;
           }
           if (hint) return log('info', hint.text);
-          if (s.modelReady) return log('info', `Voice is ready: press Ctrl+T in the input to talk, Ctrl+T again to stop.`);
+          if (s.modelReady) return log('info', 'Voice is ready: hold Ctrl+Space and talk, let go to stop.');
           log('info', `Downloading the speech model ${s.model} (about 60 MB, once) to ${voiceDir()}…`);
           let shown = 0;
           void downloadModel(s.model, (done, total) => {
             const pct = total ? Math.floor((done / total) * 100) : 0;
             if (pct >= shown + 25) log('info', `  ${(shown = pct)}%`);
           }).then(
-            () => log('info', 'Voice is ready: press Ctrl+T in the input to talk, Ctrl+T again to stop. (macOS asks once to let your terminal use the microphone.)'),
+            () => log('info', 'Voice is ready: hold Ctrl+Space and talk, let go to stop. (macOS asks once to let your terminal use the microphone.)'),
             (err) => log('error', `Couldn't download the speech model: ${(err as Error).message}`),
           );
           return;
@@ -874,8 +906,9 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
           log('info', [`Voice input runs on your machine (whisper.cpp; nothing is uploaded).`, `Recorder: ${s.recorder ? s.recorder.command : 'missing'} · whisper.cpp: ${s.whisper ?? 'missing'} · model ${s.model}: ${s.modelReady ? 'ready' : 'not downloaded'}`, hint ? hint.text : '', `Run /voice setup${hint?.command ? ` (runs ${hint.command}, then downloads the model)` : hint ? ' after installing them' : ' to download the model'}.`].filter(Boolean).join('\n'));
           return;
         }
-        // Ready: /voice toggles recording, like Ctrl+T, inserting into the draft.
-        onVoice((text) => setDraft((d) => (d && !/\s$/.test(d) ? `${d} ${text}` : d + text)));
+        // Ready: /voice toggles recording (like a tap of Ctrl+Space).
+        if (recording.current) void stopVoice();
+        else startVoice(false);
         return;
       }
       case 'vault': {
@@ -1402,7 +1435,7 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
   return {
     entries, transcript: terminalHold.current === undefined ? entries : entries.slice(0, terminalHold.current), add, log, overlay, setOverlay, closeOverlay, finishImport, ready, updating, updateLog, statusTick, bump,
     finishTrust, pickHistory, startPlanGoal, startNewPlan, draft, onDraft, onSubmit, onPaste, onImagePaste, onHistory: suggestions.length || fileSuggestions.length ? undefined : onHistory, onExternalEdit, doRewind, togglePlanMode, fileSuggestions, fileSelected, acceptFile, runCommand, suggestions, selected, setSuggestIndex, inputActive, chat, skills, openShells, queued, exitArmed, compacting, pickSession,
-    view, setView, viewing, goalNote, saveVault, voice, onVoice,
+    view, setView, viewing, goalNote, saveVault, voice,
   };
 }
 

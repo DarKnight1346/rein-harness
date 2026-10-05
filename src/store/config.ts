@@ -78,7 +78,7 @@ export type Config = {
   lspServers?: Record<string, {command: string; args?: string[]}>;
   /** Commits and pull requests the agent writes credit Rein (a "Co-Authored by [Rein Harness](…)" line). */
   attribution: boolean;
-  /** whisper.cpp model for voice input (Ctrl+T): `base.en-q5_1` (English, default), or e.g. `base-q5_1` / `small-q5_1` for other languages. */
+  /** whisper.cpp model for voice input (hold Ctrl+Space): `base.en-q5_1` (English, default), or e.g. `base-q5_1` / `small-q5_1` for other languages. */
   voiceModel: string;
   /** Big pastes (more than 3 lines or 800 characters) become a `[Pasted text #1 +40 lines]` placeholder in the input; false pastes the text as-is. */
   collapsePastes: boolean;

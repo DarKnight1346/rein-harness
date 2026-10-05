@@ -107,7 +107,7 @@ export function ClassicApp({resume}: {resume: Resume}) {
         {overlay.name === 'approval' && <ApprovalPrompt req={overlay.req} onDecide={overlay.resolve} />}
         <Box borderStyle="round" borderColor={r.inputActive ? 'gray' : 'blackBright'} paddingX={1}>
           <Text color="gray">{'> '}</Text>
-          <TextInput isActive={r.inputActive} value={r.draft} onChange={r.onDraft} onPaste={r.onPaste} onImagePaste={r.onImagePaste} onVoice={r.onVoice} onHistory={r.onHistory} onExternalEdit={r.onExternalEdit} placeholder={!r.ready ? 'starting…' : chat.busy ? 'queue a message, or /btw <question>' : 'message or /help'} onSubmit={r.onSubmit} />
+          <TextInput isActive={r.inputActive} value={r.draft} onChange={r.onDraft} onPaste={r.onPaste} onImagePaste={r.onImagePaste} onHistory={r.onHistory} onExternalEdit={r.onExternalEdit} placeholder={!r.ready ? 'starting…' : chat.busy ? 'queue a message, or /btw <question>' : 'message or /help'} onSubmit={r.onSubmit} />
         </Box>
         {r.inputActive && r.suggestions.length > 0 ? (
           <Box flexDirection="column" paddingLeft={2}>
