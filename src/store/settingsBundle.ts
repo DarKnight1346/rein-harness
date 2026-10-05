@@ -1,4 +1,4 @@
-import {copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync} from 'node:fs';
+import {existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync} from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import {reinConfigDir} from './paths.js';
@@ -40,7 +40,10 @@ function walk(dir: string, rel: string, out: Record<string, string>): void {
     const p = path.join(dir, e.name);
     const r = `${rel}/${e.name}`;
     if (e.isDirectory()) walk(p, r, out);
-    else if (e.isFile() && statSync(p).size <= MAX_FILE) out[r] = readFileSync(p, 'utf8');
+    else if (e.isFile()) {
+      const data = readFileSync(p); // read once, then check: nothing can change in between
+      if (data.length <= MAX_FILE) out[r] = data.toString('utf8');
+    }
   }
 }
 
@@ -78,8 +81,12 @@ export function importSettings(file: string, dir = reinConfigDir()): {written: s
     const dest = path.join(dir, rel);
     if (!dest.startsWith(path.resolve(dir) + path.sep)) continue;
     mkdirSync(path.dirname(dest), {recursive: true});
-    if (existsSync(dest) && readFileSync(dest, 'utf8') !== text) {
-      copyFileSync(dest, `${dest}.before-import`);
+    let before: string | undefined;
+    try {
+      before = readFileSync(dest, 'utf8');
+    } catch {}
+    if (before !== undefined && before !== text) {
+      writeFileSync(`${dest}.before-import`, before); // the content just read, not the file again
       backedUp.push(rel);
     }
     writeFileSync(dest, text);
