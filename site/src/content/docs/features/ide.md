@@ -17,7 +17,7 @@ Rein works with your editor through the **Claude Code extension**: the official 
 - **Your selection goes with your message.** Select code in the editor and ask "why is this slow?". Rein adds the selection (file, line range and text) to your next message. The top bar shows `⧉ Visual Studio Code · 12 lines` while something is selected.
 - **Review changes as diffs in the editor.** When the agent wants to write or edit a file and Rein asks for approval, the same change also opens as a diff tab in the editor. Accept it there and the change goes through. Reject it, or close the tab, and it's denied. Either side can answer, whichever you reach first. **Edit the diff before accepting** and Rein writes your version, telling the agent the file now has your changes.
 - **"Mention in chat" inserts `@file`.** The extension's mention action (Alt+Ctrl+K / Option+Cmd+K in VS Code) puts `@path (lines 10-20)` into Rein's input.
-- **The agent sees the editor's problems.** An `ide_diagnostics` tool returns the errors and warnings the editor's language servers report (type errors, lint findings), for one file or the whole workspace. The agent can check it didn't break anything without running the whole build.
+- **The agent sees the editor's problems.** The `diagnostics` tool returns the errors and warnings the editor's language servers report (type errors, lint findings), for one file or the whole workspace. The agent can check it didn't break anything without running the whole build. Without an editor, the same tool uses the language servers Rein runs itself ([code intelligence](../code-intelligence/)).
 
 ## Connecting
 

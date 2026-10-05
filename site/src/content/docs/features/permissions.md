@@ -42,6 +42,8 @@ Even inside the project, files that could run code *outside* the sandbox later s
 
 When a command fails because of the sandbox (`Operation not permitted`, or a network error in strict mode), the agent is told why and can retry with `unsandboxed: true`. **That always asks you**, even in bypass mode, and no saved rule or "allow for the session" covers it.
 
+`lsp_install`, which installs a [language server](../code-intelligence/#installing-a-server) into Rein's folder, also always asks, even in bypass mode.
+
 macOS uses `sandbox-exec` (Seatbelt), as Claude Code and Codex do. Linux uses bubblewrap (install the `bubblewrap` package); without it, and on Windows, commands run unsandboxed and Rein says so at startup. Only the agent's commands are sandboxed: your own [`!` commands](../../reference/commands/#shell-commands-with-), hooks and MCP servers aren't.
 
 ## Approval modes

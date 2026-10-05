@@ -25,6 +25,8 @@ export type ToolDef = {
   enabled?(): boolean;
   /** Always ask the user (no auto-approval, no "allow for the session"); rules and bypass still apply. */
   alwaysAsk?: boolean;
+  /** Ask even in bypass mode (installing software on the user's machine). */
+  askEvenInBypass?: boolean;
   /** A mutating tool that writes into the session scratchpad when no path is given (no approval then). */
   defaultsToScratch?: boolean;
   /** Paths the call touches; any outside the working directories needs the user's approval first. */

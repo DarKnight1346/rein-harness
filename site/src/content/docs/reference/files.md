@@ -20,7 +20,7 @@ On Linux (or anywhere the `XDG_*` variables are set), a new install follows the 
 | What | Where |
 |---|---|
 | What you write: `config.json`, `settings.json`, `mcp.json`, `AGENTS.md`, `system-prompt.md`, `skills/`, `agents/` | `$XDG_CONFIG_HOME/rein` (default `~/.config/rein`) |
-| What Rein keeps: conversations, accounts, checkpoints, exports, secrets, MCP sign-ins | `$XDG_DATA_HOME/rein` (default `~/.local/share/rein`) |
+| What Rein keeps: conversations, accounts, checkpoints, exports, secrets, MCP sign-ins, language servers | `$XDG_DATA_HOME/rein` (default `~/.local/share/rein`) |
 | Bookkeeping: usage, input history, trusted projects, the update lock (`state/` below) | `$XDG_STATE_HOME/rein` (default `~/.local/state/rein`) |
 
 An existing `~/.rein` keeps being used as it is, and so does `REIN_HOME`. To switch an existing install to the XDG layout, move its files into those folders and remove `~/.rein`. The paths below are relative to whichever folder holds them.
@@ -51,6 +51,7 @@ An existing `~/.rein` keeps being used as it is, and so does `REIN_HOME`. To swi
 | `AGENTS.md` | Global instructions added to every session's system prompt |
 | `system-prompt.md` | Optional. Replaces Rein's **base** system prompt only. Tools, project info, memory and instruction files are still appended |
 | `secrets/jev.key` | Jev API key fallback file (`0600`), used only when the Keychain / DPAPI isn't available. On Windows the DPAPI-encrypted key is `secrets/jev.key.dpapi` |
+| `lsp/<server>/` | Language servers `lsp_install` installed with npm (`lsp/typescript/`, `lsp/python/`), and `installed.json` with the version. See [code intelligence](../../features/code-intelligence/) |
 | `update.lock` | Held for up to 10 minutes while a background auto-update installs, so several Rein windows don't install at once |
 
 Session ids look like `2026-10-03-14-22-05-1a2b3c4d`. Sessions are listed per project by the folder they ran in.
@@ -155,6 +156,7 @@ Quit Rein first.
 | `state/` | Yes | Usage snapshots and cooldowns (refetched on use), learned context windows, cached model lists, the Codex catalog (all regenerated) |
 | `scratch/` | Mostly | Agent scratch files, and the attached images that resumed conversations point to |
 | `checkpoints/` | Yes | `/rewind` for past conversations |
+| `lsp/` | Yes | Installed language servers (the agent offers to install them again) |
 | `sessions/` | Yes | Conversation history: `/resume`, `rein --continue`, `sessions_search` |
 | `config.json` | Yes | Your settings (defaults return) |
 | `accounts/<provider>/<id>/` | **No.** Use `/login` → remove | The login of an account you added. Deleting it by hand leaves `accounts.json` pointing at a missing folder |

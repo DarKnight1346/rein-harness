@@ -67,6 +67,17 @@ export type ToolHostOptions = {
   /** Save a file's state before a tool changes it (checkpoints for /rewind). */
   checkpoint?: (file: string) => Promise<void>;
   /**
+   * Code intelligence around file changes (lsp/manager.ts): `before` snapshots the files' current
+   * diagnostics, `after` returns a note on problems the change introduced (appended to the result).
+   * `read` warms the server up; `shell` re-syncs files a command may have changed.
+   */
+  diagnostics?: {
+    before(files: string[], root: string): Promise<unknown>;
+    after(snapshot: unknown): Promise<string | undefined>;
+    read?(file: string, root: string): void;
+    shell?(root: string): void;
+  };
+  /**
    * A subagent's own copy of the project (a git worktree), if it has or now needs one: `writes`
    * says whether this call changes things. Its calls then run there, paths retargeted.
    */
@@ -250,7 +261,7 @@ export class ToolHost extends EventEmitter {
         const mode = this.opts.mode();
         const req = planAsk ? {tool, args, summary, preview: preview(tool, args), origin, planMode: true} : {tool, args, summary, preview: preview(tool, args), origin, suggestion};
         // Leaving the sandbox is always the user's call: no rule, session allowance, judge or bypass covers it.
-        const forceAsk = !!pre?.ask || planAsk || unsandboxed; // a PreToolUse hook asked for the prompt, plan mode, or leaving the sandbox
+        const forceAsk = !!pre?.ask || planAsk || unsandboxed || !!tool.askEvenInBypass; // a PreToolUse hook asked for the prompt, plan mode, leaving the sandbox, or installing software
         if (forceAsk) {
           // fall through to the prompt
         } else if (verdict === 'allow') approvedBy = 'rule';
@@ -265,6 +276,7 @@ export class ToolHost extends EventEmitter {
         if (!approvedBy) {
           const decision = await this.opts.approve(req);
           if (decision === 'deny' && planAsk) throw new ToolError('plan mode is on and the user declined this command (it may change things). Stick to read-only exploration, then call present_plan.');
+          if (decision === 'deny' && tool.askEvenInBypass) throw new ToolError("not approved (the user declined, or nobody is here to approve it, as in a headless run). Don't retry: tell the user what it would do so they can run it themselves.");
           if (decision === 'deny') throw new ToolError('the user denied this action; ask them how to proceed instead of retrying');
           if (decision === 'session' && !planAsk) this.sessionAllowed = true;
           remember(decision);
@@ -280,7 +292,18 @@ export class ToolHost extends EventEmitter {
         this.editorVersions.delete(subject.paths![0]!);
         result = await toolByName('write')!.run(ctx, {path: subject.paths![0], content: edited});
         if (result.ok) result = {...result, text: `${result.text}\n(The user changed your edit in their editor before accepting it: the file now has their version. Read it again before further edits.)`};
-      } else result = await tool.run(ctx, args ?? {});
+      } else {
+        // Files a write/edit/delete touches: their diagnostics before, to report what the change broke.
+        const changes = this.opts.diagnostics && ['write', 'edit', 'delete'].includes(tool.name) ? this.filesOf(ctx, tool, args) : [];
+        const snapshot = changes.length ? await this.opts.diagnostics!.before(changes, ctx.root).catch(() => undefined) : undefined;
+        result = await tool.run(ctx, args ?? {});
+        if (result.ok && snapshot) {
+          const note = await this.opts.diagnostics!.after(snapshot).catch(() => undefined);
+          if (note) result = {...result, text: `${result.text}\n\n${note}`};
+        }
+        if (result.ok && tool.name === 'read') for (const f of this.filesOf(ctx, tool, args)) this.opts.diagnostics?.read?.(f, ctx.root);
+        if (tool.name === 'shell' && !(args as {background?: boolean})?.background) this.opts.diagnostics?.shell?.(ctx.root);
+      }
       // PostToolUse hooks: feedback (exit 2 / decision "block") and context go back to the model.
       if (hasHooks('PostToolUse', this.opts.root)) {
         const post = await runHooks('PostToolUse', this.opts.root, {...hookInput, tool_response: {ok: result.ok, text: result.text.slice(0, 20_000)}});
@@ -400,6 +423,18 @@ export class ToolHost extends EventEmitter {
   /** Every working directory: project root, scratchpad, global skills, config and session additions. */
   workingDirs(): string[] {
     return workingDirs(this.context());
+  }
+
+  /** A tool call's files, resolved (inside the working directories only). */
+  private filesOf(ctx: ToolContext, tool: ToolDef, args: any): string[] {
+    const out: string[] = [];
+    for (const p of tool.paths?.(args) ?? []) {
+      try {
+        const r = resolvePath(ctx, p);
+        if (r.inside) out.push(r.real);
+      } catch {}
+    }
+    return out;
   }
 
   private outsidePaths(ctx: ToolContext, tool: ToolDef, args: any): string[] {

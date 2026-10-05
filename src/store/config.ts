@@ -70,6 +70,12 @@ export type Config = {
   worktrees: 'auto' | 'off';
   /** API accounts (pay per use): 'fallback' = only when no subscription can serve the model (default), 'always' = alongside subscriptions (after them). */
   apiAccounts: 'fallback' | 'always';
+  /** Built-in code intelligence: Rein runs language servers itself ('auto', the default), or never ('off'). */
+  lsp: 'auto' | 'off';
+  /** Stop a built-in language server after this many minutes unused (default 10). */
+  lspIdleMinutes: number;
+  /** Use a specific language server command instead of Rein's: {"typescript": {"command": "/path/to/server", "args": ["--stdio"]}}. */
+  lspServers?: Record<string, {command: string; args?: string[]}>;
   /** Big pastes (more than 3 lines or 800 characters) become a `[Pasted text #1 +40 lines]` placeholder in the input; false pastes the text as-is. */
   collapsePastes: boolean;
   /** OS sandbox for the agent's shell commands: 'write' (default: writes limited to the project), 'strict' (also no network), 'off'. */
@@ -105,6 +111,8 @@ export const DEFAULT_CONFIG: Config = {
   sandbox: 'write',
   apiAccounts: 'fallback',
   collapsePastes: true,
+  lsp: 'auto',
+  lspIdleMinutes: 10,
   worktrees: 'auto',
 };
 
