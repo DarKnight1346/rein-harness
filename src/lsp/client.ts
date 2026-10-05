@@ -27,10 +27,10 @@ export class LspClient {
   private lastPublishAt = 0;
   lastUsed = Date.now();
 
-  constructor(readonly root: string, command: string, args: string[], readonly languageIdFor: (file: string) => string, initializationOptions?: Record<string, unknown>) {
+  constructor(readonly root: string, command: string, args: string[], readonly languageIdFor: (file: string) => string, initializationOptions?: Record<string, unknown>, env?: Record<string, string>) {
     // Windows: npm's .cmd shims only run through a shell (Node refuses to spawn them directly).
     const shim = process.platform === 'win32' && /\.(cmd|bat)$/i.test(command);
-    this.proc = spawn(shim ? `"${command}"` : command, args, {cwd: root, stdio: ['pipe', 'pipe', 'ignore'], env: process.env, detached: process.platform !== 'win32', shell: shim});
+    this.proc = spawn(shim ? `"${command}"` : command, args, {cwd: root, stdio: ['pipe', 'pipe', 'ignore'], env: {...process.env, ...env}, detached: process.platform !== 'win32', shell: shim});
     this.rpc = new Rpc(this.proc);
     this.rpc.on('notification', (method: string, params: {uri?: string; diagnostics?: Diagnostic[]}) => {
       if (method !== 'textDocument/publishDiagnostics' || !params?.uri) return;

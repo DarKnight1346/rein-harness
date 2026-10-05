@@ -1,5 +1,5 @@
 import {execFileSync} from 'node:child_process';
-import {mkdtempSync, writeFileSync} from 'node:fs';
+import {mkdirSync, mkdtempSync, writeFileSync} from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
@@ -107,5 +107,58 @@ describe('askEvenInBypass', () => {
     expect(r.ok).toBe(false);
     expect(r.text).toContain("Don't retry");
     host.close();
+  });
+});
+
+describe('language server registry', () => {
+  it('matches files to servers by name and extension', async () => {
+    const {serverFor, languageIdFor, SERVERS} = await import('../src/lsp/servers.js');
+    const id = (f: string) => serverFor(f)?.id;
+    expect(id('kernel/main.cpp')).toBe('cpp');
+    expect(id('boot/start.S')).toBe('asm');
+    expect(id('boot/start.asm')).toBe('asm');
+    expect(id('x/Dockerfile')).toBe('dockerfile');
+    expect(id('CMakeLists.txt')).toBe('cmake');
+    expect(id('notes.txt')).toBeUndefined();
+    expect(id('analysis.R')).toBe('r');
+    expect(languageIdFor(serverFor('a.mm')!, 'a.mm')).toBe('objective-cpp');
+    // Every extension belongs to one server (no silent shadowing).
+    const seen = new Map<string, string>();
+    for (const s of SERVERS) for (const e of Object.keys(s.languages)) {
+      expect(seen.get(e), `${e}: ${seen.get(e)} and ${s.id}`).toBeUndefined();
+      seen.set(e, s.id);
+    }
+  });
+  it('says why a server cannot be installed', async () => {
+    const {installable, serverById} = await import('../src/lsp/servers.js');
+    const swift = installable(serverById('swift')!);
+    expect(swift.ok).toBe(false);
+    if (!swift.ok) expect(swift.why).toMatch(/Xcode/);
+  });
+  it('unpacks .gz, tar archives and plain binaries', async () => {
+    const {unpack} = await import('../src/lsp/servers.js');
+    const {gzipSync} = await import('node:zlib');
+    const {execFileSync} = await import('node:child_process');
+    const {readFileSync} = await import('node:fs');
+    const dir = mkdtempSync(path.join(os.tmpdir(), 'rein-unpack-'));
+    const gz = path.join(dir, 'tool.gz');
+    writeFileSync(gz, gzipSync('gz-binary'));
+    const out1 = mkdtempSync(path.join(dir, 'a-'));
+    await unpack(gz, 'tool-x86_64.gz', out1, 'tool');
+    expect(readFileSync(path.join(out1, 'tool'), 'utf8')).toBe('gz-binary');
+    const raw = path.join(dir, 'raw');
+    writeFileSync(raw, 'raw-binary');
+    const out2 = mkdtempSync(path.join(dir, 'b-'));
+    await unpack(raw, 'tool-macos', out2, 'tool');
+    expect(readFileSync(path.join(out2, 'tool'), 'utf8')).toBe('raw-binary');
+    const src = mkdtempSync(path.join(dir, 'src-'));
+    mkdirSync(path.join(src, 'bin'));
+    writeFileSync(path.join(src, 'bin', 'tool'), 'tar-binary');
+    const tgz = path.join(dir, 'tool.tar.gz');
+    execFileSync('tar', ['-czf', tgz, '-C', src, 'bin']);
+    const out3 = mkdtempSync(path.join(dir, 'c-'));
+    await unpack(tgz, 'tool.tar.gz', out3, 'bin/tool');
+    expect(readFileSync(path.join(out3, 'bin', 'tool'), 'utf8')).toBe('tar-binary');
+    await expect(unpack(raw, 'tool.tar.gz', mkdtempSync(path.join(dir, 'd-')), 'tool')).rejects.toThrow();
   });
 });

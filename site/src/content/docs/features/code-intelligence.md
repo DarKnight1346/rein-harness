@@ -24,20 +24,59 @@ Rein runs language servers for your project itself, so the agent gets real compi
 
 ## Languages
 
-| Language | Server | Files |
-|---|---|---|
-| TypeScript / JavaScript | TypeScript 7's built-in server (`tsc --lsp`), or `typescript-language-server` for projects on TypeScript 5 or 6 | `.ts` `.tsx` `.mts` `.cts` `.js` `.jsx` `.mjs` `.cjs` |
-| Python | `pyright` (or `basedpyright` on your PATH) | `.py` `.pyi` |
+Rein knows a language server for most languages you'll work in. It starts the right one for each file. If that server isn't installed, the agent mentions it **once** the first time it changes such a file, so it can offer to install it.
+
+**Rein installs these itself** (when you say yes), into its own folder:
+
+| Language | Server | Installed with | Error reporting |
+|---|---|---|---|
+| TypeScript / JavaScript | TypeScript 7's `tsc --lsp`, or `typescript-language-server` for TypeScript 5/6 | npm | ✓ |
+| Python | `pyright` (or `basedpyright` on your PATH) | npm | ✓ |
+| C / C++ / Objective-C / CUDA | `clangd` | release binary | ✓ |
+| Assembly (GNU as, NASM, x86/x86-64, ARM, RISC-V…) | `asm-lsp` | release binary (macOS, Linux x64) | ✓ |
+| Go | `gopls` | `go install` | ✓ |
+| Zig | `zls` | release binary | ✓ |
+| Lua | `lua-language-server` | release binary | ✓ |
+| PHP | `intelephense` | npm | ✓ |
+| Clojure | `clojure-lsp` | release binary | ✓ |
+| Elm | `elm-language-server` | npm | ✓ |
+| Svelte | `svelte-language-server` | npm | ✓ |
+| CSS / SCSS / Less, JSON, YAML | `vscode-langservers-extracted`, `yaml-language-server` | npm | ✓ |
+| TOML | `taplo` | release binary | ✓ |
+| Dockerfile | `dockerfile-language-server` | npm | ✓ |
+| Rust | `rust-analyzer` | release binary | Started; reported nothing without the Rust toolchain, which it needs (`rustup`) |
+| Shell scripts | `bash-language-server` | npm | Started; its errors come from [`shellcheck`](https://www.shellcheck.net), which must be on your PATH |
+| Ruby | `ruby-lsp` | `gem` | Not tested (needs Ruby 2.7 or newer) |
+| C# / F# | `csharp-ls` / `fsautocomplete` | `dotnet tool` | Not tested (needs the .NET SDK) |
+| Fortran | `fortls` | Python venv | Started; didn't report the test error |
+| Vue | `@vue/language-server` | npm | Started; didn't report a script type error (that needs Vue's TypeScript plugin, which Rein doesn't set up) |
+| HTML, Markdown | `vscode-html-language-server`, `marksman` | npm, release binary | Started; didn't report the test errors (an unclosed tag, a broken link) |
+| SQL | `sqls` | `go install` | Started; it checks against a database connection you configure |
+| CMake | `neocmakelsp` | release binary | Started (not tested with an error) |
+
+✓: tested on macOS. Rein installed it, opened a file with a deliberate error, and the error came back. "Started": installed and ran, but didn't report that test's error.
+
+**These come with their toolchain**, so Rein uses them when they're on your PATH and tells you how to get them otherwise: Swift (`sourcekit-lsp`, with Xcode, found through `xcrun`), Java (`jdtls`), Kotlin, Scala (Metals), Haskell (HLS), OCaml, Elixir, Erlang, Gleam, Dart / Flutter, Nim, R, Julia, Perl, PowerShell, Terraform and Nix.
 
 For TypeScript, Rein uses **your project's own TypeScript** when `node_modules/typescript` exists, so the errors match your build. Otherwise it uses the TypeScript it installed.
+
+:::tip[C and C++ projects]
+clangd needs to know how your code is built (include paths, defines, target) to report errors you can trust. Give it a `compile_commands.json` in the project or `build/`: CMake writes one with `-DCMAKE_EXPORT_COMPILE_COMMANDS=ON`; for Make and other builds, run the build through [Bear](https://github.com/rizsotto/Bear) (`bear -- make`). Without one, clangd guesses, and freestanding code (kernels, firmware) shows false errors. Rein only reports problems an edit introduced, which keeps the noise down. For assembly, an `.asm-lsp.toml` in the project picks the assembler and architecture.
+:::
 
 ## Installing a server
 
 Rein looks for a server in its own folder first (`lsp/<server>/` in the [data folder](../../reference/files/)), then on your PATH. It never changes your PATH.
 
-When a server is missing, the agent asks whether to install it and calls `lsp_install`. **That always asks you**, even in bypass mode: it installs software on your machine. Rein then runs `npm install` into `lsp/typescript/` or `lsp/python/` and records the version it installed. Nothing is installed globally.
+When a server is missing, the agent asks whether to install it and calls `lsp_install`. **That always asks you**, even in bypass mode: it installs software on your machine. Rein installs the latest version into `lsp/<server>/` and records the version:
 
-To use a server you already have instead, set `lspServers` in `config.json`:
+- **npm** packages go into that folder's `node_modules`.
+- **Release binaries** are downloaded from the project's GitHub releases page and unpacked there. An update unpacks next to the old version first, so a failed download keeps the working one.
+- **`go install`, `gem install`, `dotnet tool install`** and Python packages (in a venv) use that language's own tool, which the project already needs.
+
+Nothing is installed globally. `/lsp` lists what's available and where, what Rein can install, and what you'd install yourself.
+
+To use a server you already have instead, or one Rein doesn't know, set `lspServers` in `config.json` (by server id, as `/lsp` shows them):
 
 ```json title="~/.rein/config.json"
 {"lspServers": {"python": {"command": "/opt/homebrew/bin/basedpyright-langserver", "args": ["--stdio"]}}}

@@ -301,9 +301,9 @@ Label `InstallLanguageServer`. Approval: **always asks, even in bypass mode.**
 
 | Parameter | Type | Notes |
 | --- | --- | --- |
-| `server` **(required)** | string | `typescript` or `python` |
+| `server` **(required)** | string | A server Rein can install: `typescript`, `python`, `cpp`, `asm`, `rust`, `go`, `zig`, `lua`, `ruby`, `php`, `csharp`, `fsharp`, `clojure`, `elm`, `fortran`, `svelte`, `vue`, `bash`, `html`, `css`, `json`, `yaml`, `toml`, `markdown`, `sql`, `dockerfile`, `cmake` |
 
-Installs that language server with `npm install` into Rein's `lsp/<server>/` folder and records the version. See [code intelligence](../../features/code-intelligence/#installing-a-server).
+Installs the latest version of that language server into Rein's `lsp/<server>/` folder (npm, the project's release binaries, or `go` / `gem` / `dotnet` / a Python venv) and records the version. Servers that come with a toolchain (Swift, Java, Kotlin…) can't be installed this way; the result says how to get them. See [code intelligence](../../features/code-intelligence/#installing-a-server).
 
 ### `agent`
 

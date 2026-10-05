@@ -3,7 +3,7 @@ import {existsSync, realpathSync} from 'node:fs';
 import path from 'node:path';
 import type {Config} from '../store/config.js';
 import {LspClient, type Diagnostic} from './client.js';
-import {resolveServer, serverFor, type ServerSpec} from './servers.js';
+import {filePatterns, installable, languageIdFor, resolveServer, serverFor, type ServerSpec} from './servers.js';
 
 /**
  * Rein's built-in code intelligence: language servers it runs itself, one per (project root,
@@ -16,17 +16,17 @@ const REPORT_TIMEOUT_MS = 1500;
 const MAX_REPORTED = 5;
 const MAX_DEPENDENTS = 10;
 
-export type Before = {root: string; files: {file: string; count: number; list?: Diagnostic[]; dependent?: boolean}[]};
+export type Before = {root: string; files: {file: string; count: number; list?: Diagnostic[]; dependent?: boolean}[]; missing?: ServerSpec[]};
 
 /**
  * Files that likely import `file` (their text names it), so an edit that breaks a caller is caught
  * too: `git grep` for the module name, same language, at most a few. Empty outside a git repo.
  */
-function dependents(file: string, root: string, exts: string[]): Promise<string[]> {
+function dependents(file: string, root: string, patterns: string[]): Promise<string[]> {
   const stem = path.basename(file).replace(/\.[^.]+$/, '');
   if (stem.length < 2 || stem === 'index' || stem === '__init__') return Promise.resolve([]);
   return new Promise((resolve) => {
-    execFile('git', ['grep', '-l', '-I', '-F', '-w', stem, '--', ...exts.map((e) => `*${e}`)], {cwd: root, timeout: 1000, maxBuffer: 1 << 20}, (err, out) => {
+    execFile('git', ['grep', '-l', '-I', '-F', '-w', stem, '--', ...patterns], {cwd: root, timeout: 1000, maxBuffer: 1 << 20}, (err, out) => {
       if (err && !out) return resolve([]);
       const self = path.resolve(file);
       resolve(String(out).split('\n').filter(Boolean).map((f) => path.resolve(root, f)).filter((f) => f !== self).slice(0, MAX_DEPENDENTS));
@@ -98,7 +98,7 @@ export class LspManager {
       const run = resolveServer(spec, this.opts.config().lspServers ?? {}, root);
       if (!run) return undefined;
       try {
-        c = new LspClient(root, run.command, run.args, (f) => spec.languages[path.extname(f).toLowerCase()] ?? 'plaintext', run.initOptions ?? spec.initOptions?.(root));
+        c = new LspClient(root, run.command, run.args, (f) => languageIdFor(spec, f), run.initOptions ?? spec.initOptions?.(root), run.env);
       } catch {
         return undefined;
       }
@@ -118,12 +118,14 @@ export class LspManager {
   async before(files: string[], root: string): Promise<Before> {
     root = real(root);
     const targets: {file: string; dependent: boolean}[] = files.map((file) => ({file, dependent: false}));
+    const missing: ServerSpec[] = [];
     for (const file of files) {
       const spec = serverFor(file);
+      if (spec && this.enabled() && !this.hinted.has(spec.id) && !resolveServer(spec, this.opts.config().lspServers ?? {}, root)) missing.push(spec);
       if (!spec || !this.client(file, root)) continue;
-      for (const d of await dependents(file, root, Object.keys(spec.languages))) if (!targets.some((t) => t.file === d)) targets.push({file: d, dependent: true});
+      for (const d of await dependents(file, root, filePatterns(spec))) if (!targets.some((t) => t.file === d)) targets.push({file: d, dependent: true});
     }
-    const out: Before = {root, files: []};
+    const out: Before = {root, files: [], missing};
     await Promise.all(
       targets.map(async ({file, dependent}) => {
         // A file being created has no problems yet: nothing to wait for.
@@ -158,8 +160,27 @@ export class LspManager {
     const all = results.flat();
     const total = all.length;
     const lines = all.slice(0, MAX_REPORTED);
-    if (!total) return undefined;
-    return `[Diagnostics: this edit introduced ${total} problem${total === 1 ? '' : 's'}${total > lines.length ? ` (first ${lines.length})` : ''}:\n${lines.join('\n')}\nFix ${total === 1 ? 'it' : 'them'} before moving on.]`;
+    const hint = this.missingHint(b.missing ?? []);
+    if (!total) return hint;
+    return `${hint ? `${hint}\n` : ''}[Diagnostics: this edit introduced ${total} problem${total === 1 ? '' : 's'}${total > lines.length ? ` (first ${lines.length})` : ''}:\n${lines.join('\n')}\nFix ${total === 1 ? 'it' : 'them'} before moving on.]`;
+  }
+
+  /** Servers the agent was already told are missing (once per session each). */
+  private hinted = new Set<string>();
+
+  /** Edits to a language whose server isn't installed: say so once, so the agent can offer it. */
+  private missingHint(missing: ServerSpec[]): string | undefined {
+    const fresh = missing.filter((s) => !this.hinted.has(s.id));
+    if (!fresh.length) return undefined;
+    for (const s of fresh) this.hinted.add(s.id);
+    return fresh
+      .map((s) => {
+        const can = installable(s);
+        return can.ok
+          ? `[Code intelligence: ${s.name} isn't installed, so this change wasn't checked for errors. Offer the user to install it (lsp_install {server: "${s.id}"}, it asks them).]`
+          : `[Code intelligence: ${s.name} isn't installed, so this change wasn't checked for errors. Rein can't install it itself (${can.why}) — mention it to the user once if it would help.]`;
+      })
+      .join('\n');
   }
 
   /** A file's (or every open file's) current problems, for the diagnostics tool. */

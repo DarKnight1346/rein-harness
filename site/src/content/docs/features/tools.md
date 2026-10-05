@@ -43,7 +43,7 @@ File changes show up in the transcript as a colored diff. When Rein runs a [lang
 | Tool | What it does |
 |---|---|
 | `diagnostics` | A file's (or the workspace's) errors and warnings, from your editor if one is connected, otherwise from the language servers Rein runs. See [Code intelligence](../code-intelligence/). |
-| `lsp_install` | Installs a missing language server (TypeScript, Python) into Rein's folder. Always asks you. |
+| `lsp_install` | Installs a missing language server (C/C++, assembly, Rust, Go, Python, TypeScript and [many more](../code-intelligence/#languages)) into Rein's folder. Always asks you. |
 
 ### Search
 
