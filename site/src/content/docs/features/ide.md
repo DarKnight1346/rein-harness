@@ -1,11 +1,11 @@
 ---
 title: Editor integration
-description: Use Rein with VS Code, Cursor, Windsurf or JetBrains through the Claude Code extension you already have. Your selection goes with your messages, file changes open as diffs in the editor, and the agent reads the editor's diagnostics.
+description: Use Rein with VS Code, Cursor, Windsurf, JetBrains, Neovim or Emacs through the Claude Code extension (or plugin) you already have. Your selection goes with your messages, file changes open as diffs in the editor, and the agent reads the editor's diagnostics.
 sidebar:
   badge: New
 ---
 
-Rein works with your editor through the **Claude Code extension**: the official one for VS Code, Cursor and Windsurf, or the Claude Code plugin for JetBrains IDEs. There's nothing new to install: if the extension is there, Rein uses it.
+Rein works with your editor through the **Claude Code extension**: the official one for VS Code, Cursor and Windsurf, or the Claude Code plugin for JetBrains IDEs. Neovim and Emacs work through the community plugins that speak the same protocol ([below](#neovim-and-emacs)). There's nothing new to install: if the extension is there, Rein uses it.
 
 ```text title="rein"
   ⎿ Connected to Visual Studio Code: your selection goes with your messages, file changes open
@@ -28,6 +28,17 @@ Under the hood, the extension runs a local MCP server and announces it in `~/.cl
 :::note
 Diffs open for writes and edits inside the project. Commands, deletes, and changes outside the project or to [sensitive paths](../permissions/#sensitive-locations) are still answered in Rein only.
 :::
+
+## Neovim and Emacs
+
+The community plugins that implement the Claude Code editor protocol work with Rein the same way:
+
+| Editor | Plugin | Status |
+|---|---|---|
+| Neovim | [claudecode.nvim](https://github.com/coder/claudecode.nvim) | Tested: Rein connects, reads diagnostics, and opens diffs for review (selection uses the same messages as VS Code, not tested yet) |
+| Emacs | [claude-code-ide.el](https://github.com/manzaltu/claude-code-ide.el) | Same protocol; not tested yet |
+
+Start the plugin's server in the editor (claudecode.nvim does it on startup with `auto_start = true`, or `:ClaudeCodeStart`), then run `rein` in that project, in the editor's terminal or any other. Rein finds the editor through its lock file in `~/.claude/ide/`. `/ide` shows the connection. The plugins' own "launch Claude" commands start `claude`; to use Rein from them, point their terminal command at `rein` (claudecode.nvim: `terminal_cmd = "rein"`).
 
 ## Related
 

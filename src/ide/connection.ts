@@ -175,7 +175,9 @@ export class IdeConnection extends EventEmitter {
 
   /** The editor's problems (errors, warnings) for one file, or the whole workspace. */
   async diagnostics(filePath?: string): Promise<string> {
-    return (await this.text('getDiagnostics', filePath ? {uri: `file://${filePath}`} : {})).join('\n');
+    const text = (await this.text('getDiagnostics', filePath ? {uri: `file://${filePath}`} : {})).join('\n').trim();
+    // Some editors (claudecode.nvim) answer "no problems" as an empty JSON list.
+    return /^\[\s*\]$/.test(text) ? '' : text;
   }
 
   async close(): Promise<void> {
