@@ -141,7 +141,7 @@ Some paths only ever get a one-time yes, even in bypass mode, and the prompt tur
 enter/1 allow once · esc/4 deny
 ```
 
-The list, under your home folder: `.ssh`, `.gnupg`, `.aws`, `.azure`, `.kube`, `.docker`, `.config/gcloud`, `.config/gh`, `.netrc`, `.npmrc`, `.git-credentials`, `.pypirc`, `Library/Keychains`, `.claude`, `.claude.json`, `.codex`, `.rein/accounts`, `.rein/accounts.json`. Anywhere on disk: any file named `.env` or `.env.<something>`, and any `*.pem`, `*.key`, `*.p12`, `*.pfx` or `*.keychain`.
+The list, under your home folder: `.ssh`, `.gnupg`, `.aws`, `.azure`, `.kube`, `.docker`, `.config/gcloud`, `.config/gh`, `.netrc`, `.npmrc`, `.git-credentials`, `.pypirc`, `Library/Keychains`, `.claude`, `.claude.json`, `.codex`, `.rein/accounts`, `.rein/accounts.json`, and Rein's `secrets/` folder (the vault and the Jev key, wherever the data folder is). Anywhere on disk: any file named `.env` or `.env.<something>`, and any `*.pem`, `*.key`, `*.p12`, `*.pfx` or `*.keychain`.
 
 :::danger[Know exactly what this covers]
 The sensitive check runs **only for file-tool paths outside the working directories**. Precisely:

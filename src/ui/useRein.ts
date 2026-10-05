@@ -18,6 +18,7 @@ import {findIdes} from '../ide/connection.js';
 import {diffTabName, proposedChange} from '../ide/review.js';
 import {takeOver} from './terminal/takeover.js';
 import {preloadPty} from '../tools/shells.js';
+import {NAME_RE} from '../vault/vault.js';
 import {installedVersion, resolveServer, SERVERS} from '../lsp/servers.js';
 import {loadPlugins} from '../plugins/index.js';
 import {conversationMarkdown, writeExport} from '../session/export.js';
@@ -60,6 +61,8 @@ const BACKGROUND_REMINDER_MS = 5 * 60_000;
 export type Overlay =
   | {name: 'none'}
   | {name: 'login'}
+  /** `/vault set NAME`: enter the value, hidden. */
+  | {name: 'vault'; secret: string}
   | {name: 'model'}
   | {name: 'settings'}
   | {name: 'approval'; req: ApprovalRequest; resolve(d: ApprovalDecision): void; position: number; total: number}
@@ -789,11 +792,35 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
     }
     // In fullscreen, commands that open a window don't echo into the history.
     const opensWindow = ['goal:plan', 'login', 'usage', 'context', 'help', 'update', 'settings', 'shells', 'btw', 'resume', 'agents', 'agent'].includes(parsed.name) || (parsed.name === 'model' && !parsed.args);
-    if (!(windowed && opensWindow)) log('user', raw.trim());
+    // A value typed after `/vault set NAME` stays off the screen and out of the transcript.
+    if (!(windowed && opensWindow)) log('user', parsed.name === 'vault' ? raw.trim().replace(/^(\/vault\s+set\s+\S+)\s+.*$/s, '$1 ••••') : raw.trim());
     switch (parsed.name) {
       case 'mcp':
         setOverlay({name: 'mcp'});
         break;
+      case 'vault': {
+        const [sub = '', name = '', ...rest] = parsed.args.trim().split(/\s+/);
+        if (sub === 'set' || sub === 'add') {
+          if (rest.length) return log('error', `Don't type the value in the command: run /vault set ${name || 'NAME'} and enter it in the hidden field. It was not saved.`);
+          if (!NAME_RE.test(name)) return log('error', 'Usage: /vault set NAME (letters, digits and _, like GITHUB_TOKEN)');
+          setOverlay({name: 'vault', secret: name});
+          return;
+        }
+        if (sub === 'rm' || sub === 'remove' || sub === 'delete') {
+          if (!name) return log('error', 'Usage: /vault rm NAME');
+          void runtime.vault.remove(name).then((ok) => log(ok ? 'info' : 'error', ok ? `Removed ${name} from the vault.` : `${name} isn't in the vault.`), (err) => log('error', `Couldn't update the vault: ${(err as Error).message}`));
+          return;
+        }
+        if (sub) return log('error', 'Usage: /vault · /vault set NAME · /vault rm NAME');
+        const names = runtime.vault.names();
+        log(
+          'info',
+          names.length
+            ? `Secrets vault (${process.platform === 'darwin' && !process.env.REIN_HOME ? 'macOS Keychain' : process.platform === 'win32' && !process.env.REIN_HOME ? 'encrypted with Windows DPAPI' : 'secrets/vault.json, 0600'}): ${names.map((n) => `$${n}`).join(', ')}\nThe agent's shell commands get them as environment variables; their values are masked as [secret:NAME] in anything the agent sees. /vault set NAME · /vault rm NAME`
+            : 'The secrets vault is empty. /vault set NAME stores a secret (an API token, a password) that the agent can use in shell commands as $NAME without ever seeing it.',
+        );
+        return;
+      }
       case 'lsp': {
         if (parsed.args.trim() === 'stop') {
           void runtime.lsp.closeAll().then(() => log('info', 'Stopped the language servers (they start again when needed).'));
@@ -1193,7 +1220,8 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
     prevDraft.current = '';
     setDraft('');
     setSuggestIndex(0);
-    addHistory(process.cwd(), typed);
+    // `/vault set NAME <value>` would leak the value: never keep it (the command refuses it too).
+    if (!/^\s*\/vault\s+set\s+\S+\s+\S/.test(typed)) addHistory(process.cwd(), typed);
     history.current.reset(loadHistory(process.cwd()));
     runCommand(typed);
   };
@@ -1278,6 +1306,14 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
     setDraft('/plan ');
   };
 
+  const saveVault = (secret: string, value: string) => {
+    setOverlay({name: 'none'});
+    void runtime.vault.set(secret, value).then(
+      (where) => logMain('info', `Saved ${secret} in the vault (${where === 'keychain' ? (process.platform === 'darwin' ? 'macOS Keychain' : 'encrypted with DPAPI') : 'secrets/vault.json, 0600'}). The agent's shell commands get it as $${secret}.`),
+      (err) => logMain('error', `Couldn't save ${secret}: ${(err as Error).message}`),
+    );
+  };
+
   const closeOverlay = () => {
     setOverlay({name: 'none'});
     void refresh();
@@ -1286,7 +1322,7 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
   return {
     entries, transcript: terminalHold.current === undefined ? entries : entries.slice(0, terminalHold.current), add, log, overlay, setOverlay, closeOverlay, finishImport, ready, updating, updateLog, statusTick, bump,
     finishTrust, pickHistory, startPlanGoal, startNewPlan, draft, onDraft, onSubmit, onPaste, onImagePaste, onHistory: suggestions.length || fileSuggestions.length ? undefined : onHistory, onExternalEdit, doRewind, togglePlanMode, fileSuggestions, fileSelected, acceptFile, runCommand, suggestions, selected, setSuggestIndex, inputActive, chat, skills, openShells, queued, exitArmed, compacting, pickSession,
-    view, setView, viewing, goalNote,
+    view, setView, viewing, goalNote, saveVault,
   };
 }
 

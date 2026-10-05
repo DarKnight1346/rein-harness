@@ -1,3 +1,4 @@
+import {VaultPrompt} from '../VaultPrompt.js';
 import React, {useEffect, useMemo, useRef, useState, type ReactNode} from 'react';
 import {Box, Text, useBoxMetrics, useInput, useWindowSize} from 'ink';
 import {PROVIDERS, parseRef, refKey} from '../../providers/types.js';
@@ -186,6 +187,12 @@ export function FullscreenApp({resume}: {resume: Resume}) {
         return (
           <Window title="Accounts" width={windowWidth} onClose={r.closeOverlay}>
             <LoginScreen bare onLog={r.log} onClose={r.closeOverlay} />
+          </Window>
+        );
+      case 'vault':
+        return (
+          <Window title={`Vault · ${overlay.secret}`} width={windowWidth} onClose={r.closeOverlay}>
+            <VaultPrompt secret={overlay.secret} onSave={(v) => r.saveVault(overlay.secret, v)} onCancel={r.closeOverlay} />
           </Window>
         );
       case 'model':

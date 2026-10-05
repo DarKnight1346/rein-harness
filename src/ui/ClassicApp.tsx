@@ -1,3 +1,4 @@
+import {VaultPrompt} from './VaultPrompt.js';
 import React, {useState} from 'react';
 import {skillSourceLabel} from '../skills/index.js';
 import {Box, Static, Text} from 'ink';
@@ -89,6 +90,11 @@ export function ClassicApp({resume}: {resume: Resume}) {
         )}
         {overlay.name === 'trust' && <TrustHooksPrompt hooks={overlay.hooks} onTrust={() => r.finishTrust(true)} onSkip={() => r.finishTrust(false)} />}
         {overlay.name === 'login' && <LoginScreen onLog={r.log} onClose={r.closeOverlay} />}
+        {overlay.name === 'vault' && (
+          <Box borderStyle="round" borderColor="cyan" paddingX={1} flexDirection="column">
+            <VaultPrompt secret={overlay.secret} onSave={(v) => r.saveVault(overlay.secret, v)} onCancel={r.closeOverlay} />
+          </Box>
+        )}
         {overlay.name === 'model' && <ModelScreen onLog={r.log} onClose={r.closeOverlay} />}
         {overlay.name === 'resume' && <ResumeScreen sessions={overlay.sessions} onPick={(id) => void r.pickSession(id)} onCancel={r.closeOverlay} />}
         {overlay.name === 'mcp' && <McpScreen onClose={r.closeOverlay} />}

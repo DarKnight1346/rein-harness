@@ -4,13 +4,11 @@ import {run} from '../util/proc.js';
 import {writeFileSecure} from './json.js';
 import {reinHome} from './paths.js';
 
-const SERVICE = 'rein-jev-api-key';
 const ACCOUNT = 'rein';
-const fallbackFile = () => path.join(reinHome(), 'secrets', 'jev.key');
 const useKeychain = () => process.platform === 'darwin' && !process.env.REIN_HOME;
-/** Windows: the key file is encrypted with DPAPI (only this Windows user can decrypt it). */
+/** Windows: the file is encrypted with DPAPI (only this Windows user can decrypt it). */
 const useDpapi = () => process.platform === 'win32' && !process.env.REIN_HOME;
-const dpapiFile = () => path.join(reinHome(), 'secrets', 'jev.key.dpapi');
+export const secretsDir = () => path.join(reinHome(), 'secrets');
 
 /** Run a DPAPI step in PowerShell; the secret travels via an env var, never the command line. */
 async function dpapi(op: 'protect' | 'unprotect', value: string): Promise<string | undefined> {
@@ -22,51 +20,74 @@ async function dpapi(op: 'protect' | 'unprotect', value: string): Promise<string
   return res?.code === 0 ? res.stdout.trim() || undefined : undefined;
 }
 
+/**
+ * One stored secret: macOS Keychain (`service`), else a DPAPI-encrypted file on Windows, else
+ * `secrets/<file>` (0600). With REIN_HOME set only the file is used, so test setups never touch
+ * the real Keychain.
+ */
+export function secretStore(service: string, file: string) {
+  const plain = () => path.join(secretsDir(), file);
+  const dpapiFile = () => path.join(secretsDir(), `${file}.dpapi`);
+  return {
+    async get(): Promise<string | undefined> {
+      let value: string | undefined;
+      if (useKeychain()) {
+        const res = await run('security', ['find-generic-password', '-s', service, '-a', ACCOUNT, '-w'], {timeoutMs: 10_000}).catch(() => undefined);
+        if (res?.code === 0) value = res.stdout.trim() || undefined;
+      }
+      if (!value && useDpapi()) {
+        const blob = (await readFile(dpapiFile(), 'utf8').catch(() => '')).trim();
+        if (blob) value = await dpapi('unprotect', blob);
+      }
+      if (!value) value = (await readFile(plain(), 'utf8').catch(() => '')).trim() || undefined;
+      return value;
+    },
+    async set(value: string): Promise<'keychain' | 'file'> {
+      if (useKeychain()) {
+        // -U updates an existing item. The value is briefly visible in this process's argv.
+        const res = await run('security', ['add-generic-password', '-U', '-s', service, '-a', ACCOUNT, '-w', value], {timeoutMs: 10_000}).catch(() => undefined);
+        if (res?.code === 0) {
+          await rm(plain(), {force: true});
+          return 'keychain';
+        }
+      }
+      if (useDpapi()) {
+        const blob = await dpapi('protect', value);
+        if (blob) {
+          await writeFileSecure(dpapiFile(), blob + '\n');
+          await rm(plain(), {force: true});
+          return 'keychain';
+        }
+      }
+      await writeFileSecure(plain(), value + '\n');
+      return 'file';
+    },
+    async delete(): Promise<void> {
+      if (useKeychain()) await run('security', ['delete-generic-password', '-s', service, '-a', ACCOUNT], {timeoutMs: 10_000}).catch(() => {});
+      await rm(plain(), {force: true});
+      await rm(dpapiFile(), {force: true});
+    },
+  };
+}
+
+const jev = secretStore('rein-jev-api-key', 'jev.key');
 let cached: string | null | undefined;
 
 /** Jev key: `TYPESAFE_API_KEY` env, else macOS Keychain, else ~/.rein/secrets/jev.key (0600). */
 export async function getJevKey(): Promise<string | undefined> {
   if (process.env.TYPESAFE_API_KEY) return process.env.TYPESAFE_API_KEY;
   if (cached !== undefined) return cached ?? undefined;
-  let key: string | undefined;
-  if (useKeychain()) {
-    const res = await run('security', ['find-generic-password', '-s', SERVICE, '-a', ACCOUNT, '-w'], {timeoutMs: 10_000}).catch(() => undefined);
-    if (res?.code === 0) key = res.stdout.trim() || undefined;
-  }
-  if (!key && useDpapi()) {
-    const blob = (await readFile(dpapiFile(), 'utf8').catch(() => '')).trim();
-    if (blob) key = await dpapi('unprotect', blob);
-  }
-  if (!key) key = (await readFile(fallbackFile(), 'utf8').catch(() => '')).trim() || undefined;
+  const key = await jev.get();
   cached = key ?? null;
   return key;
 }
 
 export async function setJevKey(key: string): Promise<'keychain' | 'file'> {
   cached = key;
-  if (useKeychain()) {
-    // -U updates an existing item. The key is briefly visible in this process's argv.
-    const res = await run('security', ['add-generic-password', '-U', '-s', SERVICE, '-a', ACCOUNT, '-w', key], {timeoutMs: 10_000}).catch(() => undefined);
-    if (res?.code === 0) {
-      await rm(fallbackFile(), {force: true});
-      return 'keychain';
-    }
-  }
-  if (useDpapi()) {
-    const blob = await dpapi('protect', key);
-    if (blob) {
-      await writeFileSecure(dpapiFile(), blob + '\n');
-      await rm(fallbackFile(), {force: true});
-      return 'keychain';
-    }
-  }
-  await writeFileSecure(fallbackFile(), key + '\n');
-  return 'file';
+  return jev.set(key);
 }
 
 export async function deleteJevKey(): Promise<void> {
   cached = null;
-  if (useKeychain()) await run('security', ['delete-generic-password', '-s', SERVICE, '-a', ACCOUNT], {timeoutMs: 10_000}).catch(() => {});
-  await rm(fallbackFile(), {force: true});
-  await rm(dpapiFile(), {force: true});
+  await jev.delete();
 }

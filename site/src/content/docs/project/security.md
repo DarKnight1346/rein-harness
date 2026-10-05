@@ -34,7 +34,7 @@ File tools (`read`, `list`, `write`, `edit`, `delete`, `search`, `image_generate
 
 ### Sensitive paths
 
-Outside the working directories, credentials and secrets get stricter treatment (`isSensitivePath` in `src/tools/host.ts`): `~/.ssh`, `~/.gnupg`, `~/.aws`, `~/.azure`, `~/.kube`, `~/.docker`, `~/.config/gcloud`, `~/.config/gh`, `~/.netrc`, `~/.npmrc`, `~/.git-credentials`, `~/.pypirc`, `~/Library/Keychains`, `~/.claude`, `~/.claude.json`, `~/.codex`, `~/.rein/accounts`, `~/.rein/accounts.json`, plus any `.env*` file and `*.pem`, `*.key`, `*.p12`, `*.pfx`, `*.keychain`. These are **asked about one at a time, even in bypass mode**. There's no "allow for the session" or "always allow" option, and auto mode never approves them.
+Outside the working directories, credentials and secrets get stricter treatment (`isSensitivePath` in `src/tools/host.ts`): `~/.ssh`, `~/.gnupg`, `~/.aws`, `~/.azure`, `~/.kube`, `~/.docker`, `~/.config/gcloud`, `~/.config/gh`, `~/.netrc`, `~/.npmrc`, `~/.git-credentials`, `~/.pypirc`, `~/Library/Keychains`, `~/.claude`, `~/.claude.json`, `~/.codex`, `~/.rein/accounts`, `~/.rein/accounts.json`, Rein's `secrets/` folder (the vault, the Jev key), plus any `.env*` file and `*.pem`, `*.key`, `*.p12`, `*.pfx`, `*.keychain`. These are **asked about one at a time, even in bypass mode**. There's no "allow for the session" or "always allow" option, and auto mode never approves them.
 
 ## Approvals
 
@@ -68,7 +68,8 @@ These are real, and you should know them:
 - **Project allow rules aren't gated.** A cloned repo's `.claude/settings.json` or `.rein/settings.json` can ship `permissions.allow` rules, which apply without a trust prompt. Read them before you start.
 - **Memory writes don't ask.** `remember` and `forget` edit `.rein/MEMORY.md` in the project without approval.
 - **Windows has no `O_NOFOLLOW`.** Rein checks for a symlink explicitly instead, which leaves a tiny race window.
-- **The Jev key briefly appears in a process argument list** while it's saved to the macOS Keychain (`security add-generic-password`).
+- **The [secrets vault](../../features/vault/) masks, it doesn't sandbox.** Values never reach the model, but a command the agent runs can still send one to a server; review commands that contact unexpected hosts. Masking recognizes the value as is and in common encodings (base64, hex, URL, JSON), not arbitrary transformations.
+- **The Jev key and vault briefly appear in a process argument list** while it's saved to the macOS Keychain (`security add-generic-password`).
 - **Jev sees excerpts.** With Jev as the decision model, the minimal state for each decision (message head and tail, the action and a change preview, goal evidence excerpts) is sent to typesafe.ai. Use `cheapest` to keep decisions on your own accounts. See [Decision model](../../internals/decision-model/).
 - **Transcripts are plaintext.** `~/.rein/sessions/` holds your messages and tool-result excerpts, written `0600` in a `0700` folder.
 - **MCP servers are your code.** A stdio server runs with your environment, and an HTTP one sees what you send it. Adding one always asks, but a malicious server is out of scope.
@@ -85,7 +86,7 @@ Include what you found, how to reproduce it, and your Rein version (`rein --vers
 
 Only the latest npm release is supported. Rein updates itself on launch, and `rein --update` installs the newest version.
 
-Reports that matter most: anything that lets a model, a web page or a pasted file **escape the project folder**, **run commands without the configured approval**, **reach local or private network hosts through `web_fetch`**, or **expose account credentials or the Jev API key**.
+Reports that matter most: anything that lets a model, a web page or a pasted file **escape the project folder**, **run commands without the configured approval**, **reach local or private network hosts through `web_fetch`**, or **expose account credentials, the Jev API key or a vault secret to the model**.
 
 ## Related
 
