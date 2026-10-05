@@ -36,7 +36,14 @@ Parameters for every tool are in the [tools reference](../../reference/tools/).
 | `edit` | Exact string replacement. `old_string` must be unique unless `replace_all`. Files over 8 MB are edited by streaming, so memory use stays constant. |
 | `delete` | Deletes a file or folder (non-empty folders need `recursive: true`). It refuses to delete the project root. |
 
-File changes show up in the transcript as a colored diff.
+File changes show up in the transcript as a colored diff. When Rein runs a [language server](../code-intelligence/) for the file, the result also lists the problems the change introduced.
+
+### Code intelligence
+
+| Tool | What it does |
+|---|---|
+| `diagnostics` | A file's (or the workspace's) errors and warnings, from your editor if one is connected, otherwise from the language servers Rein runs. See [Code intelligence](../code-intelligence/). |
+| `lsp_install` | Installs a missing language server (TypeScript, Python) into Rein's folder. Always asks you. |
 
 ### Search
 

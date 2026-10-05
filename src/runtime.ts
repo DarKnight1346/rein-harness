@@ -3,6 +3,8 @@ import {catalog} from './router/catalog.js';
 import {mergeNote, Worktrees} from './agents/worktrees.js';
 import type {Origin} from './tools/fs.js';
 import {makeRouter, type AutoRouter} from './router/index.js';
+import {LspManager, type Before} from './lsp/manager.js';
+import {installServer, serverById, SERVERS} from './lsp/servers.js';
 import {makeAutoRouter} from './router/auto.js';
 import {Engine} from './session/engine.js';
 import {compactTranscript, type CompactReason, type CompactResult} from './session/compactor.js';
@@ -95,6 +97,12 @@ export class Runtime {
     readOnlyJudge: (command) => this.judgeReadOnly(command),
     configDirs: () => this.config?.additionalDirectories ?? [],
     checkpoint: (file) => this.checkpoints.snapshot(this.currentTurn(), file),
+    diagnostics: {
+      before: (files, root) => this.lsp.before(files, root),
+      after: (snapshot) => this.lsp.after(snapshot as Before),
+      read: (file, root) => this.lsp.prewarm(file, root),
+      shell: (root) => this.lsp.resync(root),
+    },
     isolate: (origin, writes) => this.isolate(origin, writes),
   });
 
@@ -120,6 +128,9 @@ export class Runtime {
 
   /** MCP servers (project .mcp.json, ~/.rein/mcp.json, Claude Code's ~/.claude.json). */
   readonly mcp = new McpManager(process.cwd());
+
+  /** Built-in code intelligence: language servers Rein runs itself (lsp/manager.ts). */
+  readonly lsp = new LspManager({config: () => this.config});
 
   /** File checkpoints for /rewind, per conversation (Rein's own file changes, ignored files too). */
   readonly checkpoints = new Checkpoints(() => this.engine?.transcript.id ?? 'none');
@@ -225,7 +236,9 @@ export class Runtime {
     },
     finished: (agent) => this.subagentFinished(agent),
     settle: async (agent) => {
+      const wtRoot = this.worktrees.get(agent.id)?.root;
       const r = await this.worktrees.settle(agent.id);
+      if (wtRoot) void this.lsp.stopRoot(wtRoot); // its language servers go with the worktree
       if (!r) return undefined;
       if (r.kept) this.tools.addDirs([r.kept]); // the main agent merges the conflicting files from there
       return mergeNote(r);
@@ -454,17 +467,38 @@ Drop superseded reads of the same file, routine listings, and output that no lon
       }),
       imageTool(() => this.config),
       {
-        name: 'ide_diagnostics',
+        name: 'diagnostics',
         label: 'Diagnostics',
-        description: "Problems (errors, warnings) your user's editor reports: type errors, lint findings and so on, from its language servers. For one file (path) or the whole workspace. Use it after changes to check you didn't break anything.",
+        description:
+          "Problems (type errors, lint findings…) in a file (path) or the whole workspace, from the user's editor when one is connected, otherwise from language servers Rein runs itself (TypeScript/JavaScript, Python). Use it after changes to check you didn't break anything. File edits already report new problems they introduce.",
         inputSchema: {type: 'object', properties: {path: {type: 'string', description: 'A file (project-relative or absolute); omit for the whole workspace'}}},
         mutating: false,
-        enabled: () => !!this.ide,
         summarize: (a: any) => a?.path ?? 'workspace',
+        run: async (ctx: {root: string}, a: any) => {
+          const root = ctx?.root ?? process.cwd();
+          const file = typeof a?.path === 'string' ? path.resolve(root, a.path) : undefined;
+          if (this.ide) return {ok: true, text: `[from the editor]\n${(await this.ide.diagnostics(file)) || 'No problems reported.'}`};
+          if ((this.config.lsp ?? 'auto') === 'off') return {ok: false, text: 'no editor is connected and built-in language servers are off (config lsp: "off")'};
+          const known = file ? this.lsp.spec(file) : undefined;
+          if (file && !known) return {ok: false, text: `Rein has no built-in language server for ${path.extname(file) || 'this file'} files yet (TypeScript/JavaScript and Python), and no editor is connected.`};
+          if (known && !known.installed) return {ok: false, text: `The ${known.spec.name} language server isn't installed. Ask the user whether to install it, then call lsp_install {server: "${known.spec.id}"} (it asks them too).`};
+          const text = await this.lsp.diagnostics(root, file);
+          return {ok: true, text: `[from Rein's language servers]\n${text ?? 'No problems in the files opened so far (pass a path to check a specific file).'}`};
+        },
+      },
+      {
+        name: 'lsp_install',
+        label: 'InstallLanguageServer',
+        description: `Install a language server Rein runs for code intelligence (diagnostics, and new problems reported after each edit), into Rein's own folder with npm. Servers: ${SERVERS.map((s) => `"${s.id}" (${s.name})`).join(', ')}. Always asks the user; only use it when they want it.`,
+        inputSchema: {type: 'object', properties: {server: {type: 'string', enum: SERVERS.map((s) => s.id)}}, required: ['server']},
+        mutating: true,
+        alwaysAsk: true,
+        askEvenInBypass: true,
+        summarize: (a: any) => String(a?.server ?? ''),
         run: async (_ctx: unknown, a: any) => {
-          if (!this.ide) return {ok: false, text: 'no editor is connected'};
-          const file = typeof a?.path === 'string' ? path.resolve(process.cwd(), a.path) : undefined;
-          return {ok: true, text: (await this.ide.diagnostics(file)) || 'No problems reported.'};
+          const spec = serverById(String(a?.server));
+          if (!spec) return {ok: false, text: `unknown server "${a?.server}"`};
+          return installServer(spec);
         },
       },
     );
@@ -575,6 +609,7 @@ Drop superseded reads of the same file, routine listings, and output that no lon
   shutdown(): void {
     void this.mcp.closeAll();
     void this.ide?.close();
+    void this.lsp.closeAll();
     this.stopUsageRefresh();
     this.agents.closeAll();
     this.engine?.shutdown();

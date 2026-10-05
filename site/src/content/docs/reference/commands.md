@@ -54,6 +54,7 @@ See [Goals](../../features/goals/) and [Plan mode](../../features/plans/).
 | `/model` | *(none)* | Opens **Models** with sections Chat model, Subagents, Subagent priority, Decision model, Compaction model, Advisor and Web. Choosing a chat model continues to its effort level. |
 | | `auto` | Sets the chat model to auto routing. |
 | | `<model>` | Sets the chat model. Accepts a `provider:model` ref or a model's id or label as shown in `/model`, case-insensitive. |
+| `/lsp` | `stop` | Built-in code intelligence: the language servers Rein is running (memory, open files, idle time), and which are installed and where. `stop` shuts them down (they start again when needed). → [Code intelligence](../../features/code-intelligence/) |
 | `/plugins` | — | Lists the Claude Code and Codex plugins Rein loaded, and what each adds (commands, agents, hooks, MCP servers), plus Codex skills. → [Plugins](../../features/plugins/) |
 | `/login` | — | Lists accounts; adds Claude (subscription, Console API key, Bedrock, Vertex) or Codex (ChatGPT, OpenAI API key) accounts; re-authenticates or removes them; manages the Jev API key. → [Accounts](../../features/accounts/#api-accounts-pay-per-use) |
 | `/usage` | *(none)* | Usage windows (5h / weekly / 30-day) and reset times for every account. |

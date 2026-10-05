@@ -95,6 +95,8 @@ Replaces an exact string. `old_string` must match exactly (whitespace included, 
 | `new_string` **(required)** | string | Replacement |
 | `replace_all` | boolean | Replace every occurrence, default false |
 
+After a successful `write`, `edit` or `delete`, problems the change introduced (from Rein's [language servers](../../features/code-intelligence/)) are appended to the result.
+
 **Stale-file protection** applies to `edit`, and to `write` on a file that already exists. The agent must have read the file in this conversation, and the file must not have changed since. Otherwise the call fails with "read it again". The scratchpad is exempt.
 
 ### `delete`
@@ -283,15 +285,25 @@ Ticks milestone *N* (`- [x]` in the plan file) after the same evidence check (p 
 
 ## Subagents and helpers
 
-### `ide_diagnostics`
+### `diagnostics`
 
-Label `Diagnostics`. Approval: none (read-only). **Only listed while an editor is connected** ([editor integration](../../features/ide/)).
+Label `Diagnostics`. Approval: none (read-only).
 
 | Parameter | Type | Notes |
 | --- | --- | --- |
 | `path` | string | A file, project-relative or absolute. Omit for the whole workspace |
 
-Returns the errors and warnings the editor's language servers report (the extension's `getDiagnostics`).
+With an [editor connected](../../features/ide/), returns the errors and warnings the editor's language servers report (the extension's `getDiagnostics`), headed `[from the editor]`. Otherwise it asks the language servers Rein runs itself ([code intelligence](../../features/code-intelligence/)), headed `[from Rein's language servers]`; without a `path` that covers the files opened so far. If the file's server isn't installed, the result tells the agent to offer `lsp_install`.
+
+### `lsp_install`
+
+Label `InstallLanguageServer`. Approval: **always asks, even in bypass mode.**
+
+| Parameter | Type | Notes |
+| --- | --- | --- |
+| `server` **(required)** | string | `typescript` or `python` |
+
+Installs that language server with `npm install` into Rein's `lsp/<server>/` folder and records the version. See [code intelligence](../../features/code-intelligence/#installing-a-server).
 
 ### `agent`
 

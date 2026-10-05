@@ -18,6 +18,7 @@ import {findIdes} from '../ide/connection.js';
 import {diffTabName, proposedChange} from '../ide/review.js';
 import {takeOver} from './terminal/takeover.js';
 import {preloadPty} from '../tools/shells.js';
+import {installedVersion, resolveServer, SERVERS} from '../lsp/servers.js';
 import {loadPlugins} from '../plugins/index.js';
 import {conversationMarkdown, writeExport} from '../session/export.js';
 import {copyToClipboard} from './terminal/clipboard.js';
@@ -793,6 +794,22 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
       case 'mcp':
         setOverlay({name: 'mcp'});
         break;
+      case 'lsp': {
+        if (parsed.args.trim() === 'stop') {
+          void runtime.lsp.closeAll().then(() => log('info', 'Stopped the language servers (they start again when needed).'));
+          return;
+        }
+        const running = runtime.lsp.status();
+        const lines = running.length
+          ? running.map((s) => `${s.server.padEnd(11)} ${s.rssMB !== undefined ? `${s.rssMB} MB`.padStart(7) : ''}  ${s.files} file${s.files === 1 ? '' : 's'} open · idle ${s.idleMin} min · ${s.root}`)
+          : ['No language servers running (they start when you work on a matching file).'];
+        const installed = SERVERS.map((s) => {
+          const r = resolveServer(s, runtime.config.lspServers ?? {});
+          return `${s.name}: ${r ? `${r.where === 'rein' ? `installed by Rein${installedVersion(s) ? ` (${installedVersion(s)})` : ''}` : r.where === 'path' ? `on your PATH (${r.command})` : `configured (${r.command})`}` : 'not installed (the agent can offer to install it)'}`;
+        });
+        log('info', [...lines, '', ...installed, (runtime.config.lsp ?? 'auto') === 'off' ? '\nBuilt-in language servers are off (config lsp).' : `Idle servers stop after ${runtime.config.lspIdleMinutes ?? 10} min. /lsp stop stops them now.`].join('\n'));
+        return;
+      }
       case 'plugins': {
         const plugins = loadPlugins();
         const codexSkills = skills.filter((s) => s.source === 'codex').map((s) => `/${s.name}`);
