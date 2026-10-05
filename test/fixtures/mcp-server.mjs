@@ -12,4 +12,9 @@ server.registerTool('remember', {description: 'Save a note to notes.log', inputS
   return {content: [{type: 'text', text: `saved: ${note}`}]};
 });
 server.registerTool('fail', {description: 'Always fails', inputSchema: {}, annotations: {readOnlyHint: true}}, async () => ({content: [{type: 'text', text: 'nope'}], isError: true}));
+// Asks the client's model (MCP sampling) and returns its answer.
+server.registerTool('ask_model', {description: 'Ask the client model', inputSchema: {question: z.string()}, annotations: {readOnlyHint: true}}, async ({question}) => {
+  const r = await server.server.createMessage({messages: [{role: 'user', content: {type: 'text', text: question}}], maxTokens: 50, modelPreferences: {hints: [{name: 'haiku'}], costPriority: 0.9}});
+  return {content: [{type: 'text', text: `model ${r.model} said: ${r.content.type === 'text' ? r.content.text : '?'}`}]};
+});
 await server.connect(new StdioServerTransport());

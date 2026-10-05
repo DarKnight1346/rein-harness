@@ -80,6 +80,8 @@ export type Config = {
   waitForLimits: boolean;
   /** Run simple shell reads and searches the agent writes (cat, head, grep -rn, sed -n, ls, find -name) as the built-in tools. */
   steerShell: boolean;
+  /** MCP servers asking for a completion (sampling): ask you per server (default), allow, or refuse. */
+  mcpSampling: 'ask' | 'allow' | 'off';
   /** Commits and pull requests the agent writes credit Rein (a "Co-Authored by [Rein Harness](…)" line). */
   attribution: boolean;
   /** whisper.cpp model for voice input (hold Ctrl+Space): `base.en-q5_1` (English, default), or e.g. `base-q5_1` / `small-q5_1` for other languages. */
@@ -122,6 +124,7 @@ export const DEFAULT_CONFIG: Config = {
   attribution: true,
   waitForLimits: true,
   steerShell: true,
+  mcpSampling: 'ask',
   voiceModel: 'base.en-q5_1',
   lsp: 'auto',
   lspIdleMinutes: 10,

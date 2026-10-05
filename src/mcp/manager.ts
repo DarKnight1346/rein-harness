@@ -5,7 +5,8 @@ import {SSEClientTransport} from '@modelcontextprotocol/sdk/client/sse.js';
 import {StdioClientTransport} from '@modelcontextprotocol/sdk/client/stdio.js';
 import {StreamableHTTPClientTransport} from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import {UnauthorizedError} from '@modelcontextprotocol/sdk/client/auth.js';
-import {ToolListChangedNotificationSchema} from '@modelcontextprotocol/sdk/types.js';
+import {CreateMessageRequestSchema, ToolListChangedNotificationSchema} from '@modelcontextprotocol/sdk/types.js';
+import type {SamplingParams} from './sampling.js';
 import {openBrowser} from '../util/proc.js';
 import {callbackServer, ReinOAuthProvider} from './oauth.js';
 import {ToolError, type ToolImage} from '../tools/fs.js';
@@ -41,6 +42,9 @@ export function mcpToolName(server: string, tool: string): string {
 export class McpManager extends EventEmitter {
   private servers = new Map<string, Server>();
 
+  /** Answers servers' sampling requests (set by the runtime before servers connect). */
+  sampling?: (server: string, params: SamplingParams) => Promise<import('@modelcontextprotocol/sdk/types.js').CreateMessageResult>;
+
   constructor(private readonly root: string) {
     super();
   }
@@ -68,7 +72,12 @@ export class McpManager extends EventEmitter {
     const server: Server = {...e, status: 'connecting', tools: []};
     this.servers.set(e.name, server);
     this.emit('change');
-    const client = new Client({name: 'rein', version: '0.1.0'}, {capabilities: {}});
+    // Sampling: the server may ask for a completion, answered with the user's subscriptions (mcp/sampling.ts).
+    const client = new Client({name: 'rein', version: '0.1.0'}, {capabilities: this.sampling ? {sampling: {}} : {}});
+    if (this.sampling) {
+      const sample = this.sampling;
+      client.setRequestHandler(CreateMessageRequestSchema, (req) => sample(e.name, req.params as SamplingParams));
+    }
     // Remote servers: saved OAuth tokens are used (and refreshed); without any, a 401 means "sign in".
     const auth = oauthFor(e.config, e.name);
     try {

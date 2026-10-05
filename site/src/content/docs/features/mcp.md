@@ -128,6 +128,23 @@ Saved rules work on MCP tools:
 `readOnlyHint` is the server's own claim. A server you don't trust can mislabel a tool, so add a deny rule for any server tools you want blocked regardless.
 :::
 
+## Sampling: servers can use your models
+
+Some MCP servers need a model themselves: to summarize what they fetched, classify an issue, or draft a reply. The protocol lets them ask the client for one (**sampling**, `sampling/createMessage`). Rein answers with **your signed-in subscriptions**, so a server like that needs no API key of its own.
+
+- **Which model:** a model the server hints at (`"haiku"`, `"claude"`, `"gpt"`) when you have it. Otherwise the server's priorities decide: when it values intelligence most, your chat model (or the default); when it values cost or speed, the cheapest model you have.
+- **You approve it.** The first request from each server shows its prompt:
+
+  ```text title="rein"
+  Rein wants to use a model (Haiku 4.5) for the MCP server "test"
+  ```
+
+  `1 Allow` answers this request; `2 Allow "test" to use models this session` stops asking for that server until Rein exits; `4 Deny` refuses, and the server gets an error.
+- **Headless** (`rein -p`) has no one to ask, so requests are refused unless sampling is set to allow.
+- `mcpSampling` in `config.json`: `"ask"` (default), `"allow"` (no prompt), or `"off"` (Rein doesn't offer sampling to servers at all).
+
+Text only: images in a server's request are left out. The usage counts against the account the model ran on, like any other request.
+
 ## Agent-managed servers
 
 The agent can manage servers itself, so "connect the Postgres MCP server" is a complete request:

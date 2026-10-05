@@ -23,7 +23,9 @@ export function ApprovalPrompt({req, onDecide, bare}: {req: ApprovalRequest; onD
   const outside = req.outside?.length ? req.outside : undefined;
   // Outside the project: "this session" means reads anywhere, or this folder for changes.
   // Credentials/secrets only ever get a one-time yes.
-  const sessionLabel = outside
+  const sessionLabel = req.sessionLabel
+    ? `2 ${req.sessionLabel}`
+    : outside
     ? req.tool.mutating
       ? `2 Allow ${outside.length === 1 ? 'this folder' : 'these folders'} this session`
       : '2 Allow reads outside the project this session'
