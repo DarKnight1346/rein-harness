@@ -301,9 +301,9 @@ Label `InstallLanguageServer`. Approval: **always asks, even in bypass mode.**
 
 | Parameter | Type | Notes |
 | --- | --- | --- |
-| `server` **(required)** | string | A server Rein can install: `typescript`, `python`, `cpp`, `asm`, `rust`, `go`, `zig`, `lua`, `ruby`, `php`, `csharp`, `fsharp`, `clojure`, `elm`, `fortran`, `svelte`, `vue`, `bash`, `html`, `css`, `json`, `yaml`, `toml`, `markdown`, `sql`, `dockerfile`, `cmake` |
+| `server` **(required)** | string | The server id from the diagnostics result or edit note that suggested it: `cpp`, `asm`, `rust`, `go`, `java`, `kotlin`, `python`, `typescript`… An unknown id returns the full list |
 
-Installs the latest version of that language server into Rein's `lsp/<server>/` folder (npm, the project's release binaries, or `go` / `gem` / `dotnet` / a Python venv) and records the version. Servers that come with a toolchain (Swift, Java, Kotlin…) can't be installed this way; the result says how to get them. See [code intelligence](../../features/code-intelligence/#installing-a-server).
+Installs the latest version of that language server into Rein's `lsp/<server>/` folder (npm, release binaries, the vendor's download, or the language's own installer: `go`, `gem`, `dotnet`, pip, Coursier, ghcup, opam, R, Julia, Nix) and records the version. Servers that need a runtime that isn't installed (Java, Erlang, R…) say so instead of installing. See [code intelligence](../../features/code-intelligence/#installing-a-server).
 
 ### `agent`
 

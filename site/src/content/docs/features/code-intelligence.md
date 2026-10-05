@@ -53,10 +53,28 @@ Rein knows a language server for most languages you'll work in. It starts the ri
 | HTML, Markdown | `vscode-html-language-server`, `marksman` | npm, release binary | Started; didn't report the test errors (an unclosed tag, a broken link) |
 | SQL | `sqls` | `go install` | Started; it checks against a database connection you configure |
 | CMake | `neocmakelsp` | release binary | Started (not tested with an error) |
+| Perl | PerlNavigator | release binary (x64) | ✓ |
+| Gleam | the Gleam compiler (`gleam lsp`) | release binary | ✓ |
+| Terraform | `terraform-ls` | HashiCorp's release site | ✓ |
+| Java | Eclipse JDT LS | download (needs Java 21+) | Not tested yet |
+| Kotlin | JetBrains `kotlin-lsp` | download, about 360 MB (bundles its own Java) | Not tested |
+| Scala | Metals | Coursier, then `cs install metals` (needs Java) | Not tested yet |
+| Elixir | ElixirLS | release (needs Elixir) | Not tested yet |
+| Erlang | ELP, the build for your Erlang/OTP version | release binary (needs Erlang) | Not tested yet |
+| Nim | `nimlangserver` | release binary (needs Nim) | Not tested yet |
+| PowerShell | PowerShell Editor Services | release (needs `pwsh`) | Not tested yet |
+| Dart / Flutter | the Dart SDK (`dart language-server`) | download, about 230 MB; Flutter's own `dart` is used when it's on your PATH | Not tested |
+| Haskell | HLS | `ghcup install hls` into Rein's folder (needs GHC) | Not tested |
+| OCaml | `ocamllsp` | `opam install ocaml-lsp-server` (into your current opam switch) | Not tested |
+| R | `languageserver` | `install.packages` into Rein's folder (needs R) | Not tested |
+| Julia | LanguageServer.jl | its own Julia environment in Rein's folder (needs Julia) | Not tested |
+| Nix | `nil` | `nix build nixpkgs#nil` (needs Nix) | Not tested |
 
 ✓: tested on macOS. Rein installed it, opened a file with a deliberate error, and the error came back. "Started": installed and ran, but didn't report that test's error.
 
-**These come with their toolchain**, so Rein uses them when they're on your PATH and tells you how to get them otherwise: Swift (`sourcekit-lsp`, with Xcode, found through `xcrun`), Java (`jdtls`), Kotlin, Scala (Metals), Haskell (HLS), OCaml, Elixir, Erlang, Gleam, Dart / Flutter, Nim, R, Julia, Perl, PowerShell, Terraform and Nix.
+**Swift** uses `sourcekit-lsp`, which comes with Xcode and the Swift toolchain (on macOS Rein finds it through `xcrun` too); there's nothing separate to install.
+
+Where a server needs its language's runtime (Java, Erlang, R…), `lsp_install` checks it's there first and says so if not. OCaml's server goes where opam puts packages (your current switch); everything else stays in Rein's folder.
 
 For TypeScript, Rein uses **your project's own TypeScript** when `node_modules/typescript` exists, so the errors match your build. Otherwise it uses the TypeScript it installed.
 

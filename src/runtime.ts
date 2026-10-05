@@ -486,7 +486,7 @@ Drop superseded reads of the same file, routine listings, and output that no lon
         name: 'diagnostics',
         label: 'Diagnostics',
         description:
-          "Problems (type errors, lint findings…) in a file (path) or the whole workspace, from the user's editor when one is connected, otherwise from language servers Rein runs itself (C/C++, assembly, Rust, Go, TypeScript/JavaScript, Python, Java, C#, Ruby, PHP, Swift, Kotlin, Lua, Zig, shell, HTML/CSS/JSON/YAML and more). Use it after changes to check you didn't break anything. File edits already report new problems they introduce.",
+          "Problems (type errors, lint findings…) in a file (path) or the whole workspace, from the user's editor if connected, else from language servers Rein runs (most languages). File edits already report new problems they introduce; use this to check a file you didn't edit, or the state before you start.",
         inputSchema: {type: 'object', properties: {path: {type: 'string', description: 'A file (project-relative or absolute); omit for the whole workspace'}}},
         mutating: false,
         summarize: (a: any) => a?.path ?? 'workspace',
@@ -508,15 +508,16 @@ Drop superseded reads of the same file, routine listings, and output that no lon
       {
         name: 'lsp_install',
         label: 'InstallLanguageServer',
-        description: `Install a language server Rein runs for code intelligence (diagnostics, and new problems reported after each edit), into Rein's own folder (npm, the project's release binaries, or go/gem/dotnet/pip). Servers it can install: ${SERVERS.filter((x) => x.install.kind !== 'manual').map((x) => `"${x.id}" (${x.name})`).join(', ')}. Always asks the user; only use it when they want it.`,
-        inputSchema: {type: 'object', properties: {server: {type: 'string', enum: SERVERS.filter((x) => x.install.kind !== 'manual').map((x) => x.id)}}, required: ['server']},
+        // Kept short: it's in every request, and the server id comes from the diagnostics result or edit note that suggests it.
+        description: "Install a language server for code intelligence into Rein's own folder. server: the id from the diagnostics result or edit note that suggested it (e.g. \"cpp\", \"rust\", \"java\"). Always asks the user; only use it when they want it.",
+        inputSchema: {type: 'object', properties: {server: {type: 'string'}}, required: ['server']},
         mutating: true,
         alwaysAsk: true,
         askEvenInBypass: true,
         summarize: (a: any) => String(a?.server ?? ''),
         run: async (_ctx: unknown, a: any) => {
           const spec = serverById(String(a?.server));
-          if (!spec) return {ok: false, text: `unknown server "${a?.server}"`};
+          if (!spec) return {ok: false, text: `unknown server "${a?.server}". Servers Rein can install: ${SERVERS.filter((x) => x.install.kind !== 'manual').map((x) => x.id).join(', ')}`};
           return installServer(spec);
         },
       },
