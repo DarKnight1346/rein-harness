@@ -2,7 +2,7 @@ import {beforeEach, describe, expect, it} from 'vitest';
 import {catalog} from '../src/router/catalog.js';
 import {makeRouter} from '../src/router/index.js';
 import {makeAutoRouter} from '../src/router/auto.js';
-import {Engine, type EngineEvent} from '../src/session/engine.js';
+import {Engine, limitWait, type EngineEvent} from '../src/session/engine.js';
 import {compactTranscript} from '../src/session/compactor.js';
 import {DEFAULT_CONFIG, type Config} from '../src/store/config.js';
 import {usageStore} from '../src/store/usage.js';
@@ -24,6 +24,43 @@ beforeEach(() => {
   config = {...DEFAULT_CONFIG, chatModel: 'claude:sonnet'};
   usageStore.reset();
   catalog.authFailed.clear();
+});
+
+describe('waiting for a limit to reset', () => {
+  beforeEach(() => Object.assign(limitWait, {pollMs: 50, marginMs: 0}));
+  const limitedOnly = async () => {
+    await tempHome([acct('claude', 'c1')]);
+    const {adapter, log} = fakeAdapter('claude', CLAUDE_FAKE_MODELS, () => reply('back again'));
+    install('claude', adapter);
+    await catalog.refresh();
+    return log;
+  };
+
+  it('waits for the earliest reset, then carries on with the turn', async () => {
+    const log = await limitedOnly();
+    usageStore.coolDown('c1', Date.now() + 400);
+    const t = Date.now();
+    const evs = await collect(engineWith().send('keep going'));
+    expect(Date.now() - t).toBeGreaterThanOrEqual(350);
+    expect(evs.find((x) => x.type === 'waiting')).toMatchObject({type: 'waiting'});
+    expect(evs.some((x) => x.type === 'notice' && /Limit reset/.test(x.text))).toBe(true);
+    expect(log.prompts.at(-1)!.prompt).toContain('keep going');
+    expect(evs.at(-1)).toEqual({type: 'done', interrupted: false});
+  });
+
+  it('stops waiting on Esc, and does not wait when it is off or the reset is too far', async () => {
+    await limitedOnly();
+    usageStore.coolDown('c1', Date.now() + 3600_000);
+    const e = engineWith();
+    setTimeout(() => e.interrupt(), 150);
+    const evs = await collect(e.send('wait'));
+    expect(evs.at(-1)).toEqual({type: 'done', interrupted: true});
+    config.waitForLimits = false;
+    expect((await collect(engineWith().send('no wait'))).at(-1)).toMatchObject({type: 'error', message: expect.stringMatching(/at its limit/)});
+    config.waitForLimits = true;
+    usageStore.coolDown('c1', Date.now() + 3 * 24 * 3600_000); // a weekly limit
+    expect((await collect(engineWith().send('too far'))).some((x) => x.type === 'waiting')).toBe(false);
+  });
 });
 
 describe('engine', () => {
@@ -83,6 +120,7 @@ describe('engine', () => {
     await tempHome([acct('claude', 'c1')]);
     install('claude', fakeAdapter('claude', CLAUDE_FAKE_MODELS, () => [{type: 'error', kind: 'limit', message: 'limit'}]).adapter);
     await catalog.refresh();
+    config.waitForLimits = false; // (by default it would wait for the reset: see above)
     const evs = await collect(engineWith().send('hi'));
     expect(evs.at(-1)).toMatchObject({type: 'error'});
   });

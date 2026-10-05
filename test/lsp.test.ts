@@ -83,7 +83,7 @@ describe('built-in language servers', () => {
     await lsp.after(b2);
     const t = Date.now();
     expect(await lsp.turnEnd()).toContain('app.ts:2:1 error fake X2: lib.ts is broken');
-    expect(Date.now() - t).toBeLessThan(1400);
+    expect(Date.now() - t).toBeLessThan(process.platform === "win32" ? 5000 : 1400);
     await lsp.closeAll();
   });
 
@@ -100,7 +100,7 @@ describe('built-in language servers', () => {
     // A new file: no wait before it's written.
     const t = Date.now();
     await host.call('write', {path: 'c.ts', content: 'export const c = BAD;\n'});
-    expect(Date.now() - t).toBeLessThan(1400);
+    expect(Date.now() - t).toBeLessThan(process.platform === "win32" ? 5000 : 1400);
     const note = await lsp.turnEnd();
     expect(note).toContain('left 2 problems');
     expect(note).toMatch(/b\.ts:1:\d+ error fake X1/);

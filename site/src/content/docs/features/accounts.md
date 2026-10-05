@@ -198,8 +198,13 @@ Rein spots a limit from the CLI's own signals: Claude's `rate_limit_event` or it
 3. If no account has that model left, Rein picks another model: auto routing chooses again without the failed
    model, or a pinned model is swapped for the one nearest in cost:
    `No Opus account available — switching to Sonnet`.
-4. After 5 attempts Rein stops with `gave up after several failovers`. If every account for the model is
-   cooling down you'll see `Every account for Sonnet is at its limit — earliest reset 5:30 PM.`
+4. If no other model can take over either, Rein **waits for the earliest reset and carries on** with the same
+   turn: `Every account for Sonnet is at its limit — earliest reset 5:30 PM. Waiting, then continuing (Esc stops).`
+   The status line shows `◷ Every account is at its limit · continuing at 5:30 PM (in 1h 12m)` until then. It
+   checks every minute, so an account freed early is used right away. A goal left running overnight keeps going.
+   Resets more than 12 hours away (a weekly limit) aren't waited for, and `/settings` → **Limits** turns waiting
+   off (`waitForLimits`), so Rein stops with that message instead.
+5. After 5 attempts Rein stops with `gave up after several failovers`.
 
 The same retry handles an account whose login has expired (`needs re-login (/login)`) and an overloaded
 provider (`is overloaded`). Rein's transcript is the source of truth, so the new account's session gets the

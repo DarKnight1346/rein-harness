@@ -21,6 +21,8 @@ export type EngineEvent =
   | {type: 'compact'; phase: 'end'; reason: CompactReason; result: CompactResult}
   | {type: 'text'; delta: string}
   | {type: 'notice'; text: string}
+  /** Every account is at its limit: waiting until `until` (ms), then continuing. */
+  | {type: 'waiting'; until: number}
   | {type: 'done'; interrupted: boolean}
   | {type: 'error'; message: string};
 
@@ -159,6 +161,7 @@ export class Engine {
   interrupt(): void {
     this.interruptRequested = true;
     this.running?.interrupt();
+    this.wakeWait?.();
   }
 
   /** `/compact`: summarize now; the next turn starts a fresh native session from the summary. */
@@ -200,6 +203,29 @@ export class Engine {
    * Tool definitions changed (e.g. the advisor was switched on): drop the live native session; the
    * next turn resumes it (same history) with the new tool list.
    */
+  /**
+   * Wait until an account for `ref` can be used again: the reset time, or sooner if usage
+   * refreshes show one free (checked every minute). False if interrupted.
+   */
+  private async waitForAccount(ref: ModelRef, until: number): Promise<boolean> {
+    const cfg = this.deps.config();
+    while (!this.interruptRequested) {
+      if (this.pickAccount(ref, new Set(), cfg, this.transcript.messages.length - 1)?.account) return true;
+      const left = until + limitWait.marginMs - Date.now(); // a little after the reset, so it has happened
+      if (left <= 0) return true;
+      await new Promise<void>((resolve) => {
+        const t = setTimeout(resolve, Math.min(limitWait.pollMs, left));
+        this.wakeWait = () => {
+          clearTimeout(t);
+          resolve();
+        };
+      });
+      this.wakeWait = undefined;
+    }
+    return false;
+  }
+  private wakeWait: (() => void) | undefined;
+
   refreshTools(): void {
     if (!this.running) this.closeActive();
   }
@@ -260,6 +286,21 @@ export class Engine {
       if (!account) {
         const alt = await this.deps.alternative(text, t, route.ref, excluded).catch(() => undefined);
         if (!alt || refKey(alt) === refKey(route.ref)) {
+          // Every account is at its limit: wait for the earliest reset and carry on (Esc stops it).
+          const until = earliestReset(route.ref);
+          if (until && cfg.waitForLimits !== false && until - Date.now() <= limitWait.maxMs) {
+            yield {type: 'notice', text: `${noAccountMessage(route.ref)} Waiting, then continuing (Esc stops).`};
+            yield {type: 'waiting', until};
+            const ready = await this.waitForAccount(route.ref, until);
+            if (this.interruptRequested || !ready) {
+              yield {type: 'done', interrupted: true};
+              return;
+            }
+            yield {type: 'notice', text: `Limit reset — continuing with ${label(route.ref)}.`};
+            excluded.clear();
+            attempt--; // the wait isn't an attempt
+            continue;
+          }
           yield {type: 'error', message: noAccountMessage(route.ref)};
           return;
         }
@@ -622,6 +663,18 @@ export class Engine {
 }
 
 const label = (r: ModelRef) => (catalog.get(r)?.label ?? r.model);
+
+/**
+ * Waiting for a limit to reset: the longest wait (a weekly limit days away isn't waited for), how
+ * often to look for a freed account, and how long after the reset to try. Tests shorten them.
+ */
+export const limitWait = {maxMs: 12 * 3600_000, pollMs: 60_000, marginMs: 15_000};
+
+/** When the first limited account for `ref` comes back (undefined = none is just limited). */
+function earliestReset(ref: ModelRef): number | undefined {
+  const resets = catalog.accountsFor(ref).map((a) => usageStore.cooldownUntil(a.id)).filter((x): x is number => !!x);
+  return resets.length ? Math.min(...resets) : undefined;
+}
 
 function noAccountMessage(ref: ModelRef): string {
   const accounts = catalog.accountsFor(ref);

@@ -11,7 +11,7 @@ const TABS: Tab[] = [
   {id: 'sidebar', title: 'Sidebar', items: SIDEBAR_ITEMS, defaults: DEFAULT_SIDEBAR, key: 'sidebarSections'},
 ];
 type Choice = {value: string | number | boolean; label: string};
-type ChoiceTabDef = {title: string; key: 'autoCompactPct' | 'toolApproval' | 'shellMaxMinutes' | 'subagentLimit' | 'goalMaxRounds' | 'hidePersonalInfo' | 'autoUpdate' | 'loadBalancing' | 'notifications' | 'sandbox' | 'apiAccounts' | 'worktrees' | 'collapsePastes' | 'attribution'; description: string; choices: Choice[]};
+type ChoiceTabDef = {title: string; key: 'autoCompactPct' | 'toolApproval' | 'shellMaxMinutes' | 'subagentLimit' | 'goalMaxRounds' | 'hidePersonalInfo' | 'autoUpdate' | 'loadBalancing' | 'notifications' | 'sandbox' | 'apiAccounts' | 'worktrees' | 'collapsePastes' | 'attribution' | 'waitForLimits'; description: string; choices: Choice[]};
 const CHOICE_TABS: ChoiceTabDef[] = [
   {
     title: 'Approvals',
@@ -80,6 +80,15 @@ const CHOICE_TABS: ChoiceTabDef[] = [
     choices: [
       {value: true, label: 'Placeholder — [Pasted text #1 +40 lines]  (default)'},
       {value: false, label: 'Plain text — paste it into the input as-is'},
+    ],
+  },
+  {
+    title: 'Limits',
+    key: 'waitForLimits',
+    description: 'When every account for the model is at its usage limit (and no other model can take over), Rein can wait for the earliest reset and carry on by itself: a goal left running overnight keeps going. Waits of more than 12 hours (a weekly limit) are not waited for. Esc stops a wait.',
+    choices: [
+      {value: true, label: 'Wait for the reset and continue  (default)'},
+      {value: false, label: 'Stop and tell me'},
     ],
   },
   {
