@@ -69,6 +69,7 @@ How these play together is covered in [load balancing](../../internals/load-bala
 | `steerShell` | boolean | `true` | Run the agent's simple shell reads and searches (`cat F`, `head`/`tail`, `sed -n 'A,Bp' F`, `ls`, `grep -rn`, `rg`, `find -name`) as the built-in `read` / `list` / `search` tools. See [Tools](../../features/tools/#reads-and-searches-run-as-tools). | `~/.rein/config.json` |
 | `mcpSampling` | `"ask"` \| `"allow"` \| `"off"` | `"ask"` | MCP servers asking for a completion ([sampling](../../features/mcp/#sampling-servers-can-use-your-models)) get one from your subscriptions: after you approve each server, without asking, or never. | `~/.rein/config.json` |
 | `inlineImages` | `"auto"` \| `"off"` | `"auto"` | Show images the agent generates or reads in the terminal, where it can draw them (kitty, Ghostty; iTerm2 and WezTerm in the classic renderer). See [Seeing images in the terminal](../../features/web-and-images/#seeing-images-in-the-terminal). | `~/.rein/config.json` |
+| `rtl` | `"auto"` \| `"on"` \| `"off"` | `"auto"` | Lay out right-to-left text (Hebrew, Arabic) for display in terminals that don't do it themselves. See [Math and right-to-left text](../../features/tui/#math-and-right-to-left-text). | `~/.rein/config.json` |
 | `attribution` | boolean | `true` | Commits and pull requests the agent writes end with the line `Co-Authored by [Rein Harness](https://github.com/DarKnight1346/rein-harness)` (Rein's system prompt asks for it). `false` drops the instruction. | `/settings` → Attribution |
 | `voiceModel` | string | `"base.en-q5_1"` | The whisper.cpp model for [voice input](../../features/voice/). English-only by default; `"base-q5_1"`, `"small-q5_1"` and so on understand other languages. Run `/voice setup` after changing it to download it. | `~/.rein/config.json` |
 | `collapsePastes` | boolean | `true` | Big pastes (more than 3 lines or 800 characters) show in the input as a `[Pasted text #1 +40 lines]` placeholder and are sent in full with your message. `false` pastes the text into the input as-is. | `/settings` → Paste |
@@ -191,3 +192,14 @@ JSON has no comments. A syntax error makes Rein fail to read the file. The file 
 - [Files & environment](../files/): where this file lives and what else is in `~/.rein`
 - [Load balancing](../../internals/load-balancing/): what `loadBalancing` and `maxUsedPct` actually do
 - [The decision model](../../internals/decision-model/): every place `decisionModel` is used
+
+## Moving to another machine
+
+`/settings export [file]` writes one file (`rein-settings.json` by default, `0600`) with what you've set up:
+
+- `config.json`, `settings.json` (permission rules and hooks), `mcp.json`, `AGENTS.md`, `system-prompt.md`;
+- your `skills/` and `agents/` folders.
+
+**Never in it:** accounts and logins, the [vault](../../features/vault/), the Jev key. Values written literally into an MCP server's `env` or `headers` (tokens, mostly) are left out too, and the export lists them so you can set them again. `${VAR}` references stay, so they work wherever the variable is set.
+
+On the other machine, `/settings import rein-settings.json` writes the files into its settings folder. A file that exists and differs is kept as `<name>.before-import` first. Restart Rein to load everything.

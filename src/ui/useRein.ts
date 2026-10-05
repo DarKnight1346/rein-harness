@@ -21,6 +21,7 @@ import {preloadPty} from '../tools/shells.js';
 import {rmSync} from 'node:fs';
 import {PushToTalk, voiceKeys, type VoiceKeyEvent} from './terminal/voiceKey.js';
 import {DEFAULT_MODEL, detect, downloadModel, installHint, MAX_RECORD_SECONDS, Recording, transcribe, voiceDir} from '../voice/voice.js';
+import {exportSettings, importSettings, writeBundle} from '../store/settingsBundle.js';
 import {NAME_RE} from '../vault/vault.js';
 import {installable, installedVersion, resolveServer, SERVERS} from '../lsp/servers.js';
 import {loadPlugins} from '../plugins/index.js';
@@ -871,7 +872,7 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
       return;
     }
     // In fullscreen, commands that open a window don't echo into the history.
-    const opensWindow = ['goal:plan', 'login', 'usage', 'context', 'help', 'update', 'settings', 'shells', 'btw', 'resume', 'agents', 'agent'].includes(parsed.name) || (parsed.name === 'model' && !parsed.args);
+    const opensWindow = ['goal:plan', 'login', 'usage', 'context', 'help', 'update', 'shells', 'btw', 'resume', 'agents', 'agent'].includes(parsed.name) || (parsed.name === 'settings' && !parsed.args.trim()) || (parsed.name === 'model' && !parsed.args);
     // A value typed after `/vault set NAME` stays off the screen and out of the transcript.
     if (!(windowed && opensWindow)) log('user', parsed.name === 'vault' ? raw.trim().replace(/^(\/vault\s+set\s+\S+)\s+.*$/s, '$1 ••••') : raw.trim());
     switch (parsed.name) {
@@ -1244,9 +1245,36 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
         void runtime.setConfig({tui: want}).then(() => exit({switchTo: want, sessionId: runtime.engine.transcript.messages.length ? runtime.engine.transcript.id : undefined} satisfies ExitResult));
         break;
       }
-      case 'settings':
+      case 'settings': {
+        // /settings export [file] · /settings import <file>: the same settings on another machine.
+        const [sub, ...rest] = parsed.args.trim().split(/\s+/);
+        const file = rest.join(' ');
+        if (sub === 'export') {
+          try {
+            const b = exportSettings();
+            const out = writeBundle(file || 'rein-settings.json', b);
+            log('info', `Exported ${Object.keys(b.files).length} settings files to ${out}${b.redacted.length ? `\nLeft out (they looked like secrets; set them again on the new machine): ${b.redacted.join(', ')}` : ''}\nAccounts, logins, the vault and keys are never exported. On the other machine: /settings import ${nodePath.basename(out)}`);
+          } catch (err) {
+            log('error', `Couldn't export: ${(err as Error).message}`);
+          }
+          break;
+        }
+        if (sub === 'import') {
+          if (!file) {
+            log('error', 'Usage: /settings import <file> (from /settings export)');
+            break;
+          }
+          try {
+            const r = importSettings(file);
+            log('info', `Imported ${r.written.length} settings files${r.backedUp.length ? ` (your previous ${r.backedUp.join(', ')} kept as *.before-import)` : ''}. Restart Rein to load them all.`);
+          } catch (err) {
+            log('error', `Couldn't import: ${(err as Error).message}`);
+          }
+          break;
+        }
         setOverlay({name: 'settings'});
         break;
+      }
       case 'agents': {
         const all = runtime.agents.list();
         if (windowed) {

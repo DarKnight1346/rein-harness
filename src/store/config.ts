@@ -84,6 +84,8 @@ export type Config = {
   mcpSampling: 'ask' | 'allow' | 'off';
   /** Show images the agent makes or reads in the terminal, where it can draw them (iTerm2, WezTerm, kitty, Ghostty). */
   inlineImages: 'auto' | 'off';
+  /** Right-to-left text (Hebrew, Arabic): reorder it for display where the terminal doesn't ('auto'), always, or never. */
+  rtl: 'auto' | 'on' | 'off';
   /** Commits and pull requests the agent writes credit Rein (a "Co-Authored by [Rein Harness](…)" line). */
   attribution: boolean;
   /** whisper.cpp model for voice input (hold Ctrl+Space): `base.en-q5_1` (English, default), or e.g. `base-q5_1` / `small-q5_1` for other languages. */
@@ -128,6 +130,7 @@ export const DEFAULT_CONFIG: Config = {
   steerShell: true,
   mcpSampling: 'ask',
   inlineImages: 'auto',
+  rtl: 'auto',
   voiceModel: 'base.en-q5_1',
   lsp: 'auto',
   lspIdleMinutes: 10,

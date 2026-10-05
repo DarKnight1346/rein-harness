@@ -94,6 +94,8 @@ Don't modernize this code. Match the existing ES5 style; no arrow functions.
 </scoped_instructions>
 ```
 
+**Other repos you work in** ([`/add-dir`](../../reference/commands/), `--add-dir`, or `additionalDirectories`) get the same treatment from their own top: the first time the agent works in one, that repo's `AGENTS.md` / `CLAUDE.md` comes along, scoped to it (`applies_to="other-repo/"`).
+
 That way a monorepo can hold per-package rules without spending context on packages the agent never touches. Each file is delivered **once per conversation**. Rein delivers them again after `/clear`, `/resume` or [compaction](../../internals/context/), since a summary may not keep them word for word.
 
 ## Custom base prompt: `~/.rein/system-prompt.md`

@@ -360,7 +360,17 @@ export class ToolHost extends EventEmitter {
         continue;
       }
       const dir = existsSync(real) && statSync(real).isDirectory() ? real : path.dirname(real);
-      items.push(...scopedInstructions(root, dir, this.deliveredInstructions));
+      // Another repo added as a working directory (/add-dir, additionalDirectories): its own
+      // AGENTS.md / CLAUDE.md too, from its top, the first time the agent works there.
+      const inside = (r: string) => dir === r || dir.startsWith(r + path.sep);
+      const extra = inside(root) ? undefined : this.extraWorkingDirs().map((d) => {
+        try {
+          return realpathSync(d);
+        } catch {
+          return d;
+        }
+      }).find(inside);
+      items.push(...scopedInstructions(extra ? path.dirname(extra) : root, dir, this.deliveredInstructions));
     }
     return items.length ? renderScoped(items) : undefined;
   }

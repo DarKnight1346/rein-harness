@@ -77,7 +77,7 @@ See [Goals](../../features/goals/) and [Plan mode](../../features/plans/).
 
 | Command | Arguments | What it does |
 |---|---|---|
-| `/add-dir` | `<path>` | Adds a working directory the agent can use without asking, for this session. |
+| `/add-dir` | `<path>` | Adds a working directory the agent can use without asking, for this session. Another repo's own `AGENTS.md` / `CLAUDE.md` is delivered the first time the agent works in it. |
 | | *(none)* | Lists the current working directories. |
 | `/permissions` | — | Lists the allow/deny rules in effect, grouped by the settings file they come from. |
 | `/ide` | `reconnect` | Editor integration: shows the connected editor (VS Code, Cursor, Windsurf or JetBrains, through the Claude Code extension) and what's selected, or connects to one. → [Editor integration](../../features/ide/) |
@@ -89,6 +89,7 @@ See [Goals](../../features/goals/) and [Plan mode](../../features/plans/).
 | Command | Arguments | What it does |
 |---|---|---|
 | `/settings` | — | Settings in tabs: Status line, Sidebar, Approvals, Sandbox, Shell, Subagents, Goals, Load balancing, Paste, Limits, Attribution, Worktrees, API accounts, Notifications, Updates, Privacy, Compaction. |
+| `/settings` | `export [file]` · `import <file>` | Settings in tabs: Status line, Sidebar, Approvals, Sandbox, Shell, Subagents, Goals, Load balancing, Paste, Attribution, Worktrees, API accounts, Notifications, Updates, Privacy, Compaction. |
 | `/tui` | `fullscreen` \| `classic` | Switches renderer and carries the conversation over. With no argument, shows which renderer is active. *Waits for idle.* |
 | `/update` | — | Updates the `claude` and `codex` CLIs, checks the Codex app-server protocol, then updates Rein. *Waits for idle.* |
 | `/export` | `[file]` | Saves the whole conversation as Markdown (every message, each reply's tool calls as a list) and copies it to the clipboard. Default file: `~/.rein/exports/<id>.md`; a path is relative to the project. |
