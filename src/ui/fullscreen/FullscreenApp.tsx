@@ -23,7 +23,7 @@ import {AskScreen} from '../AskScreen.js';
 import {renderMarkdown} from '../markdown.js';
 import {progress} from '../../plans/store.js';
 import {PlansScreen} from '../PlansScreen.js';
-import {todoLine} from '../../tools/todo.js';
+import {isMilestoneCopy, todoLine, type Todo} from '../../tools/todo.js';
 import {splashLines} from './splash.js';
 
 const SPLASH_FADE_IN_MS = 700;
@@ -789,7 +789,7 @@ function Sidebar({width, height, tick, run, view, setView}: {width: number; heig
   const inner = width - 3;
   // A goal working from a plan shows its milestones first; then the task list whenever the agent
   // keeps one (like Claude Code's todo list).
-  const todos = runtime.engine?.transcript.todos ?? [];
+  const todos = sidebarTodos();
   const planGoal = runtime.goals.goal?.plan ? ['plan'] : [];
   const sections = [...planGoal, ...(todos.length && todos.some((t) => t.status !== 'completed') ? ['tasks'] : []), ...enabledItems('sidebar', runtime.config)];
   const render = (id: string): ReactNode => {
@@ -986,8 +986,15 @@ function PlanSection({inner, run}: {inner: number; run(cmd: string): void}) {
   );
 }
 
-function TasksSection({inner}: {inner: number}) {
+/** The task list, minus tasks that repeat the active plan's milestones (shown above it already). */
+function sidebarTodos(): Todo[] {
   const todos = runtime.engine?.transcript.todos ?? [];
+  const milestones = runtime.goals.goal?.plan ? (runtime.goals.plan()?.milestones.map((m) => m.text) ?? []) : [];
+  return milestones.length ? todos.filter((t) => !isMilestoneCopy(t, milestones)) : todos;
+}
+
+function TasksSection({inner}: {inner: number}) {
+  const todos = sidebarTodos();
   const done = todos.filter((t) => t.status === 'completed').length;
   return (
     <>
