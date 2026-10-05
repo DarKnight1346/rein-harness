@@ -90,6 +90,18 @@ Fetched pages are cached **in memory for 15 minutes**, up to 100 pages, keyed by
 `image_generate` writes straight to `path` and overwrites an existing file there without the read-first check that `write` and `edit` enforce. [/rewind](../rewind/) can still restore it, because the file is checkpointed before the tool runs.
 :::
 
+## Seeing images in the terminal
+
+When the agent generates an image or reads one, Rein shows it right under the tool line. An image you paste (Ctrl+V) or drop into a message shows under your message, in resumed conversations too. This works in terminals that can draw images:
+
+| Terminal | Classic renderer (`--classic`) | Fullscreen (default) |
+|---|---|---|
+| kitty, Ghostty | ✓ | ✓ |
+| iTerm2, WezTerm | ✓ | No (the path is shown) |
+| Terminal.app, VS Code, others | No (the path is shown) | No (the path is shown) |
+
+The classic renderer prints the image into the scrollback (iTerm2's inline images, or the kitty graphics protocol). Fullscreen redraws the whole screen all the time, so there it needs kitty's Unicode placeholders, which only kitty and Ghostty support: the image is sent to the terminal once, and Rein draws placeholder characters where it should appear. In fullscreen, PNGs show (what `image_generate` makes); other formats show in classic with iTerm2 or WezTerm. Inside tmux or screen, images are off (they don't pass graphics through by default). Images are at most 60 columns wide. `"inlineImages": "off"` in `config.json` turns this off.
+
 ## Reading images and PDFs
 
 The `read` tool understands media:

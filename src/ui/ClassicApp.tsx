@@ -1,8 +1,9 @@
 import {VaultPrompt} from './VaultPrompt.js';
 import {voiceNote} from './useRein.js';
-import React, {useState} from 'react';
+import React, {useEffect, useRef, useState} from 'react';
 import {skillSourceLabel} from '../skills/index.js';
-import {Box, Static, Text} from 'ink';
+import {Box, Static, Text, useStdout} from 'ink';
+import {detectGraphics, imagePaths, inlineImage} from './terminal/images.js';
 import {approvalNote, compactText, routeLabel, toolResultSummary} from './format.js';
 import {ImportPrompt} from './ImportPrompt.js';
 import {TrustHooksPrompt} from './TrustHooksPrompt.js';
@@ -53,6 +54,31 @@ function ForegroundTail() {
 }
 
 /** Classic renderer: inline in the main screen, transcript in native scrollback via <Static>. */
+/**
+ * Images the agent made or read, drawn into the scrollback under their tool line where the
+ * terminal can (terminal/images.ts). Written through Ink's stdout, which keeps the live area
+ * below intact; each image once.
+ */
+function useInlineImages(entries: readonly {id: number; kind: string}[]) {
+  const {write} = useStdout();
+  const shown = useRef(new Set<number>());
+  const graphics = useRef(detectGraphics());
+  useEffect(() => {
+    if (graphics.current === 'none' || runtime.config.inlineImages === 'off') return;
+    for (const e of entries) {
+      if ((e.kind !== 'tool' && e.kind !== 'user') || shown.current.has(e.id)) continue;
+      shown.current.add(e.id);
+      const t = e as unknown as {label?: string; ok?: boolean; result?: string; images?: string[]};
+      const files = e.kind === 'user' ? (t.images ?? []) : t.ok && IMAGE_TOOLS.has(t.label!) ? imagePaths(t.result!, process.cwd()) : [];
+      for (const file of files) {
+        const img = inlineImage(file, graphics.current, Math.min(60, (process.stdout.columns ?? 80) - 4));
+        if (img) write(img);
+      }
+    }
+  }, [entries, write]);
+}
+const IMAGE_TOOLS = new Set(['ImageGen', 'Read']);
+
 export function ClassicApp({resume}: {resume: Resume}) {
   // <Static> only prints items past the count it has already rendered; remount it on /clear.
   const [generation, setGeneration] = useState(0);
@@ -65,6 +91,7 @@ export function ClassicApp({resume}: {resume: Resume}) {
     },
   });
   const {chat, overlay} = r;
+  useInlineImages(r.transcript);
 
   return (
     <>
