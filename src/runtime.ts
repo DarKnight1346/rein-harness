@@ -10,6 +10,7 @@ import type {RemoteServer} from './remote/server.js';
 import {makeTracker} from './trackers/index.js';
 import type {Issue, TrackerConfig} from './trackers/types.js';
 import {issueTask, TrackerWatcher} from './trackers/watcher.js';
+import {sendWebhook} from './ui/terminal/webhook.js';
 import {LspManager, type Before} from './lsp/manager.js';
 import {installable, installServer, serverById, SERVERS} from './lsp/servers.js';
 import {makeAutoRouter} from './router/auto.js';
@@ -181,6 +182,9 @@ export class Runtime {
     // The branch note is for agents (it names a local path): the issue comment says the branch itself.
     const report = (finished.output || '(no report)').replace(/\n*\[Its work is on the branch [^\]]*\]\s*$/, '').trim();
     return {report: report || '(no report)', branch};
+  /** Tell your phone (config notifyUrl): approvals waiting, work finished, issues done. */
+  notifyRemote(title: string, message: string): void {
+    void sendWebhook(this.config.notifyUrl, title, this.vault.mask(message));
   }
 
   /** Built-in code intelligence: language servers Rein runs itself (lsp/manager.ts). */
