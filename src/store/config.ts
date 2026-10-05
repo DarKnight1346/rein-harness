@@ -76,6 +76,8 @@ export type Config = {
   lspIdleMinutes: number;
   /** Use a specific language server command instead of Rein's: {"typescript": {"command": "/path/to/server", "args": ["--stdio"]}}. */
   lspServers?: Record<string, {command: string; args?: string[]}>;
+  /** Commits and pull requests the agent writes credit Rein (a "Co-Authored by [Rein Harness](…)" line). */
+  attribution: boolean;
   /** Big pastes (more than 3 lines or 800 characters) become a `[Pasted text #1 +40 lines]` placeholder in the input; false pastes the text as-is. */
   collapsePastes: boolean;
   /** OS sandbox for the agent's shell commands: 'write' (default: writes limited to the project), 'strict' (also no network), 'off'. */
@@ -111,6 +113,7 @@ export const DEFAULT_CONFIG: Config = {
   sandbox: 'write',
   apiAccounts: 'fallback',
   collapsePastes: true,
+  attribution: true,
   lsp: 'auto',
   lspIdleMinutes: 10,
   worktrees: 'auto',

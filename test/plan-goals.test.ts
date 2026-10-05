@@ -81,3 +81,15 @@ describe('goals from a plan', () => {
     expect(done).toEqual(['flag parsed']);
   });
 });
+
+describe('attribution', () => {
+  it('asks for the Rein line in commits and PRs, unless turned off', async () => {
+    const {ATTRIBUTION_LINE, setAttribution, systemPrompt} = await import('../src/session/prompt.js');
+    expect(ATTRIBUTION_LINE).toBe('Co-Authored by [Rein Harness](https://github.com/DarKnight1346/rein-harness)');
+    setAttribution(() => true);
+    expect(await systemPrompt({tools: true})).toContain(`Every git commit you make must end with this line, after a blank line: ${ATTRIBUTION_LINE}`);
+    setAttribution(() => false);
+    expect(await systemPrompt({tools: true})).not.toContain(ATTRIBUTION_LINE);
+    setAttribution(() => true);
+  });
+});

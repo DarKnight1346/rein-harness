@@ -11,7 +11,7 @@ const TABS: Tab[] = [
   {id: 'sidebar', title: 'Sidebar', items: SIDEBAR_ITEMS, defaults: DEFAULT_SIDEBAR, key: 'sidebarSections'},
 ];
 type Choice = {value: string | number | boolean; label: string};
-type ChoiceTabDef = {title: string; key: 'autoCompactPct' | 'toolApproval' | 'shellMaxMinutes' | 'subagentLimit' | 'goalMaxRounds' | 'hidePersonalInfo' | 'autoUpdate' | 'loadBalancing' | 'notifications' | 'sandbox' | 'apiAccounts' | 'worktrees' | 'collapsePastes'; description: string; choices: Choice[]};
+type ChoiceTabDef = {title: string; key: 'autoCompactPct' | 'toolApproval' | 'shellMaxMinutes' | 'subagentLimit' | 'goalMaxRounds' | 'hidePersonalInfo' | 'autoUpdate' | 'loadBalancing' | 'notifications' | 'sandbox' | 'apiAccounts' | 'worktrees' | 'collapsePastes' | 'attribution'; description: string; choices: Choice[]};
 const CHOICE_TABS: ChoiceTabDef[] = [
   {
     title: 'Approvals',
@@ -80,6 +80,15 @@ const CHOICE_TABS: ChoiceTabDef[] = [
     choices: [
       {value: true, label: 'Placeholder — [Pasted text #1 +40 lines]  (default)'},
       {value: false, label: 'Plain text — paste it into the input as-is'},
+    ],
+  },
+  {
+    title: 'Attribution',
+    key: 'attribution',
+    description: 'Commits and pull requests the agent writes end with a line crediting Rein: "Co-Authored by [Rein Harness](https://github.com/DarKnight1346/rein-harness)". Takes effect on the next turn.',
+    choices: [
+      {value: true, label: 'On — credit Rein in commits and PRs  (default)'},
+      {value: false, label: 'Off — no attribution line'},
     ],
   },
   {
