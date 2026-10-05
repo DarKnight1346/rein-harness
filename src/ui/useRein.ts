@@ -18,6 +18,8 @@ import {findIdes} from '../ide/connection.js';
 import {diffTabName, proposedChange} from '../ide/review.js';
 import {takeOver} from './terminal/takeover.js';
 import {preloadPty} from '../tools/shells.js';
+import {rmSync} from 'node:fs';
+import {DEFAULT_MODEL, detect, downloadModel, installHint, MAX_RECORD_SECONDS, Recording, transcribe, voiceDir} from '../voice/voice.js';
 import {NAME_RE} from '../vault/vault.js';
 import {installedVersion, resolveServer, SERVERS} from '../lsp/servers.js';
 import {loadPlugins} from '../plugins/index.js';
@@ -57,6 +59,9 @@ const DELIVER = '\u0000deliver-agent:';
 const NOTIFY_AFTER_MS = 20_000;
 /** Background commands running at least this long are mentioned (once) when a turn ends. */
 const BACKGROUND_REMINDER_MS = 5 * 60_000;
+
+export type VoiceState = 'idle' | 'recording' | 'transcribing';
+export const voiceNote = (v: VoiceState) => (v === 'recording' ? `● Recording… Ctrl+T to stop (up to ${MAX_RECORD_SECONDS / 60} min) · Ctrl+C cancels` : 'Transcribing…');
 
 export type Overlay =
   | {name: 'none'}
@@ -224,6 +229,7 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
       exit();
       return;
     }
+    if (cancelVoice()) log('info', 'Recording cancelled.');
     if (chat.busy) chat.interrupt();
     else runtime.tools.shells.killForeground();
     runtime.agents.cancelAll();
@@ -656,6 +662,48 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
     if (recalled !== undefined) prevDraft.current = recalled;
     return recalled;
   };
+  // Voice input (voice/voice.ts): Ctrl+T or /voice starts recording, the same again stops it; the
+  // text lands in the input (never sent on its own).
+  const [voice, setVoice] = useState<VoiceState>('idle');
+  const recording = useRef<{rec: Recording; timer: NodeJS.Timeout; insert(text: string): void} | undefined>(undefined);
+  const stopVoice = async () => {
+    const r = recording.current;
+    if (!r) return;
+    recording.current = undefined;
+    clearTimeout(r.timer);
+    setVoice('transcribing');
+    try {
+      const s = detect(runtime.config.voiceModel || DEFAULT_MODEL);
+      const wav = await r.rec.stop();
+      const text = await transcribe(s.whisper!, s.model, wav).finally(() => rmSync(wav, {force: true}));
+      if (text) r.insert(text);
+      else log('info', 'No speech was recognized.');
+    } catch (err) {
+      log('error', `Voice: ${(err as Error).message}`);
+    } finally {
+      setVoice('idle');
+    }
+  };
+  const onVoice = (insert: (text: string) => void) => {
+    if (voice === 'transcribing') return;
+    if (recording.current) return void stopVoice();
+    const s = detect(runtime.config.voiceModel || DEFAULT_MODEL);
+    const hint = installHint(s);
+    if (hint || !s.modelReady) return log('info', `${hint ? hint.text : `Voice needs its speech model (${s.model}, about 60 MB, downloaded once).`} Run /voice setup${hint?.command ? ' to install it' : ''}.`);
+    const rec = new Recording(s.recorder!);
+    recording.current = {rec, insert, timer: setTimeout(() => void stopVoice(), MAX_RECORD_SECONDS * 1000)};
+    setVoice('recording');
+  };
+  const cancelVoice = () => {
+    const r = recording.current;
+    if (!r) return false;
+    recording.current = undefined;
+    clearTimeout(r.timer);
+    r.rec.cancel();
+    setVoice('idle');
+    return true;
+  };
+
   const onImagePaste = async () => {
     const token = await attachments.current.pasteClipboardImage();
     if (!token) log('info', 'No image on the clipboard (Ctrl+V pastes images; drag a file in to attach it).');
@@ -798,6 +846,38 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
       case 'mcp':
         setOverlay({name: 'mcp'});
         break;
+      case 'voice': {
+        const s = detect(runtime.config.voiceModel || DEFAULT_MODEL);
+        const hint = installHint(s);
+        if (parsed.args.trim() === 'setup') {
+          if (hint?.command) {
+            log('info', `Installing with Homebrew: ${hint.command}`);
+            runBang(hint.command);
+            log('info', 'When it finishes, run /voice setup again for the speech model.');
+            return;
+          }
+          if (hint) return log('info', hint.text);
+          if (s.modelReady) return log('info', `Voice is ready: press Ctrl+T in the input to talk, Ctrl+T again to stop.`);
+          log('info', `Downloading the speech model ${s.model} (about 60 MB, once) to ${voiceDir()}…`);
+          let shown = 0;
+          void downloadModel(s.model, (done, total) => {
+            const pct = total ? Math.floor((done / total) * 100) : 0;
+            if (pct >= shown + 25) log('info', `  ${(shown = pct)}%`);
+          }).then(
+            () => log('info', 'Voice is ready: press Ctrl+T in the input to talk, Ctrl+T again to stop. (macOS asks once to let your terminal use the microphone.)'),
+            (err) => log('error', `Couldn't download the speech model: ${(err as Error).message}`),
+          );
+          return;
+        }
+        if (parsed.args.trim()) return log('error', 'Usage: /voice · /voice setup');
+        if (hint || !s.modelReady) {
+          log('info', [`Voice input runs on your machine (whisper.cpp; nothing is uploaded).`, `Recorder: ${s.recorder ? s.recorder.command : 'missing'} · whisper.cpp: ${s.whisper ?? 'missing'} · model ${s.model}: ${s.modelReady ? 'ready' : 'not downloaded'}`, hint ? hint.text : '', `Run /voice setup${hint?.command ? ` (runs ${hint.command}, then downloads the model)` : hint ? ' after installing them' : ' to download the model'}.`].filter(Boolean).join('\n'));
+          return;
+        }
+        // Ready: /voice toggles recording, like Ctrl+T, inserting into the draft.
+        onVoice((text) => setDraft((d) => (d && !/\s$/.test(d) ? `${d} ${text}` : d + text)));
+        return;
+      }
       case 'vault': {
         const [sub = '', name = '', ...rest] = parsed.args.trim().split(/\s+/);
         if (sub === 'set' || sub === 'add') {
@@ -1322,7 +1402,7 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
   return {
     entries, transcript: terminalHold.current === undefined ? entries : entries.slice(0, terminalHold.current), add, log, overlay, setOverlay, closeOverlay, finishImport, ready, updating, updateLog, statusTick, bump,
     finishTrust, pickHistory, startPlanGoal, startNewPlan, draft, onDraft, onSubmit, onPaste, onImagePaste, onHistory: suggestions.length || fileSuggestions.length ? undefined : onHistory, onExternalEdit, doRewind, togglePlanMode, fileSuggestions, fileSelected, acceptFile, runCommand, suggestions, selected, setSuggestIndex, inputActive, chat, skills, openShells, queued, exitArmed, compacting, pickSession,
-    view, setView, viewing, goalNote, saveVault,
+    view, setView, viewing, goalNote, saveVault, voice, onVoice,
   };
 }
 

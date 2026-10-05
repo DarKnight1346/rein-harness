@@ -39,6 +39,7 @@ Rein follows Claude Code's conventions wherever it can: Esc interrupts, Esc twic
 | **`!` at the start** | Runs the rest as a shell command yourself (`!npm test`): live output, no approval, and it goes along with your next message. |
 | **Ctrl+]** | While a command the agent ran with `interactive: true` has your terminal: back to Rein (it keeps running). In Rein: hand the terminal back to that command. |
 | **Ctrl+G** | Opens the draft in your editor (`$VISUAL`, then `$EDITOR`, else `vi`; Notepad on Windows). Save and quit to bring the edited text back. |
+| **Ctrl+T** | [Voice input](../../features/voice/): starts recording; press again to stop. The transcript goes into the input at the cursor (not sent). Ctrl+C cancels a recording. |
 | **Ctrl+V** | Pastes an **image** from the clipboard as `[Image #1]`. Normal text paste uses your terminal's paste. |
 | **Paste** | Long pastes (more than 3 lines or 800 characters) collapse to `[Pasted text #1 +42 lines]`. |
 | **Drag a file onto the terminal** | Attaches it: images as `[Image #n]`, other files as `[File #n: name]`. |

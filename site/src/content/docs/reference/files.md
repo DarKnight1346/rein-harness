@@ -52,6 +52,7 @@ An existing `~/.rein` keeps being used as it is, and so does `REIN_HOME`. To swi
 | `system-prompt.md` | Optional. Replaces Rein's **base** system prompt only. Tools, project info, memory and instruction files are still appended |
 | `secrets/vault.json` | The [secrets vault](../../features/vault/) (`0600`), used only when the Keychain / DPAPI isn't available (Linux, or `REIN_HOME` set). On macOS it's the Keychain item `rein-vault`; on Windows the DPAPI-encrypted `secrets/vault.json.dpapi` |
 | `secrets/jev.key` | Jev API key fallback file (`0600`), used only when the Keychain / DPAPI isn't available. On Windows the DPAPI-encrypted key is `secrets/jev.key.dpapi` |
+| `voice/ggml-<model>.bin` | The speech model for [voice input](../../features/voice/), downloaded once by `/voice setup` (about 60 MB) |
 | `lsp/<server>/` | Language servers `lsp_install` installed with npm (`lsp/typescript/`, `lsp/python/`), and `installed.json` with the version. See [code intelligence](../../features/code-intelligence/) |
 | `update.lock` | Held for up to 10 minutes while a background auto-update installs, so several Rein windows don't install at once |
 
@@ -157,6 +158,7 @@ Quit Rein first.
 | `state/` | Yes | Usage snapshots and cooldowns (refetched on use), learned context windows, cached model lists, the Codex catalog (all regenerated) |
 | `scratch/` | Mostly | Agent scratch files, and the attached images that resumed conversations point to |
 | `checkpoints/` | Yes | `/rewind` for past conversations |
+| `voice/` | Yes | The speech model (`/voice setup` downloads it again) |
 | `lsp/` | Yes | Installed language servers (the agent offers to install them again) |
 | `sessions/` | Yes | Conversation history: `/resume`, `rein --continue`, `sessions_search` |
 | `config.json` | Yes | Your settings (defaults return) |

@@ -38,6 +38,8 @@ type Props = {
    * or undefined to stay. Off while a suggestion list uses the arrows.
    */
   onHistory?(dir: -1 | 1, current: string): string | undefined;
+  /** Ctrl+T: start or stop voice input; the transcript is inserted at the cursor when it's ready. */
+  onVoice?(insert: (text: string) => void): void;
   /** Ctrl+G: edit the draft in $EDITOR; returns the edited text (undefined = keep the draft). */
   onExternalEdit?(current: string): string | undefined;
   /** Columns available: text word-wraps to fit (instead of running off-screen). */
@@ -61,7 +63,7 @@ export function wrapInput(value: string, width: number): string[] {
  * New line (Claude Code conventions): Shift+Enter where the terminal reports it (kitty keyboard
  * protocol), Option/Meta+Enter, Ctrl+J, or `\` then Enter. Plain Enter submits.
  */
-export function TextInput({placeholder = '', mask = false, isActive = true, value: controlled, onChange, onSubmit, onCancel, onPaste, onImagePaste, onHistory, onExternalEdit, width, maxLines}: Props) {
+export function TextInput({onVoice, placeholder = '', mask = false, isActive = true, value: controlled, onChange, onSubmit, onCancel, onPaste, onImagePaste, onHistory, onExternalEdit, width, maxLines}: Props) {
   const [own, setOwn] = useState('');
   const value = controlled ?? own;
   // Keystrokes can arrive faster than re-renders; always edit the latest state.
@@ -95,6 +97,14 @@ export function TextInput({placeholder = '', mask = false, isActive = true, valu
       const s = state.current;
       if (key.ctrl && input === 'v' && onImagePaste) {
         void onImagePaste().then((token) => token && add(token));
+        return;
+      }
+      if (key.ctrl && input === 't' && onVoice) {
+        onVoice((text) => {
+          // Spaced from what's around the cursor.
+          const before = state.current.value.slice(0, state.current.cursor);
+          add(`${before && !/\s$/.test(before) ? ' ' : ''}${text}`);
+        });
         return;
       }
       if (key.ctrl && input === 'g' && onExternalEdit) {

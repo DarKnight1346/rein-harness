@@ -1,4 +1,5 @@
 import {VaultPrompt} from '../VaultPrompt.js';
+import {voiceNote} from '../useRein.js';
 import React, {useEffect, useMemo, useRef, useState, type ReactNode} from 'react';
 import {Box, Text, useBoxMetrics, useInput, useWindowSize} from 'ink';
 import {PROVIDERS, parseRef, refKey} from '../../providers/types.js';
@@ -426,12 +427,14 @@ export function FullscreenApp({resume}: {resume: Resume}) {
       <Box borderStyle="round" borderColor={r.inputActive ? 'cyan' : 'gray'} paddingX={1} width={cols} height={draftLines + 2} flexShrink={0} overflow="hidden">
         <Text color="cyan">{'> '}</Text>
         <Box flexDirection="column" width={inputWidth} justifyContent="flex-end" overflow="hidden">
-          <TextInput width={inputWidth} maxLines={MAX_INPUT_LINES} isActive={r.inputActive} value={r.draft} onChange={r.onDraft} onPaste={r.onPaste} onImagePaste={r.onImagePaste} onHistory={r.onHistory} onExternalEdit={r.onExternalEdit} placeholder={!r.ready ? 'starting…' : viewing ? `message ${viewing.name} (subagent)…` : chat.busy ? 'queue a message, or /btw <question>' : 'message, / for commands'} onSubmit={r.onSubmit} />
+          <TextInput width={inputWidth} maxLines={MAX_INPUT_LINES} isActive={r.inputActive} value={r.draft} onChange={r.onDraft} onPaste={r.onPaste} onImagePaste={r.onImagePaste} onVoice={r.onVoice} onHistory={r.onHistory} onExternalEdit={r.onExternalEdit} placeholder={!r.ready ? 'starting…' : viewing ? `message ${viewing.name} (subagent)…` : chat.busy ? 'queue a message, or /btw <question>' : 'message, / for commands'} onSubmit={r.onSubmit} />
         </Box>
       </Box>
       <Box height={1} paddingX={1}>
         {r.exitArmed ? (
           <Text color="yellow">Press Ctrl+C again to exit</Text>
+        ) : r.voice !== 'idle' ? (
+          <Text color={r.voice === 'recording' ? 'red' : 'cyan'}>{voiceNote(r.voice)}</Text>
         ) : (
           <Text dimColor wrap="truncate">
             esc interrupt · ctrl+c stop (twice to exit) · wheel/PgUp scroll · ⇧↵ / ⌥↵ / \↵ newline · ctrl+b sidebar
