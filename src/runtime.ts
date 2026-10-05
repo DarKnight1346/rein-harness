@@ -3,6 +3,7 @@ import {catalog} from './router/catalog.js';
 import {mergeNote, Worktrees} from './agents/worktrees.js';
 import type {Origin} from './tools/fs.js';
 import {makeRouter, type AutoRouter} from './router/index.js';
+import {samplingHandler} from './mcp/sampling.js';
 import {LspManager, type Before} from './lsp/manager.js';
 import {installable, installServer, serverById, SERVERS} from './lsp/servers.js';
 import {makeAutoRouter} from './router/auto.js';
@@ -544,6 +545,22 @@ Drop superseded reads of the same file, routine listings, and output that no lon
         mcpToolSet = now;
         this.engine?.refreshTools();
       }
+    });
+    // MCP sampling: servers may ask for a completion, answered with the user's subscriptions.
+    this.mcp.sampling = samplingHandler({
+      config: () => this.config,
+      // Looked up per request: the UI sets the approver after start-up (headless never does: refused).
+      approve: async (server, model, preview) => {
+            if (!this.approver) return 'deny';
+            const d = await this.approver({
+              tool: {name: 'mcp_sampling', label: 'use a model', description: '', inputSchema: {type: 'object', properties: {}}, mutating: false, run: async () => ({ok: true, text: ''}), summarize: () => ''},
+              args: {},
+              summary: `(${catalog.get(model)?.label ?? model.model}) for the MCP server "${server}"`,
+              preview,
+              sessionLabel: `Allow "${server}" to use models this session`,
+            });
+            return d === 'deny' ? 'deny' : d === 'once' ? 'once' : 'session';
+          },
     });
     void this.mcp.start().catch(() => {});
     this.stopUsageRefresh = startUsageRefresh({balancing: () => this.config.loadBalancing !== 'sticky', busy: (id) => catalog.busy.get(id) ?? 0});

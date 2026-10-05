@@ -32,6 +32,8 @@ export type ApprovalRequest = {
   suggestion?: string;
   /** Plan mode: a command not known to be read-only — only "allow once" or deny. */
   planMode?: boolean;
+  /** What "allow for the session" covers, when it isn't changes and commands (an MCP server's sampling…). */
+  sessionLabel?: string;
 };
 export type ApprovalDecision = 'once' | 'session' | 'always' | 'deny';
 export type ApprovalMode = 'ask' | 'auto' | 'bypass';
