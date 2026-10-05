@@ -1,4 +1,5 @@
 import {execFile, execFileSync} from 'node:child_process';
+import {existsSync, realpathSync} from 'node:fs';
 import path from 'node:path';
 import type {Config} from '../store/config.js';
 import {LspClient, type Diagnostic} from './client.js';
@@ -32,6 +33,15 @@ function dependents(file: string, root: string, exts: string[]): Promise<string[
     });
   });
 }
+
+/** Roots as real paths, like the file paths the tools resolve (macOS /var → /private/var). */
+const real = (p: string) => {
+  try {
+    return realpathSync(p);
+  } catch {
+    return p;
+  }
+};
 
 const keyOf = (d: Diagnostic) => `${d.severity ?? 1}|${d.code ?? ''}|${d.message}`;
 
@@ -75,6 +85,7 @@ export class LspManager {
   /** The running client for a file's root and language, started if needed. */
   client(file: string, root: string, start = true): LspClient | undefined {
     if (!this.enabled()) return undefined;
+    root = real(root);
     const spec = serverFor(file);
     if (!spec) return undefined;
     const key = `${root}|${spec.id}`;
@@ -105,6 +116,7 @@ export class LspManager {
 
   /** Before an edit: the current diagnostics of each file and of files that import it (opening them if needed). */
   async before(files: string[], root: string): Promise<Before> {
+    root = real(root);
     const targets: {file: string; dependent: boolean}[] = files.map((file) => ({file, dependent: false}));
     for (const file of files) {
       const spec = serverFor(file);
@@ -114,6 +126,8 @@ export class LspManager {
     const out: Before = {root, files: []};
     await Promise.all(
       targets.map(async ({file, dependent}) => {
+        // A file being created has no problems yet: nothing to wait for.
+        if (!existsSync(file)) return void out.files.push({file, count: 0, dependent});
         const c = this.client(file, root);
         if (!c || !(await c.whenReady(REPORT_TIMEOUT_MS))) return;
         if (!c.isOpen(file)) {
@@ -150,6 +164,7 @@ export class LspManager {
 
   /** A file's (or every open file's) current problems, for the diagnostics tool. */
   async diagnostics(root: string, file?: string): Promise<string | undefined> {
+    root = real(root);
     if (file) {
       const c = this.client(file, root);
       if (!c || !(await c.whenReady(20_000))) return undefined;
@@ -165,11 +180,13 @@ export class LspManager {
 
   /** Shell commands may have changed files: re-sync every open file under this root. */
   resync(root: string): void {
-    for (const c of this.clients.values()) if (c.root === root) for (const {file} of c.allDiagnostics()) c.sync(file);
+    root = real(root);
+    for (const c of this.clients.values()) if (c.root === root) for (const file of c.openFiles()) c.sync(file);
   }
 
   /** Stop the servers for a root (a worktree that merged back). */
   async stopRoot(root: string): Promise<void> {
+    root = real(root);
     for (const [k, c] of this.clients) if (c.root === root) {
       this.clients.delete(k);
       await c.shutdown();
@@ -206,7 +223,7 @@ export class LspManager {
       try {
         if (c.proc.pid && process.platform !== 'win32') rssMB = Math.round(Number(execFileSync('ps', ['-o', 'rss=', '-p', String(c.proc.pid)], {encoding: 'utf8'}).trim()) / 1024);
       } catch {}
-      return {server: k.split('|').pop()!, root: c.root, pid: c.proc.pid, rssMB, files: c.allDiagnostics().length, idleMin: Math.round((Date.now() - c.lastUsed) / 60_000)};
+      return {server: k.split('|').pop()!, root: c.root, pid: c.proc.pid, rssMB, files: c.openFiles().length, idleMin: Math.round((Date.now() - c.lastUsed) / 60_000)};
     });
   }
 

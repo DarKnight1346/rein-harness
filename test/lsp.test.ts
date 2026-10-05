@@ -85,7 +85,27 @@ describe('built-in language servers', () => {
     const res = await host.call('edit', {path: 'b.ts', old_string: 'export const ok = 1;', new_string: 'export const ok = BAD;'});
     expect(res.ok).toBe(true);
     expect(res.text).toContain('[Diagnostics: this edit introduced 1 problem');
+    // A new file: no wait before it's written, and its errors are still reported.
+    const t = Date.now();
+    const created = await host.call('write', {path: 'c.ts', content: 'export const c = BAD;\n'});
+    expect(created.text).toContain('c.ts:1:18 error fake X1');
+    expect(Date.now() - t).toBeLessThan(1400);
     host.close();
     await lsp.closeAll();
+  });
+});
+
+describe('askEvenInBypass', () => {
+  it('asks in bypass mode, and a refusal says not to retry', async () => {
+    const {ToolHost} = await import('../src/tools/host.js');
+    const root = mkdtempSync(path.join(os.tmpdir(), 'rein-ask-'));
+    const asked: string[] = [];
+    const host = new ToolHost({root, mode: () => 'bypass', approve: async (r) => (asked.push(r.tool.name), 'deny')});
+    host.register({name: 'installer', label: 'Install', description: 'x', inputSchema: {type: 'object', properties: {}}, mutating: true, alwaysAsk: true, askEvenInBypass: true, summarize: () => '', run: async () => ({ok: true, text: 'installed'})});
+    const r = await host.call('installer', {});
+    expect(asked).toEqual(['installer']);
+    expect(r.ok).toBe(false);
+    expect(r.text).toContain("Don't retry");
+    host.close();
   });
 });

@@ -276,6 +276,7 @@ export class ToolHost extends EventEmitter {
         if (!approvedBy) {
           const decision = await this.opts.approve(req);
           if (decision === 'deny' && planAsk) throw new ToolError('plan mode is on and the user declined this command (it may change things). Stick to read-only exploration, then call present_plan.');
+          if (decision === 'deny' && tool.askEvenInBypass) throw new ToolError("not approved (the user declined, or nobody is here to approve it, as in a headless run). Don't retry: tell the user what it would do so they can run it themselves.");
           if (decision === 'deny') throw new ToolError('the user denied this action; ask them how to proceed instead of retrying');
           if (decision === 'session' && !planAsk) this.sessionAllowed = true;
           remember(decision);

@@ -19,8 +19,8 @@ Rein runs language servers for your project itself, so the agent gets real compi
   Fix it before moving on.]
   ```
 
-  Problems that were already there aren't repeated, so a legacy codebase full of warnings doesn't drown every edit. Errors and warnings count; hints don't. At most 5 are listed. Importing files are found with `git grep` for the file's name (up to 10 of them, in a git repository). Rein waits at most 1.5 seconds for the server, so a slow server never holds up an edit: a clean edit costs a few milliseconds with TypeScript 7, and up to a second with servers that only report changes (TypeScript 5/6, pyright).
-- **A `diagnostics` tool.** The agent checks one file (`path`) or every file it has open. With an [editor connected](../ide/), the editor's diagnostics are used instead, and the result says which source answered.
+  Problems that were already there aren't repeated, so a legacy codebase full of warnings doesn't drown every edit. Errors and warnings count; hints don't. At most 5 are listed. Importing files are found with `git grep` for the file's name: up to 10, and only files git tracks, so a caller created moments ago and not yet added isn't checked. Each wait for the server is capped at 1.5 seconds, so a slow server never holds up an edit for long. The first edit in a session can take a few seconds while the server starts. After that, a clean edit costs a few milliseconds with TypeScript 7, and up to about a second with servers that only report changes (TypeScript 5/6, pyright).
+- **A `diagnostics` tool.** The agent checks one file (`path`) or every file it has open. With an [editor connected](../ide/), the editor's diagnostics are used instead, and the result says which source answered. The after-edit check always uses Rein's own servers, so with an editor open you have two language servers running for the project (the editor's and Rein's).
 
 ## Languages
 
