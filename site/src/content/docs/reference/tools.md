@@ -95,7 +95,7 @@ Replaces an exact string. `old_string` must match exactly (whitespace included, 
 | `new_string` **(required)** | string | Replacement |
 | `replace_all` | boolean | Replace every occurrence, default false |
 
-After a successful `write`, `edit` or `delete`, problems the change introduced (from Rein's [language servers](../../features/code-intelligence/)) are appended to the result.
+Files changed with `write`, `edit` or `delete` are checked by Rein's [language servers](../../features/code-intelligence/) when the agent finishes its turn; problems the changes left come back as one `<code_check>` message.
 
 **Stale-file protection** applies to `edit`, and to `write` on a file that already exists. The agent must have read the file in this conversation, and the file must not have changed since. Otherwise the call fails with "read it again". The scratchpad is exempt.
 

@@ -376,11 +376,19 @@ Drop superseded reads of the same file, routine listings, and output that no lon
    * Stop hooks after a reply: exit 2 / decision "block" keeps the agent going with the reason as
    * its next instruction. `active` is true while continuing because of a Stop hook (as in Claude Code).
    */
-  async stopHook(active: boolean): Promise<string | undefined> {
+  /**
+   * The agent finished its turn: should it keep going? A Stop hook may say so (Claude Code
+   * compatible); otherwise the code check may (problems the turn's changes left, from the
+   * language servers, once per turn).
+   */
+  async stopHook(active: boolean): Promise<{reason: string; kind: 'hook' | 'diagnostics'} | undefined> {
     const root = process.cwd();
-    if (!hasHooks('Stop', root)) return undefined;
-    const out = await runHooks('Stop', root, {session_id: this.engine?.transcript.id, stop_hook_active: active});
-    return out.block;
+    if (hasHooks('Stop', root)) {
+      const out = await runHooks('Stop', root, {session_id: this.engine?.transcript.id, stop_hook_active: active});
+      if (out.block) return {reason: out.block, kind: 'hook'};
+    }
+    const problems = await this.lsp.turnEnd().catch(() => undefined);
+    return problems ? {reason: problems, kind: 'diagnostics'} : undefined;
   }
 
   /** Auto effort: one decision-model question (Jev or the cheap model) about how hard the message is. */
@@ -486,7 +494,7 @@ Drop superseded reads of the same file, routine listings, and output that no lon
         name: 'diagnostics',
         label: 'Diagnostics',
         description:
-          "Problems (type errors, lint findings…) in a file (path) or the whole workspace, from the user's editor if connected, else from language servers Rein runs (most languages). File edits already report new problems they introduce; use this to check a file you didn't edit, or the state before you start.",
+          "Problems (type errors, lint findings…) in a file (path) or the whole workspace, from the user's editor if connected, else from language servers Rein runs (most languages). Problems your changes leave are also reported when you finish a turn; use this to check a file or the state before you start.",
         inputSchema: {type: 'object', properties: {path: {type: 'string', description: 'A file (project-relative or absolute); omit for the whole workspace'}}},
         mutating: false,
         summarize: (a: any) => a?.path ?? 'workspace',

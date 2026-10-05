@@ -372,7 +372,17 @@ export const SERVERS: ServerSpec[] = [
     alternatives: ['expert', 'lexical'],
     args: [],
     needs: ['elixir'],
-    install: {kind: 'github', repo: 'elixir-lsp/elixir-ls', asset: (_p, v) => `elixir-ls-v${v}.zip`, bin: () => (isWindows ? 'language_server.bat' : 'language_server.sh')},
+    install: {
+      kind: 'custom',
+      // ElixirLS compiles itself on its first launch (a minute or more): do that now, not on the agent's first edit.
+      run: async (_dir, h) => {
+        const {tag} = await h.release('elixir-lsp/elixir-ls');
+        const asset = `elixir-ls-${tag}.zip`;
+        const bin = await h.fetchUnpack(`https://github.com/elixir-lsp/elixir-ls/releases/download/${tag}/${asset}`, asset, isWindows ? 'language_server.bat' : 'language_server.sh');
+        await h.run(bin, []); // compiles, sees no input, exits
+        return {version: tag.replace(/^v/, ''), bin};
+      },
+    },
   },
   {
     id: 'erlang',
@@ -697,7 +707,8 @@ export function installable(spec: ServerSpec): {ok: true} | {ok: false; why: str
 function runTool(command: string, args: string[], cwd: string, env: NodeJS.ProcessEnv = process.env): Promise<{ok: boolean; out: string}> {
   return new Promise((resolve) => {
     let out = '';
-    const child = spawn(command, args, {cwd, env, shell: isWindows, windowsHide: true});
+    // No stdin: installers never prompt, and a server run to warm up sees EOF and exits.
+    const child = spawn(command, args, {cwd, env, shell: isWindows, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe']});
     child.stdout?.on('data', (d) => (out += d));
     child.stderr?.on('data', (d) => (out += d));
     child.on('error', (err) => resolve({ok: false, out: err.message}));

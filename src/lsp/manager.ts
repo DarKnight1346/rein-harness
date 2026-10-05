@@ -13,8 +13,11 @@ import {filePatterns, installable, languageIdFor, resolveServer, serverFor, type
  */
 const SEVERITY = ['', 'error', 'warning', 'info', 'hint'];
 const REPORT_TIMEOUT_MS = 1500;
-const MAX_REPORTED = 5;
+const MAX_TURN_REPORTED = 10;
 const MAX_DEPENDENTS = 10;
+
+/** Files a before() call looked at (for after(): which to re-sync). */
+const files = (b: Before, turn: Map<string, {root: string; file: string}>) => [...new Set([...b.files.map((f) => f.file), ...[...turn.values()].filter((t) => t.root === b.root).map((t) => t.file)])];
 
 export type Before = {root: string; files: {file: string; count: number; list?: Diagnostic[]; dependent?: boolean}[]; missing?: ServerSpec[]};
 
@@ -114,7 +117,18 @@ export class LspManager {
     if (c) void c.whenReady(30_000).then((ok) => ok && c.sync(file));
   }
 
-  /** Before an edit: the current diagnostics of each file and of files that import it (opening them if needed). */
+  /**
+   * Files this turn changed (and files importing them), with their problems before the first
+   * change: what the end-of-turn check compares against. Keyed by root + file.
+   */
+  private turn = new Map<string, {root: string; file: string; count: number; list?: Diagnostic[]}>();
+
+  /**
+   * Before an edit: the first time this turn a file (or a file importing it) is touched, remember
+   * its problems as they are now. Problems are reported once, when the turn ends (turnEnd): in the
+   * middle of a change, breakage the agent is about to fix is expected, and reporting it after
+   * every edit only costs tokens.
+   */
   async before(files: string[], root: string): Promise<Before> {
     root = real(root);
     const targets: {file: string; dependent: boolean}[] = files.map((file) => ({file, dependent: false}));
@@ -123,13 +137,16 @@ export class LspManager {
       const spec = serverFor(file);
       if (spec && this.enabled() && !this.hinted.has(spec.id) && !resolveServer(spec, this.opts.config().lspServers ?? {}, root)) missing.push(spec);
       if (!spec || !this.client(file, root)) continue;
+      if (this.turn.has(`${root}|${file}`)) continue; // already tracked this turn (dependents too)
       for (const d of await dependents(file, root, filePatterns(spec))) if (!targets.some((t) => t.file === d)) targets.push({file: d, dependent: true});
     }
     const out: Before = {root, files: [], missing};
     await Promise.all(
       targets.map(async ({file, dependent}) => {
+        const key = `${root}|${file}`;
+        if (this.turn.has(key)) return;
         // A file being created has no problems yet: nothing to wait for.
-        if (!existsSync(file)) return void out.files.push({file, count: 0, dependent});
+        if (!existsSync(file)) return void this.turn.set(key, {root, file, count: 0});
         const c = this.client(file, root);
         if (!c || !(await c.whenReady(REPORT_TIMEOUT_MS))) return;
         if (!c.isOpen(file)) {
@@ -137,32 +154,42 @@ export class LspManager {
           c.sync(file);
           await c.waitForDiagnostics(file, n, REPORT_TIMEOUT_MS);
         }
+        this.turn.set(key, {root, file, count: c.publishCount(file), list: c.diagnostics(file)});
         out.files.push({file, count: c.publishCount(file), list: c.diagnostics(file), dependent});
       }),
     );
     return out;
   }
 
-  /** After an edit: problems it introduced, as a short note for the tool result (undefined = none). */
+  /** After an edit: tell the servers (no waiting); the only note is a missing server, once. */
   async after(b: Before): Promise<string | undefined> {
-    // Send every change first, then collect: callers are re-checked against the new text.
-    const checks = b.files.map((f) => ({...f, c: this.client(f.file, b.root, false)})).map((f) => ({...f, changed: !!f.c?.sync(f.file)}));
-    const relevant = checks.filter((x) => x.c && (x.changed || x.dependent)); // unchanged (or gone): nothing new to report
-    // Push servers: wait once per server for its re-check to settle (pull servers are asked per file).
-    await Promise.all([...new Set(relevant.map((x) => x.c!))].filter((c) => !c.pull).map((c) => c.waitSettled(relevant.filter((x) => x.c === c).map((x) => ({file: x.file, after: x.count})), REPORT_TIMEOUT_MS)));
+    for (const f of files(b, this.turn)) this.client(f, b.root, false)?.sync(f);
+    return this.missingHint(b.missing ?? []);
+  }
+
+  /**
+   * The turn is ending: problems the turn's changes left that weren't there before, as one note
+   * for the agent (undefined = none). The tracking starts over either way, so a turn is nudged at
+   * most once about the same problems.
+   */
+  async turnEnd(): Promise<string | undefined> {
+    const tracked = [...this.turn.values()];
+    this.turn.clear();
+    if (!tracked.length) return undefined;
+    const checks = tracked.map((t) => ({...t, c: this.client(t.file, t.root, false)})).filter((t) => t.c);
+    for (const t of checks) t.c!.sync(t.file);
+    await Promise.all([...new Set(checks.map((x) => x.c!))].filter((c) => !c.pull).map((c) => c.waitSettled(checks.filter((x) => x.c === c).map((x) => ({file: x.file, after: x.count})), REPORT_TIMEOUT_MS)));
     const results = await Promise.all(
-      relevant.map(async ({file, count, list, c}) => {
+      checks.map(async ({file, count, list, c, root}) => {
         if (c!.pull && !(await c!.waitForDiagnostics(file, count, REPORT_TIMEOUT_MS))) return [];
         const now = c!.diagnostics(file) ?? [];
-        return (list ? newProblems(list, now) : now.filter((d) => (d.severity ?? 1) === 1)).map((d) => formatDiagnostic(d, file, b.root));
+        return (list ? newProblems(list, now) : now.filter((d) => (d.severity ?? 1) === 1)).map((d) => formatDiagnostic(d, file, root));
       }),
     );
     const all = results.flat();
-    const total = all.length;
-    const lines = all.slice(0, MAX_REPORTED);
-    const hint = this.missingHint(b.missing ?? []);
-    if (!total) return hint;
-    return `${hint ? `${hint}\n` : ''}[Diagnostics: this edit introduced ${total} problem${total === 1 ? '' : 's'}${total > lines.length ? ` (first ${lines.length})` : ''}:\n${lines.join('\n')}\nFix ${total === 1 ? 'it' : 'them'} before moving on.]`;
+    if (!all.length) return undefined;
+    const lines = all.slice(0, MAX_TURN_REPORTED);
+    return `Your changes left ${all.length} problem${all.length === 1 ? '' : 's'} the code didn't have before${all.length > lines.length ? ` (first ${lines.length})` : ''}, from the language server:\n${lines.join('\n')}\nFix ${all.length === 1 ? 'it' : 'them'}, or if ${all.length === 1 ? 'it should' : 'they should'} stay, say why in your reply.`;
   }
 
   /** Servers the agent was already told are missing (once per session each). */

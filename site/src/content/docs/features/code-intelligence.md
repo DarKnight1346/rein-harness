@@ -5,22 +5,29 @@ sidebar:
   badge: New
 ---
 
-Rein runs language servers for your project itself, so the agent gets real compiler feedback while it works, on any model, without an editor open. After every file change the agent learns which problems **that change** introduced, and it can ask for a file's problems at any time.
+Rein runs language servers for your project itself, so the agent gets real compiler feedback, on any model, without an editor open. When the agent finishes a turn, Rein checks the files it changed (and the files that import them). If the turn left problems the code didn't have before, the agent is told and keeps working.
 
 ## What the agent gets
 
-- **New problems after each edit.** When `write`, `edit` or `delete` changes a file, Rein compares diagnostics before and after the change, for that file **and the files that import it**, and appends only the new ones to the tool result. So changing a function's return type reports the caller it broke:
+- **A check when it's done.** While the agent works, its edits don't produce error reports: halfway through a change, broken callers are expected, and reporting them after every edit only costs tokens. When it's about to finish, Rein compares each touched file's problems with how it was before the turn's first change to it. If the turn introduced any, you see `Code check:` with the first line, and the agent gets them as one message and continues:
 
-  ```text title="edit result"
-  Edited math.ts: 1 replacement at line 1
-
-  [Diagnostics: this edit introduced 1 problem:
+  ```text title="what the agent receives"
+  <code_check>
+  Your changes left 1 problem the code didn't have before, from the language server:
   main.ts:2:14 error ts 2322: Type 'string' is not assignable to type 'number'.
-  Fix it before moving on.]
+  Fix it, or if it should stay, say why in your reply.
+  </code_check>
   ```
 
-  Problems that were already there aren't repeated, so a legacy codebase full of warnings doesn't drown every edit. Errors and warnings count; hints don't. At most 5 are listed. Importing files are found with `git grep` for the file's name: up to 10, and only files git tracks, so a caller created moments ago and not yet added isn't checked. Each wait for the server is capped at 1.5 seconds, so a slow server never holds up an edit for long. The first edit in a session can take a few seconds while the server starts. After that, a clean edit costs a few milliseconds with TypeScript 7, and up to about a second with servers that only report changes (TypeScript 5/6, pyright).
-- **A `diagnostics` tool.** The agent checks one file (`path`) or every file it has open. With an [editor connected](../ide/), the editor's diagnostics are used instead, and the result says which source answered. The after-edit check always uses Rein's own servers, so with an editor open you have two language servers running for the project (the editor's and Rein's).
+  This happens once per turn: if the agent decides a problem should stay (and says why), it isn't asked again. Problems that were already there aren't counted, so a legacy codebase full of warnings doesn't trigger it. Errors and warnings count; hints don't. At most 10 are listed. Importing files are found with `git grep` for the file's name: up to 10, and only files git tracks, so a caller created moments ago and not yet added isn't checked. The check waits at most about 1.5 seconds for the servers; the first edit in a session can take a few seconds while a server starts.
+
+  It runs after [`Stop` hooks](../hooks/): when one sends the agent back to work, the code check waits for the next time it finishes.
+- **A `diagnostics` tool.** The agent checks one file (`path`) or every file it has open, for example before it starts. With an [editor connected](../ide/), the editor's diagnostics are used instead, and the result says which source answered. The end-of-turn check always uses Rein's own servers, so with an editor open you have two language servers running for the project (the editor's and Rein's).
+- **A one-time hint** when it first changes a file whose language server isn't installed, so it can offer to install it.
+
+:::note[Why at the end of the turn]
+An earlier version reported problems after every edit. Measured on multi-file refactors (Haiku, servers on vs off), that didn't make the code compile more often, and it used 74% more input tokens: the agent spent them on breakage it was about to fix anyway. It also missed the case that mattered, where the agent stopped with the code still broken. Checking once at the end targets exactly that.
+:::
 
 ## Languages
 
