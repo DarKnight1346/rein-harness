@@ -4,7 +4,6 @@ import React, {useEffect, useRef, useState} from 'react';
 import {skillSourceLabel} from '../skills/index.js';
 import {Box, Static, Text, useStdout} from 'ink';
 import {detectGraphics, imagePaths, inlineImage} from './terminal/images.js';
-import {Box, Static, Text} from 'ink';
 import {needsBidi, visualOrder} from './bidi.js';
 import {approvalNote, compactText, routeLabel, toolResultSummary} from './format.js';
 import {ImportPrompt} from './ImportPrompt.js';
