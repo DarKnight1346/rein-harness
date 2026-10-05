@@ -5,7 +5,7 @@ import {defaultRef} from '../router/index.js';
 import type {Config} from '../store/config.js';
 import type {Engine} from './engine.js';
 import {systemPrompt} from './prompt.js';
-import {estimateTokens, renderMessages} from './transcript.js';
+import {estimateTokens, renderMessages, summaryForModel} from './transcript.js';
 import type {ToolSpec} from '../tools/host.js';
 import {SUBAGENT_PROMPT, type Subagent} from '../agents/manager.js';
 
@@ -43,7 +43,7 @@ export async function contextReport(engine: Engine, cfg: Config, toolSpecs: Tool
   const categories: ContextCategory[] = [
     {key: 'system', label: 'System prompt', tokens: estimateTokens(await systemPrompt({tools: true}))},
     {key: 'tools', label: `Tool definitions (${toolSpecs.length})`, tokens: toolSpecs.length ? estimateTokens(JSON.stringify(toolSpecs)) : 0},
-    {key: 'summary', label: 'Summary', tokens: t.summary ? estimateTokens(t.summary.text) : 0},
+    {key: 'summary', label: 'Summary', tokens: t.summary ? estimateTokens(summaryForModel(t.summary)) : 0},
     {key: 'messages', label: 'Messages', tokens: estimateTokens(renderMessages(recent))},
     {key: 'calls', label: 'Tool calls & results', tokens: calls ? estimateTokens(calls) : 0},
   ];

@@ -198,7 +198,7 @@ describe('compactor', () => {
     expect(Object.keys(e.transcript.native)).toHaveLength(1);
     const res = await e.compactNow();
     expect(res).toMatchObject({summarized: 4});
-    expect(e.transcript.summary).toEqual({text: 'GOAL: test', coversUpTo: 4});
+    expect(e.transcript.summary).toMatchObject({text: 'GOAL: test', coversUpTo: 4});
     expect(e.transcript.native).toEqual({});
     expect(log.oneShots[0]!.prompt).toContain('User: one');
     await collect(e.send('four'));

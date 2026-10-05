@@ -1190,9 +1190,10 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
           log('info', 'Nothing to compact yet — the last couple of messages are always kept as-is.');
           break;
         }
-        setCompacting({startedAt: Date.now(), label: `Compacting ${n} messages`});
+        const focus = parsed.args.trim() || undefined;
+        setCompacting({startedAt: Date.now(), label: `Compacting ${n} messages${focus ? ' (focused)' : ''}`});
         void runtime.engine
-          .compactNow()
+          .compactNow(focus)
           .then(
             (res) => {
               if ('skipped' in res) log('info', `Nothing to compact: ${res.skipped}`);

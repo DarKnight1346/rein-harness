@@ -24,7 +24,7 @@ export const COMMANDS: {name: CommandName; description: string}[] = [
   {name: 'usage', description: 'Usage windows (5h / weekly / …) and resets per account (/usage refresh)'},
   {name: 'model', description: 'Chat, decision and compaction models (/model auto, /model <name>)'},
   {name: 'context', description: 'Show what the current context holds and how full it is'},
-  {name: 'compact', description: 'Summarize the conversation with the compaction model'},
+  {name: 'compact', description: 'Summarize the conversation with the compaction model; /compact <what to keep> focuses the summary'},
   {name: 'shells', description: 'Shell commands the agent started; open one to see its logs (/shells <id>)'},
   {name: 'settings', description: 'Settings: status line, sidebar, approvals, sandbox, shell, subagents, goals, load balancing, notifications, updates, privacy, compaction'},
   {name: 'update', description: 'Update the claude and codex CLIs and Rein'},

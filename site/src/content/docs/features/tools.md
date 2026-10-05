@@ -108,6 +108,7 @@ Details in [Web & images](../web-and-images/).
 | `advisor` | Ask a stronger model for advice. Only listed when an advisor is set in `/model` (off by default). |
 | `decide` | Hand small judgments (yes/no, pick one, score) to the cheap decision model, up to 25 questions per call. |
 | `skill` | Load a [skill](../skills/) when the request matches one. |
+| `recall` | After a [compaction](../../internals/context/#compaction), bring a summarized part of this conversation back verbatim (by message number, or by searching). |
 
 ### MCP management
 

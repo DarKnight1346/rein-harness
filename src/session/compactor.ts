@@ -1,7 +1,9 @@
 import {completeWith, resolveUtilityModel} from '../decider/index.js';
 import {catalog} from '../router/catalog.js';
 import type {Config} from '../store/config.js';
-import {estimateTokens, renderForSummary, renderMessages, saveTranscript, type Transcript} from './transcript.js';
+import {mkdir, writeFile} from 'node:fs/promises';
+import path from 'node:path';
+import {estimateTokens, renderForSummary, renderMessages, saveTranscript, scratchDir, summaryForModel, type Message, type Transcript} from './transcript.js';
 
 const SYSTEM = `You compress chat transcripts into a summary another assistant will use to continue the conversation seamlessly.
 Write in plain text with these sections (omit empty ones):
@@ -31,6 +33,33 @@ export type CompactResult =
 /** `midturn`: the context filled up while the agent was working; it carries on from the summary. */
 export type CompactReason = 'manual' | 'auto' | 'midturn' | 'handoff' | 'context';
 
+const MAP_MAX_PARTS = 40;
+const FILE_TOOLS = new Set(['Write', 'Edit', 'Delete']);
+
+/**
+ * What the summary covers, part by part (one per message you sent), with the files each part
+ * changed: built from the transcript, not by the model, so it stays exact across compactions.
+ * The full messages stay in the transcript; the recall tool brings any part back verbatim.
+ */
+export function summaryMap(messages: Message[], upTo: number): string | undefined {
+  const parts: {from: number; to: number; ask: string; files: Set<string>}[] = [];
+  for (let i = 0; i < upTo; i++) {
+    const m = messages[i]!;
+    if (m.role === 'user' && !m.synthetic) parts.push({from: i + 1, to: i + 1, ask: m.text.replace(/\s+/g, ' ').trim().slice(0, 90), files: new Set()});
+    const p = parts.at(-1);
+    if (!p) continue;
+    p.to = i + 1;
+    for (const tool of m.tools ?? []) if (FILE_TOOLS.has(tool.label) && tool.ok && tool.summary) p.files.add(tool.summary.split(' ')[0]!);
+  }
+  if (!parts.length) return undefined;
+  // Long conversations: keep the first parts and the most recent ones.
+  const shown = parts.length > MAP_MAX_PARTS ? [...parts.slice(0, 10), undefined, ...parts.slice(-(MAP_MAX_PARTS - 10))] : parts;
+  const lines = shown.map((p) =>
+    p ? `#${p.from}-${p.to} "${p.ask}"${p.files.size ? ` · changed ${[...p.files].slice(0, 6).join(', ')}${p.files.size > 6 ? ` +${p.files.size - 6}` : ''}` : ''}` : `… ${parts.length - MAP_MAX_PARTS} more parts`,
+  );
+  return `EARLIER PARTS OF THIS CONVERSATION (summarized above; the full messages are kept — restore one with recall {from, to}, or find something with recall {query}):\n${lines.join('\n')}`;
+}
+
 /** Messages a compaction would fold into the summary (0 = nothing to do). */
 export function compactableCount(t: Transcript, keepRecent = KEEP_RECENT): number {
   const from = t.summary?.coversUpTo ?? 0;
@@ -47,7 +76,7 @@ export function contextTokens(t: Transcript): number {
  * with the compaction model. Native session refs are dropped so the next turn starts a fresh
  * session from the summary instead of resuming the full history.
  */
-export async function compactTranscript(t: Transcript, cfg: Config, opts: {keepRecent?: number} = {}): Promise<CompactResult> {
+export async function compactTranscript(t: Transcript, cfg: Config, opts: {keepRecent?: number; focus?: string} = {}): Promise<CompactResult> {
   const keep = opts.keepRecent ?? KEEP_RECENT;
   const from = t.summary?.coversUpTo ?? 0;
   const upTo = Math.max(from, t.messages.length - keep);
@@ -64,14 +93,19 @@ export async function compactTranscript(t: Transcript, cfg: Config, opts: {keepR
     while (end < upTo && estimateTokens(renderForSummary(t.messages.slice(start, end + 1))) < CHUNK_TOKENS) end++;
     const chunk = renderForSummary(t.messages.slice(start, end));
     const prompt = `${summary ? `EXISTING SUMMARY (of earlier conversation):\n${summary}\n\nNEW TRANSCRIPT TO FOLD IN:\n` : 'TRANSCRIPT:\n'}${chunk}\n\nWrite the updated summary.`;
-    summary = (await completeWith(ref, cfg, SYSTEM, prompt, {timeoutMs: 180_000})).trim();
+    const system = opts.focus?.trim() ? `${SYSTEM}\nThe user asked this summary to focus on: ${opts.focus.trim()}. Keep everything about that in full detail (verbatim where it matters); be brief about the rest.` : SYSTEM;
+    summary = (await completeWith(ref, cfg, system, prompt, {timeoutMs: 180_000})).trim();
     if (!summary) throw new Error('compaction model returned an empty summary');
     start = end;
   }
 
-  t.summary = {text: summary!, coversUpTo: upTo};
+  t.summary = {text: summary!, coversUpTo: upTo, map: summaryMap(t.messages, upTo)};
   t.native = {};
   await saveTranscript(t).catch(() => {});
+  // The summary as a file too (the session's scratchpad), for you to read or the agent to re-read.
+  await mkdir(scratchDir(t.id), {recursive: true})
+    .then(() => writeFile(path.join(scratchDir(t.id), 'summary.md'), `# Conversation summary (messages 1-${upTo})\n\n${summaryForModel(t.summary!)}\n`))
+    .catch(() => {});
   return {
     summarized: upTo - from,
     summaryTokens: estimateTokens(summary!),

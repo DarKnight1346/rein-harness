@@ -4,6 +4,7 @@ import {mergeNote, Worktrees} from './agents/worktrees.js';
 import type {Origin} from './tools/fs.js';
 import {makeRouter, type AutoRouter} from './router/index.js';
 import {samplingHandler} from './mcp/sampling.js';
+import {recallTool} from './tools/recall.js';
 import {LspManager, type Before} from './lsp/manager.js';
 import {installable, installServer, serverById, SERVERS} from './lsp/servers.js';
 import {makeAutoRouter} from './router/auto.js';
@@ -484,6 +485,7 @@ Drop superseded reads of the same file, routine listings, and output that no lon
       }),
       decideTool(() => this.config),
       ...mcpTools({mcp: this.mcp, root: () => process.cwd(), call: (name, args, origin) => this.tools.call(name, args, origin)}),
+      recallTool(() => this.engine?.transcript),
       todoTool({
         transcript: () => this.engine?.transcript,
         milestones: () => (this.goals.goal?.status === 'active' ? this.goals.plan()?.milestones.map((m) => m.text) : undefined),

@@ -206,6 +206,18 @@ Regex search over saved conversations (messages and their tool calls), newest fi
 | `all_projects` | boolean | Search every project, not only this one |
 | `case_sensitive` | boolean | |
 
+### `recall`
+
+Label `Recall`. Approval: none (read-only). **Main agent only.**
+
+| Parameter | Type | Notes |
+| --- | --- | --- |
+| `from` | number | First message number (1-based, as the summary's map lists them) |
+| `to` | number | Last message number; up to 30 messages per call |
+| `query` | string | Find where something was said in the summarized part (case-insensitive) |
+
+After a [compaction](../../internals/context/#compaction): returns summarized messages of this conversation verbatim, tool results in full, or with `query` the places a word appears. Messages that weren't summarized are still in context, and it says so.
+
 ### `session_read`
 
 Label `SessionRead`. Approval: none.
