@@ -69,19 +69,26 @@ export function gitlabTracker(cfg: TrackerConfig, secrets: Record<string, string
 }
 
 // ── Azure DevOps (Boards) ─────────────────────────────────────────────────────────────────────────
-const htmlToText = (html: string) =>
-  html
+/**
+ * A work item's HTML description as plain text for the model: entities decoded first, then tags
+ * removed until none are left (so a tag hidden inside another can't survive one pass).
+ */
+export function htmlToText(html: string): string {
+  let text = html
     .replace(/<br\s*\/?>/gi, '\n')
     .replace(/<\/(p|div|li|h\d)>/gi, '\n')
-    .replace(/<[^>]+>/g, '')
     .replace(/&nbsp;/g, ' ')
     .replace(/&lt;/g, '<')
     .replace(/&gt;/g, '>')
     .replace(/&quot;/g, '"')
     .replace(/&#39;/g, "'")
-    .replace(/&amp;/g, '&')
-    .replace(/\n{3,}/g, '\n\n')
-    .trim();
+    .replace(/&amp;/g, '&');
+  for (let prev = ''; prev !== text; ) {
+    prev = text;
+    text = text.replace(/<[^<>]*>/g, '');
+  }
+  return text.replace(/[<>]/g, '').replace(/\n{3,}/g, '\n\n').trim();
+}
 const escapeHtml = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
 export function azureTracker(cfg: TrackerConfig, secrets: Record<string, string>, f: typeof fetch = fetch): Tracker {

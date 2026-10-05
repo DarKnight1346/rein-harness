@@ -3,7 +3,7 @@ import {existsSync, mkdtempSync, readFileSync, writeFileSync} from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import {beforeEach, describe, expect, it} from 'vitest';
-import {adfToText, azureTracker, gitlabTracker, jiraTracker, linearTracker, textToAdf} from '../src/trackers/rest.js';
+import {adfToText, azureTracker, gitlabTracker, htmlToText, jiraTracker, linearTracker, textToAdf} from '../src/trackers/rest.js';
 import type {Issue, Tracker} from '../src/trackers/types.js';
 import {issueTask, TrackerWatcher} from '../src/trackers/watcher.js';
 
@@ -101,6 +101,11 @@ describe('tracker adapters (requests as their API references describe)', () => {
     expect(issues[0]!.body).toBe('Do & test');
     expect((calls[0]!.init.headers as Record<string, string>).authorization).toBe(`Basic ${Buffer.from(':pat').toString('base64')}`);
     expect(JSON.parse(String(calls[0]!.init.body)).query).toContain("[System.AssignedTo] = @Me AND [System.Tags] CONTAINS 'rein'");
+  });
+
+  it('turns HTML descriptions into plain text, nested tags included', () => {
+    expect(htmlToText('<p>Fix &lt;b&gt;this&lt;/b&gt;</p><scr<script>ipt>alert(1)</script>')).toBe('Fix this\nalert(1)');
+    expect(htmlToText('a<br>b')).toBe('a\nb');
   });
 
   it('Jira: search/jql with the label, ADF both ways', async () => {
