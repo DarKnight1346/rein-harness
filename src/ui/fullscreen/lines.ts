@@ -1,5 +1,7 @@
 import {planPreview, planPreviewLines} from '../planPreview.js';
 import chalk from 'chalk';
+import {readFileSync} from 'node:fs';
+import {cellsFor, detectGraphics, imagePaths, kittyImage, kittyPlaceholder, pngSize} from '../terminal/images.js';
 import cliTruncate from 'cli-truncate';
 import {diffWordsWithSpace} from 'diff';
 import sliceAnsi from 'slice-ansi';
@@ -31,6 +33,36 @@ const gutter = (text: string, width: number, color: (s: string) => string) =>
  * Fullscreen transcript entries → wrapped ANSI lines (the history pane virtualizes these).
  * Mirrors the classic renderer's EntryView.
  */
+/**
+ * kitty / Ghostty: images under their tool line, as Unicode placeholders (the screen is redrawn
+ * all the time; the terminal draws the picture wherever the placeholders are). Each image is sent
+ * to the terminal once, invisibly; other terminals show none here (the classic renderer can).
+ */
+const sentImages = new Map<string, {id: number; cols: number; rows: number}>();
+function imageLines(result: string, width: number): string[] {
+  if (runtime.config.inlineImages === 'off' || detectGraphics() !== 'kitty') return [];
+  const out: string[] = [];
+  for (const file of imagePaths(result, process.cwd())) {
+    let img = sentImages.get(file);
+    if (!img) {
+      let data: Buffer;
+      try {
+        data = readFileSync(file);
+      } catch {
+        continue;
+      }
+      const px = pngSize(data);
+      if (!px || data.length > 8 * 1024 * 1024) continue;
+      const {cols, rows} = cellsFor(px, Math.min(60, width - 4), 24);
+      img = {id: 0x100000 + sentImages.size + 1, cols, rows}; // ids with all three color bytes in use
+      process.stdout.write(kittyImage(data, cols, rows, {id: img.id, virtual: true}));
+      sentImages.set(file, img);
+    }
+    out.push('', ...kittyPlaceholder(img.id, img.cols, img.rows).map((l) => `  ${l}`));
+  }
+  return out;
+}
+
 export function entryLines(entry: Entry, width: number): string[] {
   switch (entry.kind) {
     case 'banner':
@@ -46,6 +78,7 @@ export function entryLines(entry: Entry, width: number): string[] {
         ...wrap(chalk.bold(entry.label) + chalk.dim(`(${entry.summary})${approvalNote(entry.approvedBy, entry.judge)}`) + diffStatText(entry.diff), width, entry.ok ? chalk.green('⏺ ') : chalk.red('⏺ '), '  '),
         ...gutter(toolResultSummary(entry.label, entry.result), width, entry.ok ? chalk.dim : chalk.red).slice(0, 1),
         ...(entry.plan ? planPreviewLines(entry.plan, width) : diffLines(entry.diff, width, entry.summary)),
+        ...(entry.ok && (entry.label === 'ImageGen' || entry.label === 'Read') ? imageLines(entry.result, width) : []),
       ];
     case 'compact': {
       const {stats, why} = compactText(entry.reason, entry.result, runtime.config.autoCompactPct);

@@ -82,6 +82,8 @@ export type Config = {
   steerShell: boolean;
   /** MCP servers asking for a completion (sampling): ask you per server (default), allow, or refuse. */
   mcpSampling: 'ask' | 'allow' | 'off';
+  /** Show images the agent makes or reads in the terminal, where it can draw them (iTerm2, WezTerm, kitty, Ghostty). */
+  inlineImages: 'auto' | 'off';
   /** Commits and pull requests the agent writes credit Rein (a "Co-Authored by [Rein Harness](…)" line). */
   attribution: boolean;
   /** whisper.cpp model for voice input (hold Ctrl+Space): `base.en-q5_1` (English, default), or e.g. `base-q5_1` / `small-q5_1` for other languages. */
@@ -125,6 +127,7 @@ export const DEFAULT_CONFIG: Config = {
   waitForLimits: true,
   steerShell: true,
   mcpSampling: 'ask',
+  inlineImages: 'auto',
   voiceModel: 'base.en-q5_1',
   lsp: 'auto',
   lspIdleMinutes: 10,
