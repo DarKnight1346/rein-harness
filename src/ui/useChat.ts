@@ -91,6 +91,7 @@ export function useChat(commit: (e: NewEntry<ChatEntry>) => void, notice: (kind:
       try {
         for await (const ev of runtime.engine.send(text, images)) {
           if (ev.type !== 'waiting' && ev.type !== 'notice') setWaitUntil(undefined);
+          runtime.remoteBus.emit('engine', ev); // the remote page watches the same stream
           if (ev.type === 'route') {
             route = ev;
             setPhase('thinking');

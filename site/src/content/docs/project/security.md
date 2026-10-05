@@ -74,6 +74,15 @@ These are real, and you should know them:
 - **Transcripts are plaintext.** `~/.rein/sessions/` holds your messages and tool-result excerpts, written `0600` in a `0700` folder.
 - **MCP servers are your code.** A stdio server runs with your environment, and an HTTP one sees what you send it. Adding one always asks, but a malicious server is out of scope.
 
+## Remote access
+
+The [remote page](../../features/remote/) (`/remote`) lets a paired device do what the keyboard can: message the agent and answer its approvals.
+
+- **Only this computer by default.** It listens on `127.0.0.1`. Reach it through a private tunnel (Tailscale, Cloudflare Tunnel), which also provides HTTPS. Listening on a network address (`remoteHost`) is plain HTTP, and Rein says so when it starts.
+- **Pairing:** a 6-digit code, single use, valid 5 minutes, locked after 5 wrong tries, rate-limited. It becomes a random 256-bit token, compared in constant time and kept in memory only.
+- **Requests:** reads need the token as an `HttpOnly`, `SameSite=Strict` cookie; changes also need it as a header, so a cross-site request can't act on the page. The page has a strict CSP and never renders conversation text as HTML.
+- **Not protected against:** someone who has a paired device, or the token. That's the same as someone at your keyboard. `/remote unpair` revokes every device and `/remote off` stops the page.
+
 ## Your accounts, your responsibility
 
 Rein drives your own subscriptions through the providers' official CLIs. It doesn't proxy, share or pool access between people. Whether running several accounts of the same provider fits that provider's terms is your call. Check the terms of each subscription you use.

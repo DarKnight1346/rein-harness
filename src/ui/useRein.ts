@@ -22,6 +22,9 @@ import {rmSync} from 'node:fs';
 import {PushToTalk, voiceKeys, type VoiceKeyEvent} from './terminal/voiceKey.js';
 import {DEFAULT_MODEL, detect, downloadModel, installHint, MAX_RECORD_SECONDS, Recording, transcribe, voiceDir} from '../voice/voice.js';
 import {exportSettings, importSettings, writeBundle} from '../store/settingsBundle.js';
+import {RemoteServer, type RemoteState} from '../remote/server.js';
+import {parseRef} from '../providers/types.js';
+import type {EngineEvent} from '../session/engine.js';
 import {NAME_RE} from '../vault/vault.js';
 import {installable, installedVersion, resolveServer, SERVERS} from '../lsp/servers.js';
 import {loadPlugins} from '../plugins/index.js';
@@ -151,6 +154,8 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
   const logMain = log;
 
   const chat = useChat(add, log, {split: opts.renderer === 'classic'});
+  const chatRef = useRef(chat);
+  chatRef.current = chat;
 
   // Project hooks run only once trusted: ask as soon as untrusted ones are skipped (at startup, or
   // when they change mid-session), after any window that's open closes.
@@ -292,10 +297,13 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
   // File changes and commands ask the user through an approval overlay. Several agents can ask at
   // once, so requests queue and are shown one at a time ("1 of 3").
   const approvals = useRef<{req: ApprovalRequest; resolve(d: ApprovalDecision): void}[]>([]);
+  const approvalSeq = useRef(0);
   const showNextApproval = useCallback(() => {
     const next = approvals.current[0];
     if (!next) {
       setOverlay((o) => (o.name === 'approval' ? {name: 'none'} : o));
+      runtime.remoteApproval = undefined;
+      runtime.remoteBus.emit('approval');
       return;
     }
     let settled = false;
@@ -336,6 +344,9 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
       total: approvals.current.length,
       resolve,
     });
+    // The remote page can answer the same request (whichever side answers first wins).
+    runtime.remoteApproval = {id: ++approvalSeq.current, req: next.req, resolve};
+    runtime.remoteBus.emit('approval');
   }, []);
   useEffect(() => {
     runtime.approver = (req) =>
@@ -793,6 +804,114 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
     });
   };
 
+  // The remote page (remote/server.ts): what it shows, what it can do. Messages from it go
+  // through runCommand like typed ones; a few commands only make sense at the keyboard.
+  const REMOTE_REFUSED = new Set(['exit', 'vault', 'remote', 'login', 'settings', 'update', 'tui', 'ide', 'voice']);
+  const remoteLive = useRef('');
+  const remoteState = (): RemoteState => {
+    const t = runtime.engine?.transcript;
+    const ref = runtime.config.chatModel && runtime.config.chatModel !== 'auto' ? parseRef(runtime.config.chatModel) : undefined;
+    const a = runtime.remoteApproval;
+    return {
+      project: nodePath.basename(process.cwd()),
+      model: ref ? (catalog.get(ref)?.label ?? ref.model) : 'auto',
+      busy: chatRef.current.busy,
+      waitingUntil: (chatRef.current as {waitUntil?: number}).waitUntil, // (with waitForLimits)
+      messages: (t?.messages ?? []).slice(-60).map((m) => ({role: m.role, text: m.text.slice(0, 8000), tools: m.tools?.map((x) => ({label: x.label, summary: x.summary, ok: x.ok}))})),
+      live: remoteLive.current || undefined,
+      approval: a && {
+        id: a.id,
+        title: `Rein wants to ${a.req.tool.label}`,
+        summary: a.req.summary,
+        preview: a.req.preview.slice(0, 6000),
+        options: [{decision: 'once', label: 'Allow'}, ...(a.req.sensitive || a.req.planMode ? [] : [{decision: 'session', label: (a.req as {sessionLabel?: string}).sessionLabel ?? 'Allow all this session'}]), {decision: 'deny', label: 'Deny'}],
+      },
+    };
+  };
+  useEffect(() => {
+    const bus = runtime.remoteBus;
+    const onEngine = (ev: EngineEvent) => {
+      const s = runtime.remote;
+      if (ev.type === 'text') {
+        remoteLive.current += ev.delta;
+        s?.push('delta', {text: ev.delta});
+        return;
+      }
+      if (ev.type === 'done' || ev.type === 'error') remoteLive.current = '';
+      if (ev.type === 'tokens') return;
+      s?.push('state');
+    };
+    const onApproval = () => runtime.remote?.push('state');
+    const onInput = (text: string) => {
+      const name = /^\/([\w:-]+)/.exec(text.trim())?.[1];
+      if (name && REMOTE_REFUSED.has(name)) return logMain('error', `/${name} can't be run from the remote page.`);
+      logMain('info', '⇢ from the remote page');
+      runCommandRef.current(text);
+    };
+    bus.on('engine', onEngine);
+    bus.on('approval', onApproval);
+    bus.on('input', onInput);
+    return () => {
+      bus.off('engine', onEngine);
+      bus.off('approval', onApproval);
+      bus.off('input', onInput);
+    };
+  }, []);
+  const remoteCommand = async (args: string) => {
+    const [sub = 'on'] = args.split(/\s+/);
+    const cfg = runtime.config;
+    if (sub === 'off') {
+      await runtime.remote?.stop();
+      runtime.remote = undefined;
+      return logMain('info', 'Remote page stopped.');
+    }
+    if (sub === 'unpair') {
+      runtime.remote?.unpairAll();
+      return logMain('info', 'Every paired device is forgotten: pair again with /remote pair.');
+    }
+    if (sub === 'status') {
+      const s = runtime.remote;
+      return logMain('info', s?.running ? `Remote page on http://${s.address!.host}:${s.address!.port} · ${s.paired} paired device${s.paired === 1 ? '' : 's'}` : 'The remote page is off. /remote on starts it.');
+    }
+    if (sub !== 'on' && sub !== 'pair') return logMain('error', 'Usage: /remote [on] · /remote pair · /remote status · /remote unpair · /remote off');
+    if (!runtime.remote?.running) {
+      const server = new RemoteServer({
+        state: remoteState,
+        send: (text) => runtime.remoteBus.emit('input', text),
+        approve: (id, decision) => {
+          const a = runtime.remoteApproval;
+          if (!a || a.id !== id || !['once', 'session', 'deny'].includes(decision)) return false;
+          if (decision === 'session' && (a.req.sensitive || a.req.planMode)) return false;
+          a.resolve(decision as ApprovalDecision);
+          return true;
+        },
+        interrupt: () => chatRef.current.interrupt(),
+      });
+      const host = cfg.remoteHost || '127.0.0.1';
+      try {
+        await server.start(cfg.remotePort ?? 7377, host);
+      } catch (err) {
+        return logMain('error', `Couldn't start the remote page: ${(err as Error).message}`);
+      }
+      runtime.remote = server;
+    }
+    const s = runtime.remote!;
+    const code = s.newCode();
+    const {host, port} = s.address!;
+    const local = host === '127.0.0.1' || host === '::1' || host === 'localhost';
+    logMain(
+      'info',
+      [
+        `Remote page: http://${local ? 'localhost' : host}:${port} · pairing code ${code} (5 minutes, one device)`,
+        local
+          ? `It listens on this computer only. From your phone, open it through Tailscale (tailscale serve ${port}) or a Cloudflare tunnel (cloudflared tunnel --url http://localhost:${port}).`
+          : `⚠ It listens on ${host}: anyone who can reach that address can try to pair. Prefer a tunnel with HTTPS.`,
+        'Anyone paired can send the agent messages and answer its approvals. /remote unpair forgets every device; /remote off stops it.',
+      ].join('\n'),
+    );
+  };
+
+  const runCommandRef = useRef<(raw: string) => void>(() => {});
   const runCommand = (raw: string) => {
     // `!command` runs a shell command directly (main conversation only).
     if (/^\s*!\s*\S/.test(raw) && !viewing) {
@@ -910,6 +1029,10 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
         // Ready: /voice toggles recording (like a tap of Ctrl+Space).
         if (recording.current) void stopVoice();
         else startVoice(false);
+        return;
+      }
+      case 'remote': {
+        void remoteCommand(parsed.args.trim());
         return;
       }
       case 'vault': {
@@ -1471,6 +1594,7 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
     void refresh();
   };
 
+  runCommandRef.current = runCommand;
   return {
     entries, transcript: terminalHold.current === undefined ? entries : entries.slice(0, terminalHold.current), add, log, overlay, setOverlay, closeOverlay, finishImport, ready, updating, updateLog, statusTick, bump,
     finishTrust, pickHistory, startPlanGoal, startNewPlan, draft, onDraft, onSubmit, onPaste, onImagePaste, onHistory: suggestions.length || fileSuggestions.length ? undefined : onHistory, onExternalEdit, doRewind, togglePlanMode, fileSuggestions, fileSelected, acceptFile, runCommand, suggestions, selected, setSuggestIndex, inputActive, chat, skills, openShells, queued, exitArmed, compacting, pickSession,

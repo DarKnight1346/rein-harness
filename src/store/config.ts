@@ -86,6 +86,9 @@ export type Config = {
   inlineImages: 'auto' | 'off';
   /** Right-to-left text (Hebrew, Arabic): reorder it for display where the terminal doesn't ('auto'), always, or never. */
   rtl: 'auto' | 'on' | 'off';
+  /** The remote page's address (/remote): this computer only by default; reach it through a tunnel. */
+  remoteHost: string;
+  remotePort: number;
   /** Commits and pull requests the agent writes credit Rein (a "Co-Authored by [Rein Harness](…)" line). */
   attribution: boolean;
   /** whisper.cpp model for voice input (hold Ctrl+Space): `base.en-q5_1` (English, default), or e.g. `base-q5_1` / `small-q5_1` for other languages. */
@@ -131,6 +134,8 @@ export const DEFAULT_CONFIG: Config = {
   mcpSampling: 'ask',
   inlineImages: 'auto',
   rtl: 'auto',
+  remoteHost: '127.0.0.1',
+  remotePort: 7377,
   voiceModel: 'base.en-q5_1',
   lsp: 'auto',
   lspIdleMinutes: 10,

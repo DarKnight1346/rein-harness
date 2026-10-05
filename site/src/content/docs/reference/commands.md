@@ -55,6 +55,7 @@ See [Goals](../../features/goals/) and [Plan mode](../../features/plans/).
 | | `auto` | Sets the chat model to auto routing. |
 | | `<model>` | Sets the chat model. Accepts a `provider:model` ref or a model's id or label as shown in `/model`, case-insensitive. |
 | `/voice` | `setup` | [Voice input](../../features/voice/) on your machine (whisper.cpp). Shows what's installed, or, once set up, starts or stops a recording (like a tap of Ctrl+Space). `setup` installs what's missing (Homebrew on macOS) and downloads the speech model (about 60 MB, once). |
+| `/remote` | `on` · `pair` · `status` · `unpair` · `off` | Use this session from your phone or another computer: starts a page Rein serves (on this computer only, reach it through a tunnel) and shows a pairing code. → [Remote access](../../features/remote/) |
 | `/vault` | `set NAME` · `rm NAME` | Secrets the agent can use in shell commands as `$NAME` without seeing them. Lists the names; `set` asks for the value in a hidden field; `rm` removes one. → [Secrets vault](../../features/vault/) |
 | `/lsp` | `stop` | Built-in code intelligence: the language servers Rein is running (memory, open files, idle time), and which are installed and where. `stop` shuts them down (they start again when needed). → [Code intelligence](../../features/code-intelligence/) |
 | `/plugins` | — | Lists the Claude Code and Codex plugins Rein loaded, and what each adds (commands, agents, hooks, MCP servers), plus Codex skills. → [Plugins](../../features/plugins/) |

@@ -132,6 +132,10 @@ Writes outside the project always come to you in `ask` and `auto` modes. The jud
 Confinement covers the **file tools' path arguments** and the shell's working directory. It does not look inside shell commands. `cat ~/Documents/x.txt` is an ordinary shell call. In `ask` mode you see it in the prompt; in `bypass` mode it runs. A command that names an outside path does lose its "read-only, runs without asking" status, though (see the [pipeline](#the-full-pipeline)).
 :::
 
+## Approving from another device
+
+With the [remote page](../remote/) on, every approval also shows on paired devices. Answer it in Rein or on the page; the first answer wins. The options are the same, and sensitive locations only get a one-time yes there too.
+
 ## Sensitive locations
 
 Some paths only ever get a one-time yes, even in bypass mode, and the prompt turns red:
