@@ -1036,6 +1036,8 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
       }
       case 'remote': {
         void remoteCommand(parsed.args.trim());
+        return;
+      }
       case 'trackers': {
         const [sub, ref] = parsed.args.trim().split(/\s+/);
         const cfgs = runtime.config.trackers ?? [];
