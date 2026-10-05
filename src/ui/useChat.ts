@@ -147,10 +147,13 @@ export function useChat(commit: (e: NewEntry<ChatEntry>) => void, notice: (kind:
       }
       // A Stop hook may keep the agent working (bounded, like Claude Code's stop_hook_active).
       if (finished && stopDepth < MAX_STOP_CONTINUATIONS) {
-        const reason = await runtime.stopHook(stopDepth > 0).catch(() => undefined);
-        if (reason) {
-          notice('info', `Stop hook: ${reason}`);
-          await send(`<stop_hook>\n${reason}\n</stop_hook>\nContinue working.`, undefined, stopDepth + 1);
+        const stop = await runtime.stopHook(stopDepth > 0).catch(() => undefined);
+        if (stop?.kind === 'hook') {
+          notice('info', `Stop hook: ${stop.reason}`);
+          await send(`<stop_hook>\n${stop.reason}\n</stop_hook>\nContinue working.`, undefined, stopDepth + 1);
+        } else if (stop) {
+          notice('info', `Code check: ${stop.reason.split('\n')[0]}`);
+          await send(`<code_check>\n${stop.reason}\n</code_check>`, undefined, stopDepth + 1);
         }
       }
     },

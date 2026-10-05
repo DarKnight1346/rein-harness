@@ -22,7 +22,7 @@ import {rmSync} from 'node:fs';
 import {PushToTalk, voiceKeys, type VoiceKeyEvent} from './terminal/voiceKey.js';
 import {DEFAULT_MODEL, detect, downloadModel, installHint, MAX_RECORD_SECONDS, Recording, transcribe, voiceDir} from '../voice/voice.js';
 import {NAME_RE} from '../vault/vault.js';
-import {installedVersion, resolveServer, SERVERS} from '../lsp/servers.js';
+import {installable, installedVersion, resolveServer, SERVERS} from '../lsp/servers.js';
 import {loadPlugins} from '../plugins/index.js';
 import {conversationMarkdown, writeExport} from '../session/export.js';
 import {copyToClipboard} from './terminal/clipboard.js';
@@ -943,10 +943,20 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
         const lines = running.length
           ? running.map((s) => `${s.server.padEnd(11)} ${s.rssMB !== undefined ? `${s.rssMB} MB`.padStart(7) : ''}  ${s.files} file${s.files === 1 ? '' : 's'} open · idle ${s.idleMin} min · ${s.root}`)
           : ['No language servers running (they start when you work on a matching file).'];
-        const installed = SERVERS.map((s) => {
-          const r = resolveServer(s, runtime.config.lspServers ?? {});
-          return `${s.name}: ${r ? `${r.where === 'rein' ? `installed by Rein${installedVersion(s) ? ` (${installedVersion(s)})` : ''}` : r.where === 'path' ? `on your PATH (${r.command})` : `configured (${r.command})`}` : 'not installed (the agent can offer to install it)'}`;
-        });
+        const available: string[] = [];
+        const canInstall: string[] = [];
+        const manualOnly: string[] = [];
+        for (const sp of SERVERS) {
+          const r = resolveServer(sp, runtime.config.lspServers ?? {});
+          if (r) available.push(`  ${sp.name}: ${r.where === 'rein' ? `installed by Rein${installedVersion(sp) ? ` (${installedVersion(sp)})` : ''}` : r.where === 'config' ? `configured (${r.command})` : `${r.command}`}`);
+          else (installable(sp).ok ? canInstall : manualOnly).push(sp.id);
+        }
+        const installed = [
+          available.length ? 'Available:' : 'No language servers installed yet.',
+          ...available,
+          canInstall.length ? `Rein can install (the agent offers when you work on one): ${canInstall.join(', ')}` : '',
+          manualOnly.length ? `Install yourself (comes with the toolchain; the agent says how): ${manualOnly.join(', ')}` : '',
+        ].filter(Boolean);
         log('info', [...lines, '', ...installed, (runtime.config.lsp ?? 'auto') === 'off' ? '\nBuilt-in language servers are off (config lsp).' : `Idle servers stop after ${runtime.config.lspIdleMinutes ?? 10} min. /lsp stop stops them now.`].join('\n'));
         return;
       }

@@ -95,7 +95,7 @@ Replaces an exact string. `old_string` must match exactly (whitespace included, 
 | `new_string` **(required)** | string | Replacement |
 | `replace_all` | boolean | Replace every occurrence, default false |
 
-After a successful `write`, `edit` or `delete`, problems the change introduced (from Rein's [language servers](../../features/code-intelligence/)) are appended to the result.
+Files changed with `write`, `edit` or `delete` are checked by Rein's [language servers](../../features/code-intelligence/) when the agent finishes its turn; problems the changes left come back as one `<code_check>` message.
 
 **Stale-file protection** applies to `edit`, and to `write` on a file that already exists. The agent must have read the file in this conversation, and the file must not have changed since. Otherwise the call fails with "read it again". The scratchpad is exempt.
 
@@ -301,9 +301,9 @@ Label `InstallLanguageServer`. Approval: **always asks, even in bypass mode.**
 
 | Parameter | Type | Notes |
 | --- | --- | --- |
-| `server` **(required)** | string | `typescript` or `python` |
+| `server` **(required)** | string | The server id from the diagnostics result or edit note that suggested it: `cpp`, `asm`, `rust`, `go`, `java`, `kotlin`, `python`, `typescript`… An unknown id returns the full list |
 
-Installs that language server with `npm install` into Rein's `lsp/<server>/` folder and records the version. See [code intelligence](../../features/code-intelligence/#installing-a-server).
+Installs the latest version of that language server into Rein's `lsp/<server>/` folder (npm, release binaries, the vendor's download, or the language's own installer: `go`, `gem`, `dotnet`, pip, Coursier, ghcup, opam, R, Julia, Nix) and records the version. Servers that need a runtime that isn't installed (Java, Erlang, R…) say so instead of installing. See [code intelligence](../../features/code-intelligence/#installing-a-server).
 
 ### `agent`
 

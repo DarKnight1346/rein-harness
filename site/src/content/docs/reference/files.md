@@ -53,7 +53,7 @@ An existing `~/.rein` keeps being used as it is, and so does `REIN_HOME`. To swi
 | `secrets/vault.json` | The [secrets vault](../../features/vault/) (`0600`), used only when the Keychain / DPAPI isn't available (Linux, or `REIN_HOME` set). On macOS it's the Keychain item `rein-vault`; on Windows the DPAPI-encrypted `secrets/vault.json.dpapi` |
 | `secrets/jev.key` | Jev API key fallback file (`0600`), used only when the Keychain / DPAPI isn't available. On Windows the DPAPI-encrypted key is `secrets/jev.key.dpapi` |
 | `voice/ggml-<model>.bin` | The speech model for [voice input](../../features/voice/), downloaded once by `/voice setup` (about 60 MB) |
-| `lsp/<server>/` | Language servers `lsp_install` installed with npm (`lsp/typescript/`, `lsp/python/`), and `installed.json` with the version. See [code intelligence](../../features/code-intelligence/) |
+| `lsp/<server>/` | Language servers `lsp_install` installed (`lsp/cpp/`, `lsp/typescript/`, …; HTML, CSS and JSON share `lsp/vscode-langservers/`), each with `installed.json` recording the version. See [code intelligence](../../features/code-intelligence/) |
 | `update.lock` | Held for up to 10 minutes while a background auto-update installs, so several Rein windows don't install at once |
 
 Session ids look like `2026-10-03-14-22-05-1a2b3c4d`. Sessions are listed per project by the folder they ran in.

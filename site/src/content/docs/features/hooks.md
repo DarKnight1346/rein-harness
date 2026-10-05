@@ -175,7 +175,7 @@ What a block or context does, per event:
 - **PreToolUse block:** the call fails with `blocked by a PreToolUse hook: <reason>`.
 - **PostToolUse** block reason or context is appended to the tool result as `[PostToolUse hook] …` / `[PostToolUse hook context] …`.
 - **UserPromptSubmit block:** the message isn't sent, and you see `Blocked by a UserPromptSubmit hook: <reason>`. Context is appended to your message inside `<hook_context>`.
-- **Stop block:** Rein shows `Stop hook: <reason>` and sends the agent `<stop_hook>…</stop_hook> Continue working.` This happens at most **10 times in a row**, interactive or headless.
+- **Stop block:** Rein shows `Stop hook: <reason>` and sends the agent `<stop_hook>…</stop_hook> Continue working.` This happens at most **10 times in a row**, interactive or headless. When no Stop hook blocks, Rein's own [code check](../code-intelligence/#what-the-agent-gets) runs next.
 - **SessionStart** context is attached to the first message of the session.
 
 :::caution[What a PreToolUse "allow" skips]

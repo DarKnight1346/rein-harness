@@ -111,10 +111,10 @@ export async function runHeadless(argv: string[]): Promise<number> {
     await turn(prompt);
     // Stop hooks may send the agent back to work (bounded, as in the UI).
     for (let depth = 0; !error && depth < 10; depth++) {
-      const reason = await runtime.stopHook(depth > 0).catch(() => undefined);
-      if (!reason) break;
+      const stop = await runtime.stopHook(depth > 0).catch(() => undefined);
+      if (!stop) break;
       reply += '\n\n';
-      await turn(`<stop_hook>\n${reason}\n</stop_hook>\nContinue working.`);
+      await turn(stop.kind === 'hook' ? `<stop_hook>\n${stop.reason}\n</stop_hook>\nContinue working.` : `<code_check>\n${stop.reason}\n</code_check>`);
     }
   } catch (err) {
     error = (err as Error).message;

@@ -4,7 +4,7 @@ import {mergeNote, Worktrees} from './agents/worktrees.js';
 import type {Origin} from './tools/fs.js';
 import {makeRouter, type AutoRouter} from './router/index.js';
 import {LspManager, type Before} from './lsp/manager.js';
-import {installServer, serverById, SERVERS} from './lsp/servers.js';
+import {installable, installServer, serverById, SERVERS} from './lsp/servers.js';
 import {makeAutoRouter} from './router/auto.js';
 import {Engine} from './session/engine.js';
 import {compactTranscript, type CompactReason, type CompactResult} from './session/compactor.js';
@@ -376,11 +376,19 @@ Drop superseded reads of the same file, routine listings, and output that no lon
    * Stop hooks after a reply: exit 2 / decision "block" keeps the agent going with the reason as
    * its next instruction. `active` is true while continuing because of a Stop hook (as in Claude Code).
    */
-  async stopHook(active: boolean): Promise<string | undefined> {
+  /**
+   * The agent finished its turn: should it keep going? A Stop hook may say so (Claude Code
+   * compatible); otherwise the code check may (problems the turn's changes left, from the
+   * language servers, once per turn).
+   */
+  async stopHook(active: boolean): Promise<{reason: string; kind: 'hook' | 'diagnostics'} | undefined> {
     const root = process.cwd();
-    if (!hasHooks('Stop', root)) return undefined;
-    const out = await runHooks('Stop', root, {session_id: this.engine?.transcript.id, stop_hook_active: active});
-    return out.block;
+    if (hasHooks('Stop', root)) {
+      const out = await runHooks('Stop', root, {session_id: this.engine?.transcript.id, stop_hook_active: active});
+      if (out.block) return {reason: out.block, kind: 'hook'};
+    }
+    const problems = await this.lsp.turnEnd().catch(() => undefined);
+    return problems ? {reason: problems, kind: 'diagnostics'} : undefined;
   }
 
   /** Auto effort: one decision-model question (Jev or the cheap model) about how hard the message is. */
@@ -486,7 +494,7 @@ Drop superseded reads of the same file, routine listings, and output that no lon
         name: 'diagnostics',
         label: 'Diagnostics',
         description:
-          "Problems (type errors, lint findings…) in a file (path) or the whole workspace, from the user's editor when one is connected, otherwise from language servers Rein runs itself (TypeScript/JavaScript, Python). Use it after changes to check you didn't break anything. File edits already report new problems they introduce.",
+          "Problems (type errors, lint findings…) in a file (path) or the whole workspace, from the user's editor if connected, else from language servers Rein runs (most languages). Problems your changes leave are also reported when you finish a turn; use this to check a file or the state before you start.",
         inputSchema: {type: 'object', properties: {path: {type: 'string', description: 'A file (project-relative or absolute); omit for the whole workspace'}}},
         mutating: false,
         summarize: (a: any) => a?.path ?? 'workspace',
@@ -496,8 +504,11 @@ Drop superseded reads of the same file, routine listings, and output that no lon
           if (this.ide) return {ok: true, text: `[from the editor]\n${(await this.ide.diagnostics(file)) || 'No problems reported.'}`};
           if ((this.config.lsp ?? 'auto') === 'off') return {ok: false, text: 'no editor is connected and built-in language servers are off (config lsp: "off")'};
           const known = file ? this.lsp.spec(file) : undefined;
-          if (file && !known) return {ok: false, text: `Rein has no built-in language server for ${path.extname(file) || 'this file'} files yet (TypeScript/JavaScript and Python), and no editor is connected.`};
-          if (known && !known.installed) return {ok: false, text: `The ${known.spec.name} language server isn't installed. Ask the user whether to install it, then call lsp_install {server: "${known.spec.id}"} (it asks them too).`};
+          if (file && !known) return {ok: false, text: `Rein has no built-in language server for ${path.basename(file)}, and no editor is connected. (The user can configure one in config.json lspServers.)`};
+          if (known && !known.installed) {
+            const can = installable(known.spec);
+            return {ok: false, text: can.ok ? `The ${known.spec.name} language server isn't installed. Ask the user whether to install it, then call lsp_install {server: "${known.spec.id}"} (it asks them too).` : `The ${known.spec.name} language server isn't installed, and Rein can't install it itself: ${can.why}`};
+          }
           const text = await this.lsp.diagnostics(root, file);
           return {ok: true, text: `[from Rein's language servers]\n${text ?? 'No problems in the files opened so far (pass a path to check a specific file).'}`};
         },
@@ -505,15 +516,16 @@ Drop superseded reads of the same file, routine listings, and output that no lon
       {
         name: 'lsp_install',
         label: 'InstallLanguageServer',
-        description: `Install a language server Rein runs for code intelligence (diagnostics, and new problems reported after each edit), into Rein's own folder with npm. Servers: ${SERVERS.map((s) => `"${s.id}" (${s.name})`).join(', ')}. Always asks the user; only use it when they want it.`,
-        inputSchema: {type: 'object', properties: {server: {type: 'string', enum: SERVERS.map((s) => s.id)}}, required: ['server']},
+        // Kept short: it's in every request, and the server id comes from the diagnostics result or edit note that suggests it.
+        description: "Install a language server for code intelligence into Rein's own folder. server: the id from the diagnostics result or edit note that suggested it (e.g. \"cpp\", \"rust\", \"java\"). Always asks the user; only use it when they want it.",
+        inputSchema: {type: 'object', properties: {server: {type: 'string'}}, required: ['server']},
         mutating: true,
         alwaysAsk: true,
         askEvenInBypass: true,
         summarize: (a: any) => String(a?.server ?? ''),
         run: async (_ctx: unknown, a: any) => {
           const spec = serverById(String(a?.server));
-          if (!spec) return {ok: false, text: `unknown server "${a?.server}"`};
+          if (!spec) return {ok: false, text: `unknown server "${a?.server}". Servers Rein can install: ${SERVERS.filter((x) => x.install.kind !== 'manual').map((x) => x.id).join(', ')}`};
           return installServer(spec);
         },
       },

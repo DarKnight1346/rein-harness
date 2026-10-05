@@ -26,10 +26,8 @@ import {renderMarkdown} from '../markdown.js';
 import {progress} from '../../plans/store.js';
 import {PlansScreen} from '../PlansScreen.js';
 import {isMilestoneCopy, todoLine, type Todo} from '../../tools/todo.js';
-import {splashLines} from './splash.js';
+import {Splash, splashHeight, type SplashPhase} from './SplashScreen.js';
 
-const SPLASH_FADE_IN_MS = 700;
-const SPLASH_FADE_OUT_MS = 900;
 import {hidingIdentity, redact} from '../privacy.js';
 import {contextPct, enabledItems, statusInfo} from '../layout.js';
 import {ConfigureScreen} from '../ConfigureScreen.js';
@@ -108,24 +106,15 @@ export function FullscreenApp({resume}: {resume: Resume}) {
     return out;
   }, [r.entries, chat.live, textWidth, hide]);
   // Blank-state splash: fades in at launch and out once the first message is sent (and again after
-  // /clear). Animated at ~20 fps while fading, a slow color drift otherwise.
+  // /clear). <Splash> animates it.
   const hasUserMessage = r.entries.some((e) => e.kind === 'user');
   const [splashPhase, setSplashPhase] = useState<{fadeIn: number; fadeOut?: number}>({fadeIn: Date.now()});
-  const [splashTick, setSplashTick] = useState(0);
   useEffect(() => {
     if (hasUserMessage && !splashPhase.fadeOut) setSplashPhase((p) => ({...p, fadeOut: Date.now()}));
     if (!hasUserMessage && splashPhase.fadeOut) setSplashPhase({fadeIn: Date.now()}); // /clear
   }, [hasUserMessage]);
-  const now = Date.now();
-  const splashOpacity = splashPhase.fadeOut ? 1 - (now - splashPhase.fadeOut) / SPLASH_FADE_OUT_MS : Math.min(1, (now - splashPhase.fadeIn) / SPLASH_FADE_IN_MS);
-  const splashVisible = !viewing && splashOpacity > 0;
-  const fading = splashVisible && (splashOpacity < 1 || !!splashPhase.fadeOut);
-  useEffect(() => {
-    if (!splashVisible) return;
-    const t = setInterval(() => setSplashTick((x) => x + 1), fading ? 50 : 150);
-    return () => clearInterval(t);
-  }, [splashVisible, fading]);
-  const splash = splashVisible ? splashLines(textWidth, splashOpacity, splashTick) : undefined;
+  // The animation lives in <Splash> (it owns its timer and stops it itself); here only whether it may show.
+  const splash = viewing ? undefined : splashPhase;
 
   // Viewing a subagent: its conversation replaces the main history (recomputed on its updates).
   const lines = viewing ? agentLines(viewing, textWidth).map(redact) : mainLines;
@@ -471,7 +460,7 @@ type HistoryProps = {
   onSelect(sel: Selection | undefined): void;
   onCopy(text: string): void;
   /** Blank-state graphic, drawn centered in the empty rows above the messages (if it fits). */
-  splash?: string[];
+  splash?: SplashPhase;
 };
 
 /**
@@ -517,16 +506,12 @@ function History({width, lines, scroll, onScroll, selection, onSelect, onCopy, s
     },
   });
   // The splash sits in the empty space above the messages, vertically centered; skipped if cramped.
-  const showSplash = splash && topPad >= splash.length + 2;
+  const showSplash = splash && topPad >= splashHeight(width) + 2;
   return (
     <Box ref={ref} flexDirection="column" flexGrow={1} flexShrink={1} overflow="hidden" justifyContent="flex-end" paddingX={1}>
       {showSplash ? (
         <Box flexDirection="column" height={topPad} justifyContent="center" flexShrink={0}>
-          {splash!.map((l, i) => (
-            <Text key={`s${i}`} wrap="truncate">
-              {l || ' '}
-            </Text>
-          ))}
+          <Splash width={width} phase={splash!} />
         </Box>
       ) : null}
       {visible.map((line, i) => {
