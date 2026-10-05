@@ -26,7 +26,7 @@ Rein runs language servers for your project itself, so the agent gets real compi
 - **A one-time hint** when it first changes a file whose language server isn't installed, so it can offer to install it.
 
 :::note[Why at the end of the turn]
-An earlier version reported problems after every edit. Measured on multi-file refactors (Haiku, servers on vs off), that didn't make the code compile more often, and it used 74% more input tokens: the agent spent them on breakage it was about to fix anyway. It also missed the case that mattered, where the agent stopped with the code still broken. Checking once at the end targets exactly that.
+An earlier version reported problems after every edit. Measured on multi-file refactors (Haiku, servers on vs off), that didn't make the code compile more often, and it used 74% more input tokens: the agent spent them on breakage it was about to fix anyway. It also missed the case that mattered, where the agent stopped with the code still broken. With the check at the end of the turn instead, the same tasks compiled 10 times out of 10 (8 with servers off), for about 5% more input tokens: the check fired only in the 2 runs that had left callers broken, and both were fixed. That's a small sample (Haiku, 20 runs), not a benchmark.
 :::
 
 ## Languages
@@ -63,13 +63,13 @@ Rein knows a language server for most languages you'll work in. It starts the ri
 | Perl | PerlNavigator | release binary (x64) | ✓ |
 | Gleam | the Gleam compiler (`gleam lsp`) | release binary | ✓ |
 | Terraform | `terraform-ls` | HashiCorp's release site | ✓ |
-| Java | Eclipse JDT LS | download (needs Java 21+) | Not tested yet |
+| Java | Eclipse JDT LS | download (needs Java 21+) | Not tested |
 | Kotlin | JetBrains `kotlin-lsp` | download, about 360 MB (bundles its own Java) | Not tested |
-| Scala | Metals | Coursier, then `cs install metals` (needs Java) | Not tested yet |
-| Elixir | ElixirLS | release (needs Elixir) | Not tested yet |
-| Erlang | ELP, the build for your Erlang/OTP version | release binary (needs Erlang) | Not tested yet |
-| Nim | `nimlangserver` | release binary (needs Nim) | Not tested yet |
-| PowerShell | PowerShell Editor Services | release (needs `pwsh`) | Not tested yet |
+| Scala | Metals | Coursier, then `cs install metals` (needs Java) | Not tested |
+| Elixir | ElixirLS (compiled once at install, about 20 s) | release (needs Elixir) | ✓ |
+| Erlang | ELP, the build for your Erlang/OTP version | release binary (needs Erlang) | ✓ |
+| Nim | `nimlangserver` | release binary (needs Nim) | ✓ |
+| PowerShell | PowerShell Editor Services | release (needs `pwsh`) | Not tested |
 | Dart / Flutter | the Dart SDK (`dart language-server`) | download, about 230 MB; Flutter's own `dart` is used when it's on your PATH | Not tested |
 | Haskell | HLS | `ghcup install hls` into Rein's folder (needs GHC) | Not tested |
 | OCaml | `ocamllsp` | `opam install ocaml-lsp-server` (into your current opam switch) | Not tested |
