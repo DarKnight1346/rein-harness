@@ -98,7 +98,9 @@ const base: RenderOptions = {
   patchConsole: false,
   maxFps: 30,
   incrementalRendering: true,
-  kittyKeyboard: {mode: 'auto', flags: ['disambiguateEscapeCodes']},
+  // Event types: the release of Ctrl+Space ends a push-to-talk recording (other releases are
+  // dropped before Ink sees them, in MouseStdin).
+  kittyKeyboard: {mode: 'auto', flags: ['disambiguateEscapeCodes', 'reportEventTypes']},
 };
 
 for (;;) {
@@ -121,8 +123,10 @@ for (;;) {
     const lines = lastEntries.current.flatMap((e) => entryLines(e, Math.max(20, width - 2)));
     if (lines.length > 2 && !result?.switchTo) process.stdout.write(lines.join('\n') + '\n\n');
   } else {
-    const app = render(<ClassicApp resume={resume} />, base);
+    const stdin = new MouseStdin(process.stdin); // Ctrl+Space and key releases (no mouse in classic)
+    const app = render(<ClassicApp resume={resume} />, {...base, stdin: stdin as unknown as NodeJS.ReadStream});
     result = (await app.waitUntilExit()) as ExitResult | undefined;
+    process.stdin.removeAllListeners('data');
   }
   if (!result?.switchTo) break;
   renderer = result.switchTo;

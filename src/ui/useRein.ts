@@ -18,6 +18,10 @@ import {findIdes} from '../ide/connection.js';
 import {diffTabName, proposedChange} from '../ide/review.js';
 import {takeOver} from './terminal/takeover.js';
 import {preloadPty} from '../tools/shells.js';
+import {rmSync} from 'node:fs';
+import {PushToTalk, voiceKeys, type VoiceKeyEvent} from './terminal/voiceKey.js';
+import {DEFAULT_MODEL, detect, downloadModel, installHint, MAX_RECORD_SECONDS, Recording, transcribe, voiceDir} from '../voice/voice.js';
+import {NAME_RE} from '../vault/vault.js';
 import {installedVersion, resolveServer, SERVERS} from '../lsp/servers.js';
 import {loadPlugins} from '../plugins/index.js';
 import {conversationMarkdown, writeExport} from '../session/export.js';
@@ -57,9 +61,19 @@ const NOTIFY_AFTER_MS = 20_000;
 /** Background commands running at least this long are mentioned (once) when a turn ends. */
 const BACKGROUND_REMINDER_MS = 5 * 60_000;
 
+export type VoiceState = 'idle' | 'holding' | 'recording' | 'transcribing';
+export const voiceNote = (v: VoiceState) =>
+  v === 'holding'
+    ? '● Recording… let go of Ctrl+Space to stop · Ctrl+C cancels'
+    : v === 'recording'
+      ? `● Recording… press Ctrl+Space to stop (up to ${MAX_RECORD_SECONDS / 60} min) · Ctrl+C cancels`
+      : 'Transcribing…';
+
 export type Overlay =
   | {name: 'none'}
   | {name: 'login'}
+  /** `/vault set NAME`: enter the value, hidden. */
+  | {name: 'vault'; secret: string}
   | {name: 'model'}
   | {name: 'settings'}
   | {name: 'approval'; req: ApprovalRequest; resolve(d: ApprovalDecision): void; position: number; total: number}
@@ -221,6 +235,7 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
       exit();
       return;
     }
+    if (cancelVoice()) log('info', 'Recording cancelled.');
     if (chat.busy) chat.interrupt();
     else runtime.tools.shells.killForeground();
     runtime.agents.cancelAll();
@@ -653,6 +668,74 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
     if (recalled !== undefined) prevDraft.current = recalled;
     return recalled;
   };
+  // Voice input (voice/voice.ts): hold Ctrl+Space to talk, let go to stop (terminal/voiceKey.ts);
+  // a tap, or /voice, toggles. The text lands in the input (never sent on its own).
+  const [voice, setVoice] = useState<VoiceState>('idle');
+  const recording = useRef<{rec: Recording; timer: NodeJS.Timeout} | undefined>(undefined);
+  const ptt = useRef(new PushToTalk());
+  const insertVoice = (text: string) => setDraft((d) => (d && !/\s$/.test(d) ? `${d} ${text}` : d + text));
+  const stopVoice = async () => {
+    ptt.current.reset();
+    const r = recording.current;
+    if (!r) return;
+    recording.current = undefined;
+    clearTimeout(r.timer);
+    setVoice('transcribing');
+    try {
+      const s = detect(runtime.config.voiceModel || DEFAULT_MODEL);
+      const wav = await r.rec.stop();
+      const text = await transcribe(s.whisper!, s.model, wav).finally(() => rmSync(wav, {force: true}));
+      if (text) insertVoice(text);
+      else log('info', 'No speech was recognized.');
+    } catch (err) {
+      log('error', `Voice: ${(err as Error).message}`);
+    } finally {
+      setVoice('idle');
+    }
+  };
+  const startVoice = (held: boolean) => {
+    if (recording.current || voice === 'transcribing') return;
+    const s = detect(runtime.config.voiceModel || DEFAULT_MODEL);
+    const hint = installHint(s);
+    if (hint || !s.modelReady) {
+      ptt.current.reset();
+      log('info', `${hint ? hint.text : `Voice needs its speech model (${s.model}, about 60 MB, downloaded once).`} Run /voice setup${hint?.command ? ' to install it' : ''}.`);
+      return;
+    }
+    recording.current = {rec: new Recording(s.recorder!), timer: setTimeout(() => void stopVoice(), MAX_RECORD_SECONDS * 1000)};
+    setVoice(held ? 'holding' : 'recording');
+  };
+  const cancelVoice = () => {
+    ptt.current.reset();
+    const r = recording.current;
+    if (!r) return false;
+    recording.current = undefined;
+    clearTimeout(r.timer);
+    r.rec.cancel();
+    setVoice('idle');
+    return true;
+  };
+  // Ctrl+Space comes from the stdin filter; only while the input box has the keyboard.
+  const inputActiveRef = useRef(true);
+  inputActiveRef.current = inputActive;
+  useEffect(() => {
+    const p = ptt.current;
+    const onKey = (ev: VoiceKeyEvent) => (inputActiveRef.current || p.recording) && p.key(ev);
+    const onStart = () => startVoice(true);
+    const onToggled = () => recording.current && setVoice('recording');
+    const onStop = () => void stopVoice();
+    voiceKeys.on('key', onKey);
+    p.on('start', onStart);
+    p.on('toggled', onToggled);
+    p.on('stop', onStop);
+    return () => {
+      voiceKeys.off('key', onKey);
+      p.off('start', onStart);
+      p.off('toggled', onToggled);
+      p.off('stop', onStop);
+    };
+  });
+
   const onImagePaste = async () => {
     const token = await attachments.current.pasteClipboardImage();
     if (!token) log('info', 'No image on the clipboard (Ctrl+V pastes images; drag a file in to attach it).');
@@ -789,11 +872,68 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
     }
     // In fullscreen, commands that open a window don't echo into the history.
     const opensWindow = ['goal:plan', 'login', 'usage', 'context', 'help', 'update', 'settings', 'shells', 'btw', 'resume', 'agents', 'agent'].includes(parsed.name) || (parsed.name === 'model' && !parsed.args);
-    if (!(windowed && opensWindow)) log('user', raw.trim());
+    // A value typed after `/vault set NAME` stays off the screen and out of the transcript.
+    if (!(windowed && opensWindow)) log('user', parsed.name === 'vault' ? raw.trim().replace(/^(\/vault\s+set\s+\S+)\s+.*$/s, '$1 ••••') : raw.trim());
     switch (parsed.name) {
       case 'mcp':
         setOverlay({name: 'mcp'});
         break;
+      case 'voice': {
+        const s = detect(runtime.config.voiceModel || DEFAULT_MODEL);
+        const hint = installHint(s);
+        if (parsed.args.trim() === 'setup') {
+          if (hint?.command) {
+            log('info', `Installing with Homebrew: ${hint.command}`);
+            runBang(hint.command);
+            log('info', 'When it finishes, run /voice setup again for the speech model.');
+            return;
+          }
+          if (hint) return log('info', hint.text);
+          if (s.modelReady) return log('info', 'Voice is ready: hold Ctrl+Space and talk, let go to stop.');
+          log('info', `Downloading the speech model ${s.model} (about 60 MB, once) to ${voiceDir()}…`);
+          let shown = 0;
+          void downloadModel(s.model, (done, total) => {
+            const pct = total ? Math.floor((done / total) * 100) : 0;
+            if (pct >= shown + 25) log('info', `  ${(shown = pct)}%`);
+          }).then(
+            () => log('info', 'Voice is ready: hold Ctrl+Space and talk, let go to stop. (macOS asks once to let your terminal use the microphone.)'),
+            (err) => log('error', `Couldn't download the speech model: ${(err as Error).message}`),
+          );
+          return;
+        }
+        if (parsed.args.trim()) return log('error', 'Usage: /voice · /voice setup');
+        if (hint || !s.modelReady) {
+          log('info', [`Voice input runs on your machine (whisper.cpp; nothing is uploaded).`, `Recorder: ${s.recorder ? s.recorder.command : 'missing'} · whisper.cpp: ${s.whisper ?? 'missing'} · model ${s.model}: ${s.modelReady ? 'ready' : 'not downloaded'}`, hint ? hint.text : '', `Run /voice setup${hint?.command ? ` (runs ${hint.command}, then downloads the model)` : hint ? ' after installing them' : ' to download the model'}.`].filter(Boolean).join('\n'));
+          return;
+        }
+        // Ready: /voice toggles recording (like a tap of Ctrl+Space).
+        if (recording.current) void stopVoice();
+        else startVoice(false);
+        return;
+      }
+      case 'vault': {
+        const [sub = '', name = '', ...rest] = parsed.args.trim().split(/\s+/);
+        if (sub === 'set' || sub === 'add') {
+          if (rest.length) return log('error', `Don't type the value in the command: run /vault set ${name || 'NAME'} and enter it in the hidden field. It was not saved.`);
+          if (!NAME_RE.test(name)) return log('error', 'Usage: /vault set NAME (letters, digits and _, like GITHUB_TOKEN)');
+          setOverlay({name: 'vault', secret: name});
+          return;
+        }
+        if (sub === 'rm' || sub === 'remove' || sub === 'delete') {
+          if (!name) return log('error', 'Usage: /vault rm NAME');
+          void runtime.vault.remove(name).then((ok) => log(ok ? 'info' : 'error', ok ? `Removed ${name} from the vault.` : `${name} isn't in the vault.`), (err) => log('error', `Couldn't update the vault: ${(err as Error).message}`));
+          return;
+        }
+        if (sub) return log('error', 'Usage: /vault · /vault set NAME · /vault rm NAME');
+        const names = runtime.vault.names();
+        log(
+          'info',
+          names.length
+            ? `Secrets vault (${process.platform === 'darwin' && !process.env.REIN_HOME ? 'macOS Keychain' : process.platform === 'win32' && !process.env.REIN_HOME ? 'encrypted with Windows DPAPI' : 'secrets/vault.json, 0600'}): ${names.map((n) => `$${n}`).join(', ')}\nThe agent's shell commands get them as environment variables; their values are masked as [secret:NAME] in anything the agent sees. /vault set NAME · /vault rm NAME`
+            : 'The secrets vault is empty. /vault set NAME stores a secret (an API token, a password) that the agent can use in shell commands as $NAME without ever seeing it.',
+        );
+        return;
+      }
       case 'lsp': {
         if (parsed.args.trim() === 'stop') {
           void runtime.lsp.closeAll().then(() => log('info', 'Stopped the language servers (they start again when needed).'));
@@ -1193,7 +1333,8 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
     prevDraft.current = '';
     setDraft('');
     setSuggestIndex(0);
-    addHistory(process.cwd(), typed);
+    // `/vault set NAME <value>` would leak the value: never keep it (the command refuses it too).
+    if (!/^\s*\/vault\s+set\s+\S+\s+\S/.test(typed)) addHistory(process.cwd(), typed);
     history.current.reset(loadHistory(process.cwd()));
     runCommand(typed);
   };
@@ -1278,6 +1419,14 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
     setDraft('/plan ');
   };
 
+  const saveVault = (secret: string, value: string) => {
+    setOverlay({name: 'none'});
+    void runtime.vault.set(secret, value).then(
+      (where) => logMain('info', `Saved ${secret} in the vault (${where === 'keychain' ? (process.platform === 'darwin' ? 'macOS Keychain' : 'encrypted with DPAPI') : 'secrets/vault.json, 0600'}). The agent's shell commands get it as $${secret}.`),
+      (err) => logMain('error', `Couldn't save ${secret}: ${(err as Error).message}`),
+    );
+  };
+
   const closeOverlay = () => {
     setOverlay({name: 'none'});
     void refresh();
@@ -1286,7 +1435,7 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
   return {
     entries, transcript: terminalHold.current === undefined ? entries : entries.slice(0, terminalHold.current), add, log, overlay, setOverlay, closeOverlay, finishImport, ready, updating, updateLog, statusTick, bump,
     finishTrust, pickHistory, startPlanGoal, startNewPlan, draft, onDraft, onSubmit, onPaste, onImagePaste, onHistory: suggestions.length || fileSuggestions.length ? undefined : onHistory, onExternalEdit, doRewind, togglePlanMode, fileSuggestions, fileSelected, acceptFile, runCommand, suggestions, selected, setSuggestIndex, inputActive, chat, skills, openShells, queued, exitArmed, compacting, pickSession,
-    view, setView, viewing, goalNote,
+    view, setView, viewing, goalNote, saveVault, voice,
   };
 }
 

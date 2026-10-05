@@ -60,6 +60,8 @@ export default defineConfig({
           {label: 'Headless & CI', slug: 'features/headless'},
           {label: 'Editor integration', slug: 'features/ide'},
           {label: 'Code intelligence', slug: 'features/code-intelligence'},
+          {label: 'Secrets vault', slug: 'features/vault'},
+          {label: 'Voice input', slug: 'features/voice'},
           {label: 'The terminal UI', slug: 'features/tui'},
         ]},
         {label: 'Reference', items: [

@@ -37,6 +37,12 @@ export function setAttribution(fn: () => boolean): void {
   attribution = fn;
 }
 
+/** Names in the secrets vault (never values), supplied by the runtime. */
+let vaultNames: () => string[] = () => [];
+export function setVaultNames(fn: () => string[]): void {
+  vaultNames = fn;
+}
+
 /** Claude Code's user-level instructions (REIN_CLAUDE_GLOBAL overrides — tests). */
 const claudeGlobal = () => process.env.REIN_CLAUDE_GLOBAL ?? path.join(os.homedir(), '.claude', 'CLAUDE.md');
 
@@ -102,6 +108,11 @@ export async function systemPrompt(opts: {tools?: boolean; scratch?: string} = {
         `Scratchpad: ${opts.scratch}\nA private folder for this session only. Put temporary files, notes, drafts and experiments here (absolute paths) instead of the project; changes there never need approval. It persists if the session is resumed.`,
       );
     }
+    const secrets = vaultNames();
+    if (secrets.length)
+      sections.push(
+        `Secrets vault: these environment variables are set in every shell command you run: ${secrets.map((n) => `$${n}`).join(', ')}. Use them by name (e.g. curl -H "Authorization: Bearer $${secrets[0]}"); you never see their values: anything that would show one (command output, files) shows [secret:NAME] instead. Tools that read the environment (gh, npm, aws…) pick them up as usual.`,
+      );
     sections.push('Past conversations in this project can be searched with sessions_search and read with session_read.');
     sections.push('If an advisor tool is available, it consults a stronger, expensive model: use it sparingly for important decisions or when stuck.');
   }

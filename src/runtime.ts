@@ -36,7 +36,8 @@ import {webTools} from './tools/web.js';
 import {isMilestoneCopy, todoTool} from './tools/todo.js';
 import {imageGenRef, imageTool} from './tools/image.js';
 import {newTranscript, saveTranscript} from './session/transcript.js';
-import {setAttribution, setExtraWorkingDirs, systemPrompt} from './session/prompt.js';
+import {setAttribution, setExtraWorkingDirs, setVaultNames, systemPrompt} from './session/prompt.js';
+import {Vault} from './vault/vault.js';
 import {parseRef, refKey, type Account, type ModelRef, type TokenCount, type ToolBinding} from './providers/types.js';
 import {removeAccount} from './accounts/service.js';
 import {releaseCodexAccount} from './providers/codex/adapter.js';
@@ -97,6 +98,7 @@ export class Runtime {
     readOnlyJudge: (command) => this.judgeReadOnly(command),
     configDirs: () => this.config?.additionalDirectories ?? [],
     checkpoint: (file) => this.checkpoints.snapshot(this.currentTurn(), file),
+    mask: (text) => this.vault.mask(text),
     diagnostics: {
       before: (files, root) => this.lsp.before(files, root),
       after: (snapshot) => this.lsp.after(snapshot as Before),
@@ -128,6 +130,9 @@ export class Runtime {
 
   /** MCP servers (project .mcp.json, ~/.rein/mcp.json, Claude Code's ~/.claude.json). */
   readonly mcp = new McpManager(process.cwd());
+
+  /** The secrets vault (vault/vault.ts): values for shell commands the model never sees. */
+  readonly vault = new Vault();
 
   /** Built-in code intelligence: language servers Rein runs itself (lsp/manager.ts). */
   readonly lsp = new LspManager({config: () => this.config});
@@ -436,6 +441,10 @@ Drop superseded reads of the same file, routine listings, and output that no lon
   }
 
   async init(opts: {resume: Resume}): Promise<{resumed?: Transcript}> {
+    await this.vault.load();
+    this.tools.shells.vault = this.vault;
+    setVaultNames(() => this.vault.names());
+    this.vault.onChange(() => this.engine?.refreshTools()); // the system prompt lists the names
     this.tools.register(
       ...agentTools(this.agents, () => this.config),
       advisorTool({config: () => this.config, engine: () => this.engine, agents: this.agents}),

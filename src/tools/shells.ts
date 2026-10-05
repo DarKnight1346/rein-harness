@@ -88,6 +88,8 @@ export const DEFAULT_TIMEOUT_MS = 120_000;
  * `foreground` (shell started in the foreground).
  */
 export class ShellManager extends EventEmitter {
+  /** The secrets vault: its values go into every command's environment, and are masked in its output. */
+  vault?: {env(): Record<string, string>; mask(text: string): string};
   private nextId = 1;
   private shells = new Map<number, Shell>();
   private procs = new Map<number, ChildProcess | {pid: number}>();
@@ -124,7 +126,7 @@ export class ShellManager extends EventEmitter {
     if (opts.tty) return this.startTty(shell, sh, opts);
     const child = spawn(sh.file, sh.args, {
       cwd: opts.cwd,
-      env: {...process.env, FORCE_COLOR: '0', CI: process.env.CI ?? '1', PAGER: 'cat', GIT_PAGER: 'cat'},
+      env: {...process.env, ...this.vault?.env(), FORCE_COLOR: '0', CI: process.env.CI ?? '1', PAGER: 'cat', GIT_PAGER: 'cat'},
       stdio: ['ignore', 'pipe', 'pipe'],
       // Own process group → killTree reaches children (dev servers, watchers). Windows uses
       // taskkill /T instead, and a detached child there would open its own console window.
@@ -170,7 +172,7 @@ export class ShellManager extends EventEmitter {
     // PowerShell's -NonInteractive makes Read-Host fail: the point here is to be interactive.
     const sh = {...shellCmd, args: shellCmd.args.filter((a) => a !== '-NonInteractive')};
     const {CI: _ci, FORCE_COLOR: _fc, NO_COLOR: _nc, ...base} = process.env;
-    const env = {...base, TERM: 'xterm-256color', PAGER: 'cat', GIT_PAGER: 'cat'} as Record<string, string>;
+    const env = {...base, ...this.vault?.env(), TERM: 'xterm-256color', PAGER: 'cat', GIT_PAGER: 'cat'} as Record<string, string>;
     const cols = process.stdout.columns || 100;
     const rows = process.stdout.rows || 30;
     const term: Term = {write: () => {}, resize: () => {}, raw: '', alt: false};
@@ -382,7 +384,8 @@ export class ShellManager extends EventEmitter {
 
   private push(shell: Shell, raw: string): void {
     // Progress bars redraw with \r: keep only the final state of the line.
-    const line = raw.includes('\r') ? raw.split('\r').filter(Boolean).at(-1) ?? '' : raw;
+    const shown = raw.includes('\r') ? raw.split('\r').filter(Boolean).at(-1) ?? '' : raw;
+    const line = this.vault ? this.vault.mask(shown) : shown; // stored lines never hold a secret
     shell.lines.push(own(line.length > MAX_LINE_CHARS ? line.slice(0, MAX_LINE_CHARS) + '…' : line));
     if (shell.lines.length > MAX_LINES) {
       const drop = shell.lines.length - MAX_LINES;

@@ -1,3 +1,4 @@
+import {secretsDir} from '../store/secrets.js';
 import {EventEmitter} from 'node:events';
 import {existsSync, mkdirSync, realpathSync, rmSync, statSync} from 'node:fs';
 import net from 'node:net';
@@ -66,6 +67,8 @@ export type ToolHostOptions = {
   planMode?: () => boolean;
   /** Save a file's state before a tool changes it (checkpoints for /rewind). */
   checkpoint?: (file: string) => Promise<void>;
+  /** Mask secrets (the vault) in every tool result before the model, hooks or the transcript see it. */
+  mask?: (text: string) => string;
   /**
    * Code intelligence around file changes (lsp/manager.ts): `before` snapshots the files' current
    * diagnostics, `after` returns a note on problems the change introduced (appended to the result).
@@ -304,6 +307,7 @@ export class ToolHost extends EventEmitter {
         if (result.ok && tool.name === 'read') for (const f of this.filesOf(ctx, tool, args)) this.opts.diagnostics?.read?.(f, ctx.root);
         if (tool.name === 'shell' && !(args as {background?: boolean})?.background) this.opts.diagnostics?.shell?.(ctx.root);
       }
+      if (this.opts.mask) result = {...result, text: this.opts.mask(result.text)};
       // PostToolUse hooks: feedback (exit 2 / decision "block") and context go back to the model.
       if (hasHooks('PostToolUse', this.opts.root)) {
         const post = await runHooks('PostToolUse', this.opts.root, {...hookInput, tool_response: {ok: result.ok, text: result.text.slice(0, 20_000)}});
@@ -313,6 +317,7 @@ export class ToolHost extends EventEmitter {
     } catch (err) {
       result = {ok: false, text: err instanceof ToolError ? err.message : `error: ${(err as Error).message}`};
     }
+    if (this.opts.mask) result = {...result, text: this.opts.mask(result.text)}; // errors too (and hook notes)
     if (result.text.length > MAX_RESULT_CHARS) result = {...result, text: result.text.slice(0, MAX_RESULT_CHARS) + '\n… [output truncated]'};
     // A subfolder's own AGENTS.md / CLAUDE.md, the first time the agent works in it (scoped to it).
     if (result.ok) {
@@ -608,9 +613,11 @@ export function mcpProxyCommand(): {command: string; args: string[]} {
 
 const HOME = os.homedir();
 /** Credentials and secrets: always asked about individually, even in bypass mode. */
-const SENSITIVE = ['.ssh', '.gnupg', '.aws', '.azure', '.kube', '.docker', '.config/gcloud', '.config/gh', '.netrc', '.npmrc', '.git-credentials', '.pypirc', 'Library/Keychains', '.claude', '.claude.json', '.codex', '.rein/accounts', '.rein/accounts.json'].map((p) => path.join(HOME, p));
+const SENSITIVE = ['.ssh', '.gnupg', '.aws', '.azure', '.kube', '.docker', '.config/gcloud', '.config/gh', '.netrc', '.npmrc', '.git-credentials', '.pypirc', 'Library/Keychains', '.claude', '.claude.json', '.codex', '.rein/accounts', '.rein/accounts.json', '.rein/secrets'].map((p) => path.join(HOME, p));
 
 export function isSensitivePath(real: string): boolean {
-  if (SENSITIVE.some((p) => real === p || real.startsWith(p + path.sep))) return true;
+  // Rein's own secrets folder (the vault, the Jev key), wherever the data folder is (REIN_HOME, XDG).
+  const secrets = secretsDir();
+  if ([...SENSITIVE, secrets].some((p) => real === p || real.startsWith(p + path.sep))) return true;
   return /(^|\/)\.env(\.[\w.-]+)?$/.test(real) || /\.(pem|key|p12|pfx|keychain)$/i.test(real);
 }

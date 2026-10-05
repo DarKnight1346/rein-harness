@@ -1,3 +1,5 @@
+import {VaultPrompt} from '../VaultPrompt.js';
+import {voiceNote} from '../useRein.js';
 import React, {useEffect, useMemo, useRef, useState, type ReactNode} from 'react';
 import {Box, Text, useBoxMetrics, useInput, useWindowSize} from 'ink';
 import {PROVIDERS, parseRef, refKey} from '../../providers/types.js';
@@ -186,6 +188,12 @@ export function FullscreenApp({resume}: {resume: Resume}) {
         return (
           <Window title="Accounts" width={windowWidth} onClose={r.closeOverlay}>
             <LoginScreen bare onLog={r.log} onClose={r.closeOverlay} />
+          </Window>
+        );
+      case 'vault':
+        return (
+          <Window title={`Vault · ${overlay.secret}`} width={windowWidth} onClose={r.closeOverlay}>
+            <VaultPrompt secret={overlay.secret} onSave={(v) => r.saveVault(overlay.secret, v)} onCancel={r.closeOverlay} />
           </Window>
         );
       case 'model':
@@ -425,6 +433,8 @@ export function FullscreenApp({resume}: {resume: Resume}) {
       <Box height={1} paddingX={1}>
         {r.exitArmed ? (
           <Text color="yellow">Press Ctrl+C again to exit</Text>
+        ) : r.voice !== 'idle' ? (
+          <Text color={r.voice === 'recording' ? 'red' : 'cyan'}>{voiceNote(r.voice)}</Text>
         ) : (
           <Text dimColor wrap="truncate">
             esc interrupt · ctrl+c stop (twice to exit) · wheel/PgUp scroll · ⇧↵ / ⌥↵ / \↵ newline · ctrl+b sidebar

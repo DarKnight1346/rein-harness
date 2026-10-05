@@ -1,5 +1,6 @@
 import {EventEmitter} from 'node:events';
 import {Readable} from 'node:stream';
+import {splitVoiceKeys, voiceKeys} from './voiceKey.js';
 
 /**
  * SGR mouse (1006) with press/release + wheel (1000) and motion only while a button is held
@@ -46,8 +47,10 @@ export function splitMouse(data: string): {text: string; events: MouseEvent[]; p
 
 /**
  * stdin stand-in handed to Ink: strips mouse sequences before Ink's key parser sees them (they'd
- * otherwise arrive as typed text) and emits them on `mouse`. Everything else — keys, pastes, the
- * kitty-protocol query reply — passes through unchanged.
+ * otherwise arrive as typed text) and emits them on `mouse`; Ctrl+Space goes to `voiceKeys`
+ * (push-to-talk) and kitty key-release events are dropped. Everything else — keys, pastes, the
+ * kitty-protocol query reply — passes through unchanged. Both renderers use it (classic without
+ * turning mouse reporting on).
  */
 export class MouseStdin extends Readable {
   readonly isTTY = true;
@@ -86,9 +89,12 @@ export class MouseStdin extends Readable {
 
   private onData(data: string): void {
     clearTimeout(this.flushTimer);
-    const {text, events, pending} = splitMouse(this.pending + data);
+    const {text: rest, events, pending} = splitMouse(this.pending + data);
     this.pending = pending;
+    // Ctrl+Space (push-to-talk) and key releases never reach Ink's key handlers.
+    const {text, events: keys} = splitVoiceKeys(rest);
     if (text) this.push(text);
+    for (const k of keys) voiceKeys.emit('key', k);
     for (const ev of events) this.mouse.emit('mouse', ev);
     // A sequence split across reads normally completes within a millisecond; don't hold input forever.
     if (pending) this.flushTimer = setTimeout(() => this.flushPending(), 50);

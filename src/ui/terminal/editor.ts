@@ -32,7 +32,7 @@ export function editExternally(text: string, fullscreen: boolean): string | unde
   } finally {
     stdin.setRawMode?.(true);
     rmSync(file, {force: true});
-    out.write('\x1b[>1u');
+    out.write('\x1b[>3u');
     if (fullscreen) {
       // Back to a blank alt screen; Ink redraws everything on resize (see resizeFix.ts).
       out.write('\x1b[?1049h' + MOUSE_ON + '\x1b[2J\x1b[H');
