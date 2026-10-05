@@ -39,10 +39,10 @@ const gutter = (text: string, width: number, color: (s: string) => string) =>
  * to the terminal once, invisibly; other terminals show none here (the classic renderer can).
  */
 const sentImages = new Map<string, {id: number; cols: number; rows: number}>();
-function imageLines(result: string, width: number): string[] {
-  if (runtime.config.inlineImages === 'off' || detectGraphics() !== 'kitty') return [];
+function imageLines(files: string[], width: number): string[] {
+  if (!files.length || runtime.config.inlineImages === 'off' || detectGraphics() !== 'kitty') return [];
   const out: string[] = [];
-  for (const file of imagePaths(result, process.cwd())) {
+  for (const file of files) {
     let img = sentImages.get(file);
     if (!img) {
       let data: Buffer;
@@ -68,7 +68,7 @@ export function entryLines(entry: Entry, width: number): string[] {
     case 'banner':
       return [chalk.bold.cyan(`▁▃▅▇ ${entry.text}`) + chalk.dim('  /help for commands'), ''];
     case 'user':
-      return ['', ...entry.text.split('\n').flatMap((p, i) => wrap(p, width, i === 0 ? chalk.gray('> ') : '  ', '  '))];
+      return ['', ...entry.text.split('\n').flatMap((p, i) => wrap(p, width, i === 0 ? chalk.gray('> ') : '  ', '  ')), ...imageLines(entry.images ?? [], width)];
     case 'assistant':
       return assistantLines(entry.text, width, entry.first);
     case 'tool':
@@ -78,7 +78,7 @@ export function entryLines(entry: Entry, width: number): string[] {
         ...wrap(chalk.bold(entry.label) + chalk.dim(`(${entry.summary})${approvalNote(entry.approvedBy, entry.judge)}`) + diffStatText(entry.diff), width, entry.ok ? chalk.green('⏺ ') : chalk.red('⏺ '), '  '),
         ...gutter(toolResultSummary(entry.label, entry.result), width, entry.ok ? chalk.dim : chalk.red).slice(0, 1),
         ...(entry.plan ? planPreviewLines(entry.plan, width) : diffLines(entry.diff, width, entry.summary)),
-        ...(entry.ok && (entry.label === 'ImageGen' || entry.label === 'Read') ? imageLines(entry.result, width) : []),
+        ...(entry.ok && (entry.label === 'ImageGen' || entry.label === 'Read') ? imageLines(imagePaths(entry.result, process.cwd()), width) : []),
       ];
     case 'compact': {
       const {stats, why} = compactText(entry.reason, entry.result, runtime.config.autoCompactPct);

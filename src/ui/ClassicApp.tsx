@@ -66,11 +66,11 @@ function useInlineImages(entries: readonly {id: number; kind: string}[]) {
   useEffect(() => {
     if (graphics.current === 'none' || runtime.config.inlineImages === 'off') return;
     for (const e of entries) {
-      if (e.kind !== 'tool' || shown.current.has(e.id)) continue;
+      if ((e.kind !== 'tool' && e.kind !== 'user') || shown.current.has(e.id)) continue;
       shown.current.add(e.id);
-      const t = e as unknown as {label: string; ok: boolean; result: string};
-      if (!t.ok || !IMAGE_TOOLS.has(t.label)) continue;
-      for (const file of imagePaths(t.result, process.cwd())) {
+      const t = e as unknown as {label?: string; ok?: boolean; result?: string; images?: string[]};
+      const files = e.kind === 'user' ? (t.images ?? []) : t.ok && IMAGE_TOOLS.has(t.label!) ? imagePaths(t.result!, process.cwd()) : [];
+      for (const file of files) {
         const img = inlineImage(file, graphics.current, Math.min(60, (process.stdout.columns ?? 80) - 4));
         if (img) write(img);
       }

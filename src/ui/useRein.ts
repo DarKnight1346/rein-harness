@@ -841,12 +841,12 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
         setQueued((q) => [...q, parsed.text]);
         return;
       }
-      log('user', parsed.text);
+      const msg = attachments.current.expand(parsed.text);
+      add({kind: 'user', text: parsed.text, ...(msg.images.length ? {images: msg.images.map((i) => i.path)} : {})});
       if (!catalog.all().length) {
         log('error', 'No signed-in accounts. Use /login to add one.');
         return;
       }
-      const msg = attachments.current.expand(parsed.text);
       void chat.send(msg.text, msg.images).then(bump);
       return;
     }
@@ -1459,7 +1459,7 @@ function replay(t: Transcript, add: AddEntry): void {
   add({kind: 'info', text: t.messages.length > recent.length ? `Resumed conversation (${t.messages.length} messages; showing the last ${recent.length})` : 'Resumed conversation'});
   for (const m of recent) {
     if (m.synthetic) add({kind: 'info', text: 'Context compacted mid-task — the agent carried on from the summary.'});
-    else if (m.role === 'user') add({kind: 'user', text: displayText(m.text)});
+    else if (m.role === 'user') add({kind: 'user', text: displayText(m.text), ...(m.images?.length ? {images: m.images.map((i) => i.path)} : {})});
     else {
       for (const tool of m.tools ?? []) {
         const plan = planPreview(tool.label, tool.summary, tool.ok, tool.result);

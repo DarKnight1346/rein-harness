@@ -55,3 +55,28 @@ describe('terminal images', () => {
     expect(inlineImage(path.join(dir, 'a.png'), 'iterm', 40)).toMatch(/^\x1b\]1337;File=/);
   });
 });
+
+describe('pasted images', () => {
+  it('show under your message in fullscreen (kitty), sent to the terminal once', async () => {
+    const {vi} = await import('vitest');
+    const dir = mkdtempSync(path.join(os.tmpdir(), 'rein-paste-'));
+    const file = path.join(dir, 'clipboard-1.png');
+    writeFileSync(file, png(200, 100));
+    process.env.REIN_GRAPHICS = 'kitty';
+    const writes: string[] = [];
+    const spy = vi.spyOn(process.stdout, 'write').mockImplementation((s: any) => (writes.push(String(s)), true));
+    try {
+      const {entryLines} = await import('../src/ui/fullscreen/lines.js');
+      const entry = {id: 1, kind: 'user', text: 'what is this? [Image #1]', images: [file]} as const;
+      const lines = entryLines(entry as never, 80);
+      const placeholders = lines.filter((l) => l.includes(String.fromCodePoint(0x10eeee)));
+      expect(placeholders.length).toBeGreaterThan(0);
+      entryLines(entry as never, 80); // the screen is redrawn: no second transmit
+      expect(writes.filter((w) => w.startsWith('\x1b_G'))).toHaveLength(1);
+      expect(writes[0]).toContain('U=1');
+    } finally {
+      spy.mockRestore();
+      delete process.env.REIN_GRAPHICS;
+    }
+  });
+});

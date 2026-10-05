@@ -92,7 +92,7 @@ Fetched pages are cached **in memory for 15 minutes**, up to 100 pages, keyed by
 
 ## Seeing images in the terminal
 
-When the agent generates an image, or reads one, Rein shows it right under the tool line, in terminals that can draw images:
+When the agent generates an image or reads one, Rein shows it right under the tool line. An image you paste (Ctrl+V) or drop into a message shows under your message, in resumed conversations too. This works in terminals that can draw images:
 
 | Terminal | Classic renderer (`--classic`) | Fullscreen (default) |
 |---|---|---|
