@@ -1,3 +1,4 @@
+import {EventEmitter} from 'node:events';
 import {adapters} from './providers/index.js';
 import {catalog} from './router/catalog.js';
 import {mergeNote, Worktrees} from './agents/worktrees.js';
@@ -5,6 +6,7 @@ import type {Origin} from './tools/fs.js';
 import {makeRouter, type AutoRouter} from './router/index.js';
 import {samplingHandler} from './mcp/sampling.js';
 import {recallTool} from './tools/recall.js';
+import type {RemoteServer} from './remote/server.js';
 import {LspManager, type Before} from './lsp/manager.js';
 import {installable, installServer, serverById, SERVERS} from './lsp/servers.js';
 import {makeAutoRouter} from './router/auto.js';
@@ -136,6 +138,15 @@ export class Runtime {
 
   /** The secrets vault (vault/vault.ts): values for shell commands the model never sees. */
   readonly vault = new Vault();
+
+  /**
+   * The remote page (remote/server.ts) and the TUI meet here: `engine` events as the chat consumes
+   * them, `input` text sent from the page, `approval` when the one shown changes.
+   */
+  readonly remoteBus = new EventEmitter();
+  /** The approval on screen now, answerable from the remote page too (first answer wins). */
+  remoteApproval: {id: number; req: ApprovalRequest; resolve(d: ApprovalDecision): void} | undefined;
+  remote: RemoteServer | undefined;
 
   /** Built-in code intelligence: language servers Rein runs itself (lsp/manager.ts). */
   readonly lsp = new LspManager({config: () => this.config});
@@ -660,6 +671,7 @@ Drop superseded reads of the same file, routine listings, and output that no lon
     void this.mcp.closeAll();
     void this.ide?.close();
     void this.lsp.closeAll();
+    void this.remote?.stop();
     this.stopUsageRefresh();
     this.agents.closeAll();
     this.engine?.shutdown();
