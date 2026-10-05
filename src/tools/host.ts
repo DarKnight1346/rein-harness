@@ -12,6 +12,7 @@ import {addProjectRule, check, loadRules, ruleTool, suggestRule, type Rules, typ
 import {hasHooks, runHooks} from '../hooks.js';
 import {renderScoped, scopedInstructions} from '../session/prompt.js';
 import {readOnlyCommand} from './plan.js';
+import {steer} from './steer.js';
 import {ipcPath, isWindows} from '../util/platform.js';
 import {ShellManager} from './shells.js';
 import type {DiffLine} from './diff.js';
@@ -67,6 +68,8 @@ export type ToolHostOptions = {
   planMode?: () => boolean;
   /** Save a file's state before a tool changes it (checkpoints for /rewind). */
   checkpoint?: (file: string) => Promise<void>;
+  /** Run simple shell reads/searches (cat, grep, sed -n…) as the built-in tools (default on). */
+  steerShell?: () => boolean;
   /** Mask secrets (the vault) in every tool result before the model, hooks or the transcript see it. */
   mask?: (text: string) => string;
   /**
@@ -168,7 +171,21 @@ export class ToolHost extends EventEmitter {
       .map((t) => ({name: t.name, description: t.describe?.() ?? t.description, inputSchema: t.schema?.() ?? t.inputSchema}));
   }
 
+  /** The agent was told once that a shell read ran as a tool. */
+  private steeredOnce = false;
+
   async call(name: string, rawArgs: unknown, origin?: Origin): Promise<ToolResult> {
+    // `cat F`, `grep -rn x src`, `sed -n '10,40p' F`…: run as the built-in tool (tools/steer.ts).
+    if (name === 'shell' && this.opts.steerShell?.() !== false) {
+      const a = (rawArgs ?? {}) as {command?: unknown; cwd?: unknown; background?: unknown; interactive?: unknown};
+      const steered = typeof a.command === 'string' && !a.cwd && !a.background && !a.interactive ? steer(a.command, this.opts.root) : undefined;
+      if (steered) {
+        const r = await this.call(steered.tool, steered.args, origin);
+        if (this.steeredOnce) return r;
+        this.steeredOnce = true;
+        return {...r, text: `${r.text}\n\n[Rein ran \`${String(a.command).trim().split(/\s+/)[0]}\` as the ${steered.tool} tool: same result, and files count as read for edit. Call ${steered.tool} directly next time.]`};
+      }
+    }
     let args = rawArgs;
     const tool = this.find(name);
     if (!tool) return {ok: false, text: `unknown tool ${name}`};

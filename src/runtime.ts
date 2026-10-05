@@ -99,6 +99,7 @@ export class Runtime {
     configDirs: () => this.config?.additionalDirectories ?? [],
     checkpoint: (file) => this.checkpoints.snapshot(this.currentTurn(), file),
     mask: (text) => this.vault.mask(text),
+    steerShell: () => this.config.steerShell !== false,
     diagnostics: {
       before: (files, root) => this.lsp.before(files, root),
       after: (snapshot) => this.lsp.after(snapshot as Before),
