@@ -32,6 +32,8 @@ An existing `~/.rein` keeps being used as it is, and so does `REIN_HOME`. To swi
 | `accounts.json` | Account registry: `{id, provider, home, imported, email, plan}` per account, plus `importOffered` (the first-run import prompt is shown once). `home: null` means "the CLI's default folder, env var unset". |
 | `accounts/claude/<id>/` | `CLAUDE_CONFIG_DIR` for a Claude account you added with `/login` (`claude-1`, `claude-2`, …) |
 | `accounts/codex/<id>/` | `CODEX_HOME` for a Codex account you added (`codex-1`, …) |
+| `state/trackers.json` | Issues the [trackers](../../features/trackers/) have taken (so a restart doesn't redo them), with their status and branch |
+| `worktrees/<project>/rein-<issue>/` | The worktree an issue was worked on, on its `rein/<issue>` branch, kept for you to review. Remove it with `git worktree remove` when you're done |
 | `state/usage.json` | Last-known usage windows per account, plus limit cooldowns (account unusable until a time) |
 | `exports/<id>.md` | Conversations saved with `/export` (when no file is given) |
 | `mcp-auth/<host>_<path>.json` | OAuth tokens and client registration for each remote MCP server you signed in to (owner-only), e.g. `mcp.linear.app_mcp.json`. Delete one to sign out of that server |

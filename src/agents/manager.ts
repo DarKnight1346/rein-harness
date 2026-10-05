@@ -28,6 +28,8 @@ export type Subagent = {
   status: SubagentStatus;
   startedAt: number;
   endedAt?: number;
+  /** Started by untrusted input (an issue from a tracker): its tool calls always ask. */
+  untrusted?: boolean;
   /** Final report (the last round's text). */
   output: string;
   rounds: number;
@@ -121,7 +123,7 @@ export class SubagentManager extends EventEmitter {
     return this.done.get(id);
   }
 
-  spawn(args: {task: string; model: string; mode: SubagentMode; name?: string; background?: boolean; definition?: import('./definitions.js').AgentDefinition}): {agent: Subagent; done: Promise<Subagent>} {
+  spawn(args: {task: string; model: string; mode: SubagentMode; name?: string; background?: boolean; definition?: import('./definitions.js').AgentDefinition; untrusted?: boolean}): {agent: Subagent; done: Promise<Subagent>} {
     const limit = this.deps.limit();
     if (this.running().length >= limit) {
       throw new Error(`subagent limit reached (${limit} running; the user's limit is ${limit}). Wait for one with agent_result {id, wait: true}, or do the work yourself.`);
@@ -141,6 +143,7 @@ export class SubagentManager extends EventEmitter {
       events: [],
       tokens: {input: 0, cached: 0, output: 0},
       ...(args.definition ? {definition: args.definition} : {}),
+      ...(args.untrusted ? {untrusted: true} : {}),
     };
     this.agents.set(id, agent);
     const done = this.run(agent);

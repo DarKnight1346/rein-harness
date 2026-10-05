@@ -1,9 +1,10 @@
 import type {Skill} from '../skills/index.js';
 
-export type CommandName = 'remote' | 'voice' | 'vault' | 'lsp' | 'plugins' | 'export' | 'ide' | 'memory' | 'mcp' | 'rewind' | 'permissions' | 'add-dir' | 'goal' | 'goal:plan' | 'btw' | 'agents' | 'agent' | 'resume' | 'login' | 'usage' | 'model' | 'context' | 'compact' | 'shells' | 'settings' | 'update' | 'tui' | 'clear' | 'help' | 'exit';
+export type CommandName = 'trackers' | 'remote' | 'voice' | 'vault' | 'lsp' | 'plugins' | 'export' | 'ide' | 'memory' | 'mcp' | 'rewind' | 'permissions' | 'add-dir' | 'goal' | 'goal:plan' | 'btw' | 'agents' | 'agent' | 'resume' | 'login' | 'usage' | 'model' | 'context' | 'compact' | 'shells' | 'settings' | 'update' | 'tui' | 'clear' | 'help' | 'exit';
 
 export const COMMANDS: {name: CommandName; description: string}[] = [
   {name: 'remote', description: 'Use this session from your phone or another computer: a page Rein serves (pairing code); /remote pair · status · unpair · off'},
+  {name: 'trackers', description: 'Issue trackers handing work to Rein (GitHub, Linear, GitLab, Azure DevOps, Jira): status · check · retry <ref>'},
   {name: 'voice', description: 'Voice input, on your machine (whisper.cpp): hold Ctrl+Space to talk. /voice shows status or starts/stops recording; /voice setup installs what it needs'},
   {name: 'vault', description: 'Secrets the agent can use in shell commands as $NAME without seeing them: list, /vault set NAME, /vault rm NAME'},
   {name: 'lsp', description: "Built-in code intelligence: the language servers Rein runs, their memory, what's installed (/lsp stop stops them)"},

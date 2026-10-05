@@ -135,6 +135,9 @@ Confinement covers the **file tools' path arguments** and the shell's working di
 ## Approving from another device
 
 With the [remote page](../remote/) on, every approval also shows on paired devices. Answer it in Rein or on the page; the first answer wins. The options are the same, and sensitive locations only get a one-time yes there too.
+## Work from issue trackers always asks
+
+Work started by an [issue tracker](../trackers/) runs on text someone else wrote, so every action it takes asks you, even in bypass or auto mode.
 
 ## Sensitive locations
 

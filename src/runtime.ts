@@ -7,6 +7,9 @@ import {makeRouter, type AutoRouter} from './router/index.js';
 import {samplingHandler} from './mcp/sampling.js';
 import {recallTool} from './tools/recall.js';
 import type {RemoteServer} from './remote/server.js';
+import {makeTracker} from './trackers/index.js';
+import type {Issue, TrackerConfig} from './trackers/types.js';
+import {issueTask, TrackerWatcher} from './trackers/watcher.js';
 import {LspManager, type Before} from './lsp/manager.js';
 import {installable, installServer, serverById, SERVERS} from './lsp/servers.js';
 import {makeAutoRouter} from './router/auto.js';
@@ -102,6 +105,7 @@ export class Runtime {
     readOnlyJudge: (command) => this.judgeReadOnly(command),
     configDirs: () => this.config?.additionalDirectories ?? [],
     checkpoint: (file) => this.checkpoints.snapshot(this.currentTurn(), file),
+    untrusted: (origin) => origin.agentId !== undefined && !!this.agents.get(origin.agentId)?.untrusted,
     mask: (text) => this.vault.mask(text),
     steerShell: () => this.config.steerShell !== false,
     diagnostics: {
@@ -147,6 +151,37 @@ export class Runtime {
   /** The approval on screen now, answerable from the remote page too (first answer wins). */
   remoteApproval: {id: number; req: ApprovalRequest; resolve(d: ApprovalDecision): void} | undefined;
   remote: RemoteServer | undefined;
+  /** Issue trackers handing work to Rein (trackers/watcher.ts); started by the interactive UI. */
+  readonly trackers = new TrackerWatcher({
+    trackers: () => this.config.trackers ?? [],
+    pollMinutes: () => this.config.trackerPollMinutes ?? 2,
+    make: (cfg) => makeTracker(cfg, this.vault.env()),
+    work: (issue, _tracker, cfg) => this.issueSession(issue, cfg),
+    log: (text, kind) => this.trackerLog?.(text, kind),
+  });
+  /** Where tracker news goes (the UI's transcript). */
+  trackerLog: ((text: string, kind?: 'info' | 'error') => void) | undefined;
+
+  /** An issue from a tracker: an untrusted background subagent on its own branch; resolves with its report. */
+  private async issueSession(issue: Issue, cfg: TrackerConfig): Promise<{report: string; branch: string}> {
+    const branch = `rein/${issue.ref.replace(/^#/, 'issue-').replace(/[^\w.-]+/g, '-').toLowerCase()}`;
+    const wt = await this.worktrees.createBranch(branch);
+    if (!wt) throw new Error("this project isn't a git repository, so there's no branch to work on");
+    const {agent, done} = this.agents.spawn({
+      task: issueTask(issue, cfg.kind, branch),
+      model: cfg.model ?? this.config.subagentModel ?? 'auto',
+      mode: 'new',
+      name: `issue ${issue.ref}`,
+      background: true,
+      untrusted: true,
+    });
+    this.worktrees.adopt(agent.id, wt); // before its first tool call: everything it does happens on the branch
+    agent.collected = true; // its report goes to the issue, not into your conversation
+    const finished = await done;
+    // The branch note is for agents (it names a local path): the issue comment says the branch itself.
+    const report = (finished.output || '(no report)').replace(/\n*\[Its work is on the branch [^\]]*\]\s*$/, '').trim();
+    return {report: report || '(no report)', branch};
+  }
 
   /** Built-in code intelligence: language servers Rein runs itself (lsp/manager.ts). */
   readonly lsp = new LspManager({config: () => this.config});
@@ -259,7 +294,7 @@ export class Runtime {
       const r = await this.worktrees.settle(agent.id);
       if (wtRoot) void this.lsp.stopRoot(wtRoot); // its language servers go with the worktree
       if (!r) return undefined;
-      if (r.kept) this.tools.addDirs([r.kept]); // the main agent merges the conflicting files from there
+      if (r.kept && !r.branch) this.tools.addDirs([r.kept]); // the main agent merges the conflicting files from there
       return mergeNote(r);
     },
     killShells: (agentId) => {
@@ -672,6 +707,7 @@ Drop superseded reads of the same file, routine listings, and output that no lon
     void this.ide?.close();
     void this.lsp.closeAll();
     void this.remote?.stop();
+    this.trackers.stop();
     this.stopUsageRefresh();
     this.agents.closeAll();
     this.engine?.shutdown();

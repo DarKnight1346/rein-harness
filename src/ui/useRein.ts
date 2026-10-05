@@ -204,6 +204,9 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
       const shadowed = shadowedSkills(loadSkills());
       if (shadowed.length) log('info', `Skill${shadowed.length > 1 ? 's' : ''} ${shadowed.map((s) => `"${s.name}"`).join(', ')} hidden by built-in command${shadowed.length > 1 ? 's' : ''}; rename to use ${shadowed.length > 1 ? 'them' : 'it'}.`);
       setReady(true);
+      // Issue trackers: only an interactive session takes issues (their approvals need someone).
+      runtime.trackerLog = (text, kind) => log(kind ?? 'info', text);
+      runtime.trackers.start();
       // Project MCP servers wait for approval (a repo shouldn't launch commands on its own).
       setTimeout(() => {
         const waiting = runtime.mcp.list().filter((s) => s.status === 'needs-approval').map((s) => s.name);
@@ -1033,6 +1036,28 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
       }
       case 'remote': {
         void remoteCommand(parsed.args.trim());
+        return;
+      }
+      case 'trackers': {
+        const [sub, ref] = parsed.args.trim().split(/\s+/);
+        const cfgs = runtime.config.trackers ?? [];
+        if (sub === 'check') {
+          if (!cfgs.length) return log('info', 'No trackers are set up: add them to "trackers" in config.json (see the Issue trackers docs).');
+          log('info', 'Checking the trackers…');
+          void runtime.trackers.poll().then((n) => log('info', n ? `${n} new issue${n === 1 ? '' : 's'} taken.` : 'No new issues.'));
+          return;
+        }
+        if (sub === 'retry') {
+          if (!ref) return log('error', 'Usage: /trackers retry <ref> (like #42 or ENG-12)');
+          return log('info', runtime.trackers.retry(ref) ? `Forgot ${ref}: the next check takes it again.` : `${ref} hasn't been taken.`);
+        }
+        if (sub) return log('error', 'Usage: /trackers · /trackers check · /trackers retry <ref>');
+        const {handled, errors} = runtime.trackers.status();
+        const lines = cfgs.length
+          ? cfgs.map((c) => `${c.kind}${c.project ? ` ${c.project}` : ''} · label "${c.label || 'rein'}"${errors.get(`${c.kind}${c.project ? ` ${c.project}` : ''}`) ? ` · ✗ ${errors.get(`${c.kind}${c.project ? ` ${c.project}` : ''}`)}` : ''}`)
+          : ['No trackers are set up: add them to "trackers" in config.json.'];
+        const taken = Object.values(handled).slice(-10).map((h) => `  ${h.ref} "${h.title}" · ${h.status}${h.branch ? ` · ${h.branch}` : ''}`);
+        log('info', [...lines, ...(taken.length ? ['Taken:', ...taken] : []), cfgs.length ? `Checked every ${runtime.config.trackerPollMinutes ?? 2} min · /trackers check to look now.` : ''].filter(Boolean).join('\n'));
         return;
       }
       case 'vault': {

@@ -89,6 +89,10 @@ export type Config = {
   /** The remote page's address (/remote): this computer only by default; reach it through a tunnel. */
   remoteHost: string;
   remotePort: number;
+  /** Issue trackers that hand work to Rein (trackers/): an issue assigned to you with the label starts a session on its own branch. */
+  trackers: import('../trackers/types.js').TrackerConfig[];
+  /** How often to look for new issues, in minutes (default 2). */
+  trackerPollMinutes: number;
   /** Commits and pull requests the agent writes credit Rein (a "Co-Authored by [Rein Harness](…)" line). */
   attribution: boolean;
   /** whisper.cpp model for voice input (hold Ctrl+Space): `base.en-q5_1` (English, default), or e.g. `base-q5_1` / `small-q5_1` for other languages. */
@@ -136,6 +140,8 @@ export const DEFAULT_CONFIG: Config = {
   rtl: 'auto',
   remoteHost: '127.0.0.1',
   remotePort: 7377,
+  trackers: [],
+  trackerPollMinutes: 2,
   voiceModel: 'base.en-q5_1',
   lsp: 'auto',
   lspIdleMinutes: 10,

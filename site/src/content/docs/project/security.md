@@ -82,6 +82,16 @@ The [remote page](../../features/remote/) (`/remote`) lets a paired device do wh
 - **Pairing:** a 6-digit code, single use, valid 5 minutes, locked after 5 wrong tries, rate-limited. It becomes a random 256-bit token, compared in constant time and kept in memory only.
 - **Requests:** reads need the token as an `HttpOnly`, `SameSite=Strict` cookie; changes also need it as a header, so a cross-site request can't act on the page. The page has a strict CSP and never renders conversation text as HTML.
 - **Not protected against:** someone who has a paired device, or the token. That's the same as someone at your keyboard. `/remote unpair` revokes every device and `/remote off` stops the page.
+## Issue trackers
+
+An [issue tracker](../../features/trackers/) hands Rein text written by whoever can open or edit the issue: a prompt-injection channel by design. Rein's defences:
+
+- **Every action asks**, regardless of approval mode (`untrusted` origins in `src/tools/host.ts`).
+- The issue text is wrapped as untrusted, and the issue can't close the wrapper early. The agent is told not to run commands from it unchecked, not to reveal secrets, and not to push, publish or open pull requests.
+- The work happens on a **new branch in a separate worktree**. Nothing is merged into your tree or pushed. The report goes to the issue, never into your conversation.
+- Tracker tokens are vault secrets, masked like any other. GitHub goes through `gh`, so Rein never handles that token.
+
+What this doesn't stop: you approving a harmful action. Read the approval before you allow it, especially commands that contact other hosts.
 
 ## Your accounts, your responsibility
 
