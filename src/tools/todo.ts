@@ -40,7 +40,7 @@ export function todoTool(deps: {transcript(): Transcript | undefined; changed():
     describe: () =>
       [
         'Keep a task list for multi-step work (3+ steps, or when the user gives several things to do). Each call replaces the whole list; the user sees it in the sidebar.',
-        '- Statuses: pending, in_progress, completed. Keep exactly one task in_progress while working; mark each completed as soon as it is done (don\'t batch).',
+        '- Statuses: pending, in_progress, completed. Keep exactly one task in_progress while working; mark tasks completed as they finish (several in one call is fine: each call is a round trip).',
         '- content: imperative ("Run the tests"); activeForm: present continuous shown while in progress ("Running the tests").',
         '- Skip it for single, trivial requests.',
         "- While a goal works from a plan, its milestones are the task list (the user sees them): use this only for sub-steps of the current milestone, never to copy the milestones.",

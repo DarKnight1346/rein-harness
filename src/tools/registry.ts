@@ -1,5 +1,5 @@
 import path from 'node:path';
-import {deleteTool, editTool, listTool, readTool, resolveInRoot, searchTool, ToolError, writeTool, type ToolContext, type ToolResult} from './fs.js';
+import {deleteTool, editTool, listTool, readManyTool, readTool, resolveInRoot, searchTool, ToolError, writeTool, type ToolContext, type ToolResult} from './fs.js';
 import {DEFAULT_TIMEOUT_MS, shellStatusText} from './shells.js';
 import {shellFor} from '../util/platform.js';
 import {sessionRead, sessionsSearch} from './sessions.js';
@@ -39,23 +39,23 @@ const str = (description: string) => ({type: 'string', description});
 export const TOOLS: ToolDef[] = [
   {
     name: 'read',
-    paths: (args) => [args?.path].filter((x): x is string => typeof x === 'string'),
+    paths: (args) => [args?.path, ...(Array.isArray(args?.paths) ? args.paths : [])].filter((x): x is string => typeof x === 'string'),
     label: 'Read',
     description:
-      'Read a file in the project. Returns lines prefixed with their 1-based line number and a tab (like `cat -n`); the prefix is not part of the file. Use offset/limit for large files. Reading a directory lists its entries. Images (PNG/JPEG/GIF/WebP) are shown to you as images; PDFs return their text page by page (use pages, e.g. "3-8", for long ones).',
+      'Read a file in the project. Returns lines prefixed with their 1-based line number and a tab (like `cat -n`); the prefix is not part of the file. Use offset/limit for large files. Reading a directory lists its entries. Images (PNG/JPEG/GIF/WebP) are shown to you as images; PDFs return their text page by page (use pages, e.g. "3-8", for long ones). To read several files, pass them all as `paths` in one call (up to 20, each shown under its path) instead of one read per file.',
     inputSchema: {
       type: 'object',
       properties: {
         path: str('File path, relative to the project root'),
+        paths: {type: 'array', items: {type: 'string'}, description: 'Several files to read in one call, instead of path'},
         offset: {type: 'integer', description: 'First line to read (1-based)'},
         limit: {type: 'integer', description: 'Max lines (default 2000)'},
         pages: str('PDF pages to read, e.g. "1-5" (max 20 per read)'),
       },
-      required: ['path'],
     },
     mutating: false,
-    run: readTool,
-    summarize: (a) => `${a?.path ?? ''}${a?.offset ? `:${a.offset}` : ''}`,
+    run: (ctx, a) => (Array.isArray(a?.paths) ? readManyTool(ctx, a) : readTool(ctx, a)),
+    summarize: (a) => (Array.isArray(a?.paths) ? `${a.paths.length} files: ${a.paths.slice(0, 3).join(', ')}${a.paths.length > 3 ? '…' : ''}` : `${a?.path ?? ''}${a?.offset ? `:${a.offset}` : ''}`),
   },
   {
     name: 'list',
@@ -87,23 +87,35 @@ export const TOOLS: ToolDef[] = [
   },
   {
     name: 'edit',
-    paths: (args) => [args?.path].filter((x): x is string => typeof x === 'string'),
+    // Every file the call changes: permission rules, approvals, checkpoints and the code check see all of them.
+    paths: (args) => [...new Set([args?.path, ...(Array.isArray(args?.edits) ? args.edits.map((e: any) => e?.path ?? args?.path) : [])].filter((x): x is string => typeof x === 'string'))],
     label: 'Edit',
     description:
-      'Replace an exact string in a file. `old_string` must match the file exactly (whitespace included, without read line-number prefixes) and be unique unless `replace_all` is true; include surrounding lines to make it unique. Read the file first.',
+      'Replace an exact string in a file. `old_string` must match the file exactly (whitespace included, without read line-number prefixes) and be unique unless `replace_all` is true; include surrounding lines to make it unique. Read the file first. To make several changes (in one file or across files), pass them all as `edits` in one call instead of calling edit once per change: they apply in order, and if any doesn\'t match, nothing is written.',
     inputSchema: {
       type: 'object',
       properties: {
-        path: str('File path, relative to the project root'),
+        path: str('File path, relative to the project root (for edits: the default for entries without a path)'),
         old_string: str('Exact text to replace'),
         new_string: str('Replacement text'),
         replace_all: {type: 'boolean', description: 'Replace every occurrence (default false)'},
+        edits: {
+          type: 'array',
+          description: 'Several replacements in one call, instead of old_string/new_string',
+          items: {
+            type: 'object',
+            properties: {path: str('File path (defaults to the top-level path)'), old_string: str('Exact text to replace'), new_string: str('Replacement text'), replace_all: {type: 'boolean'}},
+            required: ['old_string', 'new_string'],
+          },
+        },
       },
-      required: ['path', 'old_string', 'new_string'],
     },
     mutating: true,
     run: editTool,
-    summarize: (a) => String(a?.path ?? ''),
+    summarize: (a) => {
+      const files = Array.isArray(a?.edits) ? [...new Set(a.edits.map((e: any) => e?.path ?? a?.path))] : [a?.path];
+      return files.length > 1 ? `${files.length} files: ${files.slice(0, 3).join(', ')}${files.length > 3 ? '…' : ''}` : `${files[0] ?? ''}${Array.isArray(a?.edits) && a.edits.length > 1 ? ` (${a.edits.length} edits)` : ''}`;
+    },
   },
   {
     name: 'delete',

@@ -38,12 +38,13 @@ Reads a file and returns lines prefixed with their 1-based line number and a tab
 
 | Parameter | Type | Notes |
 | --- | --- | --- |
-| `path` **(required)** | string | Relative to the project root; absolute and `~/` paths work too |
+| `path` | string | Relative to the project root; absolute and `~/` paths work too. Required unless `paths` is given |
+| `paths` | string[] | Several files in one call (up to 20), each shown under a `==> path <==` header. Whole text files; a file that can't be read reports its error in its place. Images and PDFs are read one at a time |
 | `offset` | integer | First line to read (1-based) |
 | `limit` | integer | Max lines, default and cap 2000 |
 | `pages` | string | PDF pages, for example `"3-8"` (max 20 per read) |
 
-Lines longer than 2000 characters are truncated. A successful read records the file's size and mtime for stale-file protection (see `edit`).
+Lines longer than 2000 characters are truncated. A successful read records the file's size and mtime for stale-file protection (see `edit`). Every tool call is a request that re-sends the conversation, so reading the files a change needs with `paths` in one call costs one round trip instead of one per file.
 
 ### `list`
 
@@ -90,10 +91,13 @@ Replaces an exact string. `old_string` must match exactly (whitespace included, 
 
 | Parameter | Type | Notes |
 | --- | --- | --- |
-| `path` **(required)** | string | |
-| `old_string` **(required)** | string | Exact text to replace |
-| `new_string` **(required)** | string | Replacement |
+| `path` | string | The file. With `edits`, the default for entries that don't name one |
+| `old_string` | string | Exact text to replace |
+| `new_string` | string | Replacement |
 | `replace_all` | boolean | Replace every occurrence, default false |
+| `edits` | array | Several replacements in one call, instead of `old_string` / `new_string`: each `{path?, old_string, new_string, replace_all?}`, in one file or several |
+
+With `edits`, each replacement applies to the file as the ones before it left it. Every replacement is checked before anything is written, so the call changes all of its files or none; an error names the failing entry (`edits[2]: old_string not found in src/b.ts`). Every file must have been read first, as with a single edit. Approval, [permission rules](../../features/permissions/#saved-rules) (a `deny` on any file blocks the call), [checkpoints](../../features/rewind/) and the end-of-turn code check cover every file in the batch. Batches are for files up to 8 MB; larger files take a single edit. A batch that changes several files shows its preview in the approval prompt, not as an editor diff.
 
 Files changed with `write`, `edit` or `delete` are checked by Rein's [language servers](../../features/code-intelligence/) when the agent finishes its turn; problems the changes left come back as one `<code_check>` message.
 

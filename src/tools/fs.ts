@@ -144,6 +144,35 @@ export async function readTool(ctx: ToolContext, args: {path: string; offset?: n
   return {ok: true, text: out.join('\n') + (more ? `\n… more lines follow (use offset=${end + 1}; file is ${size(st.size)})` : '')};
 }
 
+const MAX_READ_MANY = 20;
+
+/**
+ * Several files in one call (`paths`), each headed by its path: the files a change needs, read in one
+ * round trip instead of one per file. Whole text files only; a failure on one is reported in its place.
+ */
+export async function readManyTool(ctx: ToolContext, args: {paths: string[]}): Promise<ToolResult> {
+  if (!Array.isArray(args.paths) || !args.paths.length || args.paths.some((p) => typeof p !== 'string')) throw new ToolError('paths must be a non-empty list of file paths');
+  if (args.paths.length > MAX_READ_MANY) throw new ToolError(`at most ${MAX_READ_MANY} paths per call`);
+  const parts: string[] = [];
+  let ok = false;
+  for (const p of [...new Set(args.paths)]) {
+    let text: string;
+    try {
+      const file = resolveInRoot(ctx, p);
+      if (isImage(file) || isPdf(file)) text = '(an image or PDF: read it on its own)';
+      else {
+        const r = await readTool(ctx, {path: p});
+        text = r.text;
+        ok ||= r.ok;
+      }
+    } catch (err) {
+      text = `error: ${(err as Error).message}`;
+    }
+    parts.push(`==> ${p} <==\n${text}`);
+  }
+  return {ok, text: parts.join('\n\n')};
+}
+
 async function looksBinary(file: string): Promise<boolean> {
   const fh = await open(file, 'r');
   try {
@@ -219,7 +248,10 @@ export async function writeTool(ctx: ToolContext, args: {path: string; content: 
 /** Files above this are edited by streaming (constant memory) instead of in memory. */
 const STREAM_EDIT_BYTES = 8 * 1024 * 1024;
 
-export async function editTool(ctx: ToolContext, args: {path: string; old_string: string; new_string: string; replace_all?: boolean}): Promise<ToolResult> {
+export type EditSpec = {path?: string; old_string: string; new_string: string; replace_all?: boolean};
+
+export async function editTool(ctx: ToolContext, args: {path: string; old_string: string; new_string: string; replace_all?: boolean; edits?: EditSpec[]}): Promise<ToolResult> {
+  if (args.edits !== undefined) return multiEdit(ctx, args);
   const file = resolveInRoot(ctx, args.path);
   if (typeof args.old_string !== 'string' || typeof args.new_string !== 'string') throw new ToolError('old_string and new_string are required');
   if (!args.old_string) throw new ToolError('old_string is empty; use write to create a file');
@@ -251,6 +283,63 @@ export async function editTool(ctx: ToolContext, args: {path: string; old_string
   const line = text.slice(0, text.indexOf(args.old_string)).split('\n').length;
   const diff = fileDiff(text, next) ?? regionDiff(line, args.old_string, args.new_string);
   return {ok: true, text: `Edited ${rel(ctx, file)}: ${args.replace_all ? `${count} replacements` : `1 replacement at line ${line}`}`, diff};
+}
+
+/**
+ * Several replacements in one call, in one file or several: each edit applies to the file as the
+ * edits before it left it. Every edit is checked before anything is written, so the call changes all
+ * of its files or none (a failed edit names its index). One call instead of a round trip per edit.
+ */
+async function multiEdit(ctx: ToolContext, args: {path?: string; old_string?: string; edits?: EditSpec[]}): Promise<ToolResult> {
+  if (!Array.isArray(args.edits) || !args.edits.length) throw new ToolError('edits must be a non-empty list of {path, old_string, new_string}');
+  if (args.old_string !== undefined) throw new ToolError('pass either old_string/new_string or edits, not both');
+  // One handle per file, opened once and used for both the read and the write (no check-then-use race).
+  const files = new Map<string, {display: string; fh: FileHandle; before: string; text: string; count: number}>();
+  try {
+    for (const [i, e] of args.edits.entries()) {
+      const where = `edits[${i}]`;
+      const display = e?.path ?? args.path;
+      if (typeof display !== 'string') throw new ToolError(`${where}: path is required (on the edit, or for all of them at the top level)`);
+      if (typeof e.old_string !== 'string' || typeof e.new_string !== 'string') throw new ToolError(`${where}: old_string and new_string are required`);
+      if (!e.old_string) throw new ToolError(`${where}: old_string is empty; use write to create a file`);
+      if (e.old_string === e.new_string) throw new ToolError(`${where}: old_string and new_string are identical`);
+      const file = resolveInRoot(ctx, display);
+      let f = files.get(file);
+      if (!f) {
+        let fh: FileHandle;
+        try {
+          fh = await openConfined(file, display, constants.O_RDWR);
+        } catch (err) {
+          if ((err as NodeJS.ErrnoException).code === 'ENOENT' || (err as NodeJS.ErrnoException).code === 'EISDIR') throw new ToolError(`${where}: ${display} does not exist`);
+          throw err;
+        }
+        files.set(file, (f = {display, fh, before: '', text: '', count: 0}));
+        const st = await fh.stat();
+        if (st.isDirectory()) throw new ToolError(`${where}: ${display} does not exist`);
+        if (st.size > STREAM_EDIT_BYTES) throw new ToolError(`${where}: ${display} is over ${size(STREAM_EDIT_BYTES)}; edit it with a single edit call`);
+        checkFresh(ctx, file, display, st);
+        f.before = f.text = await fh.readFile('utf8');
+      }
+      const n = f.text.split(e.old_string).length - 1;
+      if (n === 0) throw new ToolError(`${where}: old_string not found in ${rel(ctx, file)} (it must match exactly, including whitespace, and edits apply in order)`);
+      if (n > 1 && !e.replace_all) throw new ToolError(`${where}: old_string matches ${n} places in ${rel(ctx, file)}; include more surrounding context to make it unique, or set replace_all`);
+      f.text = e.replace_all ? f.text.split(e.old_string).join(e.new_string) : f.text.replace(e.old_string, () => e.new_string);
+      f.count += e.replace_all ? n : 1;
+    }
+    // All checked: write them.
+    const diff: DiffLine[] = [];
+    const done: string[] = [];
+    for (const [file, f] of files) {
+      await overwrite(f.fh, f.text);
+      ctx.reads?.set(file, stampOf(await f.fh.stat()));
+      if (files.size > 1) diff.push({kind: 'note', text: rel(ctx, file)});
+      diff.push(...(fileDiff(f.before, f.text) ?? []));
+      done.push(`${rel(ctx, file)} (${f.count} replacement${f.count === 1 ? '' : 's'})`);
+    }
+    return {ok: true, text: `Edited ${files.size === 1 ? done[0] : `${files.size} files: ${done.join(', ')}`}`, diff};
+  } finally {
+    for (const f of files.values()) await f.fh.close().catch(() => {});
+  }
 }
 
 function checkCount(ctx: ToolContext, file: string, count: number, replaceAll?: boolean): void {

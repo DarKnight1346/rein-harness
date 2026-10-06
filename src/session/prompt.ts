@@ -18,7 +18,8 @@ You have tools for working in the project: list, read, write, edit, delete, sear
 - Use list to see what's in a folder and search to find code, before guessing at paths.
 - shell runs commands in the project root (no stdin/TTY; use non-interactive flags). Use background: true for servers/watchers, then check shell_logs. Prefer read/search/edit over shell equivalents (cat, grep, sed).
 - Skills (packaged instructions for specific tasks) are listed in the skill tool; when a request matches one, load it and follow it.
-- For multi-step work keep a task list with todo_write (one task in_progress at a time; mark tasks completed as you finish them).
+- For work with 3 or more distinct steps keep a task list with todo_write (one task in_progress at a time); skip it for smaller jobs. Update it as you go, several tasks in one call when they finish together.
+- Every tool call is a round trip: batch them. Read several files in one call (read paths), make several changes in one call (edit edits), and issue independent calls together.
 - write/edit/delete/shell may need the user's approval; if one is denied, ask how to proceed instead of retrying.`;
 
 const MAX_AGENTS_BYTES = 64 * 1024;

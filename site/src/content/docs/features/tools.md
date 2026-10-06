@@ -30,10 +30,10 @@ Parameters for every tool are in the [tools reference](../../reference/tools/).
 
 | Tool | What it does |
 |---|---|
-| `read` | Reads a file with `cat -n`-style line numbers, 2000 lines at a time (`offset` / `limit`). Images go to the model **as images**; PDFs come back as text, page by page. See [Web & images](../web-and-images/#reading-images-and-pdfs). |
+| `read` | Reads a file with `cat -n`-style line numbers, 2000 lines at a time (`offset` / `limit`), or several files in one call (`paths`). Images go to the model **as images**; PDFs come back as text, page by page. See [Web & images](../web-and-images/#reading-images-and-pdfs). |
 | `list` | Tree view, folders first, files with sizes. `depth` 1–5. Hidden entries and `.git`, `node_modules`, `dist`, `build`, `.next`, `.venv`, `__pycache__` are skipped unless `all: true`. Capped at 500 entries. |
 | `write` | Creates or overwrites a file, creating parent folders as needed. |
-| `edit` | Exact string replacement. `old_string` must be unique unless `replace_all`. Files over 8 MB are edited by streaming, so memory use stays constant. |
+| `edit` | Exact string replacement. `old_string` must be unique unless `replace_all`. Several replacements, across files, go in one call with `edits`: all are written or none. Files over 8 MB are edited by streaming, so memory use stays constant. |
 | `delete` | Deletes a file or folder (non-empty folders need `recursive: true`). It refuses to delete the project root. |
 
 File changes show up in the transcript as a colored diff. When Rein runs a [language server](../code-intelligence/) for the files, it checks them when the agent finishes its turn and sends back any problems the changes left.

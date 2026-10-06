@@ -625,6 +625,9 @@ function preview(tool: ToolDef, args: any): string {
     return t.length > n ? t.slice(0, n) + `\n… (${t.length - n} more chars)` : t;
   };
   if (tool.name === 'write') return clip(args?.content);
+  if (tool.name === 'edit' && Array.isArray(args?.edits)) {
+    return clip(args.edits.map((e: any) => `${e?.path ?? args?.path ?? ''}\n- ${clip(e?.old_string, 200).replace(/\n/g, '\n- ')}\n+ ${clip(e?.new_string, 200).replace(/\n/g, '\n+ ')}`).join('\n'), 2000);
+  }
   if (tool.name === 'edit') return `- ${clip(args?.old_string, 300).replace(/\n/g, '\n- ')}\n+ ${clip(args?.new_string, 300).replace(/\n/g, '\n+ ')}`;
   if (tool.name === 'delete') return args?.recursive ? 'Deletes the directory and everything in it.' : '';
   if (tool.name === 'mcp_add') {
