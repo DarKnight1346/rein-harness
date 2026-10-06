@@ -74,6 +74,27 @@ export class ModelCatalog {
     this.loaded = true;
   }
 
+  /** Models already asked for their window this run (a failed probe isn't retried until restart). */
+  private probed = new Set<string>();
+
+  /**
+   * Claude models report their context window only in a reply's usage, so until one was used the
+   * catalog guessed. Ask each unknown one once, in the background, with a tiny request on a
+   * subscription account (never a pay-per-use API account); the answer is remembered.
+   */
+  async probeWindows(): Promise<void> {
+    for (const m of this.all()) {
+      const key = refKey({provider: m.provider, model: m.id});
+      const probe = adapters[m.provider].probeContextWindow;
+      if (!probe || this.learnedWindows.has(key) || this.probed.has(key)) continue;
+      const account = this.accounts.find((a) => m.accountIds.includes(a.id) && !a.api && !this.authFailed.has(a.id));
+      if (!account) continue;
+      this.probed.add(key);
+      const tokens = await probe.call(adapters[m.provider], account, m.id).catch(() => undefined);
+      if (tokens) this.learnContextWindow({provider: m.provider, model: m.id}, tokens);
+    }
+  }
+
   /** Provider-reported context window (from a request's usage) — remembered across restarts. */
   learnContextWindow(ref: ModelRef, tokens: number): void {
     if (tokens <= 0) return;
