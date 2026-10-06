@@ -76,6 +76,30 @@ describe('several edits in one call', () => {
   });
 });
 
+describe('batching nudges', () => {
+  it('point out edits / paths on the second single call in a row, once per session', async () => {
+    const host = new ToolHost({root, mode: () => 'bypass', approve: async () => 'once'});
+    const first = await host.call('read', {path: 'src/a.ts'});
+    expect(first.text).not.toContain('paths');
+    const second = await host.call('read', {path: 'src/b.ts'});
+    expect(second.text).toContain('Pass them all as `paths` in one read call');
+    expect((await host.call('read', {path: 'src/a.ts'})).text).not.toContain('`paths`'); // once
+    const e1 = await host.call('edit', {path: 'src/a.ts', old_string: 'total', new_string: 'sum'});
+    expect(e1.text).not.toContain('`edits`');
+    const e2 = await host.call('edit', {path: 'src/b.ts', old_string: 'total', new_string: 'sum', replace_all: true});
+    expect(e2.text).toContain('Pass them all as `edits` in one edit call');
+    host.close();
+  });
+
+  it('say nothing to a model that already batches', async () => {
+    const host = new ToolHost({root, mode: () => 'bypass', approve: async () => 'once'});
+    await host.call('read', {paths: ['src/a.ts', 'src/b.ts']});
+    const r = await host.call('edit', {edits: [{path: 'src/a.ts', old_string: 'total', new_string: 'sum'}, {path: 'src/b.ts', old_string: 'total', new_string: 'sum', replace_all: true}]});
+    expect(r.text).not.toContain('round trip');
+    host.close();
+  });
+});
+
 describe('several files in one read', () => {
   it('returns each under its path, with failures in place', async () => {
     const r = await readManyTool(ctx, {paths: ['src/a.ts', 'src/missing.ts', 'src/b.ts']});

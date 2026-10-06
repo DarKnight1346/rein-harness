@@ -110,6 +110,13 @@ const realRoot = (p: string) => {
 
 export class ToolHost extends EventEmitter {
   private sessionAllowed = false;
+  /**
+   * Batching nudges: a model that edits (or reads) one thing per call pays a round trip each time.
+   * The second single call in a row gets a one-line note about edits / paths, once per session:
+   * models follow what tool results tell them more than what the tool description says.
+   */
+  private streak = {tool: '', n: 0};
+  private nudged = new Set<string>();
   /** "Allow reads outside the project this session" was chosen. */
   private outsideReadsAllowed = false;
   /** Working directories added this session (/add-dir, --add-dir, "allow this folder"). */
@@ -343,6 +350,10 @@ export class ToolHost extends EventEmitter {
       result = {ok: false, text: err instanceof ToolError ? err.message : `error: ${(err as Error).message}`};
     }
     if (this.opts.mask) result = {...result, text: this.opts.mask(result.text)}; // errors too (and hook notes)
+    if (result.ok) {
+      const note = this.batchNudge(tool?.name ?? name, args);
+      if (note) result = {...result, text: `${result.text}\n\n${note}`};
+    }
     if (result.text.length > MAX_RESULT_CHARS) result = {...result, text: result.text.slice(0, MAX_RESULT_CHARS) + '\n… [output truncated]'};
     // A subfolder's own AGENTS.md / CLAUDE.md, the first time the agent works in it (scoped to it).
     if (result.ok) {
@@ -351,6 +362,16 @@ export class ToolHost extends EventEmitter {
     }
     this.emit('activity', {phase: 'end', id, label: tool.label, summary, ok: result.ok, result: result.text, approvedBy, judge, origin, diff: result.diff} satisfies ToolActivity);
     return {ok: result.ok, text: result.text, ...(result.images?.length ? {images: result.images} : {})}; // the diff is for the user, not the model
+  }
+
+  private batchNudge(name: string, args: any): string | undefined {
+    const single = (name === 'edit' && !Array.isArray(args?.edits)) || (name === 'read' && !Array.isArray(args?.paths));
+    this.streak = single ? {tool: name, n: this.streak.tool === name ? this.streak.n + 1 : 1} : {tool: '', n: 0};
+    if (this.streak.n < 2 || this.nudged.has(name)) return undefined;
+    this.nudged.add(name);
+    return name === 'edit'
+      ? '(Several changes to make? Pass them all as `edits` in one edit call, across files too: one round trip instead of one per change.)'
+      : '(Several files to read? Pass them all as `paths` in one read call: one round trip instead of one per file.)';
   }
 
   private scopedFor(name: string, args: any): string | undefined {
