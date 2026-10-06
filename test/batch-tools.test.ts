@@ -110,3 +110,41 @@ describe('several files in one read', () => {
     await expect(readManyTool(ctx, {paths: Array.from({length: 21}, (_, i) => `f${i}`)})).rejects.toThrow(/at most 20/);
   });
 });
+
+describe('experiments', () => {
+  it('reread-unchanged: a repeat whole-file read in the same model context is a one-line note', async () => {
+    let context = 'claude:sonnet#1#0';
+    const host = new ToolHost({root, mode: () => 'bypass', approve: async () => 'once', experiments: () => ['reread-unchanged'], contextId: () => context});
+    expect((await host.call('read', {path: 'src/a.ts'})).text).toContain('export const total');
+    const again = await host.call('read', {path: 'src/a.ts'});
+    expect(again.text).toMatch(/unchanged since you read it earlier/);
+    expect((await host.call('read', {path: 'src/a.ts', offset: 1, limit: 1})).text).toContain('export const total'); // a range is always read
+    await host.call('edit', {path: 'src/a.ts', old_string: 'total', new_string: 'sum'});
+    expect((await host.call('read', {path: 'src/a.ts'})).text).toContain('export const sum'); // changed: read again
+    context = 'claude:sonnet#2#0'; // compaction, failover, a model switch: the earlier read is gone
+    expect((await host.call('read', {path: 'src/a.ts'})).text).toContain('export const sum');
+    host.close();
+  });
+
+  it('reread-unchanged is off unless asked for', async () => {
+    const host = new ToolHost({root, mode: () => 'bypass', approve: async () => 'once', contextId: () => 'x'});
+    await host.call('read', {path: 'src/a.ts'});
+    expect((await host.call('read', {path: 'src/a.ts'})).text).toContain('export const total');
+    host.close();
+  });
+
+  it('quiet-passing-output: a passing build or test keeps its last lines; failures stay whole', async () => {
+    const host = new ToolHost({root, mode: () => 'bypass', approve: async () => 'once', experiments: () => ['quiet-passing-output']});
+    const many = `node -e "for (let i = 0; i < 100; i++) console.log('ok ' + i)"`;
+    const pass = await host.call('shell', {command: `${many}; echo npm test`});
+    expect(pass.text).toMatch(/^\[exit 0 after [^\]]*\]\n\(passed: \d+ earlier lines of output left out/);
+    expect(pass.text).toContain('ok 99');
+    expect(pass.text).not.toContain('ok 10\n');
+    const fail = await host.call('shell', {command: `${many}; echo npm test; exit 1`});
+    expect(fail.text).toContain('ok 10\n');
+    const other = await host.call('shell', {command: many}); // not a build or test: untouched
+    expect(other.text).toContain('ok 10\n');
+    host.close();
+  });
+});
+

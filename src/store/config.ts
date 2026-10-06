@@ -78,6 +78,8 @@ export type Config = {
   lspServers?: Record<string, {command: string; args?: string[]}>;
   /** Every account at its limit: wait for the reset (up to 12 hours) and continue, instead of stopping. */
   waitForLimits: boolean;
+  /** Efficiency experiments to turn on, by name (see the configuration reference): measured before they become defaults. */
+  experiments: string[];
   /** Run simple shell reads and searches the agent writes (cat, head, grep -rn, sed -n, ls, find -name) as the built-in tools. */
   steerShell: boolean;
   /** MCP servers asking for a completion (sampling): ask you per server (default), allow, or refuse. */
@@ -149,6 +151,7 @@ export const DEFAULT_CONFIG: Config = {
   lsp: 'auto',
   lspIdleMinutes: 10,
   worktrees: 'auto',
+  experiments: [],
 };
 
 export async function loadConfig(): Promise<Config> {

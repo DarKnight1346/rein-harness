@@ -64,6 +64,7 @@ How these play together is covered in [load balancing](../../internals/load-bala
 | `worktrees` | string | `"auto"` | `auto`: subagents working alongside other work get their own git worktree, merged back when they finish. `off`: subagents always edit the project directly. | `/settings` → Worktrees |
 | `lsp` | `"auto"` \| `"off"` | `"auto"` | Built-in [code intelligence](../../features/code-intelligence/): Rein runs language servers itself and, when the agent finishes a turn, sends back problems its changes left. `"off"` never starts one. | `~/.rein/config.json` |
 | `lspIdleMinutes` | number | `10` | Stop a built-in language server after this many minutes unused. | `~/.rein/config.json` |
+| `experiments` | string[] | `[]` | Efficiency experiments to turn on, by name; see [Experiments](#experiments). Off until measured. | `~/.rein/config.json` |
 | `lspServers` | object | — | Use your own server command instead of Rein's, per server id: `{"python": {"command": "/path/to/server", "args": ["--stdio"]}}`. | `~/.rein/config.json` |
 | `waitForLimits` | boolean | `true` | When every account for the model is at its limit and no other model can take over, wait for the earliest reset (up to 12 hours) and continue the turn. `false` stops with `Every account for … is at its limit`. | `/settings` → Limits |
 | `steerShell` | boolean | `true` | Run the agent's simple shell reads and searches (`cat F`, `head`/`tail`, `sed -n 'A,Bp' F`, `ls`, `grep -rn`, `rg`, `find -name`) as the built-in `read` / `list` / `search` tools. See [Tools](../../features/tools/#reads-and-searches-run-as-tools). | `~/.rein/config.json` |
@@ -208,3 +209,13 @@ JSON has no comments. A syntax error makes Rein fail to read the file. The file 
 **Never in it:** accounts and logins, the [vault](../../features/vault/), the Jev key. Values written literally into an MCP server's `env` or `headers` (tokens, mostly) are left out too, and the export lists them so you can set them again. `${VAR}` references stay, so they work wherever the variable is set.
 
 On the other machine, `/settings import rein-settings.json` writes the files into its settings folder. A file that exists and differs is kept as `<name>.before-import` first. Restart Rein to load everything.
+
+## Experiments
+
+Changes meant to cut what a task costs (tokens, round trips, time) that are still being measured. Each is off unless listed in `experiments`, so it can be compared with and without on the same tasks; one that pays off becomes a default.
+
+| Name | What it does |
+|---|---|
+| `reread-unchanged` | Reading a whole file again that the model already read in this conversation, and that hasn't changed since, returns a one-line note instead of the file. Only while the same model session is running: after compaction, failover or a model switch the earlier read is gone, so the file is sent again. Reads of a range (`offset` / `limit`) always return the text. |
+| `quiet-passing-output` | A build or test command (`npm test`, `tsc`, `pytest`, `go test`, `cargo test`, `make`…) that exits 0 returns its last 25 lines, where the summary is, with a note that earlier lines were left out. Failing commands and other commands return their full output. |
+

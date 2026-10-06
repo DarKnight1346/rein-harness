@@ -106,6 +106,8 @@ export class Runtime {
     readOnlyJudge: (command) => this.judgeReadOnly(command),
     configDirs: () => this.config?.additionalDirectories ?? [],
     checkpoint: (file) => this.checkpoints.snapshot(this.currentTurn(), file),
+    experiments: () => this.config.experiments ?? [],
+    contextId: () => this.engine?.contextId(),
     untrusted: (origin) => origin.agentId !== undefined && !!this.agents.get(origin.agentId)?.untrusted,
     mask: (text) => this.vault.mask(text),
     steerShell: () => this.config.steerShell !== false,

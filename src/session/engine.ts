@@ -71,6 +71,17 @@ The conversation was compacted in the middle of your work because the context wi
 export class Engine {
   transcript: Transcript;
   private active: {session: ProviderSession; key: string; ref: ModelRef} | undefined;
+  /** A number per native session object: a new one (compaction, failover, a model switch) means the model lost what it saw. */
+  private serials = new WeakMap<ProviderSession, number>();
+  private nextSerial = 1;
+
+  /** Which model context tool results go to now: changes whenever earlier results may be gone. */
+  contextId(): string | undefined {
+    const a = this.active;
+    if (!a) return undefined;
+    if (!this.serials.has(a.session)) this.serials.set(a.session, this.nextSerial++);
+    return `${a.key}#${this.serials.get(a.session)}#${this.transcript.summary?.coversUpTo ?? 0}`;
+  }
   private running: ProviderSession | undefined;
   private interruptRequested = false;
   /** Tokens of the call in flight (live), folded into `transcript.tokens` when it ends. */

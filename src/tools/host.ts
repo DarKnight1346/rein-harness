@@ -74,6 +74,10 @@ export type ToolHostOptions = {
   checkpoint?: (file: string) => Promise<void>;
   /** Run simple shell reads/searches (cat, grep, sed -n…) as the built-in tools (default on). */
   steerShell?: () => boolean;
+  /** Efficiency experiments that are on (config `experiments`). */
+  experiments?: () => string[];
+  /** The model context results go to now (engine.contextId): a change means earlier results may be gone. */
+  contextId?: () => string | undefined;
   /** Mask secrets (the vault) in every tool result before the model, hooks or the transcript see it. */
   mask?: (text: string) => string;
   /**
@@ -95,6 +99,9 @@ export type ToolHostOptions = {
 };
 
 const MAX_RESULT_CHARS = 60_000;
+/** Commands whose passing output is mostly noise (every test listed): quiet-passing-output trims them. */
+const BUILD_OR_TEST = /(^|[;&|(\s])(npm|pnpm|yarn|bun)\s+(run\s+)?(test|build|lint|typecheck|check)\b|(^|[;&|(\s])(npx\s+)?(tsc|jest|vitest|mocha|pytest|tox|cargo\s+(test|build|check)|go\s+(test|build|vet)|make|cmake|ctest|gradle|mvn|dotnet\s+(test|build)|mix\s+test|rspec|phpunit|swift\s+(test|build)|python3?\s+-m\s+(pytest|unittest)|node\s+--test)\b/;
+const QUIET_KEEP = 25;
 
 /**
  * Runs Rein's tools for whichever provider is chatting: Claude reaches it through the MCP proxy
@@ -115,6 +122,8 @@ export class ToolHost extends EventEmitter {
    * The second single call in a row gets a one-line note about edits / paths, once per session:
    * models follow what tool results tell them more than what the tool description says.
    */
+  /** reread-unchanged: whole-file reads the current model context has seen, by file. */
+  private shown = new Map<string, {context: string; mtimeMs: number; size: number; lines: number}>();
   private streak = {tool: '', n: 0};
   private nudged = new Set<string>();
   /** "Allow reads outside the project this session" was chosen. */
@@ -331,7 +340,10 @@ export class ToolHost extends EventEmitter {
         // Files a write/edit/delete touches: their diagnostics before, to report what the change broke.
         const changes = this.opts.diagnostics && ['write', 'edit', 'delete'].includes(tool.name) ? this.filesOf(ctx, tool, args) : [];
         const snapshot = changes.length ? await this.opts.diagnostics!.before(changes, ctx.root).catch(() => undefined) : undefined;
-        result = await tool.run(ctx, args ?? {});
+        const repeat = tool.name === 'read' ? this.unchangedRead(ctx, args, origin) : undefined;
+        result = repeat ?? (await tool.run(ctx, args ?? {}));
+        if (!repeat && tool.name === 'read') this.noteRead(ctx, args, result, origin);
+        if (tool.name === 'shell') result = this.quietPassing(args, result);
         if (result.ok && snapshot) {
           const note = await this.opts.diagnostics!.after(snapshot).catch(() => undefined);
           if (note) result = {...result, text: `${result.text}\n\n${note}`};
@@ -362,6 +374,67 @@ export class ToolHost extends EventEmitter {
     }
     this.emit('activity', {phase: 'end', id, label: tool.label, summary, ok: result.ok, result: result.text, approvedBy, judge, origin, diff: result.diff} satisfies ToolActivity);
     return {ok: result.ok, text: result.text, ...(result.images?.length ? {images: result.images} : {})}; // the diff is for the user, not the model
+  }
+
+  private experiment(name: string): boolean {
+    return this.opts.experiments?.().includes(name) ?? false;
+  }
+
+  private wholeRead(ctx: ToolContext, args: any): string | undefined {
+    if (typeof args?.path !== 'string' || args.offset || args.limit || args.pages || Array.isArray(args.paths)) return undefined;
+    try {
+      return resolvePath(ctx, args.path).real;
+    } catch {
+      return undefined;
+    }
+  }
+
+  /**
+   * reread-unchanged: reading a whole file again that this model context already read, and that
+   * hasn't changed since, returns a one-line note instead of the file. Only within the same native
+   * session: after compaction, failover or a model switch the earlier read is gone, so it's re-sent.
+   */
+  private unchangedRead(ctx: ToolContext, args: any, origin: Origin | undefined): ToolResult | undefined {
+    if (!this.experiment('reread-unchanged')) return undefined;
+    const file = this.wholeRead(ctx, args);
+    const context = this.opts.contextId?.();
+    if (!file || !context) return undefined;
+    const seen = this.shown.get(`${origin?.agentId ?? 0}|${file}`);
+    let st;
+    try {
+      st = statSync(file);
+    } catch {
+      return undefined;
+    }
+    if (!seen || seen.context !== context || seen.mtimeMs !== st.mtimeMs || seen.size !== st.size) return undefined;
+    return {ok: true, text: `(${args.path} is unchanged since you read it earlier in this conversation (${seen.lines} lines); it's above. Pass offset/limit to see part of it again.)`};
+  }
+
+  private noteRead(ctx: ToolContext, args: any, result: ToolResult, origin: Origin | undefined): void {
+    if (!this.experiment('reread-unchanged') || !result.ok || /\n… more lines follow/.test(result.text)) return;
+    const file = this.wholeRead(ctx, args);
+    const context = this.opts.contextId?.();
+    if (!file || !context) return;
+    try {
+      const st = statSync(file);
+      this.shown.set(`${origin?.agentId ?? 0}|${file}`, {context, mtimeMs: st.mtimeMs, size: st.size, lines: result.text.split('\n').length});
+    } catch {}
+  }
+
+  /**
+   * quiet-passing-output: a build or test command that passed (exit 0) returns its last lines, where
+   * the summary is, instead of every passing test. Failures always come back in full.
+   */
+  private quietPassing(args: any, result: ToolResult): ToolResult {
+    if (!this.experiment('quiet-passing-output') || !result.ok || args?.background) return result;
+    const command = String(args?.command ?? '');
+    if (!BUILD_OR_TEST.test(command)) return result;
+    const m = /^\[exit 0 after [^\]]*\]\n/.exec(result.text);
+    if (!m) return result;
+    const lines = result.text.slice(m[0].length).split('\n');
+    if (lines.length <= QUIET_KEEP + 10) return result;
+    const kept = lines.slice(-QUIET_KEEP);
+    return {...result, text: `${m[0]}(passed: ${lines.length - QUIET_KEEP} earlier lines of output left out; the end, with the summary, follows. Rerun with a narrower command if you need them.)\n${kept.join('\n')}`};
   }
 
   private batchNudge(name: string, args: any): string | undefined {
