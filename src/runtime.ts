@@ -44,7 +44,7 @@ import {webTools} from './tools/web.js';
 import {isMilestoneCopy, todoTool} from './tools/todo.js';
 import {imageGenRef, imageTool} from './tools/image.js';
 import {newTranscript, saveTranscript} from './session/transcript.js';
-import {setAttribution, setExtraWorkingDirs, setVaultNames, systemPrompt} from './session/prompt.js';
+import {setAttribution, setExtraWorkingDirs, setLazyTools, setVaultNames, systemPrompt} from './session/prompt.js';
 import {Vault} from './vault/vault.js';
 import {parseRef, refKey, type Account, type ModelRef, type TokenCount, type ToolBinding} from './providers/types.js';
 import {removeAccount} from './accounts/service.js';
@@ -626,6 +626,7 @@ Drop superseded reads of the same file, routine listings, and output that no lon
     this.stopUsageRefresh = startUsageRefresh({balancing: () => this.config.loadBalancing !== 'sticky', busy: (id) => catalog.busy.get(id) ?? 0});
     setExtraWorkingDirs(() => this.tools.extraWorkingDirs());
     setAttribution(() => this.config.attribution !== false);
+    setLazyTools(() => (this.config.experiments ?? []).includes('lazy-tools'));
     await usageStore.load();
     const router = makeRouter(() => this.config, (...a) => this.auto(...a));
     const host = this.tools;
@@ -707,7 +708,9 @@ Drop superseded reads of the same file, routine listings, and output that no lon
   async setConfig(patch: Partial<Config>): Promise<void> {
     // These change what tools exist or their schemas: reload the agent's tool list.
     // (attribution changes the system prompt: same reload.)
-    const toolsChanged = (['advisorModel', 'subagentModel', 'subagentPriority', 'attribution'] as const).some((k) => patch[k] !== undefined && patch[k] !== this.config[k]);
+    const toolsChanged =
+      (['advisorModel', 'subagentModel', 'subagentPriority', 'attribution'] as const).some((k) => patch[k] !== undefined && patch[k] !== this.config[k]) ||
+      (patch.experiments !== undefined && JSON.stringify(patch.experiments) !== JSON.stringify(this.config.experiments)); // they change tools and schemas
     this.config = {...this.config, ...patch};
     catalog.apiAccounts = this.config.apiAccounts ?? 'fallback';
     if (toolsChanged) this.engine?.refreshTools();

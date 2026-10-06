@@ -188,7 +188,33 @@ export class ToolHost extends EventEmitter {
     return this.tools
       .filter((t) => t.enabled?.() ?? true)
       .filter((t) => !opts.subagent || !t.mainOnly || opts.includeMainOnly)
-      .map((t) => ({name: t.name, description: t.describe?.() ?? t.description, inputSchema: this.withTodos(t, t.schema?.() ?? t.inputSchema)}));
+      .filter((t) => !this.deferred(t.name))
+      .map((t) => ({name: t.name, description: t.describe?.() ?? t.description, inputSchema: this.withTodos(t, t.schema?.() ?? t.inputSchema)}))
+      .concat(this.experiment('lazy-tools') ? [this.toolIndex(opts)] : []);
+  }
+
+  /**
+   * lazy-tools: tools a coding task rarely needs stay out of every request (their definitions are
+   * ~3k tokens a request); one `tool` entry lists them by name and loads or runs them on demand.
+   */
+  private static readonly ON_DEMAND = new Set(['skill', 'agent', 'decide', 'mcp_add', 'mcp_list', 'mcp_call', 'mcp_remove', 'web_fetch', 'web_search', 'image_generate', 'recall', 'remember', 'forget', 'sessions_search', 'session_read', 'lsp_install']);
+
+  private deferred(name: string): boolean {
+    return this.experiment('lazy-tools') && ToolHost.ON_DEMAND.has(name);
+  }
+
+  private onDemand(opts: {subagent?: boolean; includeMainOnly?: boolean} = {}): ToolDef[] {
+    return this.tools.filter((t) => ToolHost.ON_DEMAND.has(t.name) && (t.enabled?.() ?? true) && (!opts.subagent || !t.mainOnly || opts.includeMainOnly));
+  }
+
+  private toolIndex(opts: {subagent?: boolean; includeMainOnly?: boolean}): ToolSpec {
+    const first = (d: string) => (d.split(/(?<=\.)\s|\n/)[0] ?? d).slice(0, 110);
+    const list = this.onDemand(opts).map((t) => `${t.name}: ${first(t.describe?.() ?? t.description)}`);
+    return {
+      name: 'tool',
+      description: `More tools, loaded on demand. {name} returns that tool's description and parameters; {name, args} runs it (same approvals as calling it directly).\n${list.join('\n')}`,
+      inputSchema: {type: 'object', properties: {name: {type: 'string', description: 'The tool'}, args: {type: 'object', description: "Its arguments; leave out to see what it takes"}}, required: ['name']},
+    };
   }
 
   /** todo-piggyback: the tools that do the work also take the task list, so updating it costs no round trip. */
@@ -218,6 +244,14 @@ export class ToolHost extends EventEmitter {
   }
 
   async call(name: string, rawArgs: unknown, origin?: Origin): Promise<ToolResult> {
+    if (name.replace(/^mcp__rein__/, '') === 'tool' && this.experiment('lazy-tools')) {
+      const a = (rawArgs ?? {}) as {name?: unknown; args?: unknown};
+      const wanted = typeof a.name === 'string' ? a.name.replace(/^mcp__rein__/, '') : undefined;
+      const target = wanted ? this.onDemand({subagent: !!origin}).find((t) => t.name === wanted) : undefined;
+      if (!target) return {ok: false, text: `no on-demand tool ${String(a.name)}; the list is in the tool description`};
+      if (a.args === undefined) return {ok: true, text: `${target.name}: ${target.describe?.() ?? target.description}\nParameters (JSON Schema): ${JSON.stringify(target.schema?.() ?? target.inputSchema)}`};
+      return this.call(target.name, a.args, origin);
+    }
     // `cat F`, `grep -rn x src`, `sed -n '10,40p' F`…: run as the built-in tool (tools/steer.ts).
     if (name === 'shell' && this.opts.steerShell?.() !== false) {
       const a = (rawArgs ?? {}) as {command?: unknown; cwd?: unknown; background?: unknown; interactive?: unknown};

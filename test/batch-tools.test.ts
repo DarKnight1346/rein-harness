@@ -166,4 +166,24 @@ describe('experiments', () => {
     expect((off.specs().find((t) => t.name === 'edit')!.inputSchema as any).properties.todos).toBeUndefined();
     off.close();
   });
+
+  it('lazy-tools: rarely needed tools leave the list and are reached through tool', async () => {
+    const host = new ToolHost({root, mode: () => 'bypass', approve: async () => 'once', experiments: () => ['lazy-tools']});
+    host.register({name: 'web_search', label: 'WebSearch', description: 'Search the web. Returns results.', inputSchema: {type: 'object', properties: {query: {type: 'string'}}}, mutating: false, summarize: () => '', run: async (_c, a) => ({ok: true, text: `results for ${a.query}`})});
+    const names = host.specs().map((t) => t.name);
+    expect(names).toContain('read');
+    expect(names).not.toContain('web_search');
+    const index = host.specs().find((t) => t.name === 'tool')!;
+    expect(index.description).toContain('web_search: Search the web.');
+    expect((await host.call('tool', {name: 'web_search'})).text).toContain('"query"'); // its parameters
+    expect((await host.call('tool', {name: 'web_search', args: {query: 'rein'}})).text).toBe('results for rein');
+    expect((await host.call('tool', {name: 'nope'})).ok).toBe(false);
+    host.close();
+    const off = new ToolHost({root, mode: () => 'bypass', approve: async () => 'once'});
+    off.register({name: 'web_search', label: 'WebSearch', description: 'x', inputSchema: {type: 'object'}, mutating: false, summarize: () => '', run: async () => ({ok: true, text: ''})});
+    expect(off.specs().map((t) => t.name)).toContain('web_search');
+    expect(off.specs().map((t) => t.name)).not.toContain('tool');
+    off.close();
+  });
 });
+

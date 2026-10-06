@@ -38,6 +38,13 @@ export function setAttribution(fn: () => boolean): void {
   attribution = fn;
 }
 
+/** lazy-tools is on (config `experiments`): rarely needed tools are reached through `tool`. */
+let lazyTools: () => boolean = () => false;
+export function setLazyTools(fn: () => boolean): void {
+  lazyTools = fn;
+}
+const LAZY_PROMPT = `- Tools that aren't in your list (web_search, web_fetch, image_generate, agent, skill, decide, MCP servers, memory, past sessions) load on demand through tool: tool {name} shows what one takes, tool {name, args} runs it.`;
+
 /** Names in the secrets vault (never values), supplied by the runtime. */
 let vaultNames: () => string[] = () => [];
 export function setVaultNames(fn: () => string[]): void {
@@ -92,7 +99,7 @@ export async function systemPrompt(opts: {tools?: boolean; scratch?: string} = {
   const sections = [base];
   if (opts.tools) {
     const extra = extraDirs();
-    sections.push(TOOLS_PROMPT);
+    sections.push(lazyTools() ? `${TOOLS_PROMPT}\n${LAZY_PROMPT}` : TOOLS_PROMPT);
     if (attribution())
       sections.push(
         [

@@ -301,6 +301,17 @@ Ticks milestone *N* (`- [x]` in the plan file) after the same evidence check (p 
 
 ## Subagents and helpers
 
+### `tool`
+
+Label: the tool it runs. Only with the `lazy-tools` [experiment](../configuration/#experiments) on.
+
+| Parameter | Type | Notes |
+| --- | --- | --- |
+| `name` **(required)** | string | An on-demand tool from the list in this tool's description |
+| `args` | object | Its arguments. Leave out to get its description and parameters |
+
+Runs one of the tools a coding task rarely needs, which are then left out of the model's tool list. A call with `args` goes through the same approvals, rules and checkpoints as calling the tool directly.
+
 ### `diagnostics`
 
 Label `Diagnostics`. Approval: none (read-only).
