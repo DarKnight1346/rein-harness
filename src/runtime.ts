@@ -1,6 +1,6 @@
 import {EventEmitter} from 'node:events';
 import {adapters} from './providers/index.js';
-import {catalog} from './router/catalog.js';
+import {catalog, toRef} from './router/catalog.js';
 import {mergeNote, Worktrees} from './agents/worktrees.js';
 import type {Origin} from './tools/fs.js';
 import {makeRouter, type AutoRouter} from './router/index.js';
@@ -416,6 +416,8 @@ Drop superseded reads of the same file, routine listings, and output that no lon
 
   private async beforePrompt(text: string): Promise<{block?: string; context?: string}> {
     const root = process.cwd();
+    // A message from the user (not Rein's own follow-up) ends an escalation: routing is normal again.
+    if (!/^<(code_check|stop_hook)>/.test(text)) this.escalation = undefined;
     // Snapshot the project before this message runs, so /rewind can undo everything it causes.
     if (this.engine) await this.snapshots.snapshot(this.engine.transcript.messages.length);
     const session_id = this.engine?.transcript.id;
@@ -447,8 +449,34 @@ Drop superseded reads of the same file, routine listings, and output that no lon
       const out = await runHooks('Stop', root, {session_id: this.engine?.transcript.id, stop_hook_active: active});
       if (out.block) return {reason: out.block, kind: 'hook'};
     }
+    // escalate: the check already reported these and the agent's follow-up turn left them: a stronger
+    // model takes the task over (for the rest of it; the next message from the user routes normally).
+    if (active && (this.config.experiments ?? []).includes('escalate') && !this.escalation) {
+      const left = await this.lsp.stillThere().catch(() => [] as string[]);
+      const to = left.length ? this.strongerModel() : undefined;
+      if (to) {
+        this.escalation = to;
+        return {
+          kind: 'diagnostics',
+          reason: `These problems from the last check are still there after another attempt:\n${left.slice(0, 10).join('\n')}\nA stronger model is taking over this task: fix them, or if one should stay, say why.`,
+        };
+      }
+    }
     const problems = await this.lsp.turnEnd().catch(() => undefined);
     return problems ? {reason: problems, kind: 'diagnostics'} : undefined;
+  }
+
+  /** escalate: the model the task moves to (set by stopHook, cleared by the user's next message). */
+  escalation: ModelRef | undefined;
+
+  /** The cheapest available model in a higher cost tier than the current one (same provider first). */
+  private strongerModel(): ModelRef | undefined {
+    const cur = this.engine?.currentRef();
+    if (!cur) return undefined;
+    const tier = catalog.get(cur)?.tier ?? 0;
+    const up = catalog.available(this.config.maxUsedPct).filter((m) => m.tier > tier);
+    const best = up.sort((a, b) => Number(b.provider === cur.provider) - Number(a.provider === cur.provider) || a.tier - b.tier)[0];
+    return best ? toRef(best) : undefined;
   }
 
   /** Auto effort: one decision-model question (Jev or the cheap model) about how hard the message is. */
@@ -634,7 +662,7 @@ Drop superseded reads of the same file, routine listings, and output that no lon
     this.engine = new Engine(
       {
         config: () => this.config,
-        route: router.route,
+        route: (text, t, current) => (this.escalation ? Promise.resolve({ref: this.escalation, reason: 'escalated' as const}) : router.route(text, t, current)),
         alternative: router.alternative,
         compact: (t, reason, opts) => this.compact(t, reason, opts),
         selectCarry: (input) => this.selectCarry(input),

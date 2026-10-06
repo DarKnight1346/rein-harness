@@ -121,7 +121,7 @@ export class LspManager {
    * Files this turn changed (and files importing them), with their problems before the first
    * change: what the end-of-turn check compares against. Keyed by root + file.
    */
-  private turn = new Map<string, {root: string; file: string; count: number; list?: Diagnostic[]}>();
+  private turn = new Map<string, {root: string; file: string; count: number; list?: Diagnostic[]; created?: boolean}>();
 
   /**
    * Before an edit: the first time this turn a file (or a file importing it) is touched, remember
@@ -146,7 +146,7 @@ export class LspManager {
         const key = `${root}|${file}`;
         if (this.turn.has(key)) return;
         // A file being created has no problems yet: nothing to wait for.
-        if (!existsSync(file)) return void this.turn.set(key, {root, file, count: 0});
+        if (!existsSync(file)) return void this.turn.set(key, {root, file, count: 0, created: true});
         const c = this.client(file, root);
         if (!c || !(await c.whenReady(REPORT_TIMEOUT_MS))) return;
         if (!c.isOpen(file)) {
@@ -179,17 +179,48 @@ export class LspManager {
     const checks = tracked.map((t) => ({...t, c: this.client(t.file, t.root, false)})).filter((t) => t.c);
     for (const t of checks) t.c!.sync(t.file);
     await Promise.all([...new Set(checks.map((x) => x.c!))].filter((c) => !c.pull).map((c) => c.waitSettled(checks.filter((x) => x.c === c).map((x) => ({file: x.file, after: x.count})), REPORT_TIMEOUT_MS)));
+    const reported: {root: string; file: string; keys: string[]}[] = [];
     const results = await Promise.all(
-      checks.map(async ({file, count, list, c, root}) => {
+      checks.map(async ({file, count, list, created, c, root}) => {
+        // No "before" to compare with: the server hadn't reported on the file yet when the turn first
+        // touched it (a big file, a slow first parse). Its errors can't be told apart from ones that
+        // were already there (a kernel tree without its build config has hundreds), so it's skipped.
+        // A file the turn created had none before: everything in it is new.
+        if (!list && !created) return [];
         if (c!.pull && !(await c!.waitForDiagnostics(file, count, REPORT_TIMEOUT_MS))) return [];
         const now = c!.diagnostics(file) ?? [];
-        return (list ? newProblems(list, now) : now.filter((d) => (d.severity ?? 1) === 1)).map((d) => formatDiagnostic(d, file, root));
+        const found = list ? newProblems(list, now) : now.filter((d) => (d.severity ?? 1) === 1);
+        if (found.length) reported.push({root, file, keys: found.map(keyOf)});
+        return found.map((d) => formatDiagnostic(d, file, root));
       }),
     );
     const all = results.flat();
+    this.reported = reported;
     if (!all.length) return undefined;
     const lines = all.slice(0, MAX_TURN_REPORTED);
     return `Your changes left ${all.length} problem${all.length === 1 ? '' : 's'} the code didn't have before${all.length > lines.length ? ` (first ${lines.length})` : ''}, from the language server:\n${lines.join('\n')}\nFix ${all.length === 1 ? 'it' : 'them'}, or if ${all.length === 1 ? 'it should' : 'they should'} stay, say why in your reply.`;
+  }
+
+  /** What the last end-of-turn check reported, so a later turn can tell whether it was fixed. */
+  private reported: {root: string; file: string; keys: string[]}[] = [];
+
+  /**
+   * The problems the last check reported that are still there now (formatted), for escalation:
+   * the agent was told and its next turn didn't fix them. Empty when nothing was reported.
+   */
+  async stillThere(): Promise<string[]> {
+    const before = this.reported;
+    this.reported = [];
+    const out: string[] = [];
+    for (const r of before) {
+      const c = this.client(r.file, r.root, false);
+      if (!c) continue;
+      const n = c.publishCount(r.file);
+      c.sync(r.file);
+      await c.waitForDiagnostics(r.file, n, REPORT_TIMEOUT_MS);
+      for (const d of c.diagnostics(r.file) ?? []) if (r.keys.includes(keyOf(d))) out.push(formatDiagnostic(d, r.file, r.root));
+    }
+    return out;
   }
 
   /** Servers the agent was already told are missing (once per session each). */

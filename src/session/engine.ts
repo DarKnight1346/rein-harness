@@ -11,7 +11,7 @@ import {systemPrompt} from './prompt.js';
 import {buildCarry, carryStart, estimateTokens, newTranscript, recordProgress, saveTranscript, scratchDir, truncateTranscript, type Message, type Transcript} from './transcript.js';
 import {CARRY_TOOL_BUDGET, carriedTools, selectCarriedTools, type CarrySelector} from './carry.js';
 
-export type Route = {ref: ModelRef; reason: 'fixed' | 'auto' | 'sticky' | 'default' | 'failover'; confidence?: number};
+export type Route = {ref: ModelRef; reason: 'fixed' | 'auto' | 'sticky' | 'default' | 'failover' | 'escalated'; confidence?: number};
 
 export type EngineEvent =
   | {type: 'route'; route: Route; account: Account; effort?: string}
@@ -74,6 +74,11 @@ export class Engine {
   /** A number per native session object: a new one (compaction, failover, a model switch) means the model lost what it saw. */
   private serials = new WeakMap<ProviderSession, number>();
   private nextSerial = 1;
+
+  /** The model the conversation is on right now. */
+  currentRef(): ModelRef | undefined {
+    return this.active?.ref;
+  }
 
   /** Which model context tool results go to now: changes whenever earlier results may be gone. */
   contextId(): string | undefined {

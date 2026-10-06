@@ -57,6 +57,24 @@ describe('built-in language servers', () => {
     expect(() => process.kill(pid, 0)).toThrow(); // the process is really gone
   });
 
+  it('tell whether problems the last check reported were fixed (for escalation)', async () => {
+    const root = mkdtempSync(path.join(os.tmpdir(), 'rein-lsp-'));
+    const file = path.join(root, 'a.ts');
+    writeFileSync(file, 'const x = 1;\n');
+    const lsp = new LspManager({config});
+    await lsp.after(await lsp.before([file], root));
+    writeFileSync(file, 'const x = BAD;\n');
+    expect(await lsp.turnEnd()).toContain('left 1 problem');
+    expect(await lsp.stillThere()).toEqual([expect.stringContaining('a.ts:1:11 error fake X1')]); // the follow-up didn't fix it
+    expect(await lsp.stillThere()).toEqual([]); // asked once per report
+    await lsp.after(await lsp.before([file], root));
+    writeFileSync(file, 'const x = BAD;\nconst y = BAD;\n');
+    await lsp.turnEnd();
+    writeFileSync(file, 'const x = 2;\n'); // fixed
+    expect(await lsp.stillThere()).toEqual([]);
+    await lsp.closeAll();
+  });
+
   it('do not report breakage the turn fixed again (a refactor in steps), but catch a broken importer', async () => {
     const root = mkdtempSync(path.join(os.tmpdir(), 'rein-lsp-dep-'));
     writeFileSync(path.join(root, 'lib.ts'), 'export const v = 1;\n');
