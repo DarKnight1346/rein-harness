@@ -146,5 +146,24 @@ describe('experiments', () => {
     expect(other.text).toContain('ok 10\n');
     host.close();
   });
-});
 
+  it('todo-piggyback: edit, write and shell carry the task list, applied without a separate call', async () => {
+    const lists: unknown[] = [];
+    const host = new ToolHost({root, mode: () => 'bypass', approve: async () => 'once', experiments: () => ['todo-piggyback']});
+    host.register({name: 'todo_write', label: 'Tasks', description: '', inputSchema: {type: 'object'}, mutating: false, summarize: () => '', run: async (_c, a) => (lists.push(a.todos), {ok: true, text: 'ok'})});
+    const edit = host.specs().find((t) => t.name === 'edit')!;
+    expect((edit.inputSchema as any).properties.todos.type).toBe('array');
+    await host.call('read', {path: 'src/a.ts'});
+    const todos = [{content: 'Rename total', status: 'completed'}];
+    const r = await host.call('edit', {path: 'src/a.ts', old_string: 'total', new_string: 'sum', todos});
+    expect(r.ok).toBe(true);
+    expect(r.text).toContain('(task list updated)');
+    expect(lists).toEqual([todos]);
+    expect(file('src/a.ts')).toContain('sum'); // the edit itself ran normally
+    host.close();
+    const off = new ToolHost({root, mode: () => 'bypass', approve: async () => 'once'});
+    off.register({name: 'todo_write', label: 'Tasks', description: '', inputSchema: {type: 'object'}, mutating: false, summarize: () => '', run: async () => ({ok: true, text: 'ok'})});
+    expect((off.specs().find((t) => t.name === 'edit')!.inputSchema as any).properties.todos).toBeUndefined();
+    off.close();
+  });
+});

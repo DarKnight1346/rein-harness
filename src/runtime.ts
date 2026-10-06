@@ -544,6 +544,7 @@ Drop superseded reads of the same file, routine listings, and output that no lon
       ...mcpTools({mcp: this.mcp, root: () => process.cwd(), call: (name, args, origin) => this.tools.call(name, args, origin)}),
       recallTool(() => this.engine?.transcript),
       todoTool({
+        carried: () => (this.config.experiments ?? []).includes('todo-piggyback'),
         transcript: () => this.engine?.transcript,
         milestones: () => (this.goals.goal?.status === 'active' ? this.goals.plan()?.milestones.map((m) => m.text) : undefined),
         changed: () => {

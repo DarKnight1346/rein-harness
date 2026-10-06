@@ -32,7 +32,7 @@ export const todoLine = (t: Todo) => `${MARK[t.status]} ${t.status === 'in_progr
  * `todo_write` (main agent): the task list for multi-step work, like Claude Code's TodoWrite. Each
  * call replaces the whole list; it's saved with the conversation and shown in the sidebar.
  */
-export function todoTool(deps: {transcript(): Transcript | undefined; changed(): void; milestones?(): string[] | undefined}): ToolDef {
+export function todoTool(deps: {transcript(): Transcript | undefined; changed(): void; milestones?(): string[] | undefined; carried?(): boolean}): ToolDef {
   return {
     name: 'todo_write',
     label: 'Tasks',
@@ -42,6 +42,7 @@ export function todoTool(deps: {transcript(): Transcript | undefined; changed():
         'Keep a task list for multi-step work (3+ steps, or when the user gives several things to do). Each call replaces the whole list; the user sees it in the sidebar.',
         '- Statuses: pending, in_progress, completed. Keep exactly one task in_progress while working.',
         '- Each call is a round trip: write the list once, then update it at real milestones rather than after every task (tick several at once), and mark the rest completed in your last update. Don\'t call it just to tick a box.',
+        ...(deps.carried?.() ? ['- edit, write and shell also take `todos`: pass the updated list with the call that finishes a task instead of calling todo_write separately.'] : []),
         '- content: imperative ("Run the tests"); activeForm: present continuous shown while in progress ("Running the tests").',
         '- Skip it for single, trivial requests.',
         "- While a goal works from a plan, its milestones are the task list (the user sees them): use this only for sub-steps of the current milestone, never to copy the milestones.",

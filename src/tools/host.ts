@@ -188,7 +188,26 @@ export class ToolHost extends EventEmitter {
     return this.tools
       .filter((t) => t.enabled?.() ?? true)
       .filter((t) => !opts.subagent || !t.mainOnly || opts.includeMainOnly)
-      .map((t) => ({name: t.name, description: t.describe?.() ?? t.description, inputSchema: t.schema?.() ?? t.inputSchema}));
+      .map((t) => ({name: t.name, description: t.describe?.() ?? t.description, inputSchema: this.withTodos(t, t.schema?.() ?? t.inputSchema)}));
+  }
+
+  /** todo-piggyback: the tools that do the work also take the task list, so updating it costs no round trip. */
+  private static readonly CARRY_TODOS = ['edit', 'write', 'shell'];
+
+  private withTodos(t: ToolDef, schema: Record<string, unknown>): Record<string, unknown> {
+    if (!this.experiment('todo-piggyback') || !ToolHost.CARRY_TODOS.includes(t.name) || !this.find('todo_write')) return schema;
+    const props = (schema as {properties?: Record<string, unknown>}).properties ?? {};
+    return {
+      ...schema,
+      properties: {
+        ...props,
+        todos: {
+          type: 'array',
+          description: 'Optional: the updated task list (same as todo_write), applied with this call so it costs no extra round trip',
+          items: {type: 'object', properties: {content: {type: 'string'}, status: {type: 'string', enum: ['pending', 'in_progress', 'completed']}, activeForm: {type: 'string'}}, required: ['content', 'status']},
+        },
+      },
+    };
   }
 
   /** The agent was told once that a shell read ran as a tool. */
@@ -213,6 +232,15 @@ export class ToolHost extends EventEmitter {
     let args = rawArgs;
     const tool = this.find(name);
     if (!tool) return {ok: false, text: `unknown tool ${name}`};
+    let todoNote: string | undefined;
+    if (ToolHost.CARRY_TODOS.includes(tool.name) && Array.isArray((args as {todos?: unknown})?.todos)) {
+      const {todos, ...rest} = args as {todos: unknown[]};
+      args = rest;
+      if (this.experiment('todo-piggyback')) {
+        const r = await this.call('todo_write', {todos}, origin).catch((err: Error) => ({ok: false, text: err.message}));
+        todoNote = r.ok ? '(task list updated)' : `(task list not updated: ${r.text})`;
+      }
+    }
     if (origin && tool.mainOnly) return {ok: false, text: `${tool.name} is only available to the main agent (subagents can't spawn subagents)`};
     const summary = tool.summarize(args);
     const id = this.nextId++;
@@ -362,6 +390,7 @@ export class ToolHost extends EventEmitter {
       result = {ok: false, text: err instanceof ToolError ? err.message : `error: ${(err as Error).message}`};
     }
     if (this.opts.mask) result = {...result, text: this.opts.mask(result.text)}; // errors too (and hook notes)
+    if (todoNote) result = {...result, text: `${result.text}\n${todoNote}`};
     if (result.ok) {
       const note = this.batchNudge(tool?.name ?? name, args);
       if (note) result = {...result, text: `${result.text}\n\n${note}`};
