@@ -38,6 +38,19 @@ export function setAttribution(fn: () => boolean): void {
   attribution = fn;
 }
 
+/** in-scope is on (config `experiments`): one line against work the request didn't ask for. */
+let inScope: () => boolean = () => false;
+export function setInScope(fn: () => boolean): void {
+  inScope = fn;
+}
+const SCOPE_PROMPT = `- Do what was asked, completely, and no more: update the existing code and tests your change affects, but don't add new test files, refactors or features the request doesn't need. Extra work costs time and tokens.`;
+
+/** no-todo is on (config `experiments`): no task list tool, so the prompt doesn't mention it. */
+let noTodo: () => boolean = () => false;
+export function setNoTodo(fn: () => boolean): void {
+  noTodo = fn;
+}
+
 /** lazy-tools is on (config `experiments`): rarely needed tools are reached through `tool`. */
 let lazyTools: () => boolean = () => false;
 export function setLazyTools(fn: () => boolean): void {
@@ -99,7 +112,8 @@ export async function systemPrompt(opts: {tools?: boolean; scratch?: string} = {
   const sections = [base];
   if (opts.tools) {
     const extra = extraDirs();
-    sections.push(lazyTools() ? `${TOOLS_PROMPT}\n${LAZY_PROMPT}` : TOOLS_PROMPT);
+    const tools = noTodo() ? TOOLS_PROMPT.split('\n').filter((l) => !l.includes('todo_write')).join('\n') : TOOLS_PROMPT;
+    sections.push([tools, lazyTools() && LAZY_PROMPT, inScope() && SCOPE_PROMPT].filter(Boolean).join('\n'));
     if (attribution())
       sections.push(
         [

@@ -57,6 +57,9 @@ export function agentTools(agents: SubagentManager, config: () => Config): ToolD
         const preferred = !fixed ? userModel(cfg) : undefined;
         return [
           'Delegate a task to a subagent that works autonomously with the same tools and returns a report.',
+          ...((cfg.experiments ?? []).includes('lean-subagents')
+            ? ["- Each subagent starts its own context (instructions, tools and everything it reads), so it costs about as much as doing that work yourself, plus the report. Use one for independent work that can run in parallel, a long side investigation, or another model; not to split one focused change across files (do that yourself, batching edits)."]
+            : []),
           '- mode "fork": branches your current session — it keeps the full conversation history and uses your current model/account (good for parallel work that needs context).',
           '- mode "new": a fresh session with no history on any model below — the task must be self-contained (good for independent work, or to use a cheaper/stronger model).',
           fixed

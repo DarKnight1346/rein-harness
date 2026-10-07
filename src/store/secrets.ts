@@ -5,7 +5,9 @@ import {writeFileSecure} from './json.js';
 import {reinHome} from './paths.js';
 
 const ACCOUNT = 'rein';
-const useKeychain = () => process.platform === 'darwin' && !process.env.REIN_HOME;
+// A separate REIN_HOME keeps its secrets in files there, unless REIN_KEYCHAIN=1 (macOS) shares the Keychain
+// with the normal install, e.g. so a scratch home can reach the same Jev key.
+const useKeychain = () => process.platform === 'darwin' && (!process.env.REIN_HOME || process.env.REIN_KEYCHAIN === '1');
 /** Windows: the file is encrypted with DPAPI (only this Windows user can decrypt it). */
 const useDpapi = () => process.platform === 'win32' && !process.env.REIN_HOME;
 export const secretsDir = () => path.join(reinHome(), 'secrets');

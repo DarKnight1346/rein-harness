@@ -44,7 +44,7 @@ import {webTools} from './tools/web.js';
 import {isMilestoneCopy, todoTool} from './tools/todo.js';
 import {imageGenRef, imageTool} from './tools/image.js';
 import {newTranscript, saveTranscript} from './session/transcript.js';
-import {setAttribution, setExtraWorkingDirs, setLazyTools, setVaultNames, systemPrompt} from './session/prompt.js';
+import {setAttribution, setExtraWorkingDirs, setInScope, setLazyTools, setNoTodo, setVaultNames, systemPrompt} from './session/prompt.js';
 import {Vault} from './vault/vault.js';
 import {parseRef, refKey, type Account, type ModelRef, type TokenCount, type ToolBinding} from './providers/types.js';
 import {removeAccount} from './accounts/service.js';
@@ -573,6 +573,7 @@ Drop superseded reads of the same file, routine listings, and output that no lon
       recallTool(() => this.engine?.transcript),
       todoTool({
         carried: () => (this.config.experiments ?? []).includes('todo-piggyback'),
+        enabled: () => !(this.config.experiments ?? []).includes('no-todo'),
         transcript: () => this.engine?.transcript,
         milestones: () => (this.goals.goal?.status === 'active' ? this.goals.plan()?.milestones.map((m) => m.text) : undefined),
         changed: () => {
@@ -655,6 +656,8 @@ Drop superseded reads of the same file, routine listings, and output that no lon
     setExtraWorkingDirs(() => this.tools.extraWorkingDirs());
     setAttribution(() => this.config.attribution !== false);
     setLazyTools(() => (this.config.experiments ?? []).includes('lazy-tools'));
+    setNoTodo(() => (this.config.experiments ?? []).includes('no-todo'));
+    setInScope(() => (this.config.experiments ?? []).includes('in-scope'));
     await usageStore.load();
     const router = makeRouter(() => this.config, (...a) => this.auto(...a));
     const host = this.tools;

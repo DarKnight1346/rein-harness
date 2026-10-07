@@ -32,9 +32,10 @@ export const todoLine = (t: Todo) => `${MARK[t.status]} ${t.status === 'in_progr
  * `todo_write` (main agent): the task list for multi-step work, like Claude Code's TodoWrite. Each
  * call replaces the whole list; it's saved with the conversation and shown in the sidebar.
  */
-export function todoTool(deps: {transcript(): Transcript | undefined; changed(): void; milestones?(): string[] | undefined; carried?(): boolean}): ToolDef {
+export function todoTool(deps: {transcript(): Transcript | undefined; changed(): void; milestones?(): string[] | undefined; carried?(): boolean; enabled?(): boolean}): ToolDef {
   return {
     name: 'todo_write',
+    enabled: () => deps.enabled?.() ?? true,
     label: 'Tasks',
     description: 'Write the task list.',
     describe: () =>
