@@ -104,7 +104,7 @@ export async function readTool(ctx, args) {
                 more = true;
                 break;
             }
-            out.push(`${String(n).padStart(6)}\t${line.length > MAX_LINE_CHARS ? line.slice(0, MAX_LINE_CHARS) + '… [line truncated]' : line}`);
+            out.push(`${ctx.compactLines ? n : String(n).padStart(6)}\t${line.length > MAX_LINE_CHARS ? line.slice(0, MAX_LINE_CHARS) + '… [line truncated]' : line}`);
         }
     }
     finally {

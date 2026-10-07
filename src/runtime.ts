@@ -1,3 +1,5 @@
+import {readFileSync} from 'node:fs';
+import {run} from './util/proc.js';
 import {EventEmitter} from 'node:events';
 import {adapters} from './providers/index.js';
 import {catalog, toRef} from './router/catalog.js';
@@ -420,6 +422,7 @@ Drop superseded reads of the same file, routine listings, and output that no lon
     if (!/^<(code_check|stop_hook)>/.test(text)) {
       this.escalation = undefined;
       this.verified = false;
+      this.reviewed = false;
     }
     // Snapshot the project before this message runs, so /rewind can undo everything it causes.
     if (this.engine) await this.snapshots.snapshot(this.engine.transcript.messages.length);
@@ -452,6 +455,13 @@ Drop superseded reads of the same file, routine listings, and output that no lon
       const out = await runHooks('Stop', root, {session_id: this.engine?.transcript.id, stop_hook_active: active});
       if (out.block) return {reason: out.block, kind: 'hook'};
     }
+    // cross-review: once per request, a strong model from the other provider reviews the change against
+    // the request; what it finds goes back to the agent (a second pair of eyes no single-vendor CLI has).
+    if (!active && (this.config.experiments ?? []).includes('cross-review') && !this.reviewed && this.engine && this.checkpoints.changedSince(this.currentTurn()).length) {
+      this.reviewed = true;
+      const findings = await this.crossReview().catch(() => undefined);
+      if (findings) return {kind: 'hook', reason: findings};
+    }
     // verify-requirements: once per request, before the agent stops after changing files, it checks its
     // change against every requirement in the request (hard tasks fail on the one it skipped).
     if (!active && (this.config.experiments ?? []).includes('verify-requirements') && !this.verified && this.engine && this.checkpoints.changedSince(this.currentTurn()).length) {
@@ -481,6 +491,42 @@ Drop superseded reads of the same file, routine listings, and output that no lon
 
   /** verify-requirements: the check already ran for the current request. */
   private verified = false;
+  /** cross-review: the review already ran for the current request. */
+  private reviewed = false;
+
+  /** The other provider's strongest available model, for a review (undefined if none is signed in). */
+  private reviewerFor(cur: ModelRef): ModelRef | undefined {
+    const others = catalog.available(this.config.maxUsedPct).filter((m) => m.provider !== cur.provider);
+    const best = others.sort((a, b) => b.tier - a.tier)[0];
+    return best ? toRef(best) : undefined;
+  }
+
+  /** cross-review: the reviewer's findings as a message for the agent, or undefined when it found nothing. */
+  private async crossReview(): Promise<string | undefined> {
+    const cur = this.engine?.currentRef();
+    const reviewer = cur && this.reviewerFor(cur);
+    if (!reviewer || !this.engine) return undefined;
+    const root = process.cwd();
+    const git = async (...a: string[]) => (await run('git', a, {cwd: root, timeoutMs: 20_000})).stdout;
+    const diff = (await git('diff', 'HEAD', '--no-color')).slice(0, 60_000);
+    const untracked = (await git('ls-files', '--others', '--exclude-standard')).split('\n').filter(Boolean).slice(0, 20);
+    const added = untracked.map((f) => {
+      try {
+        return `--- new file ${f}\n${readFileSync(path.join(root, f), 'utf8').slice(0, 8000)}`;
+      } catch {
+        return '';
+      }
+    }).join('\n');
+    if (!diff.trim() && !added.trim()) return undefined;
+    const request = [...this.engine.transcript.messages].reverse().find((m) => m.role === 'user' && !/^<(code_check|stop_hook)>/.test(m.text))?.text ?? '';
+    const system = 'You review a code change against the request that asked for it. Report only concrete problems: requirements or edge cases the request states that the change does not handle, and real bugs. No style comments, no praise.';
+    const prompt = `The request:\n${request.slice(0, 20_000)}\n\nThe change (git diff, then new files):\n${diff}\n${added}\n\nList each problem on one line: the file, what is wrong, and which part of the request it breaks. If there are none, reply exactly NONE.`;
+    const reply = (await completeWith(reviewer, this.config, system, prompt, {timeoutMs: 240_000})).trim();
+    // Counted in the conversation's totals (no cache: a one-off call), so a review is never free on paper.
+    this.engine.addTokens({input: Math.ceil((system.length + prompt.length) / 4), cached: 0, output: Math.ceil(reply.length / 4)});
+    if (!reply || /^none\b/i.test(reply)) return undefined;
+    return `A second model (${reviewer.provider}:${reviewer.model}) reviewed your change against the request and reported:\n${reply.slice(0, 6000)}\nCheck each point against the code. Fix the ones that are real; for any that are wrong, say so in a line. Don't redo work that is fine.`;
+  }
 
   /** escalate: the model the task moves to (set by stopHook, cleared by the user's next message). */
   escalation: ModelRef | undefined;

@@ -38,7 +38,7 @@ import { webTools } from './tools/web.js';
 import { isMilestoneCopy, todoTool } from './tools/todo.js';
 import { imageGenRef, imageTool } from './tools/image.js';
 import { newTranscript, saveTranscript } from './session/transcript.js';
-import { setAttribution, setExtraWorkingDirs, setInScope, setLazyTools, setNoTodo, setVaultNames, systemPrompt } from './session/prompt.js';
+import { setAttribution, setBriefFinal, setExtraWorkingDirs, setInScope, setLazyTools, setNoTodo, setVaultNames, systemPrompt } from './session/prompt.js';
 import { Vault } from './vault/vault.js';
 import { parseRef, refKey } from './providers/types.js';
 import { removeAccount } from './accounts/service.js';
@@ -647,6 +647,7 @@ Drop superseded reads of the same file, routine listings, and output that no lon
         setLazyTools(() => (this.config.experiments ?? []).includes('lazy-tools'));
         setNoTodo(() => (this.config.experiments ?? []).includes('no-todo'));
         setInScope(() => (this.config.experiments ?? []).includes('in-scope'));
+        setBriefFinal(() => (this.config.experiments ?? []).includes('brief-final'));
         await usageStore.load();
         const router = makeRouter(() => this.config, (...a) => this.auto(...a));
         const host = this.tools;
