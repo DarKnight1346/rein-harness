@@ -417,7 +417,10 @@ Drop superseded reads of the same file, routine listings, and output that no lon
   private async beforePrompt(text: string): Promise<{block?: string; context?: string}> {
     const root = process.cwd();
     // A message from the user (not Rein's own follow-up) ends an escalation: routing is normal again.
-    if (!/^<(code_check|stop_hook)>/.test(text)) this.escalation = undefined;
+    if (!/^<(code_check|stop_hook)>/.test(text)) {
+      this.escalation = undefined;
+      this.verified = false;
+    }
     // Snapshot the project before this message runs, so /rewind can undo everything it causes.
     if (this.engine) await this.snapshots.snapshot(this.engine.transcript.messages.length);
     const session_id = this.engine?.transcript.id;
@@ -449,6 +452,16 @@ Drop superseded reads of the same file, routine listings, and output that no lon
       const out = await runHooks('Stop', root, {session_id: this.engine?.transcript.id, stop_hook_active: active});
       if (out.block) return {reason: out.block, kind: 'hook'};
     }
+    // verify-requirements: once per request, before the agent stops after changing files, it checks its
+    // change against every requirement in the request (hard tasks fail on the one it skipped).
+    if (!active && (this.config.experiments ?? []).includes('verify-requirements') && !this.verified && this.engine && this.checkpoints.changedSince(this.currentTurn()).length) {
+      this.verified = true;
+      return {
+        kind: 'hook',
+        reason:
+          "Before you finish: list every requirement and edge case in the user's request, and for each one say where your change handles it. Fix anything missing or only partly done. If everything is covered, reply with a short confirmation and stop: don't redo work.",
+      };
+    }
     // escalate: the check already reported these and the agent's follow-up turn left them: a stronger
     // model takes the task over (for the rest of it; the next message from the user routes normally).
     if (active && (this.config.experiments ?? []).includes('escalate') && !this.escalation) {
@@ -465,6 +478,9 @@ Drop superseded reads of the same file, routine listings, and output that no lon
     const problems = await this.lsp.turnEnd().catch(() => undefined);
     return problems ? {reason: problems, kind: 'diagnostics'} : undefined;
   }
+
+  /** verify-requirements: the check already ran for the current request. */
+  private verified = false;
 
   /** escalate: the model the task moves to (set by stopHook, cleared by the user's next message). */
   escalation: ModelRef | undefined;
