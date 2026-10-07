@@ -572,16 +572,12 @@ export class Engine {
     const key = `${ref.provider}:${account.id}`;
     const warm = this.active?.key === key && !this.cacheBroken && Date.now() - (this.lastUsed.get(account.id) ?? 0) < (CACHE_WARM_MS[ref.provider] ?? 5 * 60_000);
     if (warm) return this.active!.session.effort;
-    // effort-down: auto may only lower effort — low for a simple message, else the model's own default
-    // (no flag). Raising it on hard-looking requests doubled output and time without solving more.
-    if ((this.deps.config().experiments ?? []).includes('effort-down') && levels.includes('low')) {
-      const picked = await this.deps.pickEffort?.(text, ['low', 'medium']).catch(() => undefined);
-      return picked === 'low' ? 'low' : undefined;
-    }
-    // Auto never reaches for the levels the CLIs flag as excessive.
-    const choices = levels.filter((l) => l !== 'max' && l !== 'ultra');
-    const picked = await this.deps.pickEffort?.(text, choices).catch(() => undefined);
-    return picked && choices.includes(picked) ? picked : undefined;
+    // Auto only ever lowers effort: low for a simple message, else the model's own default (no flag).
+    // Raising it on hard-looking requests (high, xhigh) doubled output and time on hard benchmark tasks
+    // without solving more of them than the model's default did.
+    if (!levels.includes('low')) return undefined;
+    const picked = await this.deps.pickEffort?.(text, ['low', 'medium']).catch(() => undefined);
+    return picked === 'low' ? 'low' : undefined;
   }
 
   /** Account of the native session this conversation used most recently for a provider. */
