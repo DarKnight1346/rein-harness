@@ -30,6 +30,8 @@ export type ToolContext = {
   sessionId?: string;
   /** Set when a subagent is calling (its shells are tagged with it). */
   origin?: Origin;
+  /** compact-read experiment: line numbers without padding (`12\t` instead of `    12\t`), a token a line less. */
+  compactLines?: boolean;
 };
 
 /** Which subagent made a tool call (undefined = the main agent). */
@@ -133,7 +135,7 @@ export async function readTool(ctx: ToolContext, args: {path: string; offset?: n
         more = true;
         break;
       }
-      out.push(`${String(n).padStart(6)}\t${line.length > MAX_LINE_CHARS ? line.slice(0, MAX_LINE_CHARS) + '… [line truncated]' : line}`);
+      out.push(`${ctx.compactLines ? n : String(n).padStart(6)}\t${line.length > MAX_LINE_CHARS ? line.slice(0, MAX_LINE_CHARS) + '… [line truncated]' : line}`);
     }
   } finally {
     rl.close();

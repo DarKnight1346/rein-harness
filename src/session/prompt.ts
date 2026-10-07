@@ -38,6 +38,13 @@ export function setAttribution(fn: () => boolean): void {
   attribution = fn;
 }
 
+/** brief-final is on (config `experiments`): a short final reply. */
+let briefFinal: () => boolean = () => false;
+export function setBriefFinal(fn: () => boolean): void {
+  briefFinal = fn;
+}
+const BRIEF_PROMPT = `- When you've finished, reply in at most three short sentences: what changed, and anything the user must do or know. No recap of every file, no restating the request.`;
+
 /** in-scope is on (config `experiments`): one line against work the request didn't ask for. */
 let inScope: () => boolean = () => false;
 export function setInScope(fn: () => boolean): void {
@@ -113,7 +120,7 @@ export async function systemPrompt(opts: {tools?: boolean; scratch?: string} = {
   if (opts.tools) {
     const extra = extraDirs();
     const tools = noTodo() ? TOOLS_PROMPT.split('\n').filter((l) => !l.includes('todo_write')).join('\n') : TOOLS_PROMPT;
-    sections.push([tools, lazyTools() && LAZY_PROMPT, inScope() && SCOPE_PROMPT].filter(Boolean).join('\n'));
+    sections.push([tools, lazyTools() && LAZY_PROMPT, inScope() && SCOPE_PROMPT, briefFinal() && BRIEF_PROMPT].filter(Boolean).join('\n'));
     if (attribution())
       sections.push(
         [

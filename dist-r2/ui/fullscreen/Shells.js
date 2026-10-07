@@ -1,0 +1,82 @@
+import { jsx as _jsx, jsxs as _jsxs } from "react/jsx-runtime";
+import { useEffect, useState } from 'react';
+import { Box, Text, useInput } from 'ink';
+import { runtime } from '../../runtime.js';
+import { shellStatusText } from '../../tools/shells.js';
+import { Clickable } from '../terminal/clicks.js';
+import { InfoWindow, Window } from './Window.js';
+/** Re-render on shell output/status changes, at most ~10×/s (chatty commands would otherwise flood). */
+export function useShellsTick() {
+    const [, setTick] = useState(0);
+    useEffect(() => {
+        let timer;
+        const onChange = () => {
+            if (!timer)
+                timer = setTimeout(() => ((timer = undefined), setTick((t) => t + 1)), 100);
+        };
+        const shells = runtime.tools.shells;
+        shells.on('change', onChange);
+        const clock = setInterval(onChange, 1000); // keep "running 12s" fresh
+        return () => {
+            shells.off('change', onChange);
+            clearInterval(clock);
+            clearTimeout(timer);
+        };
+    }, []);
+}
+const statusColor = (s) => (s.status === 'running' ? 'yellow' : s.status === 'exited' && s.exitCode === 0 ? 'green' : 'red');
+/** Live output of one shell: follows new lines; `k` kills it. */
+export function ShellWindow({ id, width, onClose }) {
+    useShellsTick();
+    const shell = runtime.tools.shells.get(id);
+    if (!shell)
+        return null;
+    const head = `${shell.background ? '&' : '$'} ${shell.command}`;
+    const title = `${head.length > width - 30 ? head.slice(0, width - 31) + '…' : head}  ·  ${shellStatusText(shell)}${shell.tty && shell.status === 'running' ? (shell.waiting ? '  ·  waiting for you: ctrl+] to answer' : '  ·  ctrl+] to type into it') : ''}`;
+    const lines = [...(shell.dropped ? [`[… ${shell.dropped} earlier lines dropped]`] : []), ...shell.lines];
+    return (_jsx(InfoWindow, { title: title, width: width, follow: true, onClose: onClose, lines: lines.length ? lines : [shell.status === 'running' ? 'waiting for output…' : '(no output)'], hint: shell.status === 'running' ? 'k kill' : undefined, onKey: (input) => {
+            if (input === 'k' && shell.status === 'running') {
+                runtime.tools.shells.kill(shell.id);
+                return true;
+            }
+        } }));
+}
+/** Background shells (plus finished foreground ones); click one for its logs. */
+/** `agent`: only that subagent's commands (viewing it); undefined: the main agent's. */
+export function ShellsWindow({ width, onOpen, onClose, agent }) {
+    useShellsTick();
+    const shells = runtime.tools.shells.list().filter((s) => (agent ? s.origin?.agentId === agent.id : !s.origin)).sort((a, b) => Number(b.status === 'running') - Number(a.status === 'running') || b.id - a.id);
+    const [cursor, setCursor] = useState(0);
+    useInput((input, key) => {
+        if (key.escape || input === 'q')
+            onClose();
+        else if (key.upArrow)
+            setCursor((c) => Math.max(0, c - 1));
+        else if (key.downArrow)
+            setCursor((c) => Math.min(shells.length - 1, c + 1));
+        else if (key.return && shells[cursor])
+            onOpen(shells[cursor].id);
+        else if (input === 'k' && shells[cursor])
+            runtime.tools.shells.kill(shells[cursor].id);
+    });
+    return (_jsx(Window, { title: agent ? `Shells — ${agent.name}` : 'Shells', width: width, onClose: onClose, footer: "click/enter open logs \u00B7 k kill \u00B7 esc close", children: _jsxs(Box, { flexDirection: "column", marginY: 1, children: [!shells.length && _jsx(Text, { dimColor: true, children: "No shells yet \u2014 the agent's commands appear here." }), shells.map((s, i) => (_jsx(Clickable, { onHover: () => setCursor(i), onClick: () => onOpen(s.id), children: _jsxs(Text, { wrap: "truncate", color: i === cursor ? 'cyan' : undefined, children: [i === cursor ? '❯ ' : '  ', _jsxs(Text, { dimColor: true, children: ["#", String(s.id).padEnd(3)] }), _jsx(Text, { color: statusColor(s), children: shellStatusText(s).padEnd(18) }), _jsx(Text, { dimColor: true, children: s.background ? 'bg ' : 'fg ' }), s.command] }) }, s.id)))] }) }));
+}
+const LIVE_LINES = 10;
+/**
+ * The running foreground command's output, inline at the bottom of the chat (last 10 lines, like
+ * Claude Code) instead of a popup window. `agentId` picks a subagent's commands when viewing one.
+ * Click to open the full output.
+ */
+export function LiveShell({ width, agentId, onOpen }) {
+    useShellsTick();
+    const shell = runtime.tools.shells
+        .running({ background: false })
+        .filter((s) => (agentId === undefined ? !s.origin : s.origin?.agentId === agentId))
+        .at(-1);
+    if (!shell)
+        return null;
+    const lines = shell.lines.slice(-LIVE_LINES);
+    const hidden = shell.dropped + shell.lines.length - lines.length;
+    const inner = Math.max(10, width - 6);
+    return (_jsx(Clickable, { onClick: () => onOpen(shell.id), children: _jsxs(Box, { flexDirection: "column", paddingLeft: 3, children: [hidden > 0 ? _jsxs(Text, { dimColor: true, children: ["\u23BF \u2026 ", hidden, " earlier line", hidden === 1 ? '' : 's', " (click for all)"] }) : null, lines.length ? (lines.map((l, i) => (_jsxs(Text, { dimColor: true, wrap: "truncate", children: [i === 0 && !hidden ? '⎿ ' : '  ', l.slice(0, inner) || ' '] }, i)))) : (_jsx(Text, { dimColor: true, children: "\u23BF (no output yet)" }))] }) }));
+}
