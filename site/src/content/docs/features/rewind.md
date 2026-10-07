@@ -66,6 +66,7 @@ Before each message you send runs, Rein records the entire working tree in a **p
 
 - **Shell changes are covered.** Formatters, codemods, `sed -i`, code generators, `rm` — anything that changed files in the project, whether or not it went through Rein's `edit` tool.
 - **`.gitignore` is respected.** `node_modules`, build output and other ignored files aren't tracked, so snapshots stay small and fast.
+- **Fast in big repositories.** In a git project, the store reads the objects your repository already has and starts from a copy of its index, so the first snapshot only stores what differs from your last commit: about a second for a Linux kernel checkout, where hashing every file took over 30 seconds.
 - **Byte-exact.** The store overrides your `.gitattributes` with `* -text -filter -diff -merge` and disables line-ending conversion, so CRLF files, LFS pointers and binaries come back exactly as they were.
 - **Your `.git` is never touched.** The store has its own git directory and index. Your repository, branches, staging area and history are untouched, and the project's `.git` folder is excluded from snapshots. Git hooks are disabled for every snapshot command.
 - **Works without a repo.** The project doesn't need to be a git repository — only the `git` binary has to be installed.
