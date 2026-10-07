@@ -62,6 +62,7 @@ export async function fetchClaudeModels(account: Account): Promise<ModelInfo[]> 
           label: m.displayName ?? m.value,
           description: m.description,
           tier: tierFrom(m.description),
+          resolved: m.resolvedModel,
           contextWindow: UNKNOWN_WINDOW,
           isDefault,
           efforts: m.supportedEffortLevels?.length ? m.supportedEffortLevels : undefined,

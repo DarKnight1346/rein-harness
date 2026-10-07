@@ -51,6 +51,18 @@ describe('context windows', () => {
       expect(cat.get({provider: 'claude', model: 'fable'})?.contextWindow).toBe(1_000_000);
     });
 
+    it('asks again when an alias starts pointing at a new model', async () => {
+      const asked: string[] = [];
+      adapters.claude.probeContextWindow = async (_a, model) => (asked.push(model), 1_000_000);
+      const cat = setup([{id: 'claude-1', provider: 'claude', home: null, imported: true}]);
+      (cat as any).models.get('claude:haiku').resolved = 'claude-haiku-4-5';
+      cat.learnContextWindow({provider: 'claude', model: 'haiku'}, 200_000); // learned for Haiku 4.5
+      (cat as any).models.get('claude:haiku').resolved = 'claude-haiku-5-5'; // the alias moved
+      await cat.probeWindows();
+      expect(asked).toContain('haiku');
+      expect(cat.get({provider: 'claude', model: 'haiku'})?.contextWindow).toBe(1_000_000);
+    });
+
     it('never spends a pay-per-use API account on it', async () => {
       const asked: string[] = [];
       adapters.claude.probeContextWindow = async (a) => (asked.push(a.id), 1_000_000);

@@ -65,6 +65,8 @@ export type ModelInfo = {
   tier: number;
   contextWindow: number;
   isDefault?: boolean;
+  /** The concrete model an alias points at right now (Claude: `haiku` → `claude-haiku-5-5`), when known. */
+  resolved?: string;
   /** Effort levels the model accepts, lowest first, and its default. */
   efforts?: string[];
   defaultEffort?: string;
