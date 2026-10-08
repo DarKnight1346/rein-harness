@@ -64,6 +64,8 @@ const MAX_MIDTURN_COMPACTIONS = 20;
 /** price-break: compact at this share of the model's price break (headroom for one large tool result). */
 const PRICE_BREAK_MARGIN = 0.8;
 /** Sent after a mid-turn compaction so the agent picks the task back up instead of ending its turn. */
+/** Messages Rein sends on its own to carry on the user's request (not a new request). */
+const REIN_FOLLOW_UP = /^<(context_compacted|code_check|stop_hook)>/;
 const CONTINUE_AFTER_COMPACTION = `<context_compacted>
 The conversation was compacted in the middle of your work because the context window was filling up. The summary above covers everything so far, including your tool calls and where you stopped. Continue the task from exactly where you left off: don't start over, don't repeat finished steps, and don't stop to ask the user unless you genuinely need their input.
 </context_compacted>`;
@@ -576,15 +578,22 @@ export class Engine {
     const key = `${ref.provider}:${account.id}`;
     const warm = this.active?.key === key && !this.cacheBroken && Date.now() - (this.lastUsed.get(account.id) ?? 0) < (CACHE_WARM_MS[ref.provider] ?? 5 * 60_000);
     if (warm) return this.active!.session.effort;
+    // Rein's own follow-ups (the continuation after a compaction, the code check, Stop hooks,
+    // keep-going) are short but belong to the user's request: they keep its effort. Judged on their
+    // own they read as "simple", and a long task carried on at low.
+    if (REIN_FOLLOW_UP.test(text)) return this.requestEffort;
     // Auto only ever lowers effort: low for a simple message, else the model's own default (no flag).
     // Raising it on hard-looking requests (high, xhigh) doubled output and time on hard benchmark tasks
     // without solving more of them than the model's default did.
     // A long message is a spec, never a quick one: asked anyway, the decision model sometimes saw a
     // 15K-character feature spec as "mechanical" and ran it on low.
-    if (!levels.includes('low') || estimateTokens(text) > SIMPLE_MAX_TOKENS) return undefined;
+    if (!levels.includes('low') || estimateTokens(text) > SIMPLE_MAX_TOKENS) return (this.requestEffort = undefined);
     const picked = await this.deps.pickEffort?.(text, ['low', 'medium']).catch(() => undefined);
-    return picked === 'low' ? 'low' : undefined;
+    return (this.requestEffort = picked === 'low' ? 'low' : undefined);
   }
+
+  /** Auto effort chosen for the user's current request, which Rein's follow-ups to it keep. */
+  private requestEffort: string | undefined;
 
   /** Account of the native session this conversation used most recently for a provider. */
   private lastAccount(provider: string): string | undefined {

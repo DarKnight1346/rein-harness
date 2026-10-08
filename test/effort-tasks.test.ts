@@ -72,6 +72,19 @@ describe('effort', () => {
     expect(log.opened.at(-1)!.effort).toBeUndefined();
   });
 
+  it("Rein's own follow-ups keep the request's effort, even on a cold cache", async () => {
+    config.chatEffort = 'auto';
+    const e = engine('low');
+    await collect(e.send('Implement the following feature exactly as specified.\n' + '- requirement\n'.repeat(300)));
+    expect(log.opened.at(-1)!.effort).toBeUndefined(); // a spec: the model's default
+    vi.setSystemTime(Date.now() + 61 * 60_000); // cold, like right after a compaction
+    for (const follow of ['<context_compacted>\nContinue.\n</context_compacted>', '<code_check>\n1 problem\n</code_check>', '<stop_hook>\nKeep going.\n</stop_hook>']) {
+      await collect(e.send(follow));
+      expect(log.opened.at(-1)!.effort).toBeUndefined(); // not "simple, so low"
+    }
+    expect(picks).toEqual([]); // and the decision model wasn't asked
+  });
+
   it('auto never lowers effort for a long message, and does not ask', async () => {
     config.chatEffort = 'auto';
     const e = engine('low');
