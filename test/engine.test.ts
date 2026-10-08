@@ -203,6 +203,21 @@ describe('price-break', () => {
   });
 });
 
+describe('context-cap', () => {
+  it('compacts large windows at 200K when on', async () => {
+    await tempHome([acct('claude', 'c1')]);
+    const big = [{...CLAUDE_FAKE_MODELS[0]!, contextWindow: 1_000_000}, CLAUDE_FAKE_MODELS[1]!];
+    const {adapter} = fakeAdapter('claude', big, () => reply('ok'));
+    install('claude', adapter);
+    await catalog.refresh();
+    const e = engineWith() as any;
+    expect(e.autoCompactLimit({provider: 'claude', model: big[0]!.id})).toBe(800_000);
+    config = {...config, experiments: ['context-cap']};
+    expect(e.autoCompactLimit({provider: 'claude', model: big[0]!.id})).toBe(200_000);
+    expect(e.autoCompactLimit({provider: 'claude', model: big[1]!.id})).toBe(Math.min(200_000, big[1]!.contextWindow * 0.8));
+  });
+});
+
 describe('compactor', () => {
   it('summarizes old messages, keeps recent ones, and drops native refs', async () => {
     await tempHome([acct('claude', 'c1')]);

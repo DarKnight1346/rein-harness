@@ -63,6 +63,8 @@ const MAX_ATTEMPTS = 5;
 const MAX_MIDTURN_COMPACTIONS = 20;
 /** price-break: compact at this share of the model's price break (headroom for one large tool result). */
 const PRICE_BREAK_MARGIN = 0.8;
+/** context-cap: every request re-reads the whole conversation, so past this size it costs more than a compaction. */
+const CONTEXT_CAP = 200_000;
 /** Sent after a mid-turn compaction so the agent picks the task back up instead of ending its turn. */
 /** Messages Rein sends on its own to carry on the user's request (not a new request). */
 const REIN_FOLLOW_UP = /^<(context_compacted|code_check|stop_hook)>/;
@@ -651,7 +653,11 @@ export class Engine {
     const limit = (m?.contextWindow ?? 200_000) * (pct / 100);
     // price-break: stay on the cheaper rate card. Compacting checks a request's prompt after it was
     // sent, and the next tool result adds to it, so the limit sits below the break.
-    if (m?.priceBreak && (this.deps.config().experiments ?? []).includes('price-break')) return Math.min(limit, m.priceBreak * PRICE_BREAK_MARGIN);
+    const experiments = this.deps.config().experiments ?? [];
+    if (m?.priceBreak && experiments.includes('price-break')) return Math.min(limit, m.priceBreak * PRICE_BREAK_MARGIN);
+    // context-cap: on large windows the conversation otherwise grows to 300-500K, and cache reads of it
+    // were about 60% of what a large task cost.
+    if (experiments.includes('context-cap')) return Math.min(limit, CONTEXT_CAP);
     return limit;
   }
 
