@@ -164,7 +164,7 @@ export class Engine {
     return adapters[active.ref.provider].fork({
       account,
       model: active.ref.model,
-      systemPrompt: await systemPrompt({tools: !!this.deps.tools, scratch: this.scratch}),
+      systemPrompt: await systemPrompt({tools: !!this.deps.tools, scratch: this.scratch, provider: active.ref.provider}),
       nativeId,
       tools,
     });
@@ -617,7 +617,7 @@ export class Engine {
       const known = t.native[key];
       // Resume the native session only if it saw everything up to now; otherwise carry context.
       const resumeId = known && known.coversUpTo === userIndex ? known.nativeId : undefined;
-      const session = catalog.track(await adapters[ref.provider].openSession({account, model: ref.model, systemPrompt: await systemPrompt({tools: !!this.deps.tools, scratch: this.scratch}), resumeId, tools: this.deps.tools?.binding, effort}));
+      const session = catalog.track(await adapters[ref.provider].openSession({account, model: ref.model, systemPrompt: await systemPrompt({tools: !!this.deps.tools, scratch: this.scratch, provider: ref.provider}), resumeId, tools: this.deps.tools?.binding, effort}));
       this.active = {session, key, ref};
       if (!resumeId) t.native[key] = {provider: ref.provider, accountId: account.id, nativeId: '', coversUpTo: 0};
     }

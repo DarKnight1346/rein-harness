@@ -153,6 +153,7 @@ thread/resume {threadId, …same settings}
 thread/fork   {threadId, ephemeral: true, excludeTurns: true, model, approvalPolicy, sandbox}
 ```
 
+- **`baseInstructions` is Rein's system prompt**, which replaces Codex's own instructions. Those tell the model to test its work, so for Codex models Rein's prompt adds that line itself (the [`self-test`](../../reference/configuration/#experiments) line, always on for Codex): without it, Sol ran a fifth as many commands as in Codex and solved fewer than half as many large tasks.
 - **Model and effort travel with every `turn/start`**, so Codex switches both per turn with no reopen (`setEffort()` exists only on Codex sessions).
 - Streaming comes as notifications: `item/agentMessage/delta` for text, `thread/tokenUsage/updated` for tokens (`last` is per request, summed across a tool-using turn), `item/completed` for generated images, `turn/completed` to finish, and `error` (ignored while `willRetry` is set).
 - `account/rateLimits/read` and `account/rateLimits/updated` give usage for free. Windows are mapped **by duration** (`windowDurationMins`), not by primary/secondary position, because a free plan returns a single 30-day window.

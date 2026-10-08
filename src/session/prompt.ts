@@ -52,7 +52,7 @@ export function setInScope(fn: () => boolean): void {
 }
 const SCOPE_PROMPT = `- Do what was asked, completely, and no more: update the existing code and tests your change affects, but don't add new test files, refactors or features the request doesn't need. Extra work costs time and tokens.`;
 
-/** self-test is on (config `experiments`): check your own change before finishing. */
+/** self-test is on (config `experiments`), and always for Codex models: check your own change before finishing. */
 let selfTest: () => boolean = () => false;
 export function setSelfTest(fn: () => boolean): void {
   selfTest = fn;
@@ -119,7 +119,7 @@ export async function agentsFiles(cwd = process.cwd()): Promise<{path: string; t
  * Rein's system prompt for chat sessions (all providers): base instructions (or
  * `~/.rein/system-prompt.md`), the tools section, the project root, and AGENTS.md files.
  */
-export async function systemPrompt(opts: {tools?: boolean; scratch?: string} = {}): Promise<string> {
+export async function systemPrompt(opts: {tools?: boolean; scratch?: string; provider?: string} = {}): Promise<string> {
   let base = BASE_PROMPT;
   try {
     const custom = (await readFile(path.join(reinConfigDir(), 'system-prompt.md'), 'utf8')).trim();
@@ -129,7 +129,7 @@ export async function systemPrompt(opts: {tools?: boolean; scratch?: string} = {
   if (opts.tools) {
     const extra = extraDirs();
     const tools = noTodo() ? TOOLS_PROMPT.split('\n').filter((l) => !l.includes('todo_write')).join('\n') : TOOLS_PROMPT;
-    sections.push([tools, lazyTools() && LAZY_PROMPT, inScope() && SCOPE_PROMPT, selfTest() && SELF_TEST_PROMPT, briefFinal() && BRIEF_PROMPT].filter(Boolean).join('\n'));
+    sections.push([tools, lazyTools() && LAZY_PROMPT, inScope() && SCOPE_PROMPT, (selfTest() || opts.provider === 'codex') && SELF_TEST_PROMPT, briefFinal() && BRIEF_PROMPT].filter(Boolean).join('\n'));
     if (attribution())
       sections.push(
         [

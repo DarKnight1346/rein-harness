@@ -363,7 +363,7 @@ export class Runtime {
     const account = catalog.healthyAccounts(ref, this.config.maxUsedPct)[0];
     if (!account) throw new Error(`no healthy account for ${ref.model}`);
     const role = agent.definition ? `\n\n# Your role: ${agent.definition.name}\n${agent.definition.prompt}` : '';
-    const prompt = `${await systemPrompt({tools: true, scratch: this.engine.scratch})}\n\n${SUBAGENT_PROMPT(agent.name)}${role}`;
+    const prompt = `${await systemPrompt({tools: true, scratch: this.engine.scratch, provider: ref.provider})}\n\n${SUBAGENT_PROMPT(agent.name)}${role}`;
     const session = catalog.track(await adapters[ref.provider].openSession({account, model: ref.model, systemPrompt: prompt, tools}));
     return {session, ref, accountId: account.id, label: catalog.get(ref)?.label ?? ref.model};
   }
