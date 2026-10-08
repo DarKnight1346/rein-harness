@@ -21,6 +21,9 @@ const files = (b: Before, turn: Map<string, {root: string; file: string}>) => [.
 
 export type Before = {root: string; files: {file: string; count: number; list?: Diagnostic[]; dependent?: boolean}[]; missing?: ServerSpec[]};
 
+/** Vendored and generated trees: code the agent didn't write, never a caller worth checking. */
+const THIRD_PARTY = ['vendor', 'node_modules', 'third_party', 'third-party', '.venv', 'venv', 'site-packages', 'dist', 'build'];
+
 /**
  * Files that likely import `file` (their text names it), so an edit that breaks a caller is caught
  * too: `git grep` for the module name, same language, at most a few. Empty outside a git repo.
@@ -29,7 +32,7 @@ function dependents(file: string, root: string, patterns: string[]): Promise<str
   const stem = path.basename(file).replace(/\.[^.]+$/, '');
   if (stem.length < 2 || stem === 'index' || stem === '__init__') return Promise.resolve([]);
   return new Promise((resolve) => {
-    execFile('git', ['grep', '-l', '-I', '-F', '-w', stem, '--', ...patterns], {cwd: root, timeout: 1000, maxBuffer: 1 << 20}, (err, out) => {
+    execFile('git', ['grep', '-l', '-I', '-F', '-w', stem, '--', ...patterns, ...THIRD_PARTY.map((d) => `:(exclude,glob)**/${d}/**`)], {cwd: root, timeout: 1000, maxBuffer: 1 << 20}, (err, out) => {
       if (err && !out) return resolve([]);
       const self = path.resolve(file);
       resolve(String(out).split('\n').filter(Boolean).map((f) => path.resolve(root, f)).filter((f) => f !== self).slice(0, MAX_DEPENDENTS));
@@ -121,7 +124,7 @@ export class LspManager {
    * Files this turn changed (and files importing them), with their problems before the first
    * change: what the end-of-turn check compares against. Keyed by root + file.
    */
-  private turn = new Map<string, {root: string; file: string; count: number; list?: Diagnostic[]; created?: boolean}>();
+  private turn = new Map<string, {root: string; file: string; count: number; list?: Diagnostic[]; created?: boolean; dependent?: boolean}>();
 
   /**
    * Before an edit: the first time this turn a file (or a file importing it) is touched, remember
@@ -154,7 +157,7 @@ export class LspManager {
           c.sync(file);
           await c.waitForDiagnostics(file, n, REPORT_TIMEOUT_MS);
         }
-        this.turn.set(key, {root, file, count: c.publishCount(file), list: c.diagnostics(file)});
+        this.turn.set(key, {root, file, count: c.publishCount(file), list: c.diagnostics(file), dependent});
         out.files.push({file, count: c.publishCount(file), list: c.diagnostics(file), dependent});
       }),
     );
@@ -181,7 +184,7 @@ export class LspManager {
     await Promise.all([...new Set(checks.map((x) => x.c!))].filter((c) => !c.pull).map((c) => c.waitSettled(checks.filter((x) => x.c === c).map((x) => ({file: x.file, after: x.count})), REPORT_TIMEOUT_MS)));
     const reported: {root: string; file: string; keys: string[]}[] = [];
     const results = await Promise.all(
-      checks.map(async ({file, count, list, created, c, root}) => {
+      checks.map(async ({file, count, list, created, dependent, c, root}) => {
         // No "before" to compare with: the server hadn't reported on the file yet when the turn first
         // touched it (a big file, a slow first parse). Its errors can't be told apart from ones that
         // were already there (a kernel tree without its build config has hundreds), so it's skipped.
@@ -189,7 +192,9 @@ export class LspManager {
         if (!list && !created) return [];
         if (c!.pull && !(await c!.waitForDiagnostics(file, count, REPORT_TIMEOUT_MS))) return [];
         const now = c!.diagnostics(file) ?? [];
-        const found = list ? newProblems(list, now) : now.filter((d) => (d.severity ?? 1) === 1);
+        // A caller the agent didn't edit: only errors (a broken call). Its warnings were often still
+        // being computed when the "before" was taken (gopls' staticcheck), so they'd read as new.
+        const found = (list ? newProblems(list, now) : now.filter((d) => (d.severity ?? 1) === 1)).filter((d) => !dependent || (d.severity ?? 1) === 1);
         if (found.length) reported.push({root, file, keys: found.map(keyOf)});
         return found.map((d) => formatDiagnostic(d, file, root));
       }),

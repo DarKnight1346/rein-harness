@@ -105,6 +105,25 @@ describe('built-in language servers', () => {
     await lsp.closeAll();
   });
 
+  it("callers: vendored code isn't checked, and only errors count in files the turn didn't edit", async () => {
+    const root = mkdtempSync(path.join(os.tmpdir(), 'rein-lsp-vendor-'));
+    mkdirSync(path.join(root, 'vendor', 'pkg'), {recursive: true});
+    writeFileSync(path.join(root, 'lib.ts'), 'export const v = 1;\n');
+    writeFileSync(path.join(root, 'app.ts'), "import {v} from './lib';\n");
+    writeFileSync(path.join(root, 'vendor', 'pkg', 'dep.ts'), '// uses ../../lib.ts\n');
+    execFileSync('git', ['init', '-q'], {cwd: root});
+    execFileSync('git', ['add', '-A'], {cwd: root});
+    const lsp = new LspManager({config});
+    const lib = path.join(root, 'lib.ts');
+    const b = await lsp.before([lib], root);
+    writeFileSync(lib, 'export const v = 2; // BROKEN\n');
+    // A warning in the caller that only shows up now (a server's slower analysis), not from this edit.
+    writeFileSync(path.join(root, 'app.ts'), "import {v} from './lib'; // OLD\n");
+    await lsp.after(b);
+    expect(await lsp.turnEnd()).toBeUndefined();
+    await lsp.closeAll();
+  });
+
   it('end-of-turn check through the runtime, for edits made with the tool host', async () => {
     const {ToolHost} = await import('../src/tools/host.js');
     const root = mkdtempSync(path.join(os.tmpdir(), 'rein-lsp-host-'));
