@@ -6,3 +6,4 @@ spikes/out/
 spikes/codex-ts/
 spikes/rein-model-catalog.json
 codex-ts-exp/
+dist-*/

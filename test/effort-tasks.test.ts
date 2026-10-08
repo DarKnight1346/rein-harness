@@ -71,6 +71,14 @@ describe('effort', () => {
     await collect(e.send('a hard one'));
     expect(log.opened.at(-1)!.effort).toBeUndefined();
   });
+
+  it('auto never lowers effort for a long message, and does not ask', async () => {
+    config.chatEffort = 'auto';
+    const e = engine('low');
+    await collect(e.send('Implement the following feature exactly as specified.\n' + '- requirement\n'.repeat(300)));
+    expect(log.opened.at(-1)!.effort).toBeUndefined();
+    expect(picks).toEqual([]);
+  });
 });
 
 describe('task list', () => {

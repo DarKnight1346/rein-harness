@@ -53,6 +53,8 @@ const CARRY_BUDGET_TOKENS = 24_000;
  * Rein's own sessions (PLAN.md §22): Claude writes `ephemeral_1h` and served 99% from cache after
  * 58 min, 0% after 65; Codex still served 94% after 61 min. One hour for both.
  */
+/** Auto effort considers low only for messages up to this size (~2,000 characters). */
+const SIMPLE_MAX_TOKENS = 500;
 const CACHE_WARM_MS: Record<string, number> = {claude: 60 * 60_000, codex: 60 * 60_000};
 /** A cold switch needs the other account to be at least this much better (no flip-flopping). */
 const BALANCE_MARGIN = 15;
@@ -575,7 +577,9 @@ export class Engine {
     // Auto only ever lowers effort: low for a simple message, else the model's own default (no flag).
     // Raising it on hard-looking requests (high, xhigh) doubled output and time on hard benchmark tasks
     // without solving more of them than the model's default did.
-    if (!levels.includes('low')) return undefined;
+    // A long message is a spec, never a quick one: asked anyway, the decision model sometimes saw a
+    // 15K-character feature spec as "mechanical" and ran it on low.
+    if (!levels.includes('low') || estimateTokens(text) > SIMPLE_MAX_TOKENS) return undefined;
     const picked = await this.deps.pickEffort?.(text, ['low', 'medium']).catch(() => undefined);
     return picked === 'low' ? 'low' : undefined;
   }

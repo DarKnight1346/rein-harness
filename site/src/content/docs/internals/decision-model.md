@@ -76,7 +76,7 @@ Every call site builds a **minimal state**. That keeps calls cheap, fast and cal
 | --- | --- | --- | --- |
 | **Auto routing** (`router/auto.ts`) | `model` choice: "Pick the cheapest model that will answer it well" | confidence ≥ `autoMinConfidence` (0.45) | Your default model answers |
 | **Auto routing**, mid-conversation | `switch` noul: does this start a materially different kind of task? | switch only if p ≥ `autoSwitchThreshold` (0.7) | Stay on the current model (`auto · stayed`) |
-| **Auto effort** (`Runtime.pickEffort`) | `effort` choice: lowest level that will do it well | none (any valid choice) | Model default if the call fails |
+| **Auto effort** (`Runtime.pickEffort`) | `effort` choice: lowest level that will do it well | none (any valid choice) | Model default if the call fails; not asked for messages over ~2,000 characters (500 estimated tokens) |
 | **Auto approvals** (`Runtime.judgeChange`) | `allow` noul: clearly requested and safe? | p ≥ 0.85 (`AUTO_APPROVE_MIN`) | You're asked. Never auto-denies. |
 | **Plan mode** (`Runtime.judgeReadOnly`) | `read_only` noul: does this command only read? | p ≥ 0.85 (`READ_ONLY_MIN`) | You're asked (Allow/Deny), or it's refused in bypass mode |
 | **Subagent completion** (`Runtime.judgeCompletion`) | `complete` noul: fully done, with a final report? | p ≥ 0.5 | Told to continue, up to 3 extra rounds (`MAX_CONTINUATIONS`) |
