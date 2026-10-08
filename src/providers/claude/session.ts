@@ -6,6 +6,7 @@ import {usageStore} from '../../store/usage.js';
 import {EventQueue} from '../../util/proc.js';
 import {accountEnv} from '../env.js';
 import type {Account, ChatEvent, ImageInput, OneShotOpts, ProviderSession, TokenCount} from '../types.js';
+import {reportSideUsage} from '../usage.js';
 import {classifyError, parseRateLimitEvent, parseResetTime} from './stream.js';
 
 export const claudeBin = () => process.env.REIN_CLAUDE_BIN ?? 'claude';
@@ -279,10 +280,12 @@ function limitReset(accountId: string, message: string): number | undefined {
 export async function claudeOneShot(opts: OneShotOpts): Promise<string> {
   const session = new ClaudeSession({account: opts.account, model: opts.model, systemPrompt: opts.system, persist: false, noThinking: opts.fast, webSearch: opts.webSearch});
   const timer = setTimeout(() => session.interrupt(), opts.timeoutMs ?? 60_000);
+  let used: TokenCount | undefined;
   try {
     let text = '';
     for await (const ev of session.send(opts.prompt)) {
       if (ev.type === 'text') text += ev.delta;
+      else if (ev.type === 'tokens') used = ev.call; // cumulative over the call's requests
       else if (ev.type === 'error') throw Object.assign(new Error(ev.message), {kind: ev.kind});
       else if (ev.type === 'done' && ev.interrupted) throw new Error('timed out');
     }
@@ -290,5 +293,6 @@ export async function claudeOneShot(opts: OneShotOpts): Promise<string> {
   } finally {
     clearTimeout(timer);
     session.close();
+    reportSideUsage({provider: 'claude', model: opts.model}, used); // spent even when it failed
   }
 }

@@ -95,7 +95,7 @@ A single JSON object on stdout when the run ends:
 
 - `model` and `effort` come from the last routing decision. `effort` is left out when the model has none.
 - `tools` lists the main agent's tool calls (label, summary, success). Subagents' calls aren't included.
-- `tokens` are the conversation's running totals: `uncached` input, `cached` input and `output`.
+- `tokens` are the conversation's running totals: `uncached` input, `cached` input and `output`. They include subagents and Rein's helper calls (compaction, the decision model, the advisor, `web_fetch`), not only the main model.
 - On an early failure (bad flag, no prompt, no accounts) you get `{"type": "result", "is_error": true, "error": "…"}` instead.
 - If the run hits an error partway through, `is_error` is `true`, `error` is set, and `result` holds whatever reply text arrived before it.
 

@@ -2,6 +2,7 @@ import {usageStore} from '../../store/usage.js';
 import {EventQueue, run} from '../../util/proc.js';
 import {streamCommand} from '../claude/adapter.js';
 import {accountEnv} from '../env.js';
+import {reportSideUsage} from '../usage.js';
 import type {
   Account,
   ChatErrorKind,
@@ -341,10 +342,12 @@ export const codexAdapter: ProviderAdapter = {
     const session = await CodexSession.open({account, model, systemPrompt: system, ephemeral: true, webSearch});
     if (fast) session.effort = 'low';
     const timer = setTimeout(() => session.interrupt(), timeoutMs ?? 60_000);
+    let used: TokenCount | undefined;
     try {
       let text = '';
       for await (const ev of session.send(prompt)) {
         if (ev.type === 'text') text += ev.delta;
+        else if (ev.type === 'tokens') used = ev.call;
         else if (ev.type === 'error') throw Object.assign(new Error(ev.message), {kind: ev.kind});
         else if (ev.type === 'done' && ev.interrupted) throw new Error('timed out');
       }
@@ -352,6 +355,7 @@ export const codexAdapter: ProviderAdapter = {
     } finally {
       clearTimeout(timer);
       session.close();
+      reportSideUsage({provider: 'codex', model}, used);
     }
   },
 

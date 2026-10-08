@@ -2,6 +2,7 @@ import {readFileSync} from 'node:fs';
 import {run} from './util/proc.js';
 import {EventEmitter} from 'node:events';
 import {adapters} from './providers/index.js';
+import {onSideUsage} from './providers/usage.js';
 import {catalog, toRef} from './router/catalog.js';
 import {mergeNote, Worktrees} from './agents/worktrees.js';
 import type {Origin} from './tools/fs.js';
@@ -521,9 +522,7 @@ Drop superseded reads of the same file, routine listings, and output that no lon
     const request = [...this.engine.transcript.messages].reverse().find((m) => m.role === 'user' && !/^<(code_check|stop_hook)>/.test(m.text))?.text ?? '';
     const system = 'You review a code change against the request that asked for it. Report only concrete problems: requirements or edge cases the request states that the change does not handle, and real bugs. No style comments, no praise.';
     const prompt = `The request:\n${request.slice(0, 20_000)}\n\nThe change (git diff, then new files):\n${diff}\n${added}\n\nList each problem on one line: the file, what is wrong, and which part of the request it breaks. If there are none, reply exactly NONE.`;
-    const reply = (await completeWith(reviewer, this.config, system, prompt, {timeoutMs: 240_000})).trim();
-    // Counted in the conversation's totals (no cache: a one-off call), so a review is never free on paper.
-    this.engine.addTokens({input: Math.ceil((system.length + prompt.length) / 4), cached: 0, output: Math.ceil(reply.length / 4)});
+    const reply = (await completeWith(reviewer, this.config, system, prompt, {timeoutMs: 240_000})).trim(); // its tokens count via onSideUsage
     if (!reply || /^none\b/i.test(reply)) return undefined;
     return `A second model (${reviewer.provider}:${reviewer.model}) reviewed your change against the request and reported:\n${reply.slice(0, 6000)}\nCheck each point against the code. Fix the ones that are real; for any that are wrong, say so in a line. Don't redo work that is fine.`;
   }
@@ -765,8 +764,13 @@ Drop superseded reads of the same file, routine listings, and output that no lon
       },
       resumed,
     );
+    // Helper calls (compaction, decisions, advisor, reviews, web_fetch) count toward the conversation.
+    this.stopSideUsage?.();
+    this.stopSideUsage = onSideUsage((_ref, t) => this.engine.addTokens(t));
     return {resumed};
   }
+
+  private stopSideUsage?: () => void;
 
   /**
    * Remove an account without interrupting anything: it's retired at once (no new turns or
@@ -820,6 +824,7 @@ Drop superseded reads of the same file, routine listings, and output that no lon
     this.stopUsageRefresh();
     this.agents.closeAll();
     this.engine?.shutdown();
+    this.stopSideUsage?.();
     this.tools.close();
     for (const a of Object.values(adapters)) a.shutdown();
   }
