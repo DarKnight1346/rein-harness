@@ -52,6 +52,15 @@ export function setInScope(fn: () => boolean): void {
 }
 const SCOPE_PROMPT = `- Do what was asked, completely, and no more: update the existing code and tests your change affects, but don't add new test files, refactors or features the request doesn't need. Extra work costs time and tokens.`;
 
+/** self-test is on (config `experiments`): check your own change before finishing. */
+let selfTest: () => boolean = () => false;
+export function setSelfTest(fn: () => boolean): void {
+  selfTest = fn;
+}
+// Codex's own instructions tell its models to test their work and Rein's replace them: under Rein, Sol ran
+// a fifth as many commands as in Codex and handed work to subagents instead of checking it.
+const SELF_TEST_PROMPT = `- Before you finish a code change, run the project's tests (or build) yourself and fix what fails. Do the work and the checking yourself; a subagent's report is not a test run.`;
+
 /** no-todo is on (config `experiments`): no task list tool, so the prompt doesn't mention it. */
 let noTodo: () => boolean = () => false;
 export function setNoTodo(fn: () => boolean): void {
@@ -120,7 +129,7 @@ export async function systemPrompt(opts: {tools?: boolean; scratch?: string} = {
   if (opts.tools) {
     const extra = extraDirs();
     const tools = noTodo() ? TOOLS_PROMPT.split('\n').filter((l) => !l.includes('todo_write')).join('\n') : TOOLS_PROMPT;
-    sections.push([tools, lazyTools() && LAZY_PROMPT, inScope() && SCOPE_PROMPT, briefFinal() && BRIEF_PROMPT].filter(Boolean).join('\n'));
+    sections.push([tools, lazyTools() && LAZY_PROMPT, inScope() && SCOPE_PROMPT, selfTest() && SELF_TEST_PROMPT, briefFinal() && BRIEF_PROMPT].filter(Boolean).join('\n'));
     if (attribution())
       sections.push(
         [
