@@ -65,6 +65,7 @@ Every call site builds a **minimal state**. That keeps calls cheap, fast and cal
 | Auto approvals | `user_request` (your latest message, head+tail), `action` (tool + summary), `change_preview` (≤1,500 chars) |
 | Plan-mode shell check | `shell_command` (≤2,000 chars) |
 | Subagent completion | `task`, `final_report` (head+tail each), the last 40 tool-call labels |
+| Keep going (experiment `keep-going`) | `request`, `final_reply` (head+tail each) |
 | `goal_done` | `goal`, `agent_summary` (≤2,000), `agent_evidence` (≤3,000), `tool_results_since_goal_started` (last 30, ≤400 chars each), `last_message` (≤1,500) |
 | `milestone_done` | `goal`, `milestone`, `agent_evidence`, the same tool-result evidence |
 | Gave-up check | `goal`, `latest_agent_message` (≤3,000) |
@@ -80,6 +81,7 @@ Every call site builds a **minimal state**. That keeps calls cheap, fast and cal
 | **Auto approvals** (`Runtime.judgeChange`) | `allow` noul: clearly requested and safe? | p ≥ 0.85 (`AUTO_APPROVE_MIN`) | You're asked. Never auto-denies. |
 | **Plan mode** (`Runtime.judgeReadOnly`) | `read_only` noul: does this command only read? | p ≥ 0.85 (`READ_ONLY_MIN`) | You're asked (Allow/Deny), or it's refused in bypass mode |
 | **Subagent completion** (`Runtime.judgeCompletion`) | `complete` noul: fully done, with a final report? | p ≥ 0.5 | Told to continue, up to 3 extra rounds (`MAX_CONTINUATIONS`) |
+| **Keep going** (`Runtime.stoppedEarly`, experiment `keep-going`) | `unfinished` noul: stopped partway by its own account, not needing the user? | p ≥ 0.5 | Sent back to finish, up to 3 times per request (`KEEP_GOING_MAX`); not sent back if the call fails |
 | **`goal_done`** (`GoalManager.reviewClaim`) | `achieved` noul: does the evidence in context show the goal fully achieved? | p ≥ 0.7 (`ACCEPT_AT`) | Rejected; the agent keeps working |
 | **`milestone_done`** (`GoalManager.reviewMilestone`) | `achieved` noul for one milestone | p ≥ 0.7 | Not ticked |
 | **Gave-up detection** (`GoalManager.next`) | `gave_up` noul: does the latest message declare the goal impossible or blocked? | p ≥ 0.6 (`GAVE_UP_AT`) | Plain continuation |

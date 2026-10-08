@@ -16,6 +16,13 @@ const UNKNOWN_WINDOW = 200_000;
 /** The model list is asked of the CLI at most this often per account. */
 const MODELS_TTL_MS = 24 * 60 * 60_000;
 
+/**
+ * Models billed on two rate cards by prompt size: above the break, the whole request costs more
+ * (Haiku 5.5: $0.10/$0.50 per MTok up to 100K tokens, $0.50/$2.50 above). By resolved model, so an
+ * alias that moves (`haiku` was Haiku 4.5, flat-priced) gets the right one.
+ */
+const PRICE_BREAKS: Record<string, number> = {'claude-haiku-5-5': 100_000};
+
 type CliModel = {value: string; resolvedModel?: string; displayName?: string; description?: string; supportedEffortLevels?: string[]};
 
 /**
@@ -58,6 +65,7 @@ export async function fetchClaudeModels(account: Account): Promise<ModelInfo[]> 
           contextWindow: UNKNOWN_WINDOW,
           isDefault,
           efforts: m.supportedEffortLevels?.length ? m.supportedEffortLevels : undefined,
+          priceBreak: m.resolvedModel ? PRICE_BREAKS[m.resolvedModel] : undefined,
         };
       });
   } finally {

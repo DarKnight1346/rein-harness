@@ -66,6 +66,8 @@ export type ModelInfo = {
   /** Effort levels the model accepts, lowest first, and its default. */
   efforts?: string[];
   defaultEffort?: string;
+  /** Prompt size above which every token is billed at a higher rate (Haiku 5.5: 5x above 100K). */
+  priceBreak?: number;
 };
 
 /** `provider:model`, e.g. `claude:sonnet`, `codex:gpt-6-luna`. */

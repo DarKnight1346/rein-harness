@@ -63,6 +63,9 @@ const READ_ONLY_MIN = 0.85;
 import {mcpProxyCommand, ToolHost, type ApprovalDecision, type ApprovalRequest, type ToolActivity} from './tools/host.js';
 
 /** Process-wide state shared by the UI and commands. */
+/** keep-going: times per request the agent is sent back after stopping partway. */
+const KEEP_GOING_MAX = 3;
+
 export class Runtime {
   config: Config = DEFAULT_CONFIG;
   engine!: Engine;
@@ -424,6 +427,7 @@ Drop superseded reads of the same file, routine listings, and output that no lon
       this.escalation = undefined;
       this.verified = false;
       this.reviewed = false;
+      this.keptGoing = 0;
     }
     // Snapshot the project before this message runs, so /rewind can undo everything it causes.
     if (this.engine) await this.snapshots.snapshot(this.engine.transcript.messages.length);
@@ -487,7 +491,41 @@ Drop superseded reads of the same file, routine listings, and output that no lon
       }
     }
     const problems = await this.lsp.turnEnd().catch(() => undefined);
-    return problems ? {reason: problems, kind: 'diagnostics'} : undefined;
+    if (problems) return {reason: problems, kind: 'diagnostics'};
+    // keep-going: the agent ended its turn but its own reply says the work isn't done ("I've only
+    // partly done this"), and it isn't waiting on the user: send it back, a few times per request.
+    // Models stop like this on long tasks, more often right after a compaction.
+    if ((this.config.experiments ?? []).includes('keep-going') && this.keptGoing < KEEP_GOING_MAX && this.engine) {
+      const unfinished = await this.stoppedEarly().catch(() => false);
+      if (unfinished) {
+        this.keptGoing++;
+        return {
+          kind: 'hook',
+          reason: "Your last message says the task isn't finished, and nothing in it needs the user's input. Keep going: carry on from where you stopped and finish the whole request. Only stop when it's done, or when you genuinely need the user to decide something.",
+        };
+      }
+    }
+    return undefined;
+  }
+
+  /** keep-going: rounds used for the current request. */
+  private keptGoing = 0;
+
+  /** keep-going: does the agent's final reply admit it stopped partway, without needing the user? */
+  private async stoppedEarly(): Promise<boolean> {
+    const messages = this.engine.transcript.messages;
+    const reply = messages.at(-1)?.role === 'assistant' ? messages.at(-1)!.text : '';
+    if (!reply.trim()) return false;
+    const request = [...messages].reverse().find((m) => m.role === 'user' && !/^<(code_check|stop_hook)>/.test(m.text))?.text ?? '';
+    const d = await decide(this.config, {request: headTail(request), final_reply: headTail(reply)}, {
+      unfinished: {
+        type: 'noul',
+        instructions: "The assistant just ended its turn with final_reply. By its own account, did it stop before finishing the request (it says the work is partial, lists remaining or next steps it hasn't done, or says the code doesn't build or pass yet), while not needing anything from the user (no question for them, no decision only they can make, nothing it is blocked on)?",
+        criteria: {true: 'stopped partway on its own, could have kept going', false: 'finished, or genuinely needs the user, or blocked'},
+      },
+    });
+    const a = d.answers.unfinished;
+    return a?.type === 'noul' ? a.noul >= 0.5 : false;
   }
 
   /** verify-requirements: the check already ran for the current request. */

@@ -187,6 +187,22 @@ describe('auto-compaction events', () => {
   });
 });
 
+describe('price-break', () => {
+  it('keeps a model with a pricier rate card above some prompt size below it, when on', async () => {
+    await tempHome([acct('claude', 'c1')]);
+    const priced = [{...CLAUDE_FAKE_MODELS[0]!, contextWindow: 1_000_000, priceBreak: 100_000}, CLAUDE_FAKE_MODELS[1]!];
+    const {adapter} = fakeAdapter('claude', priced, () => reply('ok'));
+    install('claude', adapter);
+    await catalog.refresh();
+    const ref = {provider: 'claude' as const, model: priced[0]!.id};
+    const e = engineWith() as any;
+    expect(e.autoCompactLimit(ref)).toBe(800_000); // off: 80% of the window
+    config = {...config, experiments: ['price-break']};
+    expect(e.autoCompactLimit(ref)).toBe(80_000); // under the 100K break, with headroom
+    expect(e.autoCompactLimit({provider: 'claude', model: CLAUDE_FAKE_MODELS[1]!.id})).toBe(CLAUDE_FAKE_MODELS[1]!.contextWindow * 0.8); // flat-priced
+  });
+});
+
 describe('compactor', () => {
   it('summarizes old messages, keeps recent ones, and drops native refs', async () => {
     await tempHome([acct('claude', 'c1')]);

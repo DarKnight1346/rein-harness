@@ -61,6 +61,8 @@ const BALANCE_MARGIN = 15;
 const MAX_ATTEMPTS = 5;
 /** Compactions inside one turn before Rein stops compacting it: a backstop (each needs progress first, see `laterRequest`). */
 const MAX_MIDTURN_COMPACTIONS = 20;
+/** price-break: compact at this share of the model's price break (headroom for one large tool result). */
+const PRICE_BREAK_MARGIN = 0.8;
 /** Sent after a mid-turn compaction so the agent picks the task back up instead of ending its turn. */
 const CONTINUE_AFTER_COMPACTION = `<context_compacted>
 The conversation was compacted in the middle of your work because the context window was filling up. The summary above covers everything so far, including your tool calls and where you stopped. Continue the task from exactly where you left off: don't start over, don't repeat finished steps, and don't stop to ask the user unless you genuinely need their input.
@@ -635,7 +637,13 @@ export class Engine {
   /** Prompt size at which a conversation on `ref` is compacted (undefined = auto-compact off). */
   private autoCompactLimit(ref: ModelRef): number | undefined {
     const pct = this.deps.config().autoCompactPct;
-    return pct ? (catalog.get(ref)?.contextWindow ?? 200_000) * (pct / 100) : undefined;
+    if (!pct) return undefined;
+    const m = catalog.get(ref);
+    const limit = (m?.contextWindow ?? 200_000) * (pct / 100);
+    // price-break: stay on the cheaper rate card. Compacting checks a request's prompt after it was
+    // sent, and the next tool result adds to it, so the limit sits below the break.
+    if (m?.priceBreak && (this.deps.config().experiments ?? []).includes('price-break')) return Math.min(limit, m.priceBreak * PRICE_BREAK_MARGIN);
+    return limit;
   }
 
   /**
