@@ -34,6 +34,7 @@ An existing `~/.rein` keeps being used as it is, and so does `REIN_HOME`. To swi
 | `accounts/codex/<id>/` | `CODEX_HOME` for a Codex account you added (`codex-1`, …) |
 | `state/trackers.json` | Issues the [trackers](../../features/trackers/) have taken (so a restart doesn't redo them), with their status and branch |
 | `worktrees/<project>/rein-<issue>/` | The worktree an issue was worked on, on its `rein/<issue>` branch, kept for you to review. Remove it with `git worktree remove` when you're done |
+| `state/flaky/` | With `flaky-quarantine`: per project, recent test outcomes by code fingerprint and the tests found flaky. `/flaky clear` empties a project's file |
 | `state/mcp-pins.json` | With `mcpPinning`: each MCP server's launch config and tool list as first approved (hashes and tool names). Delete it to start over |
 | `state/usage.json` | Last-known usage windows per account, plus limit cooldowns (account unusable until a time) |
 | `exports/<id>.md` | Conversations saved with `/export` (when no file is given) |

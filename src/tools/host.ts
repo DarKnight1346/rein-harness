@@ -17,6 +17,7 @@ import {injectionSigns, injectionWarning, networkCapable, untrustedSource} from 
 import {addedDeps, afterEdit, checkDeps, commandDeps, depMessage} from './deps.js';
 import {checkPolicy, type Policy} from '../policy.js';
 import {digestLog, formatDigest} from './logDigest.js';
+import {fingerprint, flakyNote, isTestCommand, knownFlaky, parseOutcomes, recordRun} from '../build/flaky.js';
 import {readOnlyCommand} from './plan.js';
 import {steer} from './steer.js';
 import {ipcPath, isWindows} from '../util/platform.js';
@@ -549,6 +550,15 @@ export class ToolHost extends EventEmitter {
         if (!repeat && tool.name === 'read') this.noteRead(ctx, args, result, origin);
         if (tool.name === 'shell') result = this.quietPassing(args, result);
         if (tool.name === 'shell' && !result.ok && this.experiment('log-digest')) result = withDigest(result);
+        // flaky-quarantine: record each test's outcome on this code; known flakes in a failing run are called out.
+        if (tool.name === 'shell' && this.experiment('flaky-quarantine') && isTestCommand(String((args as {command?: string})?.command ?? ''))) {
+          const outcomes = parseOutcomes(result.text);
+          if (outcomes.passed.length || outcomes.failed.length) {
+            recordRun(ctx.root, await fingerprint(ctx.root), outcomes);
+            const note = !result.ok ? flakyNote(outcomes.failed, knownFlaky(ctx.root)) : undefined;
+            if (note) result = {...result, text: `${result.text}\n\n${note}`};
+          }
+        }
         if (result.ok && snapshot) {
           const note = await this.opts.diagnostics!.after(snapshot).catch(() => undefined);
           if (note) result = {...result, text: `${result.text}\n\n${note}`};

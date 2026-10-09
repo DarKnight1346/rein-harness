@@ -60,6 +60,8 @@ import {estimateGoalCost} from '../goals/estimate.js';
 import {loadPolicy, type PolicyRule} from '../policy.js';
 import {reinConfigDir} from '../store/paths.js';
 import {affected, changedFiles, detectBuild, formatAffected} from '../build/affected.js';
+import {clearFlaky, knownFlaky} from '../build/flaky.js';
+import {activeExperiments} from '../store/config.js';
 import {formatUsd} from '../providers/prices.js';
 
 /** /goal waiting for its confirmation (its estimate was above goalConfirmUsd). */
@@ -1211,6 +1213,16 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
           const a = await affected(root, files);
           log(a?.note && !a.targets.length ? 'error' : 'info', a ? `${files.length} changed file${files.length === 1 ? '' : 's'}. ${formatAffected(a)}` : 'No build system answered.');
         });
+        break;
+      }
+      case 'flaky': {
+        if (parsed.args.trim() === 'clear') {
+          clearFlaky(process.cwd());
+          log('info', 'Forgot the flaky tests recorded for this project.');
+          break;
+        }
+        const tests = knownFlaky(process.cwd());
+        log('info', tests.length ? [`Known flaky tests here (${tests.length}), failed and passed on the same code:`, ...tests.map((t) => `  ${t}`), '/flaky clear forgets them.'].join('\n') : `No flaky tests recorded here${activeExperiments(runtime.config).includes('flaky-quarantine') ? ' yet' : ' (turn on the flaky-quarantine experiment to record them)'}.`);
         break;
       }
       case 'policy': {

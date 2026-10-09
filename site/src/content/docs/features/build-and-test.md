@@ -56,6 +56,15 @@ Start from these; the full output follows.
 
 It recognizes GitHub Actions and GitLab CI sections and Gradle tasks as steps, the usual error markers (`error`, `FAIL`, `✗`, tracebacks, assertion errors), and locations in the `file:line`, `file(line,col)` and Python `File "x", line N` forms.
 
+## Flaky tests
+
+A flaky test sends an agent chasing a bug that isn't there. With the `flaky-quarantine` [experiment](../../reference/configuration/#experiments) on, Rein records the outcome of every test the agent runs (vitest, jest, mocha, pytest, `go test`, `cargo test`/`nextest`, and `npm`/`pnpm`/`yarn`/`bun test`) together with a fingerprint of the code it ran on: `HEAD` plus the uncommitted diff.
+
+- A test that **failed and passed on the same code** is flaky. A test that started passing after a change was fixed, not flaky.
+- When a later run fails and every failure is a known flaky test, the agent is told so, and to re-run once and treat the run as passing if only those fail again. When only some failures are flaky, it's told to ignore those and fix the rest.
+
+`/flaky` lists the known flaky tests in this project; `/flaky clear` forgets them. They're kept per project in `~/.rein/state/flaky/`.
+
 ## Related
 
 - [Code intelligence](../code-intelligence/): the end-of-turn code check and Semgrep

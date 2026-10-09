@@ -46,7 +46,7 @@ agent works by default ships as an experiment (`experiments` in config) until it
 | 23 | Official GitHub Action and GitLab component | Published, versioned wrappers for `rein -p` (repo `action.yml`, GitLab CI component). |  | todo |
 | 46 | Affected-target analysis | Use Nx, Turborepo, Bazel or Pants (when present) to know what a change affects. | features/build-and-test/#what-a-change-affects | done |
 | 47 | Affected-test selection | Run only the tests the dependency graph says can break. Builds on #46. | features/build-and-test/#what-a-change-affects | done |
-| 48 | Flaky-test quarantine | Record tests that flip without a code change; keep them out of the agent's pass/fail signal. |  | todo |
+| 48 | Flaky-test quarantine | Record tests that flip without a code change; keep them out of the agent's pass/fail signal. | features/build-and-test/#flaky-tests | done |
 | 49 | Remote build cache | Detect and use Bazel remote cache, Nx Cloud or the Gradle cache in agent builds. |  | todo |
 | 50 | CI watcher | Watch a PR's checks (`gh`/`glab`) and fix failures on its own, with the usual approvals. |  | todo |
 | 51 | Coverage-targeted tests | Generate tests for changed lines no test covers (reads coverage reports). |  | todo |
