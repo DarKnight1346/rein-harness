@@ -9,6 +9,7 @@ import {maskSecrets} from './tools/secrets.js';
 import {sastCheck} from './tools/sast.js';
 import {loadPolicy, modelBlocked} from './policy.js';
 import {reinConfigDir} from './store/paths.js';
+import {affectedTool} from './build/tool.js';
 import {effectiveBudget, overBudget, type Spend} from './budget.js';
 import {catalog, toRef} from './router/catalog.js';
 import {mergeNote, Worktrees} from './agents/worktrees.js';
@@ -778,6 +779,7 @@ Drop superseded reads of the same file, routine listings, and output that no lon
         void saveTranscript(t).catch(() => {});
       }),
       ...webTools(() => this.config),
+      affectedTool(() => activeExperiments(this.config), () => process.cwd()),
       skillTool(() => process.cwd(), () => (this.planMode = true)),
       ...memoryTools(() => process.cwd()),
       askUserTool(() => this.askPresenter),

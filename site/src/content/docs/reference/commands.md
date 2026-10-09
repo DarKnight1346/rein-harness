@@ -80,6 +80,7 @@ See [Goals](../../features/goals/) and [Plan mode](../../features/plans/).
 | Command | Arguments | What it does |
 |---|---|---|
 | `/cost` | — | What the conversation, the latest request and the current goal cost at API list prices, with token totals. See [Cost & budgets](../../features/cost/). |
+| `/affected` | — | What your working tree's changes affect, from the monorepo's build graph (Nx, Turborepo, Bazel, Pants), and the command that tests just that. See [Build & test](../../features/build-and-test/#what-a-change-affects). |
 | `/policy` | — | Shows the policy in force (`.rein/policy.yaml`, `~/.rein/policy.yaml`): its deny and ask rules, allowed and denied models, and mistakes in the files. See [Policy as code](../../features/safety/#policy-as-code-reinpolicyyaml). |
 | `/workspace` | `[clone]` | Lists the repos of this [workspace](../../features/workspaces/) (`rein.workspace.yaml`), which are cloned and what each does. `clone` clones the missing repos that have a `url`. |
 | `/scope` | `[<dir> \| off]` | Works in one package of a monorepo: `list`, `search` and `shell` start in `<dir>`, its `AGENTS.md` files load, and the code check skips callers outside it. `off` clears it; no argument shows it. Same as `rein --scope <dir>`. |

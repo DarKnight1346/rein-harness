@@ -59,6 +59,7 @@ import {CONFIG_KEYS, defaultValue, formatValue, keyInfo, parseValue} from '../st
 import {estimateGoalCost} from '../goals/estimate.js';
 import {loadPolicy, type PolicyRule} from '../policy.js';
 import {reinConfigDir} from '../store/paths.js';
+import {affected, changedFiles, detectBuild, formatAffected} from '../build/affected.js';
 import {formatUsd} from '../providers/prices.js';
 
 /** /goal waiting for its confirmation (its estimate was above goalConfirmUsd). */
@@ -1197,6 +1198,19 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
           for (const r of p.deny ?? []) lines.push(`  deny  ${r}`);
         }
         log('info', lines.length ? `Permission rules (deny wins):\n${lines.join('\n')}` : 'No permission rules yet. Choose "3 Always allow" in an approval prompt, or add "permissions": {"allow": [...], "deny": [...]} to .rein/settings.json (Claude Code format; .claude/settings.json rules apply too).');
+        break;
+      }
+      case 'affected': {
+        const root = process.cwd();
+        if (!detectBuild(root)) {
+          log('info', 'No Nx, Turborepo, Bazel or Pants workspace here (nx.json, turbo.json, MODULE.bazel/WORKSPACE, pants.toml).');
+          break;
+        }
+        void changedFiles(root).then(async (files) => {
+          if (!files.length) return log('info', 'No changes (vs HEAD) to analyze.');
+          const a = await affected(root, files);
+          log(a?.note && !a.targets.length ? 'error' : 'info', a ? `${files.length} changed file${files.length === 1 ? '' : 's'}. ${formatAffected(a)}` : 'No build system answered.');
+        });
         break;
       }
       case 'policy': {

@@ -41,11 +41,11 @@ agent works by default ships as an experiment (`experiments` in config) until it
 | # | Feature | Spec | Docs | Status |
 |---|---|---|---|---|
 | 11 | Touched-targets verify | Typecheck, lint and test only what the turn changed, extending the end-of-turn code check. |  | todo |
-| 12 | CI log digest | Turn a long CI or build log into the failing step, root cause and file:line. | reference/configuration/#experiments | done |
+| 12 | CI log digest | Turn a long CI or build log into the failing step, root cause and file:line. | features/build-and-test/#digests-of-failing-logs | done |
 | 13 | Build-time budget | Warn when a change makes the build or tests noticeably slower than the last recorded run. |  | todo |
 | 23 | Official GitHub Action and GitLab component | Published, versioned wrappers for `rein -p` (repo `action.yml`, GitLab CI component). |  | todo |
-| 46 | Affected-target analysis | Use Nx, Turborepo, Bazel or Pants (when present) to know what a change affects. |  | todo |
-| 47 | Affected-test selection | Run only the tests the dependency graph says can break. Builds on #46. |  | todo |
+| 46 | Affected-target analysis | Use Nx, Turborepo, Bazel or Pants (when present) to know what a change affects. | features/build-and-test/#what-a-change-affects | done |
+| 47 | Affected-test selection | Run only the tests the dependency graph says can break. Builds on #46. | features/build-and-test/#what-a-change-affects | done |
 | 48 | Flaky-test quarantine | Record tests that flip without a code change; keep them out of the agent's pass/fail signal. |  | todo |
 | 49 | Remote build cache | Detect and use Bazel remote cache, Nx Cloud or the Gradle cache in agent builds. |  | todo |
 | 50 | CI watcher | Watch a PR's checks (`gh`/`glab`) and fix failures on its own, with the usual approvals. |  | todo |

@@ -65,6 +65,7 @@ export default defineConfig({
           {label: 'Headless & CI', slug: 'features/headless'},
           {label: 'Editor integration', slug: 'features/ide'},
           {label: 'Code intelligence', slug: 'features/code-intelligence'},
+          {label: 'Build & test', slug: 'features/build-and-test'},
           {label: 'Remote access', slug: 'features/remote'},
           {label: 'Issue trackers', slug: 'features/trackers'},
           {label: 'Secrets vault', slug: 'features/vault'},

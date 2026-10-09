@@ -323,6 +323,16 @@ Label `Diagnostics`. Approval: none (read-only).
 
 With an [editor connected](../../features/ide/), returns the errors and warnings the editor's language servers report (the extension's `getDiagnostics`), headed `[from the editor]`. Otherwise it asks the language servers Rein runs itself ([code intelligence](../../features/code-intelligence/)), headed `[from Rein's language servers]`; without a `path` that covers the files opened so far. If the file's server isn't installed, the result tells the agent to offer `lsp_install`.
 
+### `affected`
+
+Label `Affected`. Approval: none (read-only). Only listed with the `affected-tool` [experiment](../configuration/#experiments) on, in an Nx, Turborepo, Bazel or Pants workspace.
+
+| Parameter | Type | Notes |
+| --- | --- | --- |
+| `files` | string[] | Changed files, project-relative. Omit for the working tree's changes vs `HEAD` (and untracked files) |
+
+Asks the build system which projects or targets the change affects, and returns them with the command that tests just those. See [What a change affects](../../features/build-and-test/#what-a-change-affects).
+
 ### `lsp_install`
 
 Label `InstallLanguageServer`. Approval: **always asks, even in bypass mode.**

@@ -39,7 +39,8 @@ node scripts/check-docs.mjs   # docs drift check, also runs in CI
 | `src/providers/{claude,codex}/` | CLI drivers: Claude stream-json, Codex app-server JSON-RPC |
 | `src/router/`, `src/decider/` | Model catalog, auto routing, decision model (Jev or a cheap LLM) |
 | `src/accounts/`, `src/store/` | Account registry, usage refresh, config, secrets, `~/.rein` paths |
-| `src/tools/` | Tool host (approvals and permissions) and the tools every model gets |
+| `src/tools/` | Tool host (approvals and permissions), the tools every model gets, and the safety guards |
+| `src/build/`, `src/workspace/`, `src/policy.ts` | Monorepo build systems (affected targets), workspaces, policy as code |
 | `src/agents/`, `src/goals/`, `src/plans/` | Subagents and advisor, `/goal`, saved plans |
 | `src/mcp/`, `src/hooks.ts`, `src/skills/` | MCP client, Claude Code-compatible hooks, skills |
 | `src/ide/` | Editor integration over the Claude Code IDE extension protocol (selection, diffs, diagnostics) |
