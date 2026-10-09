@@ -57,6 +57,21 @@ The agent:
 
 Steps that have to wait, for old clients or for a backfill to finish, are separate deploys.
 
+## Contract tests between services
+
+`/contracts` tells you a schema change is breaking. A **contract test** tells you before the change ships, from the consumer's side: each consumer records what it needs from a provider (the requests it makes, the response fields it reads) as a *pact*, and the provider's build replays every pact against itself.
+
+`/contract-tests` writes them with [Pact](https://pact.io):
+
+```text title="rein"
+> /contract-tests the calls to the orders service
+```
+
+1. **Boundaries.** The agent finds this service's outgoing calls: HTTP clients and their base URLs, generated OpenAPI or gRPC clients, and message producers and consumers. It finds the service on the other side, in the [workspace](../workspaces/) or with `org_search`, and which endpoints and fields the code really uses.
+2. **Pact.** It follows an existing setup for JS/TS, Python, JVM, Go, .NET or Ruby. If there's none, it asks before adding the library, and stops if you say no. Pacts go to your broker when one is configured (`PACT_BROKER_BASE_URL`), else to a `pacts/` folder.
+3. **Consumer tests.** It writes one interaction per behaviour the code depends on, including the errors it handles. Each has a provider state ("order 42 exists"), uses loose matchers, and includes only the fields the code reads. The service's real client calls the Pact mock server.
+4. **Provider verification.** When the provider is in your workspace, it adds a verification test there with state handlers and runs it. A failure is reported as a real incompatibility, never loosened away.
+
 ## Related
 
 - [Specs](../specs/): requirements and design before the change
