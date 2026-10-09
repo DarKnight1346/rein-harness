@@ -86,6 +86,32 @@ When the method shows on the line (`axios.post`, `requests.get`, `method: 'POST'
 
 For a function or type, use [`/symbols <name>`](#symbols-across-repos). With the `system-graph` experiment on, the agent gets [`api_refs`](../../reference/tools/#api_refs) for the same search.
 
+## Who a change affects
+
+Before you open the PR: who else breaks? `/impact` puts the pieces above together for the branch you're on:
+
+```text title="rein"
+> /impact
+  ⎿ Impact of this branch (against origin/main): 2 changed things, 3 callers
+
+    ✗ breaking GET /orders/{id}  (1 caller in 1 service)
+        ✗ GET /orders/{id} 200.total: response field removed
+        web:
+          services/web/order.ts:2  const o = await fetch(`/orders/${id}`);
+
+    · formatMoney  (2 callers in 1 service)
+        changed in packages/money/format.ts
+        web:
+          services/web/order.ts:1  import {formatMoney} from '@shop/money';
+          services/web/order.ts:3  show(formatMoney(o.total));
+```
+
+It works in three steps:
+
+1. **What changed.** For endpoints and RPCs, it uses the [contract changes](../contracts/#breaking-or-safe) the branch makes (OpenAPI, protobuf), marked breaking or safe. For exported functions, classes and types (JS/TS, Python, Go), it uses the definitions the diff touches. In a workspace, each repo's own branch counts.
+2. **Who calls it.** Endpoints and RPCs are followed like [`/refs`](#follow-a-call-across-repos). Symbols go through the repos' [SCIP indexes](#symbols-across-repos) when there are any, and otherwise a whole-word search in the other services.
+3. **The report.** Breaking changes come first, then the most-used.
+
 ## Related
 
 - [Workspaces](../workspaces/): several repos as one system

@@ -77,6 +77,7 @@ import {graphFor} from '../system/tools.js';
 import {findServices} from '../system/services.js';
 import {buildSymbolGraph, crossRepo, formatLookup, indexRepos, lookup} from '../system/scip.js';
 import {findApiRefs, formatRefs} from '../system/api.js';
+import {formatImpact, impactReport} from '../system/impact.js';
 import {deadCodeTask, findDeadCode, findFlags, flagRemovalTask, formatFlags, isStale} from '../contracts/deadcode.js';
 import {checkoutState, describeCheckout, sparseAdd} from '../workspace/sparse.js';
 import {buildIndex, DEFAULT_MODEL as EMBED_MODEL, formatSemanticHits, loadIndex, semanticSearch} from '../context/semantic.js';
@@ -1304,6 +1305,11 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
           if (!files.length) return log('info', 'No changes (vs HEAD). /owners <path> looks up a file or folder.');
           log('info', `Owners of ${arg || `your ${files.length} changed file${files.length === 1 ? '' : 's'}`}:\n${formatOwners(await ownersOf(root, files))}`);
         });
+        break;
+      }
+      case 'impact': {
+        log('info', 'Working out what this branch changes and who uses it…');
+        void graphFor(process.cwd()).then(async (g) => log('info', formatImpact(await impactReport(process.cwd(), g.services))));
         break;
       }
       case 'refs': {
