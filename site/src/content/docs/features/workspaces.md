@@ -65,6 +65,10 @@ Entries Rein can't use (no path or name, a name used twice, invalid YAML) are sk
 Rewind's whole-project snapshots still cover only the repo you launched in. Edits in the other repos are restored from Rein's per-file checkpoints (see [Rewind](../rewind/)).
 :::
 
+## Workspace memory
+
+Some things are true of the system, not of one repo: "api releases before web", "every service reads its config from Vault". The agent saves those with `remember` and `scope: "workspace"`, in the workspace's own `.rein/MEMORY.md` (next to `rein.workspace.yaml`). Every repo of the workspace sees them, in a **Workspace memory** section of the system prompt next to its own project memory. `forget` removes matching facts from both. Like project memory, it's a plain file you can edit or commit.
+
 ## Pull requests across repos
 
 A change that spans repos ends up as one pull request per repo, and reviewers need to know they belong together. With the same branch name in each repo:

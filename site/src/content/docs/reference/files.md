@@ -78,6 +78,7 @@ When Rein imports your existing `claude` and `codex` logins on first run, it reg
 | `.rein/settings.json` | Project permission rules and hooks. "Always allow" in an approval prompt saves rules here | Yes, if the team shares rules |
 | `.rein/settings.local.json` | Personal project rules, plus `enabledMcpjsonServers` (the project `.mcp.json` servers you approved) | No |
 | `.rein/MEMORY.md` | [Project memory](../../features/memory/): facts the agent saved with `remember`, loaded into every session here. Edit it freely | Usually |
+| `.rein/MEMORY.md` in a workspace folder | [Workspace memory](../../features/workspaces/#workspace-memory): facts shared by every repo of the workspace (`remember` with `scope: "workspace"`) | Usually |
 | `.rein/plans/` | Saved plans, `YYYY-MM-DD-<slug>.md`, with `## Milestones` checkboxes | Yes |
 | `.rein/skills/` | Project skills | Yes |
 | `.mcp.json` *(project root)* | Project MCP servers (`mcp_add` default scope). Each one needs your one-time approval before it runs | Yes |

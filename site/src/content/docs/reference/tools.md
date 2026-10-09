@@ -440,6 +440,7 @@ Saves one lasting fact to project memory, loaded into every future session in th
 | Parameter | Type | Notes |
 | --- | --- | --- |
 | `fact` **(required)** | string | One or two sentences |
+| `scope` | `project` \| `workspace` | `workspace` saves it to the [workspace's](../../features/workspaces/#workspace-memory) memory instead, shared by all its repos. Only in a workspace; default `project` |
 
 ### `forget`
 
@@ -455,6 +456,8 @@ Removes every memory fact containing `match` (case-insensitive).
 
 See [MCP](../../features/mcp/) for configuration files and the `/mcp` screen.
 
+
+In a workspace it removes matching facts from the workspace's memory too.
 ### `mcp_list`
 
 Label `McpList`. Approval: none. No parameters. Lists servers with status, transport, source file and tools.
