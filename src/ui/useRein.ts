@@ -66,6 +66,7 @@ import {failed as failedChecks, MAX_FIX_ROUNDS, prChecks, summary as ciSummary} 
 import {addedLinesByFile, findReport, parseCoverage, ranges, uncoveredChanges} from '../build/coverage.js';
 import {detectMutator, formatMutation, mutate} from '../build/mutate.js';
 import {branchSize, currentPr, describePr, queueFor, reviewComments, runQueue} from '../pr/github.js';
+import {linkPrs, prsForBranch} from '../pr/linked.js';
 import {run} from '../util/proc.js';
 import {activeExperiments} from '../store/config.js';
 import {formatUsd} from '../providers/prices.js';
@@ -1402,6 +1403,21 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
         const ws = (runtime.workspace = findWorkspace());
         if (!ws) {
           log('info', 'No workspace here. Put a rein.workspace.yaml in a folder above your repos to work on them together (see the Workspaces docs page).');
+          break;
+        }
+        const [wsSub, wsArg] = parsed.args.trim().split(/\s+/);
+        if (wsSub === 'prs' || wsSub === 'link-prs') {
+          void run('git', ['rev-parse', '--abbrev-ref', 'HEAD'], {cwd: process.cwd(), timeoutMs: 10_000}).then(async (b) => {
+            const branch = b.stdout.trim();
+            const prs = await prsForBranch(ws, branch);
+            if (!prs.length) return log('info', `No pull requests for branch ${branch} in this workspace's repos.`);
+            const list = prs.map((p) => `  ${p.repo}#${p.number} ${p.title} (${p.state.toLowerCase()}) ${p.url}`);
+            if (wsSub === 'prs') return log('info', [`Pull requests for ${branch}:`, ...list, ...(prs.length > 1 ? ['/workspace link-prs links them to each other.'] : [])].join('\n'));
+            if (prs.length < 2) return log('info', 'Only one pull request for this branch: nothing to link.');
+            if (wsArg !== 'yes') return log('info', [`/workspace link-prs yes will add a "Related pull requests" section to each of these, listing the others:`, ...list].join('\n'));
+            const {updated, failed} = await linkPrs(prs);
+            log(failed.length ? 'error' : 'info', [updated.length && `Linked ${updated.join(', ')}.`, ...failed].filter(Boolean).join('\n'));
+          });
           break;
         }
         if (parsed.args.trim() === 'clone') {

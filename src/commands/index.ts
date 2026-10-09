@@ -24,7 +24,7 @@ export const COMMANDS: {name: CommandName; description: string}[] = [
   {name: 'coverage', description: 'Lines your changes add that no test covers, from the last coverage report; /coverage tests asks the agent to write tests for them'},
   {name: 'mutate', description: 'Mutation testing of your changed files (Stryker, mutmut, go-mutesting): do the tests catch planted bugs? /mutate tests asks the agent to close the gaps'},
   {name: 'pr', description: "This branch's pull request: /pr (status), /pr digest [post], /pr split, /pr comments, /pr queue [yes]"},
-  {name: 'workspace', description: 'The repos of this workspace (rein.workspace.yaml): /workspace lists them, /workspace clone clones the missing ones'},
+  {name: 'workspace', description: 'The repos of this workspace (rein.workspace.yaml): /workspace lists them, /workspace clone clones the missing ones, /workspace prs and link-prs link the PRs of one change'},
   {name: 'scope', description: 'Work in one package of a monorepo: /scope <dir> (search, list, shell and instructions start there), /scope off, or no argument to show it'},
   {name: 'add-dir', description: 'Add a working directory the agent can use without asking: /add-dir <path> (no path: list them)'},
   {name: 'goal:plan', description: 'Start a saved plan as a goal (milestones tracked in the sidebar), or start planning a new one'},
