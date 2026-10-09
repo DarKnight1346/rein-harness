@@ -34,6 +34,29 @@ A change is breaking when a client written against the old contract can fail wit
 
 With the `contract-check` [experiment](../../reference/configuration/#experiments) on, the agent hears about it at the end of a request that broke a contract it changed. It's told to say so if the break is intended (and make it a versioned or [expand/contract](#expand-and-contract) change), or else to make the change backward compatible.
 
+## Expand and contract
+
+Renaming a column, changing a field's type or removing an endpoint breaks whatever still uses the old shape. That includes the old version of your own service, which keeps running during a deploy. The safe way is three phases, each deployed on its own:
+
+1. **Expand**: add the new shape next to the old one, and write both.
+2. **Migrate**: backfill the data, then move readers and clients over, checking as you go.
+3. **Contract**: once nothing uses the old shape, remove it.
+
+`/expand-contract <change>` plans that for you, in [plan mode](../plans/):
+
+```text title="rein"
+> /expand-contract rename orders.total to orders.total_cents, used by the API and the billing worker
+```
+
+The agent:
+
+- **Finds who depends on the old shape.** That's readers and writers in this repo, in every [workspace](../workspaces/) repo, and across the org with [`org_search`](../large-codebases/#search-the-whole-org). It also counts stored data and clients you can't redeploy.
+- **Asks what it can't find**, such as deploy order and how long old clients live.
+- **Picks the pattern for the change**: rename, change a type, make something required, split a table or service, remove or rename an API field, or evolve an event schema.
+- **Presents a plan with one milestone per step.** Each step says why it's safe to deploy alone, how the data moves (batched, resumable backfills, kept out of the schema migration), how to verify it before moving on, and how to roll it back.
+
+Steps that have to wait, for old clients or for a backfill to finish, are separate deploys.
+
 ## Related
 
 - [Specs](../specs/): requirements and design before the change
