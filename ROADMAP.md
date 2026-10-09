@@ -73,7 +73,7 @@ agent works by default ships as an experiment (`experiments` in config) until it
 |---|---|---|---|---|
 | 9 | Pinned context packs | Named, reusable bundles of files and docs loaded with one command. | features/large-codebases/#context-packs | done |
 | 30 | Repo map | AST summary per repo (symbols, signatures) sized to a token budget. | features/large-codebases/#a-map-of-the-repo | done |
-| 31 | Ownership map | Owners from CODEOWNERS, git history and Backstage catalogs. |  | todo |
+| 31 | Ownership map | Owners from CODEOWNERS, git history and Backstage catalogs. | features/large-codebases/#who-owns-what | done |
 | 32 | Workspace memory | Decisions and gotchas remembered per workspace. Builds on #29. |  | todo |
 | 33 | Org code search connector | Sourcegraph or Zoekt as a search backend. |  | todo |
 | 34 | Local semantic index | Incremental, git-aware embeddings for search by meaning. |  | todo |

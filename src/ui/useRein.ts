@@ -69,6 +69,7 @@ import {branchSize, currentPr, describePr, queueFor, reviewComments, runQueue} f
 import {linkPrs, prsForBranch} from '../pr/linked.js';
 import {loadPacks, packFiles, packMessage, savePack} from '../context/packs.js';
 import {repoMap} from '../context/repoMap.js';
+import {formatOwners, ownersOf} from '../context/owners.js';
 import {run} from '../util/proc.js';
 import {activeExperiments} from '../store/config.js';
 import {formatUsd} from '../providers/prices.js';
@@ -1235,6 +1236,15 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
           if (!files.length) return log('info', 'No changes (vs HEAD) to analyze.');
           const a = await affected(root, files);
           log(a?.note && !a.targets.length ? 'error' : 'info', a ? `${files.length} changed file${files.length === 1 ? '' : 's'}. ${formatAffected(a)}` : 'No build system answered.');
+        });
+        break;
+      }
+      case 'owners': {
+        const root = process.cwd();
+        const arg = parsed.args.trim();
+        void (arg ? Promise.resolve([arg]) : changedFiles(root)).then(async (files) => {
+          if (!files.length) return log('info', 'No changes (vs HEAD). /owners <path> looks up a file or folder.');
+          log('info', `Owners of ${arg || `your ${files.length} changed file${files.length === 1 ? '' : 's'}`}:\n${formatOwners(await ownersOf(root, files))}`);
         });
         break;
       }

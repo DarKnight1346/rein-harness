@@ -46,6 +46,26 @@ Globs are relative to the project (`*`, `**`, `?`, `{a,b}`) and match the files 
 
 Files are ranked by how much they export, then by how shallow they sit, and filled in until the budget runs out. Tests, vendored and generated files (`node_modules/`, `vendor/`, `dist/`, `*.pb.go`, `*.min.js`…) are left out, and only the first 5,000 source files are read. The declarations come from the same pattern as the outlines of long files (the `outline-reads` [experiment](../../reference/configuration/#experiments)), so they work across most languages without a parser or language server.
 
+## Who owns what
+
+`/owners` shows who owns the files you changed (or `/owners <path>`, one file or folder), grouped by owner:
+
+```text title="rein"
+> /owners
+  ⎿ Owners of your 3 changed files:
+    @acme/payments  (CODEOWNERS)
+      services/payments/charge.ts
+      services/payments/refund.ts
+    team-search  (Backstage)
+      catalog/search/index.ts
+```
+
+Rein looks in order:
+
+1. **CODEOWNERS** in `.github/`, the repo root, `docs/` or `.gitlab/`: the last rule that matches wins, as on GitHub. GitLab section headers are skipped.
+2. **Backstage**: the `spec.owner` of the `catalog-info.yaml` in the closest folder above the file.
+3. **Git history**: the three people with the most commits to the file in the last year.
+
 ## Related
 
 - [Workspaces](../workspaces/): several repos in one session, or one package with `--scope`
