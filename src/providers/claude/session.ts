@@ -11,6 +11,16 @@ import {classifyError, parseRateLimitEvent, parseResetTime} from './stream.js';
 
 export const claudeBin = () => process.env.REIN_CLAUDE_BIN ?? 'claude';
 
+let cacheTtl: () => string | undefined = () => undefined;
+/**
+ * Prompt cache lifetime for the `claude` processes Rein starts ("5m" or "1h"; undefined = the CLI's
+ * choice, which is 1 hour on a subscription). 1-hour cache writes cost 2× input, 5-minute ones 1.25×,
+ * and an agent at work sends its next request within seconds. The user's own env var still wins.
+ */
+export function setPromptCacheTtl(fn: () => string | undefined): void {
+  cacheTtl = fn;
+}
+
 type Opts = {
   account: Account;
   model: string;
@@ -85,6 +95,7 @@ export class ClaudeSession implements ProviderSession {
       env: {
         ...accountEnv(opts.account),
         ...(opts.noThinking ? {MAX_THINKING_TOKENS: '0'} : {}),
+        ...(cacheTtl() && !process.env.CLAUDE_CODE_PROMPT_CACHE_TTL ? {CLAUDE_CODE_PROMPT_CACHE_TTL: cacheTtl()} : {}),
         // Rein's shell tool can run for hours (user-configurable cap) plus time waiting for approval;
         // Rein enforces the real limit itself, so Claude's MCP timeout just needs to be out of the way.
         ...(opts.tools ? {MCP_TOOL_TIMEOUT: String(24 * 3600_000)} : {}),

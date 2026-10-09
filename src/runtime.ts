@@ -47,6 +47,7 @@ import {webTools} from './tools/web.js';
 import {isMilestoneCopy, todoTool} from './tools/todo.js';
 import {imageGenRef, imageTool} from './tools/image.js';
 import {newTranscript, saveTranscript} from './session/transcript.js';
+import {setPromptCacheTtl} from './providers/claude/session.js';
 import {setAttribution, setBriefFinal, setExtraWorkingDirs, setInScope, setLazyTools, setManyCalls, setNoTodo, setSelfTest, setVaultNames, systemPrompt} from './session/prompt.js';
 import {Vault} from './vault/vault.js';
 import {parseRef, refKey, type Account, type ModelRef, type TokenCount, type ToolBinding} from './providers/types.js';
@@ -759,6 +760,7 @@ Drop superseded reads of the same file, routine listings, and output that no lon
     setInScope(() => (this.config.experiments ?? []).includes('in-scope'));
     setManyCalls(() => (this.config.experiments ?? []).includes('many-calls'));
     setSelfTest(() => (this.config.experiments ?? []).includes('self-test'));
+    setPromptCacheTtl(() => ((this.config.experiments ?? []).includes('cache-5m') ? '5m' : undefined));
     setBriefFinal(() => (this.config.experiments ?? []).includes('brief-final'));
     await usageStore.load();
     const router = makeRouter(() => this.config, (...a) => this.auto(...a));
