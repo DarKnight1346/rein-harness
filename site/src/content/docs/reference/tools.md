@@ -423,6 +423,18 @@ Label `ApiRefs`. Approval: none (read-only). Only listed with the `system-graph`
 
 The gateway route, the places it's served, and every call site across repos. See [Follow a call across repos](../../features/system/#follow-a-call-across-repos).
 
+### `stack`
+
+Label `Stack`. Approval: **mutating**. Only listed with the `stack-tool` [experiment](../configuration/#experiments) on.
+
+| Parameter | Type | Notes |
+| --- | --- | --- |
+| `action` **(required)** | `up` \| `status` \| `logs` \| `down` | |
+| `services` | string[] | For `up`: the compose services. Omit for the ones the change touches |
+| `service` | string | For `logs` |
+
+`up` runs `docker compose up -d --wait` and reports each service's state, health and ports. See [The services a change needs](../../features/system/#the-services-a-change-needs).
+
 ### `lsp_install`
 
 Label `InstallLanguageServer`. Approval: **always asks, even in bypass mode.**

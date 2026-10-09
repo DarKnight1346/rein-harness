@@ -54,6 +54,8 @@ import {Checkpoints} from './session/checkpoints.js';
 import {WorkspaceSnapshots} from './session/snapshots.js';
 import {DevEnv} from './env/devenv.js';
 import {ContainerBox} from './env/container.js';
+import {LocalStack, servicesForChange, stackTool} from './env/stack.js';
+import {findServices} from './system/services.js';
 import {SPEC_MODE_CONTEXT, specTools} from './specs/tools.js';
 import {specSection} from './specs/pr.js';
 import {adrContext} from './specs/adr.js';
@@ -992,6 +994,7 @@ Drop superseded reads of the same file, routine listings, and output that no lon
       serviceGraphTool(() => activeExperiments(this.config), () => process.cwd()),
       symbolRefsTool(() => activeExperiments(this.config), () => process.cwd()),
       apiRefsTool(() => activeExperiments(this.config), () => process.cwd()),
+      stackTool(() => activeExperiments(this.config), () => new LocalStack(this.workspace?.root ?? process.cwd()), async () => servicesForChange(this.workspace?.root ?? process.cwd(), findServices(process.cwd()))),
       skillTool(() => process.cwd(), () => (this.planMode = true)),
       ...memoryTools(() => process.cwd()),
       askUserTool(() => this.askPresenter),

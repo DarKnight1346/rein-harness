@@ -199,6 +199,26 @@ The OS sandbox limits where commands write. For unattended work on code you don'
 Rein's own tools (`read`, `edit`, `search`…) work on your machine as usual. The container holds the agent's shell commands: builds, tests, package installs, scripts.
 :::
 
+## The services a change needs
+
+Tests against mocks pass while the real service disagrees. `/stack up` brings up the real neighbours, with [Docker Compose](https://docs.docker.com/compose/):
+
+```text title="rein"
+> /stack up
+  ⎿ Starting web (docker compose up --wait)…
+    Up and healthy: web, orders, db.
+      ✓ web  running (healthy)  localhost:3000 → 3000/tcp
+      ✓ orders  running (healthy)  localhost:8080 → 8080/tcp
+      ✓ db  running
+```
+
+- **Which services.** With no names, Rein starts the compose services built from the folders your branch changes (by `build` context, or a service named like the folder), and Compose adds their `depends_on`. Name them to choose: `/stack up orders web`.
+- **Healthy, not just started.** Rein waits for each service's health check (`docker compose up --wait`, polling on older Compose) and lists the ports it publishes. A service that isn't healthy in five minutes is reported with its state.
+- **The rest:** `/stack status` shows what's running, `/stack logs <service>` its recent output, and `/stack down` stops it all. The stack keeps running until you stop it.
+- **Helm:** `/stack up --helm <chart folder>` installs a chart with `helm upgrade --install … --wait`. It only goes into a **local** cluster (a kubectl context of kind, k3d, minikube, Docker Desktop, Rancher Desktop, OrbStack or Colima); any other context is refused.
+
+The compose file is the workspace's (or the project's) `compose.yaml` or `docker-compose.yml`. With the `stack-tool` [experiment](../../reference/configuration/#experiments) on, the agent gets a [`stack`](../../reference/tools/#stack) tool. It can bring up what its change needs, test against it, read a service's logs when something fails, and stop it again. Like any command, that goes through approvals.
+
 ## Related
 
 - [Workspaces](../workspaces/): several repos as one system

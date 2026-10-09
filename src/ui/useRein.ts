@@ -79,6 +79,7 @@ import {buildSymbolGraph, crossRepo, formatLookup, indexRepos, lookup} from '../
 import {findApiRefs, formatRefs} from '../system/api.js';
 import {formatImpact, impactReport} from '../system/impact.js';
 import {annotateTask, codemapDir, codemapStatus, writeCodemap} from '../system/codemap.js';
+import {composeFile, formatServices, LocalStack, servicesForChange} from '../env/stack.js';
 import {changeSetState, formatState, formatTests, loadChangeSets, openPrs, startChangeSet, testChangeSet} from '../system/changeset.js';
 import {deadCodeTask, findDeadCode, findFlags, flagRemovalTask, formatFlags, isStale} from '../contracts/deadcode.js';
 import {checkoutState, describeCheckout, sparseAdd} from '../workspace/sparse.js';
@@ -1309,6 +1310,25 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
         });
         break;
       }
+      case 'stack': {
+        const root = findWorkspace()?.root ?? process.cwd();
+        const stack = new LocalStack(root);
+        const [stSub = 'status', ...rest] = parsed.args.trim().split(/\s+/).filter(Boolean);
+        if (stSub === 'up' && rest[0] === '--helm') {
+          if (!rest[1]) log('error', 'Usage: /stack up --helm <chart folder>');
+          else void stack.helm(nodePath.resolve(process.cwd(), rest[1])).then((m) => log('info', m));
+        } else if (stSub === 'up') {
+          void (async () => {
+            const names = rest.length ? rest : await servicesForChange(root, findServices(process.cwd()));
+            log('info', `Starting ${names.length ? names.join(', ') : 'the whole stack'} (docker compose up --wait)…`);
+            const r = await stack.up(names);
+            log(r.ok ? 'info' : 'error', `${r.message}\n${formatServices(r.services)}`);
+          })();
+        } else if (stSub === 'logs') void stack.logs(rest[0] ?? '').then((t) => log('info', t));
+        else if (stSub === 'down') void stack.down().then((m) => log('info', m));
+        else void stack.status().then((s) => log('info', composeFile(root) ? formatServices(s) : 'No compose file here (compose.yaml or docker-compose.yml).'));
+        break;
+      }
       case 'codemap': {
         const root = findWorkspace()?.root ?? process.cwd();
         const arg = parsed.args.trim();
@@ -2276,6 +2296,7 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
         break;
       case 'clear':
         runtime.agents.closeAll();
+        void runtime.box.stop(); // sandbox container: the next conversation gets a fresh container
         setView('main');
         runtime.engine.reset();
         setEntries([banner()]);
