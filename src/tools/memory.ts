@@ -94,15 +94,17 @@ export function memoryTools(root: () => string): ToolDef[] {
         if (match.length < 3) throw new ToolError('match must be at least 3 characters');
         // Both memories: the project's, and the workspace's when there is one.
         let removed = 0;
+        let left = 0;
         for (const where of [root(), workspaceRoot(root())].filter((w): w is string => !!w)) {
           const facts = memoryFacts(where);
           const keep = facts.filter((f) => !f.toLowerCase().includes(match));
+          left += keep.length;
           if (keep.length === facts.length) continue;
           removed += facts.length - keep.length;
           save(where, keep);
         }
         if (!removed) throw new ToolError(`no fact in project or workspace memory contains "${args.match}"`);
-        return {ok: true, text: `Forgot ${removed} fact${removed === 1 ? '' : 's'}.`};
+        return {ok: true, text: `Forgot ${removed} fact${removed === 1 ? '' : 's'}; ${left} left.`};
       },
     },
   ];

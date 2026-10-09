@@ -24,7 +24,7 @@ describe('workspace memory', () => {
     expect(readFileSync(path.join(root, '.rein', 'MEMORY.md'), 'utf8')).toMatch(/- api releases before web/);
     expect(readFileSync(path.join(api, '.rein', 'MEMORY.md'), 'utf8')).toMatch(/- api tests need DATABASE_URL/);
     expect(workspaceFacts(api)[0]).toMatch(/^api releases before web/);
-    expect((await forget!.run({} as any, {match: 'releases before'})).text).toBe('Forgot 1 fact.');
+    expect((await forget!.run({} as any, {match: 'releases before'})).text).toBe('Forgot 1 fact; 1 left.');
     expect(workspaceFacts(api)).toEqual([]);
   });
 
