@@ -1,8 +1,6 @@
 ---
 title: Secrets vault
 description: Store API tokens and passwords once; the agent uses them in shell commands as $NAME without ever seeing their values.
-sidebar:
-  badge: New
 ---
 
 The vault holds secrets (API tokens, passwords) that the agent can **use** without **seeing** them. You store a secret once under a name. Every shell command Rein runs gets it as an environment variable. Anywhere its value would reach the model, Rein replaces it with `[secret:NAME]`.

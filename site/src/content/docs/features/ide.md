@@ -1,8 +1,6 @@
 ---
 title: Editor integration
 description: Use Rein with VS Code, Cursor, Windsurf, JetBrains, Neovim or Emacs through the Claude Code extension (or plugin) you already have. Your selection goes with your messages, file changes open as diffs in the editor, and the agent reads the editor's diagnostics.
-sidebar:
-  badge: New
 ---
 
 Rein works with your editor through the **Claude Code extension**: the official one for VS Code, Cursor and Windsurf, or the Claude Code plugin for JetBrains IDEs. Neovim and Emacs work through the community plugins that speak the same protocol ([below](#neovim-and-emacs)). There's nothing new to install: if the extension is there, Rein uses it.

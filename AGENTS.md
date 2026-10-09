@@ -92,8 +92,8 @@ Pages live in `site/src/content/docs/<section>/<page>.md(x)`. A new page also ne
 
 ### Additions, deprecations, removals
 
-- **Added:** document it where users will look (feature page + reference table). For a headline feature,
-  consider `sidebar: {badge: New}` in the page frontmatter, and remove the badge a few releases later.
+- **Added:** document it where users will look (feature page + reference table). Don't add `New` badges to
+  the sidebar; roadmap features show up on the What's new page (built from `ROADMAP.md`).
 - **Deprecated:** keep the docs, add `:::caution[Deprecated]` saying what to use instead and since which
   version, and mark the reference row *(deprecated)*.
 - **Removed:** delete it from every page and reference table. If a whole page goes, remove its sidebar

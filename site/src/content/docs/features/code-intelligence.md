@@ -1,8 +1,6 @@
 ---
 title: Code intelligence
 description: Rein runs language servers itself, so every model sees type errors right after an edit and can check a file's problems, with or without an editor.
-sidebar:
-  badge: New
 ---
 
 Rein runs language servers for your project itself, so the agent gets real compiler feedback, on any model, without an editor open. When the agent finishes a turn, Rein checks the files it changed (and the files that import them). If the turn left problems the code didn't have before, the agent is told and keeps working.

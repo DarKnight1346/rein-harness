@@ -1,8 +1,6 @@
 ---
 title: Cost & budgets
 description: What a conversation, a request and a goal cost in dollars at API list prices, in the sidebar, /cost and rein -p output.
-sidebar:
-  badge: New
 ---
 
 Rein prices every model request as it happens, so you can see what work costs in dollars, not just tokens:

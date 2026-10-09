@@ -1,8 +1,6 @@
 ---
 title: Workspaces
 description: Work on several repos as one system, or on one package of a monorepo. A rein.workspace.yaml lists the repos; --scope focuses the agent on one package.
-sidebar:
-  badge: New
 ---
 
 A **workspace** is a set of repos you change together: an API and the apps that call it, a shared library and its users, the services behind one product. Put a `rein.workspace.yaml` in a folder above them and start `rein` in any of the repos (or in the workspace folder itself):

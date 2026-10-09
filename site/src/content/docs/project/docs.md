@@ -30,8 +30,8 @@ same PR.
 
 ## Lifecycle of a feature in the docs
 
-- **Added:** document it on its feature page and in the reference tables. Headline features can wear
-  a `New` badge in the sidebar (`sidebar: {badge: New}` in frontmatter) for a few releases.
+- **Added:** document it on its feature page and in the reference tables. Don't add `New` badges to
+  the sidebar; the [What's new](../../start/whats-new/) page lists what's recent.
 - **Deprecated:** keep the docs, add a `:::caution[Deprecated]` aside naming the replacement and the
   version, and mark reference rows *(deprecated)*.
 - **Removed:** delete it everywhere. If a page goes away, remove its sidebar entry. The drift check

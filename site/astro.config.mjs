@@ -40,7 +40,7 @@ export default defineConfig({
           {label: 'Install', slug: 'start/install'},
           {label: 'Your first session', slug: 'start/first-session'},
           {label: 'Coming from Claude Code', slug: 'start/from-claude-code'},
-          {label: "What's new", slug: 'start/whats-new', badge: 'New'},
+          {label: "What's new", slug: 'start/whats-new'},
         ]},
         {label: 'Features', items: [
           {label: 'Accounts & failover', slug: 'features/accounts'},

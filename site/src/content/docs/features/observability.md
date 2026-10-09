@@ -1,8 +1,6 @@
 ---
 title: Observability
 description: Send every turn, tool call, token count and cost to any OpenTelemetry backend (Grafana, Honeycomb, Datadog, Jaeger) as traces and metrics. Metadata only, off by default.
-sidebar:
-  badge: New
 ---
 
 Rein can export what it does to any OpenTelemetry backend (Grafana, Honeycomb, Datadog, Jaeger, an OTel Collector) so you can watch agent work across sessions and machines: which models run, how long turns take, which tools fail, and what it costs.
