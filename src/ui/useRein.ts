@@ -51,7 +51,7 @@ import {planPreview} from './planPreview.js';
 import type {AskAnswer, AskQuestion} from '../tools/ask.js';
 import {settingsFiles} from '../tools/permissions.js';
 import {memoryFacts, memoryFile} from '../tools/memory.js';
-import {readFileSync} from 'node:fs';
+import {readFileSync, statSync} from 'node:fs';
 import {accountName, hidingIdentity, redact} from './privacy.js';
 import nodePath from 'node:path';
 import {cloneMissing, findWorkspace} from '../workspace/index.js';
@@ -63,6 +63,7 @@ import {affected, changedFiles, detectBuild, formatAffected} from '../build/affe
 import {clearFlaky, knownFlaky} from '../build/flaky.js';
 import {detectCaches} from '../build/caches.js';
 import {failed as failedChecks, MAX_FIX_ROUNDS, prChecks, summary as ciSummary} from '../build/ci.js';
+import {addedLinesByFile, findReport, parseCoverage, ranges, uncoveredChanges} from '../build/coverage.js';
 import {activeExperiments} from '../store/config.js';
 import {formatUsd} from '../providers/prices.js';
 
@@ -1217,6 +1218,33 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
           if (!files.length) return log('info', 'No changes (vs HEAD) to analyze.');
           const a = await affected(root, files);
           log(a?.note && !a.targets.length ? 'error' : 'info', a ? `${files.length} changed file${files.length === 1 ? '' : 's'}. ${formatAffected(a)}` : 'No build system answered.');
+        });
+        break;
+      }
+      case 'coverage': {
+        const root = process.cwd();
+        const report = findReport(root);
+        if (!report) {
+          log('info', 'No coverage report here (coverage/lcov.info, coverage-final.json, coverage.xml or a Go cover profile). Run your tests with coverage first.');
+          break;
+        }
+        const wantTests = parsed.args.trim() === 'tests';
+        void addedLinesByFile(root).then((added) => {
+          let hits;
+          try {
+            hits = parseCoverage(report, readFileSync(report, 'utf8'));
+          } catch (err) {
+            return log('error', `Couldn't read ${nodePath.relative(root, report)}: ${(err as Error).message}`);
+          }
+          const missed = uncoveredChanges(hits, root, added);
+          const age = Math.round((Date.now() - statSync(report).mtimeMs) / 60_000);
+          const from = `${nodePath.relative(root, report)} (${age < 1 ? 'just now' : `${age} min ago`})`;
+          if (!missed.length) return log('info', `Every changed line the report covers ran in a test, per ${from}.`);
+          const list = missed.map((m) => `  ${m.file}: ${ranges(m.lines)}`);
+          if (!wantTests) return log('info', [`Changed lines no test ran, per ${from}:`, ...list, '/coverage tests asks the agent to write tests for them.'].join('\n'));
+          const task = [`Write tests that cover these lines my changes added, which no test runs (from ${from}):`, ...list, '', "Follow the project's existing test style and location. Test the behavior, not just the lines; run the new tests to show they pass."].join('\n');
+          if (chat.busy) setQueued((q) => [...q, task]);
+          else void chat.send(task).then(bump);
         });
         break;
       }

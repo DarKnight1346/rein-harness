@@ -97,6 +97,22 @@ Start from these; the full output follows.
 
 It recognizes GitHub Actions and GitLab CI sections and Gradle tasks as steps, the usual error markers (`error`, `FAIL`, `✗`, tracebacks, assertion errors), and locations in the `file:line`, `file(line,col)` and Python `File "x", line N` forms.
 
+## Tests for what you changed
+
+`/coverage` reads the project's newest coverage report and lists the lines your working tree adds (against `HEAD`, plus untracked files) that no test ran:
+
+```text title="rein"
+> /coverage
+  ⎿ Changed lines no test ran, per coverage/lcov.info (3 min ago):
+      src/auth/session.ts: 42-47, 88
+      src/auth/refresh.ts: 12-19
+    /coverage tests asks the agent to write tests for them.
+```
+
+`/coverage tests` sends that list to the agent, to write tests in the project's style that cover those lines and to run them.
+
+It reads `coverage/lcov.info` (or `lcov.info`), Istanbul's `coverage-final.json`, Cobertura `coverage.xml` (Python's coverage.py, Java, .NET), and Go cover profiles (`coverage.out`, `cover.out`). Report paths can be absolute, relative or Go import paths. Rein doesn't run your tests: run them with coverage first, so the report reflects your changes. Only lines the report instruments count (a blank line or a comment is never "uncovered").
+
 ## Flaky tests
 
 A flaky test sends an agent chasing a bug that isn't there. With the `flaky-quarantine` [experiment](../../reference/configuration/#experiments) on, Rein records the outcome of every test the agent runs (vitest, jest, mocha, pytest, `go test`, `cargo test`/`nextest`, and `npm`/`pnpm`/`yarn`/`bun test`) together with a fingerprint of the code it ran on: `HEAD` plus the uncommitted diff.

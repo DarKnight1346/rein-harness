@@ -49,7 +49,7 @@ agent works by default ships as an experiment (`experiments` in config) until it
 | 48 | Flaky-test quarantine | Record tests that flip without a code change; keep them out of the agent's pass/fail signal. | features/build-and-test/#flaky-tests | done |
 | 49 | Remote build cache | Detect and use Bazel remote cache, Nx Cloud or the Gradle cache in agent builds. | features/build-and-test/#build-caches | done |
 | 50 | CI watcher | Watch a PR's checks (`gh`) and fix failures on its own, with the usual approvals. GitLab (`glab`) isn't done yet. | features/build-and-test/#watching-ci | done |
-| 51 | Coverage-targeted tests | Generate tests for changed lines no test covers (reads coverage reports). |  | todo |
+| 51 | Coverage-targeted tests | Generate tests for changed lines no test covers (reads coverage reports). | features/build-and-test/#tests-for-what-you-changed | done |
 | 52 | Mutation testing | Check that agent-written tests catch bugs (Stryker, mutmut, go-mutesting when installed). |  | todo |
 
 ## Wave 4: Review and PR flow

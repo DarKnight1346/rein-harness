@@ -1,6 +1,6 @@
 import type {Skill} from '../skills/index.js';
 
-export type CommandName = 'trackers' | 'remote' | 'voice' | 'vault' | 'lsp' | 'plugins' | 'export' | 'ide' | 'memory' | 'mcp' | 'rewind' | 'permissions' | 'add-dir' | 'workspace' | 'ci' | 'build' | 'flaky' | 'affected' | 'policy' | 'cost' | 'scope' | 'goal' | 'goal:plan' | 'btw' | 'agents' | 'agent' | 'resume' | 'login' | 'usage' | 'model' | 'context' | 'compact' | 'shells' | 'settings' | 'update' | 'tui' | 'clear' | 'help' | 'exit';
+export type CommandName = 'trackers' | 'remote' | 'voice' | 'vault' | 'lsp' | 'plugins' | 'export' | 'ide' | 'memory' | 'mcp' | 'rewind' | 'permissions' | 'add-dir' | 'workspace' | 'coverage' | 'ci' | 'build' | 'flaky' | 'affected' | 'policy' | 'cost' | 'scope' | 'goal' | 'goal:plan' | 'btw' | 'agents' | 'agent' | 'resume' | 'login' | 'usage' | 'model' | 'context' | 'compact' | 'shells' | 'settings' | 'update' | 'tui' | 'clear' | 'help' | 'exit';
 
 export const COMMANDS: {name: CommandName; description: string}[] = [
   {name: 'remote', description: 'Use this session from your phone or another computer: a page Rein serves (pairing code); /remote pair · status · unpair · off'},
@@ -21,6 +21,7 @@ export const COMMANDS: {name: CommandName; description: string}[] = [
   {name: 'flaky', description: 'Tests known to be flaky here (they failed and passed on the same code): /flaky lists them, /flaky clear forgets them'},
   {name: 'build', description: 'The build system here (Nx, Turborepo, Bazel, Pants), its caches, and whether the sandbox lets agent builds use them'},
   {name: 'ci', description: "This branch's pull request checks: /ci shows them, /ci watch fixes failures as they come (asks before pushing), /ci stop"},
+  {name: 'coverage', description: 'Lines your changes add that no test covers, from the last coverage report; /coverage tests asks the agent to write tests for them'},
   {name: 'workspace', description: 'The repos of this workspace (rein.workspace.yaml): /workspace lists them, /workspace clone clones the missing ones'},
   {name: 'scope', description: 'Work in one package of a monorepo: /scope <dir> (search, list, shell and instructions start there), /scope off, or no argument to show it'},
   {name: 'add-dir', description: 'Add a working directory the agent can use without asking: /add-dir <path> (no path: list them)'},
