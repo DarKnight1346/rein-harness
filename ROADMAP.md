@@ -71,7 +71,7 @@ agent works by default ships as an experiment (`experiments` in config) until it
 
 | # | Feature | Spec | Docs | Status |
 |---|---|---|---|---|
-| 9 | Pinned context packs | Named, reusable bundles of files and docs loaded with one command. |  | todo |
+| 9 | Pinned context packs | Named, reusable bundles of files and docs loaded with one command. | features/large-codebases/#context-packs | done |
 | 30 | Repo map | AST summary per repo (symbols, signatures) sized to a token budget. |  | todo |
 | 31 | Ownership map | Owners from CODEOWNERS, git history and Backstage catalogs. |  | todo |
 | 32 | Workspace memory | Decisions and gotchas remembered per workspace. Builds on #29. |  | todo |

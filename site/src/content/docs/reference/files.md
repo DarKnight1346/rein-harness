@@ -103,6 +103,10 @@ Existing Claude Code rules and hooks keep working: `Bash(npm test:*)`, `Edit(src
 
 Earlier sources win on a name clash: `<project>/.mcp.json`, then `~/.rein/mcp.json`, then `~/.claude.json` (servers added with `claude mcp add`). `${VAR}` and `${VAR:-default}` are expanded from your environment. See [MCP](../../features/mcp/).
 
+### Context packs
+
+`<project>/.rein/packs.yaml`: named file bundles that `/pack <name>` attaches. See [Context packs](../../features/large-codebases/#context-packs).
+
 ### Policy
 
 `<project>/.rein/policy.yaml` and `~/.rein/policy.yaml`: deny and ask rules over tools, paths and commands, and which models may work here. Both apply. See [Policy as code](../../features/safety/#policy-as-code-reinpolicyyaml).

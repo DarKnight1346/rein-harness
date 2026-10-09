@@ -67,6 +67,7 @@ import {addedLinesByFile, findReport, parseCoverage, ranges, uncoveredChanges} f
 import {detectMutator, formatMutation, mutate} from '../build/mutate.js';
 import {branchSize, currentPr, describePr, queueFor, reviewComments, runQueue} from '../pr/github.js';
 import {linkPrs, prsForBranch} from '../pr/linked.js';
+import {loadPacks, packFiles, packMessage, savePack} from '../context/packs.js';
 import {run} from '../util/proc.js';
 import {activeExperiments} from '../store/config.js';
 import {formatUsd} from '../providers/prices.js';
@@ -1233,6 +1234,44 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
           if (!files.length) return log('info', 'No changes (vs HEAD) to analyze.');
           const a = await affected(root, files);
           log(a?.note && !a.targets.length ? 'error' : 'info', a ? `${files.length} changed file${files.length === 1 ? '' : 's'}. ${formatAffected(a)}` : 'No build system answered.');
+        });
+        break;
+      }
+      case 'pack': {
+        const root = process.cwd();
+        const [name = '', ...rest] = parsed.args.trim().split(/\s+/);
+        const {packs, error} = loadPacks(root);
+        if (error) {
+          log('error', error);
+          break;
+        }
+        if (name === 'save') {
+          const [packName, ...globs] = rest;
+          if (!packName || !globs.length) {
+            log('error', 'Usage: /pack save <name> <glob> [glob…], e.g. /pack save payments "services/payments/**" docs/payments.md');
+            break;
+          }
+          savePack(root, {name: packName, files: globs.map((g) => g.replace(/^["']|["']$/g, ''))});
+          log('info', `Saved context pack "${packName}" in .rein/packs.yaml. /pack ${packName} attaches it.`);
+          break;
+        }
+        if (!name) {
+          log('info', packs.length ? ['Context packs (.rein/packs.yaml):', ...packs.map((p) => `  ${p.name}  ${p.files.join(', ')}${p.note ? `  · ${p.note}` : ''}`), '/pack <name> [message] attaches one.'].join('\n') : 'No context packs yet. /pack save <name> <globs…> makes one (saved in .rein/packs.yaml).');
+          break;
+        }
+        const pack = packs.find((p) => p.name === name);
+        if (!pack) {
+          log('error', `No context pack "${name}".${packs.length ? ` Packs: ${packs.map((p) => p.name).join(', ')}.` : ''}`);
+          break;
+        }
+        void packFiles(root, pack).then(({files, more}) => {
+          if (!files.length) return log('error', `Context pack "${name}" matches no files (${pack.files.join(', ')}).`);
+          const text = packMessage(pack, files, parsed.args.trim().slice(name.length).trim());
+          if (more) log('info', `Context pack "${name}": attaching the first ${files.length} of ${files.length + more} files.`);
+          if (chat.busy) return setQueued((q) => [...q, text]);
+          const msg = attachments.current.expand(text);
+          add({kind: 'user', text, ...(msg.images.length ? {images: msg.images.map((i) => i.path)} : {})});
+          void chat.send(msg.text, msg.images).then(bump);
         });
         break;
       }
