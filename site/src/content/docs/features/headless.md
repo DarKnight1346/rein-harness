@@ -169,7 +169,7 @@ In `text` mode the plan is printed after the agent's reply. In `json` mode it re
 | Code | When |
 |---|---|
 | `0` | The run completed. Denied tool calls don't count as failure. |
-| `1` | No prompt, no accounts, an invalid `--permission-mode`, or an error during the run (routing failed, every account unavailable, a `UserPromptSubmit` hook blocked the prompt, …). |
+| `1` | No prompt, no accounts, an invalid `--permission-mode`, or an error during the run (routing failed, every account unavailable, a `UserPromptSubmit` hook blocked the prompt, a [budget](../cost/#budgets) was reached, …). |
 
 To fail a CI step on the *content* of the answer, check `result` yourself (see the example below).
 

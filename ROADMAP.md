@@ -25,7 +25,7 @@ agent works by default ships as an experiment (`experiments` in config) until it
 | # | Feature | Spec | Docs | Status |
 |---|---|---|---|---|
 | 5 | Cost estimate before running | Estimate a plan's or goal's tokens and dollars from similar past sessions; ask above a threshold. |  | todo |
-| 6 | Budgets with a hard stop | Per-task, per-goal and per-repo caps (tokens or dollars) that pause the agent and say why. |  | todo |
+| 6 | Budgets with a hard stop | Per-task, per-goal and per-repo caps (tokens or dollars) that pause the agent and say why. | features/cost/#budgets | done |
 | 8 | Context-bloat warnings | Flag oversized tool results and stale reads; suggest what to compact or drop. |  | todo |
 | 10 | Stuck-loop watchdog | Detect repeated edits or the same failing command with no progress; stop or escalate. |  | todo |
 | 18 | Secret scanning on every diff | Block secrets in agent edits and redact them from saved transcripts. |  | todo |

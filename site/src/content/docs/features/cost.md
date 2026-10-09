@@ -1,6 +1,6 @@
 ---
 title: Cost & budgets
-description: What a conversation, a request and a goal cost in dollars at API list prices, in the sidebar, /cost and rein -p output.
+description: What a conversation, a request and a goal cost in dollars at API list prices, and spending caps that stop the agent before it overruns them.
 ---
 
 Rein prices every model request as it happens, so you can see what work costs in dollars, not just tokens:
@@ -46,6 +46,38 @@ On a Claude or ChatGPT subscription nothing is billed per token. The figure is w
 `write5m` and `write1h` (cache writes) default to the input price. An entry for a model that has a built-in price replaces it.
 
 Conversations from before this feature have no saved cost: their total counts from the first request priced after you resume them.
+
+## Budgets
+
+Set spending caps, in USD at the same API list prices, and Rein stops the agent when one is reached:
+
+```json title="~/.rein/config.json"
+{
+  "budget": {"requestUsd": 2, "goalUsd": 20, "conversationUsd": 50}
+}
+```
+
+Or from the prompt: `/settings budget {"requestUsd": 2}`.
+
+| Cap | Counts | When it's reached |
+|---|---|---|
+| `requestUsd` | Everything after one message of yours: the turn, Rein's follow-ups (code checks, Stop hooks), subagents and helper calls | The turn stops. Your next message starts a new request. |
+| `goalUsd` | Everything since the current [goal](../goals/) was set | The turn stops and the goal is paused. `/goal resume` continues it, if you raise the cap first. |
+| `conversationUsd` | The whole conversation | The turn stops, and new messages are refused until you raise the cap or start a new conversation (`/clear`). |
+
+When a cap is reached, the turn stops as soon as the request that crossed it reports its tokens. You see `Budget reached: this request has cost $2.03 of its $2.00 budget (API list prices), so Rein stopped.` A request already running finishes the step it's on, so the spend can end slightly above the cap. In [`rein -p`](../headless/) a budget stop is an error (exit code `1`), with that message.
+
+**Per repo:** a project's `.rein/settings.json` (or `.rein/settings.local.json`) can set its own `budget`. Where you and the repo both set the same cap, the lower one wins, so a repo can keep agents cheap without changing your other projects.
+
+`/cost` lists the caps in force and how much of each is used:
+
+```text
+Budgets (config budget, or a lower one in .rein/settings.json):
+  request budget     $0.83 of $2.00
+  goal budget        $3.10 of $20.00
+```
+
+Budgets need prices: a model with no price ([see above](#how-its-priced)) isn't counted toward them.
 
 ## Related
 

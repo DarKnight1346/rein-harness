@@ -81,7 +81,7 @@ When Rein imports your existing `claude` and `codex` logins on first run, it reg
 
 ## Files Rein reads
 
-### Settings (permission rules and hooks)
+### Settings (permission rules, hooks and budgets)
 
 All six files are merged, global first. Deny rules win wherever they appear. Hooks come from the same files and are re-read live.
 
@@ -91,6 +91,8 @@ All six files are merged, global first. Deny rules win wherever they appear. Hoo
 4. `<project>/.claude/settings.local.json`
 5. `<project>/.rein/settings.json`
 6. `<project>/.rein/settings.local.json`
+
+A project's `.rein/settings.json` (or `settings.local.json`) can also set a `budget` with lower spending caps than yours; see [Cost & budgets](../../features/cost/#budgets).
 
 Existing Claude Code rules and hooks keep working: `Bash(npm test:*)`, `Edit(src/**)` and matchers like `Bash` all map onto Rein's tools. See [permissions](../../features/permissions/) and [hooks](../../features/hooks/).
 

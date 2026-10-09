@@ -44,6 +44,8 @@ export type EngineDeps = {
   beforePrompt?: (text: string) => Promise<{block?: string; context?: string}>;
   /** Auto effort: the decision model picks a level for this message from `levels`. */
   pickEffort?: (text: string, levels: string[]) => Promise<string | undefined>;
+  /** A spending cap reached (budget): the message to show; the turn then stops. */
+  overBudget?: () => string | undefined;
   /** A turn finished (telemetry): its model, timing and what it spent. */
   onTurnEnd?: (turn: {ref: ModelRef; startedAt: number; interrupted: boolean; tokens: TokenCount}) => void;
 };
@@ -291,6 +293,12 @@ export class Engine {
       return;
     }
     if (hook?.context) text = `${text}\n\n<hook_context>\n${hook.context}\n</hook_context>`;
+    // The conversation (or the goal) is already at its cap: don't start another request.
+    const over = this.deps.overBudget?.();
+    if (over) {
+      yield {type: 'error', message: `${over} Raise the budget (/settings budget) or start a new conversation.`};
+      return;
+    }
     let images = attached;
     t.messages.push({role: 'user', text, at: Date.now(), ...(images.length ? {images} : {})});
     void saveTranscript(t); // on disk before the turn starts, so a crash mid-turn keeps the request
@@ -401,6 +409,12 @@ export class Engine {
         }
         if (ev.type === 'tokens') {
           this.callTokens = ev.call;
+          // A spending cap (budget) reached: say so and stop the turn.
+          const over = this.interruptRequested ? undefined : this.deps.overBudget?.();
+          if (over) {
+            yield {type: 'notice', text: over};
+            this.interrupt();
+          }
           // Each jump in input is one request's full prompt: how full the context is right now.
           if (ev.call.input > seenInput) {
             // Not on a segment's first request: nothing has happened yet that a compaction would fold away.

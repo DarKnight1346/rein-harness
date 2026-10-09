@@ -124,7 +124,7 @@ export async function runHeadless(argv: string[]): Promise<number> {
   try {
     await turn(prompt);
     // Stop hooks may send the agent back to work (bounded, as in the UI).
-    for (let depth = 0; !error && depth < 10; depth++) {
+    for (let depth = 0; !error && !runtime.budgetStop && depth < 10; depth++) {
       const stop = await runtime.stopHook(depth > 0).catch(() => undefined);
       if (!stop) break;
       reply += '\n\n';
@@ -133,6 +133,7 @@ export async function runHeadless(argv: string[]): Promise<number> {
   } catch (err) {
     error = (err as Error).message;
   }
+  if (runtime.budgetStop && !error) error = runtime.budgetStop; // a budget stop is a failed run
   if (presented) reply = presented; // plan mode: the plan is the answer
   if (format === 'text' && presented) write(`\n${presented}\n`);
   if (format === 'text' && reply && !reply.endsWith('\n')) write('\n');

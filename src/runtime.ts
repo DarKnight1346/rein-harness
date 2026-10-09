@@ -5,6 +5,7 @@ import {adapters} from './providers/index.js';
 import {onSideUsage} from './providers/usage.js';
 import {formatUsd, setCacheWriteTtl, setPriceOverrides} from './providers/prices.js';
 import {Telemetry} from './telemetry/otel.js';
+import {effectiveBudget, overBudget, type Spend} from './budget.js';
 import {catalog, toRef} from './router/catalog.js';
 import {mergeNote, Worktrees} from './agents/worktrees.js';
 import type {Origin} from './tools/fs.js';
@@ -83,6 +84,36 @@ export class Runtime {
   /** --scope / /scope: the package of a monorepo this session works in (absolute), if any. */
   scope: string | undefined;
 
+  /** The last budget stop (for rein -p's exit status), cleared by your next message. */
+  budgetStop: string | undefined;
+
+  /** What this conversation, the latest request and the goal have spent (USD), for budgets. */
+  private spend(): Spend | undefined {
+    const usd = this.engine?.sessionTokens.usd;
+    if (usd === undefined) return undefined;
+    const goal = this.goals.goal;
+    return {conversation: usd, request: usd - this.requestStartUsd, goal: goal?.status === 'active' && goal.startUsd !== undefined ? usd - goal.startUsd : undefined};
+  }
+
+  /** A cap reached: stop (the engine interrupts the turn), pausing the goal so it doesn't continue. */
+  private checkBudget(): string | undefined {
+    const spend = this.spend();
+    const msg = spend && overBudget(spend, effectiveBudget(this.config.budget));
+    if (!msg) return undefined;
+    this.budgetStop = msg;
+    if (this.goals.goal?.status === 'active') this.goals.pause();
+    return msg;
+  }
+
+  /** /cost's budget lines: each cap in force and how much of it is used. */
+  private budgetLines(): string[] {
+    const b = effectiveBudget(this.config.budget);
+    const s = this.spend();
+    const line = (what: string, spent: number | undefined, cap: number | undefined) => (cap === undefined ? [] : [`  ${what.padEnd(18)} ${spent === undefined ? '—' : formatUsd(spent)} of ${formatUsd(cap)}`]);
+    const lines = [...line('request budget', s?.request, b.requestUsd), ...line('goal budget', s?.goal, b.goalUsd), ...line('conversation budget', s?.conversation, b.conversationUsd)];
+    return lines.length ? ['Budgets (config budget, or a lower one in .rein/settings.json):', ...lines] : [];
+  }
+
   /** /cost: what this conversation, the latest request and the goal cost at API list prices. */
   costReport(): string {
     const t = this.engine?.sessionTokens ?? {uncached: 0, cached: 0, output: 0};
@@ -98,6 +129,7 @@ export class Runtime {
       `  latest request     ${formatUsd(Math.max(0, t.usd - this.requestStartUsd))}`,
       ...(goal?.startUsd !== undefined ? [`  goal so far        ${formatUsd(Math.max(0, t.usd - goal.startUsd))}  (${goal.status})`] : []),
       'Includes subagents and helper calls (compaction, decisions, the advisor).',
+      ...this.budgetLines(),
     ].join('\n');
   }
 
@@ -473,6 +505,7 @@ Drop superseded reads of the same file, routine listings, and output that no lon
     // A message from the user (not Rein's own follow-up) ends an escalation: routing is normal again.
     if (!/^<(code_check|stop_hook)>/.test(text)) {
       this.requestStartUsd = this.engine?.sessionTokens.usd ?? 0;
+      this.budgetStop = undefined;
       this.escalation = undefined;
       this.verifyPasses = 0;
       this.verifiedAt = undefined;
@@ -847,6 +880,7 @@ Drop superseded reads of the same file, routine listings, and output that no lon
         selectCarry: (input) => this.selectCarry(input),
         pickEffort: (text, levels) => this.pickEffort(text, levels),
         beforePrompt: (text) => this.beforePrompt(text),
+        overBudget: () => this.checkBudget(),
         onTurnEnd: (turn) => this.telemetry.turnEnd({...turn, endedAt: Date.now(), sessionId: this.engine?.transcript.id}),
         onConversationChange: () => {
           this.tools.reads.clear();
