@@ -5,7 +5,7 @@ import {defaultRef} from '../router/index.js';
 import type {Config} from '../store/config.js';
 import type {Engine} from './engine.js';
 import {agentsFiles, systemPrompt} from './prompt.js';
-import {estimateTokens, renderMessages, summaryForModel} from './transcript.js';
+import {estimateTokens, renderMessages, resultTokens, summaryForModel} from './transcript.js';
 import type {ToolSpec} from '../tools/host.js';
 import {SUBAGENT_PROMPT, type Subagent} from '../agents/manager.js';
 
@@ -58,7 +58,7 @@ export async function contextReport(engine: Engine, cfg: Config, toolSpecs: Tool
   const items = [
     ...(await agentsFiles()).map((f) => ({what: `instructions ${f.path}`, tokens: estimateTokens(f.text)})),
     ...(t.summary ? [{what: 'compaction summary', tokens: estimateTokens(summaryForModel(t.summary))}] : []),
-    ...recent.flatMap((m) => m.tools ?? []).map((x) => ({what: `${x.label}(${x.summary.slice(0, 60)})`, tokens: estimateTokens(x.result)})),
+    ...recent.flatMap((m) => m.tools ?? []).map((x) => ({what: `${x.label}(${x.summary.slice(0, 60)})`, tokens: resultTokens(x)})),
   ];
   return {
     model,

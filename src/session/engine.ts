@@ -389,7 +389,7 @@ export class Engine {
           if (a.phase === 'start') toolsRunning++;
           else {
             toolsRunning = Math.max(0, toolsRunning - 1);
-            replyTools.push({label: a.label, summary: a.summary, ok: a.ok, result: clipResult(a.result), diff: a.diff});
+            replyTools.push({label: a.label, summary: a.summary, ok: a.ok, result: clipResult(a.result), size: a.result.length, diff: a.diff});
             fullResults.push(a.result);
             // Crash safety: each finished tool call (and the text before it) goes to the log now.
             void recordProgress(t, t.messages.length, {tool: replyTools.at(-1), text: reply.slice(savedText), model: route.ref, accountId: account.id});

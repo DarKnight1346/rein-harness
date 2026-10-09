@@ -20,7 +20,8 @@ export type Message = {
   /** Rebuilt after Rein stopped mid-turn (crash, killed terminal): the reply and tool calls so far. */
   cutOff?: boolean;
   /** Tool calls made while producing this reply (kept for the record and for session search). */
-  tools?: {label: string; summary: string; ok: boolean; result: string; diff?: DiffLine[]}[];
+  /** `result` is clipped to 4,000 characters; `size` is the full result's length (what the model saw). */
+  tools?: {label: string; summary: string; ok: boolean; result: string; size?: number; diff?: DiffLine[]}[];
   /** Images attached to a user message (files in the session's scratch folder). */
   images?: import('../providers/types.js').ImageInput[];
 };
@@ -333,3 +334,6 @@ export function buildCarry(t: Transcript, coversUpTo: number, upTo: number, budg
   const text = [...head, missing.length ? renderWithTools(missing, from, keep) : '', '</earlier_conversation>'].filter(Boolean).join('\n\n') + '\n\n';
   return {text, overBudget: estimateTokens(textOnly) > budgetTokens};
 }
+
+/** A stored tool result's size in tokens: the full result's (it's stored clipped), estimated. */
+export const resultTokens = (x: {result: string; size?: number}) => (x.size !== undefined ? Math.ceil(x.size / 4) : estimateTokens(x.result));
