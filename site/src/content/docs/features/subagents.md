@@ -120,6 +120,31 @@ When subagents work at the same time, they could overwrite each other's edits. R
 
 Copies live in `~/.rein/worktrees/`, never in your project. Outside a git repository, subagents always edit the project directly. To turn this off: `/settings` → **Agents → Worktrees** → **Off** (`worktrees` in the config).
 
+## Best of both providers
+
+For a task where you'd rather pay twice than get it wrong, `/bestof` runs it on **Claude and Codex at once** and keeps the one that works:
+
+```text title="rein"
+> /bestof make the CSV export stream instead of loading everything into memory
+  ⎿ Running it on Claude (claude:opus) and Codex (codex:gpt-5.5) at once, each in its own worktree…
+    Claude finished (84 lines changed); running npm test in its worktree…
+    Codex finished (61 lines changed); running npm test in its worktree…
+    Kept Codex's result: its tests passed (both passed; it was the smaller change). The other was deleted.
+      · Claude (claude:opus): 84 lines changed, npm test passed
+      ✓ Codex (codex:gpt-5.5): 61 lines changed, npm test passed
+```
+
+Here's what happens:
+
+1. **Two subagents start.** One runs on the best Claude model with room, the other on the best Codex model. Each works in its own [worktree](#parallel-subagents-get-their-own-worktree), made from your project as it is now (uncommitted changes included).
+2. **Neither is merged when it finishes.** Rein runs the test command in each worktree.
+3. **The winner is merged.** The result whose tests pass is merged into your project, like a subagent's work normally is. If both pass, the smaller change wins. The other worktree is deleted.
+4. **If neither passes, neither is kept.** Your project is unchanged, and you see the end of each test run.
+
+The test command is the project's own: the `test` script in `package.json` (run with npm, pnpm, yarn or bun to match the lockfile), `make test`, `cargo test`, `go test ./...` or `pytest`. Name another with `/bestof --test "npm run test:unit" <task>`. With no test command it doesn't start, since it would have nothing to judge by.
+
+It needs a Claude account and a Codex account with room to work, and a git repository. It costs two runs of the task, so it only happens when you ask for it.
+
 ## The completion check
 
 After each subagent turn, the [decision model](../../internals/decision-model/) gets the task, the final report and the last 40 tool calls, and answers one question: *has the subagent fully completed the task it was given? Actually done, not just planned, partially done, or blocked?*

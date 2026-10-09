@@ -20,7 +20,9 @@ import {digestLog, formatDigest} from './tools/logDigest.js';
 import {isTestCommand} from './build/flaky.js';
 import {effectiveBudget, overBudget, type Spend} from './budget.js';
 import {catalog, toRef} from './router/catalog.js';
-import {mergeNote, Worktrees} from './agents/worktrees.js';
+import {mergeNote, repoTop, Worktrees} from './agents/worktrees.js';
+import {shellFor} from './util/platform.js';
+import {bestOf as runBestOf, formatBestOf} from './agents/bestOf.js';
 import type {Origin} from './tools/fs.js';
 import {makeRouter, type AutoRouter} from './router/index.js';
 import {samplingHandler} from './mcp/sampling.js';
@@ -354,6 +356,48 @@ export class Runtime {
     // The branch note is for agents (it names a local path): the issue comment says the branch itself.
     const report = (finished.output || '(no report)').replace(/\n*\[Its work is on the branch [^\]]*\]\s*$/, '').trim();
     return {report: report || '(no report)', branch};
+  }
+
+  /**
+   * /bestof: the task on the best available Claude model and the best Codex model at once, each in
+   * its own worktree; the result that passes the tests is merged into the project.
+   */
+  async bestOf(task: string, testCommand: string, log: (text: string) => void): Promise<string> {
+    const avail = catalog.available(this.config.maxUsedPct);
+    const best = (p: 'claude' | 'codex') => avail.filter((m) => m.provider === p).sort((a, b) => b.tier - a.tier)[0];
+    const pair = [best('claude'), best('codex')];
+    if (!pair[0] || !pair[1]) throw new Error(`/bestof needs a Claude and a Codex account with room to work (${!pair[0] ? 'no Claude model is available' : 'no Codex model is available'}).`);
+    if (!(await repoTop(process.cwd()))) throw new Error("/bestof needs a git repository: each attempt runs in its own worktree.");
+    const contenders = pair.map((m) => {
+      const ref = toRef(m!);
+      return {label: ref.provider === 'claude' ? 'Claude' : 'Codex', model: `${ref.provider}:${ref.model}`};
+    });
+    const result = await runBestOf(
+      {
+        spawn: (t, model, name) => {
+          const {agent, done} = this.agents.spawn({task: t, model, mode: 'new', name, background: true});
+          agent.collected = true; // the outcome is reported by /bestof, not dropped into your conversation
+          return {id: agent.id, done: done.then((a) => ({status: a.status, output: a.output ?? ''}))};
+        },
+        hold: (id) => this.worktrees.hold(id),
+        result: (id) => this.worktrees.heldResult(id),
+        test: async (command, root) => {
+          const sh = shellFor(command);
+          const r = await run(sh.file, sh.args, {cwd: root, timeoutMs: (this.config.shellMaxMinutes || 120) * 60_000}).catch((err) => ({code: 1, stdout: '', stderr: (err as Error).message}));
+          return {ok: r.code === 0, output: `${r.stdout}\n${r.stderr}`.trim()};
+        },
+        release: async (id, keep) => {
+          const r = await this.worktrees.release(id, keep);
+          if (r?.kept) this.tools.addDirs([r.kept]);
+          return r && keep ? mergeNote(r) : undefined;
+        },
+        log,
+      },
+      task,
+      contenders,
+      testCommand,
+    );
+    return formatBestOf(result, testCommand);
   }
 
   /** Tell your phone (config notifyUrl): approvals waiting, work finished, issues done. */

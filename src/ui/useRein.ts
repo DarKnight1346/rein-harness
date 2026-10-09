@@ -63,6 +63,7 @@ import {traceMarkdown} from '../specs/trace.js';
 import {adrDir, listAdrs, newAdr} from '../specs/adr.js';
 import {checkProject, loadArchitecture} from '../tools/architecture.js';
 import {formatRisk, planRisk} from '../plans/risk.js';
+import {detectTestCommand} from '../agents/bestOf.js';
 import {checkoutState, describeCheckout, sparseAdd} from '../workspace/sparse.js';
 import {buildIndex, DEFAULT_MODEL as EMBED_MODEL, formatSemanticHits, loadIndex, semanticSearch} from '../context/semantic.js';
 import {estimateGoalCost} from '../goals/estimate.js';
@@ -1257,6 +1258,29 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
           if (!files.length) return log('info', 'No changes (vs HEAD). /owners <path> looks up a file or folder.');
           log('info', `Owners of ${arg || `your ${files.length} changed file${files.length === 1 ? '' : 's'}`}:\n${formatOwners(await ownersOf(root, files))}`);
         });
+        break;
+      }
+      case 'bestof': {
+        const root = process.cwd();
+        let arg = parsed.args.trim();
+        const flag = arg.match(/^--test\s+(?:"([^"]+)"|'([^']+)'|(\S+))\s*/);
+        const test = flag ? (flag[1] ?? flag[2] ?? flag[3])! : detectTestCommand(root);
+        if (flag) arg = arg.slice(flag[0].length);
+        if (!arg) {
+          log('error', 'Usage: /bestof [--test "<command>"] <task>. It runs the task on Claude and Codex at once and keeps the result that passes the tests.');
+          break;
+        }
+        if (!test) {
+          log('error', "/bestof judges the results by the project's tests, and none was found (package.json test script, make test, pytest, go test, cargo test). Name one: /bestof --test \"<command>\" <task>");
+          break;
+        }
+        void runtime.bestOf(attachments.current.expand(arg).text, test, (line) => log('info', line)).then(
+          (summary) => {
+            log('info', summary);
+            bump();
+          },
+          (err) => log('error', (err as Error).message),
+        );
         break;
       }
       case 'risk': {

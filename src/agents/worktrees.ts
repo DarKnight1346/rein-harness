@@ -328,6 +328,8 @@ export async function mergeInto(top: string, base: string, result: string, linke
 export class Worktrees {
   private byAgent = new Map<number, Worktree>();
   private pending = new Map<number, Promise<Worktree | undefined>>();
+  /** /bestof: agents whose worktree isn't merged when they finish; `release` keeps or drops it later. */
+  private held = new Map<number, Worktree | undefined>();
   private top: Promise<string | undefined> | undefined;
 
   constructor(private readonly root: string, private readonly sessionId: () => string | undefined = () => undefined) {}
@@ -365,7 +367,8 @@ export class Worktrees {
     const wt: Worktree = {root: sub ? path.join(dir, sub) : dir, dir, base: commit, linked, writable: [gitDir, path.join(common, 'objects')]};
     // Beside the worktree (never inside it: it would be merged back): lets a later start finish the
     // job if this process dies first.
-    writeFileSync(`${dir}.json`, JSON.stringify({top, base: commit, linked: [...linked], pid: process.pid}));
+    // A /bestof contender isn't recovered: merging it unasked is what holding it prevents.
+    if (!this.held.has(agentId)) writeFileSync(`${dir}.json`, JSON.stringify({top, base: commit, linked: [...linked], pid: process.pid}));
     this.byAgent.set(agentId, wt);
     return wt;
   }
@@ -403,6 +406,11 @@ export class Worktrees {
    */
   async settle(agentId: number): Promise<MergeResult | undefined> {
     await this.pending.get(agentId);
+    if (this.held.has(agentId)) {
+      this.held.set(agentId, this.byAgent.get(agentId));
+      this.byAgent.delete(agentId);
+      return undefined;
+    }
     const wt = this.byAgent.get(agentId);
     if (!wt) return undefined;
     this.byAgent.delete(agentId);
@@ -450,8 +458,35 @@ export class Worktrees {
     return out;
   }
 
+  /** Don't merge this agent's worktree when it finishes (/bestof decides which one to keep). */
+  hold(agentId: number): void {
+    this.held.set(agentId, undefined);
+  }
+
+  /** A held agent's worktree once it finished, and how many lines it changed. Undefined if it changed nothing. */
+  async heldResult(agentId: number): Promise<{root: string; lines: number} | undefined> {
+    const wt = this.held.get(agentId);
+    if (!wt) return undefined;
+    const {commit} = await snapshot(wt.dir, wt.linked);
+    const stat = await git(wt.dir, ['diff', '--shortstat', wt.base, commit]).catch(() => '');
+    const lines = Number(stat.match(/(\d+) insertion/)?.[1] ?? 0) + Number(stat.match(/(\d+) deletion/)?.[1] ?? 0);
+    return lines ? {root: wt.root, lines} : undefined;
+  }
+
+  /** Merge a held worktree into the project (keep) or delete it. */
+  async release(agentId: number, keep: boolean): Promise<MergeResult | undefined> {
+    const wt = this.held.get(agentId);
+    this.held.delete(agentId);
+    if (!wt) return undefined;
+    const top = (await (this.top ??= repoTop(this.root)))!;
+    if (!keep) return finishMerged(top, wt.dir, [], [], wt.linked);
+    const {commit} = await snapshot(wt.dir, wt.linked);
+    return finish(top, wt.dir, wt.base, commit, wt.linked);
+  }
+
   /** Session end: settle what's left (merging keeps the work, as if it had been done in place). */
   async settleAll(): Promise<void> {
+    for (const id of [...this.held.keys()]) await this.release(id, false).catch(() => undefined); // undecided: the project keeps what it has
     for (const id of [...this.byAgent.keys()]) await this.settle(id).catch(() => undefined);
   }
 }
