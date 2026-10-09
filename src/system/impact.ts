@@ -1,3 +1,4 @@
+import {realpathSync} from 'node:fs';
 import path from 'node:path';
 import {ripgrep} from '../tools/fs.js';
 import {run} from '../util/proc.js';
@@ -12,7 +13,16 @@ import type {Service} from './services.js';
  * API references); exported functions and types from the diff (followed through the SCIP indexes,
  * else a whole-word search in the other services).
  */
-export type Impact = {what: string; kind: 'endpoint' | 'rpc' | 'symbol'; breaking: boolean; changes: string[]; callers: Place[]};
+export type Impact = {what: string; kind: 'endpoint' | 'rpc' | 'symbol'; breaking: boolean; changes: string[]; callers: Place[]; home?: string};
+
+/** The real path, so git's spelling of a folder and the OS's (short names, symlinks, slashes) compare equal. */
+const real = (p: string) => {
+  try {
+    return realpathSync.native(p);
+  } catch {
+    return path.resolve(p);
+  }
+};
 
 const git = async (cwd: string, ...a: string[]) => (await run('git', a, {cwd, timeoutMs: 60_000}).catch(() => undefined))?.stdout ?? '';
 
@@ -82,7 +92,8 @@ export async function impactReport(root: string, services: Service[]): Promise<{
     const mb = (await git(top, 'merge-base', 'HEAD', base === 'HEAD' ? 'HEAD' : base)).trim() || 'HEAD';
     for (const e of await changedExports(top, mb)) {
       if (items.some((i) => i.what === e.name)) continue;
-      items.push({what: e.name, kind: 'symbol', breaking: false, changes: [`changed in ${path.relative(root, path.join(top, e.file)).split(path.sep).join('/') || e.file}`], callers: []});
+      const home = real(path.join(top, e.file));
+      items.push({what: e.name, kind: 'symbol', breaking: false, changes: [`changed in ${path.relative(real(root), home).split(path.sep).join('/') || e.file}`], callers: [], home});
     }
   }
   const symbols = buildSymbolGraph(services);
@@ -92,12 +103,11 @@ export async function impactReport(root: string, services: Service[]): Promise<{
       item.callers = r?.consumers ?? [];
       continue;
     }
-    const home = item.changes[0]!.replace(/^changed in /, '');
     const scip = symbols.repos.length ? lookup(symbols, item.what, 1)[0] : undefined;
     if (scip) item.callers = scip.refs.map((r) => ({service: r.repo, file: r.file, line: r.line, text: ''}));
     else
       for (const s of services) {
-        if (path.join(root, home).startsWith(s.dir + path.sep)) continue; // its own service
+        if (item.home?.startsWith(real(s.dir) + path.sep)) continue; // its own service
         for (const u of await wordUses(s.dir, item.what)) item.callers.push({service: s.name, file: path.relative(root, path.join(s.dir, u.file)).split(path.sep).join('/'), line: u.line, text: u.text});
       }
   }
