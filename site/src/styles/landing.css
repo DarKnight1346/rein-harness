@@ -299,6 +299,7 @@ section { padding: 0 clamp(16px, 4vw, 48px); }
 .mini-grid a:hover { border-color: #3a3a4a; background: rgba(255,255,255,.03); }
 .mini-grid b { font-size: 15px; }
 .mini-grid span { color: var(--dim); font-size: 13.5px; font-family: var(--mono); }
+.mini-grid span.progress { margin-top: auto; color: #4cc9ff; font-size: 12.5px; }
 @media (max-width: 900px) { .mini-grid { grid-template-columns: 1fr 1fr; } }
 @media (max-width: 640px) { .mini-grid { grid-template-columns: 1fr; } }
 
