@@ -1,9 +1,9 @@
 ---
 title: Configuration
-description: Every key in ~/.rein/config.json with its type, default, meaning and the screen that sets it, plus a full example and the ten /settings tabs.
+description: Every key in ~/.rein/config.json with its type, default, meaning and the screen that sets it, plus a full example and the /settings tabs.
 ---
 
-Rein keeps its settings in one small JSON file, `~/.rein/config.json` (or `$REIN_HOME/config.json`). Almost everything in it has a screen: `/model` for models, `/settings` for behaviour, `/tui` and `Ctrl+B` for layout. A few tuning knobs are file-only. Changes made in the UI save immediately and apply live, with no restart needed.
+Rein keeps its settings in one small JSON file, `~/.rein/config.json` (or `$REIN_HOME/config.json`). Every key can be changed inside Rein: `/model` for models, `/settings` for behaviour, `/tui` and `Ctrl+B` for layout, and **`/settings <key> <value>`** or **`/settings` → Advanced** for any key, including the tuning knobs. Changes made in Rein save immediately and apply live, with no restart needed.
 
 ```json title="~/.rein/config.json"
 {
@@ -19,7 +19,7 @@ Rein keeps its settings in one small JSON file, `~/.rein/config.json` (or `$REIN
 Any key you leave out falls back to its default. Rein reads the file as `{...defaults, ...yourFile}` (`loadConfig` in `src/store/config.ts`), so a partial file is fine, and unknown keys are ignored.
 
 :::tip
-You rarely need to edit this file by hand. Use `/model` and `/settings`. Edit the file for the file-only keys below, then restart Rein (it reads the file at startup).
+You rarely need to edit this file by hand. `/settings keys` lists every key; `/settings <key>` explains one; `/settings <key> <value>` changes it (`true`/`false`, a number, one of the listed choices, a comma-separated list, or JSON for objects); `/settings <key> reset` restores the default. If you do edit the file, restart Rein (it reads the file at startup).
 :::
 
 ## Models
@@ -30,14 +30,14 @@ These are set in [`/model`](../../features/routing/). Model values are refs of t
 | --- | --- | --- | --- | --- |
 | `chatModel` | string | unset | The model that answers you. `"auto"` routes each message through the decision model; a ref pins one model. Unset means the provider default (Claude's default model if you have a Claude account, else Codex's default). | `/model` → Chat model, `/model <name>` |
 | `chatEffort` | string | `"auto"` | Reasoning effort for the chat model. `"auto"` lets the decision model pick a level, but only when the prompt cache is cold anyway. `"default"` uses the model's own default. A level (`low`, `medium`, `high`, `xhigh`, `max`, `ultra`) is clamped to the closest level the model supports at or below it. | `/model` → effort picker after choosing a chat model |
-| `defaultModel` | string | unset | Fallback when auto routing isn't confident (below `autoMinConfidence`) or nothing is pinned. Unset means the provider default. | File only |
+| `defaultModel` | string | unset | Fallback when auto routing isn't confident (below `autoMinConfidence`) or nothing is pinned. Unset means the provider default. | `/settings <key>`, `/settings` → Advanced |
 | `decisionModel` | string | `"cheapest"` | Routes `auto`, judges approvals in auto mode, checks goals and subagents. `"jev"`, `"cheapest"` or a ref. `"jev"` with no Jev key behaves like `"cheapest"`. Any Jev failure falls back to the cheapest model. | `/model` → Decision model |
 | `compactionModel` | string | `"cheapest"` | Summarizes the conversation (`/compact`, auto-compact, handoffs) and picks which tool results travel when a conversation moves. `"cheapest"` or a ref. | `/model` → Compaction model |
 | `advisorModel` | string | `"off"` | The stronger model agents can consult with the `advisor` tool. `"off"` hides the tool entirely. Never auto. | `/model` → Advisor |
 | `webModel` | string | `"cheapest"` | Runs `web_search` with its provider's built-in search, and answers `web_fetch` prompts. | `/model` → Web |
 | `subagentModel` | string | `"auto"` | Your model for `new`-mode subagents. `"auto"` means you haven't chosen one. Forks always keep the parent's model. | `/model` → Subagents |
 | `subagentPriority` | `"user"` \| `"agent"` | `"user"` | Order used to choose a new subagent's model. `user`: your model, then the agent's choice, then auto. `agent`: the agent's choice, then your model, then auto. | `/model` → Subagent priority |
-| `jevModel` | string | `"jev-1.13.0"` | The pinned Jev model id. Pinning keeps the decision thresholds calibrated. | File only |
+| `jevModel` | string | `"jev-1.13.0"` | The pinned Jev model id. Pinning keeps the decision thresholds calibrated. | `/settings <key>`, `/settings` → Advanced |
 
 "Cheapest available" is the lowest cost tier that has a healthy account, with ties going to the account with the most room. It re-resolves automatically as accounts hit limits. See [the decision model](../../internals/decision-model/).
 
@@ -50,9 +50,9 @@ Changing `advisorModel`, `subagentModel` or `subagentPriority` changes which too
 | Key | Type | Default | Meaning | Set in |
 | --- | --- | --- | --- | --- |
 | `loadBalancing` | `"balanced"` \| `"sticky"` | `"balanced"` | `balanced` moves a conversation to a better account only at cache-cold moments or near a limit. New chats and subagents start on the least-used account. `sticky` stays on one account until it is limited. | `/settings` → Load balancing |
-| `autoSwitchThreshold` | number (0–1) | `0.7` | Mid-conversation, auto routing switches models only when the decider's "is this a different kind of task?" probability is at least this. Below it, the current model keeps the conversation (and its warm cache). | File only |
-| `autoMinConfidence` | number (0–1) | `0.45` | Below this confidence in its model choice, auto routing uses the default model instead. | File only |
-| `maxUsedPct` | number (0–100) | `98` | An account counts as exhausted at this used %. An account is healthy only while its tightest window has more than `100 − maxUsedPct` points of headroom. An account with no usage data yet counts as 50% headroom, so it stays healthy. | File only |
+| `autoSwitchThreshold` | number (0–1) | `0.7` | Mid-conversation, auto routing switches models only when the decider's "is this a different kind of task?" probability is at least this. Below it, the current model keeps the conversation (and its warm cache). | `/settings <key>`, `/settings` → Advanced |
+| `autoMinConfidence` | number (0–1) | `0.45` | Below this confidence in its model choice, auto routing uses the default model instead. | `/settings <key>`, `/settings` → Advanced |
+| `maxUsedPct` | number (0–100) | `98` | An account counts as exhausted at this used %. An account is healthy only while its tightest window has more than `100 − maxUsedPct` points of headroom. An account with no usage data yet counts as 50% headroom, so it stays healthy. | `/settings <key>`, `/settings` → Advanced |
 
 How these play together is covered in [load balancing](../../internals/load-balancing/) and [routing](../../features/routing/).
 
@@ -62,30 +62,30 @@ How these play together is covered in [load balancing](../../internals/load-bala
 | --- | --- | --- | --- | --- |
 | `toolApproval` | `"ask"` \| `"auto"` \| `"bypass"` | `"ask"` | What happens when the agent calls a tool that changes things: file writes, edits and deletes, plus `shell`, `image_generate`, `mcp_add`/`mcp_remove` and MCP tools without `readOnlyHint`. `ask` prompts you. `auto` lets the decision model allow changes that clearly match your request (p ≥ 0.85) and asks you about everything else. It never auto-denies. `bypass` allows all, except credentials outside the project, which always ask. Also the default for `rein -p --permission-mode`. | `/settings` → Approvals |
 | `worktrees` | string | `"auto"` | `auto`: subagents working alongside other work get their own git worktree, merged back when they finish. `off`: subagents always edit the project directly. | `/settings` → Worktrees |
-| `lsp` | `"auto"` \| `"off"` | `"auto"` | Built-in [code intelligence](../../features/code-intelligence/): Rein runs language servers itself and, when the agent finishes a turn, sends back problems its changes left. `"off"` never starts one. | `~/.rein/config.json` |
-| `lspIdleMinutes` | number | `10` | Stop a built-in language server after this many minutes unused. | `~/.rein/config.json` |
-| `prices` | object | `{}` | USD per million tokens for models without a built-in price, or to replace one: `{"codex:my-model": {"input": 1.5, "cached": 0.15, "output": 6}}` (`write5m`, `write1h` optional). See [Cost & budgets](../../features/cost/). | `~/.rein/config.json` |
-| `otel` | object | unset (off) | OpenTelemetry export of turns, tool calls, tokens and cost: `{"endpoint": "http://localhost:4318", "headers": {…}, "serviceName": "rein"}`. Metadata only. See [Observability](../../features/observability/). | `~/.rein/config.json` |
-| `experiments` | string[] | `[]` | Efficiency experiments to turn on by name, or `-name` to turn a default one off; see [Experiments](#experiments). | `~/.rein/config.json` |
-| `lspServers` | object | — | Use your own server command instead of Rein's, per server id: `{"python": {"command": "/path/to/server", "args": ["--stdio"]}}`. | `~/.rein/config.json` |
+| `lsp` | `"auto"` \| `"off"` | `"auto"` | Built-in [code intelligence](../../features/code-intelligence/): Rein runs language servers itself and, when the agent finishes a turn, sends back problems its changes left. `"off"` never starts one. | `/settings <key>`, `/settings` → Advanced |
+| `lspIdleMinutes` | number | `10` | Stop a built-in language server after this many minutes unused. | `/settings <key>`, `/settings` → Advanced |
+| `prices` | object | `{}` | USD per million tokens for models without a built-in price, or to replace one: `{"codex:my-model": {"input": 1.5, "cached": 0.15, "output": 6}}` (`write5m`, `write1h` optional). See [Cost & budgets](../../features/cost/). | `/settings <key>`, `/settings` → Advanced |
+| `otel` | object | unset (off) | OpenTelemetry export of turns, tool calls, tokens and cost: `{"endpoint": "http://localhost:4318", "headers": {…}, "serviceName": "rein"}`. Metadata only. See [Observability](../../features/observability/). | `/settings <key>`, `/settings` → Advanced |
+| `experiments` | string[] | `[]` | Efficiency experiments to turn on by name, or `-name` to turn a default one off; see [Experiments](#experiments). | `/settings <key>`, `/settings` → Advanced |
+| `lspServers` | object | — | Use your own server command instead of Rein's, per server id: `{"python": {"command": "/path/to/server", "args": ["--stdio"]}}`. | `/settings <key>`, `/settings` → Advanced |
 | `waitForLimits` | boolean | `true` | When every account for the model is at its limit and no other model can take over, wait for the earliest reset (up to 12 hours) and continue the turn. `false` stops with `Every account for … is at its limit`. | `/settings` → Limits |
-| `steerShell` | boolean | `true` | Run the agent's simple shell reads and searches (`cat F`, `head`/`tail`, `sed -n 'A,Bp' F`, `ls`, `grep -rn`, `rg`, `find -name`) as the built-in `read` / `list` / `search` tools. See [Tools](../../features/tools/#reads-and-searches-run-as-tools). | `~/.rein/config.json` |
-| `mcpSampling` | `"ask"` \| `"allow"` \| `"off"` | `"ask"` | MCP servers asking for a completion ([sampling](../../features/mcp/#sampling-servers-can-use-your-models)) get one from your subscriptions: after you approve each server, without asking, or never. | `~/.rein/config.json` |
-| `inlineImages` | `"auto"` \| `"off"` | `"auto"` | Show images the agent generates or reads in the terminal, where it can draw them (kitty, Ghostty; iTerm2 and WezTerm in the classic renderer). See [Seeing images in the terminal](../../features/web-and-images/#seeing-images-in-the-terminal). | `~/.rein/config.json` |
-| `rtl` | `"auto"` \| `"on"` \| `"off"` | `"auto"` | Lay out right-to-left text (Hebrew, Arabic) for display in terminals that don't do it themselves. See [Math and right-to-left text](../../features/tui/#math-and-right-to-left-text). | `~/.rein/config.json` |
-| `remoteHost` | string | `"127.0.0.1"` | Address the [remote page](../../features/remote/) listens on. The default is this computer only; `"0.0.0.0"` is your network (Rein warns). | `~/.rein/config.json` |
-| `remotePort` | number | `7377` | Port of the remote page. | `~/.rein/config.json` |
-| `trackers` | array | `[]` | [Issue trackers](../../features/trackers/) that hand work to Rein: `{kind: "github" \| "linear" \| "gitlab" \| "azure" \| "jira", project, url, email, label, model}`. Tokens go in the vault. | `~/.rein/config.json` |
-| `trackerPollMinutes` | number | `2` | How often Rein looks for new issues. | `~/.rein/config.json` |
-| `notifyUrl` | string | `""` | Notifications on your phone: a URL Rein POSTs to when an approval has waited 30 s, and when work that took a while is done. [ntfy](https://ntfy.sh) (`https://ntfy.sh/your-topic`), Slack and Discord incoming webhooks are formatted for them; anything else gets `{"title", "message"}` JSON. See [Phone notifications](../../features/tui/#phone-notifications). | `~/.rein/config.json` |
+| `steerShell` | boolean | `true` | Run the agent's simple shell reads and searches (`cat F`, `head`/`tail`, `sed -n 'A,Bp' F`, `ls`, `grep -rn`, `rg`, `find -name`) as the built-in `read` / `list` / `search` tools. See [Tools](../../features/tools/#reads-and-searches-run-as-tools). | `/settings <key>`, `/settings` → Advanced |
+| `mcpSampling` | `"ask"` \| `"allow"` \| `"off"` | `"ask"` | MCP servers asking for a completion ([sampling](../../features/mcp/#sampling-servers-can-use-your-models)) get one from your subscriptions: after you approve each server, without asking, or never. | `/settings <key>`, `/settings` → Advanced |
+| `inlineImages` | `"auto"` \| `"off"` | `"auto"` | Show images the agent generates or reads in the terminal, where it can draw them (kitty, Ghostty; iTerm2 and WezTerm in the classic renderer). See [Seeing images in the terminal](../../features/web-and-images/#seeing-images-in-the-terminal). | `/settings <key>`, `/settings` → Advanced |
+| `rtl` | `"auto"` \| `"on"` \| `"off"` | `"auto"` | Lay out right-to-left text (Hebrew, Arabic) for display in terminals that don't do it themselves. See [Math and right-to-left text](../../features/tui/#math-and-right-to-left-text). | `/settings <key>`, `/settings` → Advanced |
+| `remoteHost` | string | `"127.0.0.1"` | Address the [remote page](../../features/remote/) listens on. The default is this computer only; `"0.0.0.0"` is your network (Rein warns). | `/settings <key>`, `/settings` → Advanced |
+| `remotePort` | number | `7377` | Port of the remote page. | `/settings <key>`, `/settings` → Advanced |
+| `trackers` | array | `[]` | [Issue trackers](../../features/trackers/) that hand work to Rein: `{kind: "github" \| "linear" \| "gitlab" \| "azure" \| "jira", project, url, email, label, model}`. Tokens go in the vault. | `/settings <key>`, `/settings` → Advanced |
+| `trackerPollMinutes` | number | `2` | How often Rein looks for new issues. | `/settings <key>`, `/settings` → Advanced |
+| `notifyUrl` | string | `""` | Notifications on your phone: a URL Rein POSTs to when an approval has waited 30 s, and when work that took a while is done. [ntfy](https://ntfy.sh) (`https://ntfy.sh/your-topic`), Slack and Discord incoming webhooks are formatted for them; anything else gets `{"title", "message"}` JSON. See [Phone notifications](../../features/tui/#phone-notifications). | `/settings <key>`, `/settings` → Advanced |
 | `attribution` | boolean | `true` | Commits and pull requests the agent writes end with the line `Co-Authored by [Rein Harness](https://github.com/DarKnight1346/rein-harness)` (Rein's system prompt asks for it). `false` drops the instruction. | `/settings` → Attribution |
-| `voiceModel` | string | `"base.en-q5_1"` | The whisper.cpp model for [voice input](../../features/voice/). English-only by default; `"base-q5_1"`, `"small-q5_1"` and so on understand other languages. Run `/voice setup` after changing it to download it. | `~/.rein/config.json` |
+| `voiceModel` | string | `"base.en-q5_1"` | The whisper.cpp model for [voice input](../../features/voice/). English-only by default; `"base-q5_1"`, `"small-q5_1"` and so on understand other languages. Run `/voice setup` after changing it to download it. | `/settings <key>`, `/settings` → Advanced |
 | `collapsePastes` | boolean | `true` | Big pastes (more than 3 lines or 800 characters) show in the input as a `[Pasted text #1 +40 lines]` placeholder and are sent in full with your message. `false` pastes the text into the input as-is. | `/settings` → Paste |
 | `apiAccounts` | string | `"fallback"` | When pay-per-use API accounts (Console, Bedrock, Vertex, OpenAI key) are used. `fallback`: only when no subscription account can serve the model. `always`: alongside subscriptions, after them. Subscriptions always come first. | `/settings` → API accounts |
 | `sandbox` | string | `"write"` | OS sandbox around the agent's shell commands. `write`: commands can only write inside the project, its working directories, the session scratchpad, temp folders and package caches (git hooks/config and agent/editor settings stay read-only). `strict`: the same, and no network except localhost. `off`: no sandbox. macOS uses `sandbox-exec`, Linux bubblewrap; Windows runs unsandboxed. | `/settings` → Sandbox |
 | `shellMaxMinutes` | number | `120` | Longest a foreground shell command may run. The agent picks a timeout per command (2 minutes by default) up to this cap. `0` = no limit. Background commands have no limit. | `/settings` → Shell |
-| `backgroundCheckMinutes` | number | `60` | Every this many minutes of a background command's life, a fork of the agent (like `/btw`) checks whether it's still needed and stops it if not. Unsure keeps it running. `0` = off. | `~/.rein/config.json` |
-| `additionalDirectories` | string[] | `[]` | Extra working directories. Tools use them without asking, like the project folder. Relative paths resolve against the project, `~/` against your home folder. Directories that don't exist are skipped. | File only (per session: `/add-dir`, `rein --add-dir`) |
+| `backgroundCheckMinutes` | number | `60` | Every this many minutes of a background command's life, a fork of the agent (like `/btw`) checks whether it's still needed and stops it if not. Unsure keeps it running. `0` = off. | `/settings <key>`, `/settings` → Advanced |
+| `additionalDirectories` | string[] | `[]` | Extra working directories. Tools use them without asking, like the project folder. Relative paths resolve against the project, `~/` against your home folder. Directories that don't exist are skipped. | `/settings <key>`, `/settings` → Advanced (per session: `/add-dir`, `rein --add-dir`) |
 | `subagentLimit` | number | `10` | How many subagents may run at once. The agent is told the limit. | `/settings` → Subagents |
 | `goalMaxRounds` | number | `0` | Automatic continuations a `/goal` may take before it pauses itself. `0` = unlimited. | `/settings` → Goals |
 | `autoCompactPct` | number | `80` | Auto-compact when the context reaches this % of the model's window, including in the middle of a turn (the agent carries on from the summary). `0` = off (only `/compact`, or when a model rejects a full context). | `/settings` → Compaction |
@@ -144,6 +144,7 @@ Valid `sidebarSections` ids: `agents`, `accounts`, `models` (chat model picker),
 | **Updates** | `autoUpdate` | Auto-update Rein *(default)* · Only when I run `/update` |
 | **Privacy** | `hidePersonalInfo` | Hide personal info *(default)* · Show emails and paths |
 | **Compaction** | `autoCompactPct` | Off · 50 · 60 · 70 · 80% *(default)* · 90 · 95% |
+| **Advanced** | every key | The whole config file as a list: `Enter` cycles a choice or on/off, or opens an editor for text, numbers, lists (comma-separated) and JSON; `r` resets the key to its default |
 
 ## A full example
 

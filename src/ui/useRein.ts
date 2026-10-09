@@ -55,6 +55,7 @@ import {readFileSync} from 'node:fs';
 import {accountName, hidingIdentity, redact} from './privacy.js';
 import nodePath from 'node:path';
 import {cloneMissing, findWorkspace} from '../workspace/index.js';
+import {CONFIG_KEYS, defaultValue, formatValue, keyInfo, parseValue} from '../store/configKeys.js';
 
 export const VERSION = reinVersion();
 
@@ -1468,6 +1469,35 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
             log('info', `Imported ${r.written.length} settings files${r.backedUp.length ? ` (your previous ${r.backedUp.join(', ')} kept as *.before-import)` : ''}. Restart Rein to load them all.`);
           } catch (err) {
             log('error', `Couldn't import: ${(err as Error).message}`);
+          }
+          break;
+        }
+        // /settings keys · /settings <key> [<value> | reset]: any key in config.json, from the prompt.
+        if (sub) {
+          const cur = runtime.config as unknown as Record<string, unknown>;
+          if (sub === 'keys') {
+            log('info', ['Every setting (~/.rein/config.json). /settings <key> explains one, /settings <key> <value> changes it, /settings → Advanced edits them in a list.', ...CONFIG_KEYS.map((i) => `  ${i.key.padEnd(24)} ${formatValue(i, cur[i.key])}`)].join('\n'));
+            break;
+          }
+          const info = keyInfo(sub);
+          if (!info) {
+            log('error', `No setting "${sub}". /settings keys lists them all.`);
+            break;
+          }
+          const text = parsed.args.trim().slice(sub.length).trim();
+          if (!text) {
+            const choices = info.kind === 'enum' ? `\n  one of: ${info.choices.join(', ')}` : info.kind === 'list' ? '\n  a comma-separated list' : info.kind === 'json' ? '\n  JSON' : '';
+            log('info', `${info.key}: ${formatValue(info, cur[info.key])}\n  ${info.description}${choices}\n  default: ${formatValue(info, defaultValue(info.key))}`);
+            break;
+          }
+          try {
+            const value = text === 'reset' ? defaultValue(info.key) : parseValue(info, text);
+            void runtime.setConfig({[info.key]: value}).then(() => {
+              log('info', `${info.key} = ${formatValue(info, value)}${text === 'reset' ? ' (default)' : ''}`);
+              bump();
+            });
+          } catch (err) {
+            log('error', (err as Error).message);
           }
           break;
         }

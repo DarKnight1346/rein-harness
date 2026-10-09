@@ -93,7 +93,8 @@ See [Goals](../../features/goals/) and [Plan mode](../../features/plans/).
 
 | Command | Arguments | What it does |
 |---|---|---|
-| `/settings` | — | Settings in tabs: Status line, Sidebar, Approvals, Sandbox, Shell, Subagents, Goals, Load balancing, Paste, Limits, Attribution, Worktrees, API accounts, Notifications, Updates, Privacy, Compaction. |
+| `/settings` | — | Settings in tabs: Status line, Sidebar, Approvals, Sandbox, Shell, Subagents, Goals, Load balancing, Paste, Limits, Attribution, Worktrees, API accounts, Notifications, Updates, Privacy, Compaction, and Advanced (every key in `~/.rein/config.json`, edited in place). |
+| `/settings` | `keys` · `<key> [<value> \| reset]` | Any setting in `~/.rein/config.json` from the prompt: `keys` lists them all, `<key>` explains one (meaning, choices, default), `<key> <value>` sets it (`true`/`false`, a number, a listed choice, a comma-separated list, or JSON), `<key> reset` restores the default. Applies live. See [Configuration](../configuration/). |
 | `/settings` | `export [file]` · `import <file>` | Settings in tabs: Status line, Sidebar, Approvals, Sandbox, Shell, Subagents, Goals, Load balancing, Paste, Attribution, Worktrees, API accounts, Notifications, Updates, Privacy, Compaction. |
 | `/tui` | `fullscreen` \| `classic` | Switches renderer and carries the conversation over. With no argument, shows which renderer is active. *Waits for idle.* |
 | `/update` | — | Updates the `claude` and `codex` CLIs, checks the Codex app-server protocol, then updates Rein. *Waits for idle.* |

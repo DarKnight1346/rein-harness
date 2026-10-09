@@ -57,6 +57,8 @@ node scripts/check-docs.mjs   # docs drift check, also runs in CI
 - Add or update tests for behaviour changes. Use the fake CLIs; never call real accounts from tests.
 - Branch from `main` and open a PR. Every merge to `main` publishes the next patch to npm automatically
   (`.github/workflows/publish.yml`), so `main` must always be releasable.
+- Every config key must be changeable inside Rein, not only in the file: add it to `CONFIG_KEYS` in
+  `src/store/configKeys.ts` (`/settings <key> <value>` and `/settings` → Advanced read it; a test fails on a missing key).
 - Pin GitHub Actions to full commit SHAs with a version comment. The repo is scored by OpenSSF Scorecard.
 - Using a new part of Codex's app-server protocol (a method, notification or field)? Add it to `REQUIRED` in
   `src/providers/codex/compat.ts`, so Rein switches Codex off cleanly on a release that lacks it instead of
