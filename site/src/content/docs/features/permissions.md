@@ -36,6 +36,7 @@ Approvals decide *whether* a command runs. The sandbox limits *what it can do* o
 |---|---|
 | **On** (`write`, default) | can only write inside the project, its working directories (including `/add-dir` folders), the session scratchpad, temp folders and package-manager caches (`~/.npm`, `~/.cache`, `~/.cargo`…). Reading and the network work as usual. |
 | **Strict** | the same, and no network except `localhost` (local dev servers and databases keep working). |
+| **Container** | run in a [Docker or Podman container of their own](../system/#a-container-per-task) for each conversation, with the project mounted and the network limited to an allowlist (none by default). Without a running container runtime, **On** applies instead. |
 | **Off** | run with no sandbox: approvals are the only guard. |
 
 Even inside the project, files that could run code *outside* the sandbox later stay read-only: `.git/hooks`, `.git/config`, `.gitmodules`, `.mcp.json`, `.claude/` and `.rein/` settings, `.vscode/`, `.idea/`. So `git init` and `git config` need to run unsandboxed.

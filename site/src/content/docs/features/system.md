@@ -172,6 +172,33 @@ Without a name, these work on the newest change set. Testing in dependency order
 
 **Annotated:** the **Notes** section is yours. It sits between `<!-- rein:notes -->` markers and regeneration never touches it. `/codemap annotate` has the agent read each service without notes and write a few sentences: what it's for, how a request moves through it, what it depends on and why, and what surprises newcomers. Everything else on the page is generated.
 
+## A container per task
+
+The OS sandbox limits where commands write. For unattended work on code you don't fully trust, you can go further: with `sandbox: "container"` (`/settings` → General → Sandbox → Container), each conversation's commands run in a **container of their own**, with Docker or Podman.
+
+```json title="~/.rein/config.json"
+{
+  "sandbox": "container",
+  "containerSandbox": {
+    "image": "node:22-bookworm",
+    "egress": ["registry.npmjs.org", "*.github.com"]
+  }
+}
+```
+
+**The container:** it starts with the first command, from `image` (default `node:22-bookworm`; use one with your project's toolchain). The project and the [workspace](../workspaces/) repos are mounted at their own paths, so file paths are the same inside and out. Each command runs with `docker exec` (or `podman exec`) from the folder it was given. Nothing else on your machine is visible: not your home folder, your SSH keys or your environment variables.
+
+**The network:**
+
+- **No `egress`:** the container has no network at all (`--network none`).
+- **With `egress`:** it sits on an internal network with no way out except a small proxy container, which lets through only the listed hosts (exact names, or `*.example.com`). Everything else gets *403, not on this task's egress allowlist*. The proxy works through `HTTP_PROXY` and `HTTPS_PROXY`, which package managers and most tools use.
+
+**Lifetime:** the containers and their network are removed when Rein exits. `runtime` picks `docker` or `podman`; by default it's whichever is running. With neither running, Rein says so once, and commands fall back to the normal OS sandbox (**On**).
+
+:::note
+Rein's own tools (`read`, `edit`, `search`…) work on your machine as usual. The container holds the agent's shell commands: builds, tests, package installs, scripts.
+:::
+
 ## Related
 
 - [Workspaces](../workspaces/): several repos as one system

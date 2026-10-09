@@ -275,8 +275,11 @@ async function shellTool(ctx: ToolContext, args: {command: string; background?: 
   if (args.interactive && args.background) throw new ToolError('interactive commands run in the foreground (the user may need to answer them): drop background');
   const cwd = resolveInRoot(ctx, args.cwd ?? '.');
   await ctx.shells.devEnv?.ready(); // devEnvironment: the container or Nix shell, started once
+  // sandbox container: the conversation's container; if no runtime is there, the OS sandbox stands in.
+  if (ctx.sandbox === 'container') await ctx.shells.box?.ready();
+  const osMode = ctx.sandbox === 'container' ? 'write' : ctx.sandbox;
   // The sandbox may write to the project and every working directory (subagent worktrees included).
-  const sandbox: SandboxSpec | undefined = ctx.sandbox && ctx.sandbox !== 'off' && !args.unsandboxed ? {mode: ctx.sandbox, roots: [ctx.root, ...(ctx.extraRoots ?? [])]} : undefined;
+  const sandbox: SandboxSpec | undefined = osMode && osMode !== 'off' && !args.unsandboxed ? {mode: osMode, roots: [ctx.root, ...(ctx.extraRoots ?? [])]} : undefined;
   const {shell, done} = ctx.shells.start(args.command, {cwd, background: !!args.background, timeoutMs: args.timeout_ms, maxMs: ctx.shellMaxMs, origin: ctx.origin, sandbox, tty: !!args.interactive});
   if (args.background) {
     return {ok: true, text: `Started background shell #${shell.id}${shell.pid ? ` (pid ${shell.pid})` : ''}: ${args.command}\nRead its output with shell_logs {id: ${shell.id}}; stop it with shell_kill {id: ${shell.id}}.`};

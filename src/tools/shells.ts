@@ -99,6 +99,8 @@ export class ShellManager extends EventEmitter {
   extraEnv?: () => Record<string, string>;
   /** devEnvironment: the repo's devcontainer or Nix/devbox shell for the agent's commands. */
   devEnv?: import('../env/devenv.js').DevEnv;
+  /** sandbox "container": the conversation's container. */
+  box?: import('../env/container.js').ContainerBox;
   private nextId = 1;
   private shells = new Map<number, Shell>();
   private procs = new Map<number, ChildProcess | {pid: number}>();
@@ -129,10 +131,11 @@ export class ShellManager extends EventEmitter {
     const shell: Shell = {id: this.nextId++, command, cwd: opts.cwd, background: opts.background, startedAt: Date.now(), status: 'running', lines: [], dropped: 0, origin: opts.origin};
     this.shells.set(shell.id, shell);
     // In the dev container, the container is the boundary: the OS sandbox isn't applied on top.
-    const dev = this.devEnv?.apply(command, opts.cwd);
+    const fromDev = this.devEnv?.apply(command, opts.cwd);
+    const dev = fromDev ?? this.box?.apply(command, opts.cwd);
     const plain = shellFor(dev?.command ?? command);
     const boxed = dev?.container ? undefined : wrap(plain, opts.sandbox);
-    if (dev) shell.devEnv = this.devEnv!.current().kind;
+    if (dev) shell.devEnv = fromDev ? this.devEnv!.current().kind : 'container';
     if (boxed) shell.sandboxed = true;
     const sh = boxed ?? plain;
     if (opts.tty) return this.startTty(shell, sh, {...opts, env: dev?.env});

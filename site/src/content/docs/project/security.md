@@ -59,7 +59,7 @@ Every mutating tool call (writes, edits, deletes, shell commands, MCP adds and r
 
 These are real, and you should know them:
 
-- **The sandbox limits writes, not reads.** By default the agent's commands run in an OS sandbox that confines writes to the project, scratchpad, temp folders and package caches (see [the command sandbox](../../features/permissions/#the-command-sandbox)), but they can read anything you can, with your full environment (including API keys in it), and the network is open unless you choose strict mode. Windows, and Linux without bubblewrap, have no sandbox.
+- **The sandbox limits writes, not reads.** By default the agent's commands run in an OS sandbox that confines writes to the project, scratchpad, temp folders and package caches (see [the command sandbox](../../features/permissions/#the-command-sandbox)), but they can read anything you can, with your full environment (including API keys in it), and the network is open unless you choose strict mode. Windows, and Linux without bubblewrap, have no OS sandbox; the [container sandbox](../../features/system/#a-container-per-task) works wherever Docker or Podman runs, and limits reads and the network too.
 - **Read-only commands auto-run.** The allowlist is conservative, but a command it matches runs without asking.
 - **Private-host blocking is by hostname.** `web_fetch` checks the literal host and IP; it doesn't resolve DNS. A public name that resolves to a private address isn't blocked.
 - **Sensitive-path rules apply outside the project only.** A `.env` inside your project is an ordinary project file the agent can read and edit like any other.
