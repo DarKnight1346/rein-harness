@@ -1,4 +1,4 @@
-import {existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync} from 'node:fs';
+import {mkdirSync, readdirSync, readFileSync, statSync, writeFileSync} from 'node:fs';
 import path from 'node:path';
 
 /**
@@ -66,11 +66,19 @@ export function newAdr(root: string, title: string, date = new Date().toISOStrin
   const n = Math.max(0, ...listAdrs(root).map((a) => a.number)) + 1;
   const rel = `${dir}/${String(n).padStart(4, '0')}-${slug(title)}.md`;
   const file = path.join(root, rel);
-  if (existsSync(file)) throw new Error(`${rel} already exists`);
   mkdirSync(path.dirname(file), {recursive: true});
-  writeFileSync(file, [`# ${n}. ${title.trim()}`, '', `Date: ${date}`, '', '## Status', '', 'Proposed', '', '## Context', '', '', '## Decision', '', '', '## Consequences', '', ''].join('\n'));
+  // wx: refuses if the file appeared meanwhile, instead of checking first and writing after.
+  try {
+    writeFileSync(file, adrTemplate(n, title, date), {flag: 'wx'});
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === 'EEXIST') throw new Error(`${rel} already exists`);
+    throw err;
+  }
   return rel;
 }
+
+const adrTemplate = (n: number, title: string, date: string) =>
+  [`# ${n}. ${title.trim()}`, '', `Date: ${date}`, '', '## Status', '', 'Proposed', '', '## Context', '', '', '## Decision', '', '', '## Consequences', '', ''].join('\n');
 
 /** For plan and spec mode (adr-check): the decisions in force, to check the plan against. */
 export function adrContext(root: string): string | undefined {

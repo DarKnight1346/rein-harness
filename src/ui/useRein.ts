@@ -1353,7 +1353,7 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
         const send = (msg: string) => (chat.busy ? setQueued((q) => [...q, msg]) : void chat.send(msg).then(bump));
         if (!arg) {
           const specs = listSpecs(root);
-          log('info', specs.length ? ['Specs in .rein/specs/:', ...specs.map((s) => `  ${describeSpec(s).replace('\n', '\n  ')}`), '/spec resume <name> picks one up.'].join('\n') : 'No specs yet. /spec <what to build> writes one: requirements, design, then tasks, each approved by you.');
+          log('info', specs.length ? ['Specs in .rein/specs/:', ...specs.map((s) => `  ${describeSpec(s).replaceAll('\n', '\n  ')}`), '/spec resume <name> picks one up.'].join('\n') : 'No specs yet. /spec <what to build> writes one: requirements, design, then tasks, each approved by you.');
           break;
         }
         if (specSub === 'trace') {
