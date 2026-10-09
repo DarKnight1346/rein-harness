@@ -18,6 +18,10 @@ export interface WorkspaceRepo {
   role?: string;
   /** The repo's default branch. */
   branch?: string;
+  /** Sparse checkout: only these folders (cone mode), for repos too big to check out whole. */
+  sparse?: string[];
+  /** Partial clone: fetch file contents (blob:none) or trees too (tree:0) only when needed. */
+  filter?: 'blob:none' | 'tree:0';
   present: boolean;
 }
 
@@ -65,7 +69,10 @@ export function parseWorkspace(file: string, text: string): Workspace {
     try {
       present = statSync(abs).isDirectory();
     } catch {}
-    ws.repos.push({name, path: abs, url: str(r.url), role: str(r.role), branch: str(r.branch), present});
+    const sparse = (Array.isArray(r.sparse) ? r.sparse : typeof r.sparse === 'string' ? [r.sparse] : []).map((s) => String(s).trim().replace(/^\/+|\/+$/g, '')).filter(Boolean);
+    const filter = str(r.filter);
+    if (filter && filter !== 'blob:none' && filter !== 'tree:0') ws.errors.push(`repos[${i}]: filter must be blob:none or tree:0, not ${filter}`);
+    ws.repos.push({name, path: abs, url: str(r.url), role: str(r.role), branch: str(r.branch), ...(sparse.length ? {sparse} : {}), ...(filter === 'blob:none' || filter === 'tree:0' ? {filter} : {}), present});
   }
   return ws;
 }
@@ -101,7 +108,7 @@ export function workspaceDirs(ws: Workspace | undefined, cwd = process.cwd()): s
 export function describeWorkspace(ws: Workspace, cwd = process.cwd()): string {
   const here = path.resolve(cwd);
   const lines = ws.repos.map((r) => {
-    const bits = [r.role, r.branch && `default branch ${r.branch}`, !r.present && 'not cloned yet'].filter(Boolean).join('; ');
+    const bits = [r.role, r.branch && `default branch ${r.branch}`, r.sparse && `sparse checkout: ${r.sparse.join(', ')} only`, !r.present && 'not cloned yet'].filter(Boolean).join('; ');
     const mine = r.path === here || here.startsWith(r.path + path.sep) ? ' (the launch folder)' : '';
     return `- ${r.name}: ${r.path}${mine}${bits ? ` — ${bits}` : ''}`;
   });
@@ -112,13 +119,23 @@ export function describeWorkspace(ws: Workspace, cwd = process.cwd()): string {
   ].join('\n');
 }
 
+/** The git clone command line for a repo: its branch, partial-clone filter and sparse start. */
+export function cloneArgs(r: WorkspaceRepo): string[] {
+  return ['clone', ...(r.branch ? ['--branch', r.branch] : []), ...(r.filter ? [`--filter=${r.filter}`] : []), ...(r.sparse?.length ? ['--sparse'] : []), r.url!, r.path];
+}
+
 /** `/workspace clone`: clone the repos that have a url and aren't there yet. */
 export async function cloneMissing(ws: Workspace, onProgress: (line: string) => void = () => {}): Promise<{cloned: string[]; failed: string[]}> {
   const cloned: string[] = [];
   const failed: string[] = [];
   for (const r of ws.repos.filter((x) => !x.present && x.url)) {
     onProgress(`Cloning ${r.name} from ${r.url}…`);
-    const res = await run('git', ['clone', ...(r.branch ? ['--branch', r.branch] : []), r.url!, r.path], {cwd: ws.root, timeoutMs: 15 * 60_000});
+    const res = await run('git', cloneArgs(r), {cwd: ws.root, timeoutMs: 15 * 60_000});
+    // A sparse clone starts with only the top-level files; then check out the folders it names.
+    if (res.code === 0 && r.sparse?.length) {
+      const set = await run('git', ['sparse-checkout', 'set', '--cone', ...r.sparse], {cwd: r.path, timeoutMs: 15 * 60_000});
+      if (set.code !== 0) failed.push(`${r.name}: git sparse-checkout set failed: ${(set.stderr || set.stdout).trim().split('\n').pop() ?? ''}`);
+    }
     if (res.code === 0) {
       r.present = true;
       cloned.push(r.name);

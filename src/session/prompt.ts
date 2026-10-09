@@ -6,6 +6,7 @@ import path from 'node:path';
 import {reinConfigDir} from '../store/paths.js';
 import {memoryFacts, workspaceFacts, workspaceMemoryFile} from '../tools/memory.js';
 import {describeWorkspace, findWorkspace} from '../workspace/index.js';
+import {checkoutState, sparsePrompt} from '../workspace/sparse.js';
 
 const BASE_PROMPT = `You are Rein, a coding assistant working in the user's project from a terminal chat.
 - Be direct and concise. Lead with the answer.
@@ -185,6 +186,8 @@ export async function systemPrompt(opts: {tools?: boolean; scratch?: string; pro
     sections.push(`Project root: ${process.cwd()}${extra.length ? `\nAlso working directories: ${extra.join(', ')}` : ''}`);
     const ws = findWorkspace();
     if (ws?.repos.length) sections.push(describeWorkspace(ws));
+    const sparse = sparsePrompt(await checkoutState(process.cwd()));
+    if (sparse) sections.push(sparse);
     const scope = scopeDir();
     if (scope)
       sections.push(

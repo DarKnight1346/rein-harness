@@ -57,6 +57,7 @@ import nodePath from 'node:path';
 import {cloneMissing, findWorkspace} from '../workspace/index.js';
 import {CONFIG_KEYS, defaultValue, formatValue, keyInfo, parseValue} from '../store/configKeys.js';
 import {TAB_TITLES} from './ConfigureScreen.js';
+import {checkoutState, describeCheckout, sparseAdd} from '../workspace/sparse.js';
 import {buildIndex, DEFAULT_MODEL as EMBED_MODEL, formatSemanticHits, loadIndex, semanticSearch} from '../context/semantic.js';
 import {estimateGoalCost} from '../goals/estimate.js';
 import {loadPolicy, type PolicyRule} from '../policy.js';
@@ -1505,6 +1506,25 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
             const {updated, failed} = await linkPrs(prs);
             log(failed.length ? 'error' : 'info', [updated.length && `Linked ${updated.join(', ')}.`, ...failed].filter(Boolean).join('\n'));
           });
+          break;
+        }
+        if (wsSub === 'sparse') {
+          const [, repoName, ...folders] = parsed.args.trim().split(/\s+/);
+          if (repoName) {
+            const repo = ws.repos.find((r) => r.name === repoName && r.present);
+            if (!repo) log('error', `No cloned repo named ${repoName} in this workspace.`);
+            else if (!folders.length) log('error', 'Usage: /workspace sparse <repo> <folder> [folder…]');
+            else void checkoutState(repo.path).then(async (c) => {
+              if (!c.sparse) return log('error', `${repoName} isn't a sparse checkout: it has every folder already.`);
+              const r = await sparseAdd(repo.path, folders);
+              log(r.ok ? 'info' : 'error', r.ok ? `Checked out ${folders.join(', ')} in ${repoName}.` : r.output);
+              runtime.engine?.refreshTools();
+            });
+            break;
+          }
+          void Promise.all(ws.repos.filter((r) => r.present).map(async (r) => `  ${r.name}  ${describeCheckout(await checkoutState(r.path)) || 'full checkout'}`)).then((rows) =>
+            log('info', ['Checkouts:', ...rows, '/workspace sparse <repo> <folder…> checks out more folders of a sparse one.'].join('\n')),
+          );
           break;
         }
         if (parsed.args.trim() === 'clone') {
