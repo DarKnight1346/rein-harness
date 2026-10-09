@@ -49,6 +49,7 @@ rein -p "now update the docs to match" -c
 | `--disallowedTools "<rules>"` | Extra deny rules for this run. |
 | `-c`, `--continue [id]` | Continue the latest conversation in this project, or the one with that id. |
 | `--verbose` | Text mode: print tool calls and notices to stderr. |
+| `--add-dir <path>` | Also let the agent use this folder without asking, for this run. Repeatable; adds to `additionalDirectories`. |
 
 `--model`, `--effort` and `--permission-mode` apply to this run only. They're never saved to `~/.rein/config.json`.
 
@@ -211,7 +212,6 @@ With `--permission-mode ask` the reviewer can read the checkout, search it and r
 
 ## Gotchas
 
-- **`--add-dir` is ignored with `-p`.** It's only handled for interactive sessions. Use `additionalDirectories` in `~/.rein/config.json`, which headless runs do respect.
 - **Flag values can't start with `-`.** `rein -p "-v is broken"` doesn't see a prompt. Pipe it in instead: `echo "-v is broken" | rein -p`.
 - **`-c` without an id** continues the newest conversation in the current folder, with no picker. If there isn't one, it starts fresh.
 - **MCP servers connect in the background**, so a very short run can finish before a slow server's tools show up. Project servers from `.mcp.json` only connect once approved (`enabledMcpjsonServers` in `.rein/settings.local.json`).

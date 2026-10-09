@@ -17,6 +17,7 @@ import {redact} from './ui/privacy.js';
  *   --allowedTools "shell(npm test:*),edit(src/**)"   --disallowedTools "…"
  *   -c, --continue [id]            continue the latest (or a given) conversation in this project
  *   --verbose                      tool calls on stderr (text mode)
+ *   --add-dir <path>               another working directory for this run (repeatable)
  */
 export async function runHeadless(argv: string[]): Promise<number> {
   const opt = (name: string, short?: string) => {
@@ -59,6 +60,13 @@ export async function runHeadless(argv: string[]): Promise<number> {
   onUntrustedHooks((p) => process.stderr.write(`rein: skipping ${p.commands.length} project hook${p.commands.length === 1 ? '' : 's'} (not trusted yet). Run \`rein\` in this folder once to review and trust them.\n`));
   // The settings measured on one-off runs (see HEADLESS_EXPERIMENTS).
   addDefaultExperiments(HEADLESS_EXPERIMENTS);
+  // --add-dir <path> (repeatable): extra working directories for this run, as in interactive Rein.
+  const dirs = argv.flatMap((a, i) => (a === '--add-dir' && argv[i + 1] ? [argv[i + 1]!] : []));
+  try {
+    if (dirs.length) runtime.tools.addDirs(dirs);
+  } catch (err) {
+    return fail((err as Error).message);
+  }
   await runtime.init({resume: resumeId ?? false});
   await runtime.refreshCatalog();
   const {catalog} = await import('./router/catalog.js');

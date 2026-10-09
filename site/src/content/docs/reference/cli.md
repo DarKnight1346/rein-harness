@@ -56,6 +56,7 @@ Interactive Rein needs a terminal. Run without one (in a pipe or CI) and it exit
 | `--disallowedTools` | comma-separated rules | Extra deny rules for this run. Deny wins. |
 | `-c`, `--continue` | `[id]` | Continues the **latest** conversation in this project, or the given one. No picker. |
 | `--verbose` | — | Text mode: prints tool calls (`⏺ Edit(src/a.ts) ✓`) and notices to stderr. |
+| `--add-dir` | `<path>` | Lets the agent also use this folder without asking, for this run. Repeatable; adds to `additionalDirectories`. |
 
 Settings passed on the command line apply to this run only. They're never saved to `config.json`.
 
@@ -101,7 +102,7 @@ rein -p "now add docs" -c --output-format stream-json --verbose
 ```
 
 :::note
-`--add-dir` has no effect with `-p`. Headless runs use only the current folder plus `additionalDirectories` from `~/.rein/config.json`. Headless mode also needs at least one account: run `rein` once to import or add one.
+Headless mode needs at least one account: run `rein` once to import or add one.
 :::
 
 ## Environment variables
