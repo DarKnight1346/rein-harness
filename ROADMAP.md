@@ -112,7 +112,7 @@ agent works by default ships as an experiment (`experiments` in config) until it
 | # | Feature | Spec | Docs | Status |
 |---|---|---|---|---|
 | 24 | Local session analytics | Success rate, retries, time and cost per task from the user's history (`/stats`). | features/insight/#how-your-requests-go | done |
-| 59 | Background sessions | Sessions keep running after the terminal closes; reattach from any terminal. |  | todo |
+| 59 | Background sessions | Sessions keep running after the terminal closes; reattach from any terminal. | features/sessions/ | done |
 | 60 | Multi-session dashboard | See and steer every running session across repos from one screen. Builds on #59. |  | todo |
 | 61 | Environment bootstrap | Start each repo's devcontainer or Nix shell for the agent's commands. | features/tools/#in-the-repos-own-environment | done |
 | 62 | ACP server mode | Run Rein as an Agent Client Protocol agent in Zed, JetBrains and other ACP editors. |  | todo |

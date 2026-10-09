@@ -14,6 +14,7 @@ Rein follows Claude Code's conventions wherever it can: Esc interrupts, Esc twic
 | **Enter** | Sends the message. With the command or file list open, fills in the highlighted entry instead. |
 | **Esc** | Interrupts the current reply and pauses an active goal. Rein keeps what was said. While viewing a subagent, stops that subagent. |
 | **Esc Esc** | With nothing running and an empty input, two presses within 0.6 s open `/rewind`. |
+| **Ctrl+\\** | In a [background session](../../features/sessions/): detaches this terminal. The session keeps running; `rein attach` comes back. |
 | **Ctrl+C** | Stops everything at once: the reply, the foreground shell command, all subagents, an active goal (paused), pending approvals (denied), open windows and your draft. |
 | **Ctrl+C Ctrl+C** | A second press within 2 s exits Rein. In between, the footer shows `Press Ctrl+C again to exit`. |
 | **Shift+Tab** | Toggles [plan mode](../../features/plans/) (when no suggestion list is open). |

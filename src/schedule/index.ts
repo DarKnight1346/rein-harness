@@ -154,7 +154,7 @@ const defaultSpawner: Spawner = (args, cwd, log) =>
   new Promise((resolve) => {
     mkdirSync(path.dirname(log), {recursive: true});
     const chunks: Buffer[] = [];
-    const p = spawn(process.execPath, [process.argv[1]!, ...args], {cwd, stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true});
+    const p = spawn(process.execPath, [...process.execArgv, process.argv[1]!, ...args], {cwd, stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true});
     p.stdout.on('data', (d) => chunks.push(d));
     p.stderr.on('data', (d) => chunks.push(d));
     p.on('error', (err) => chunks.push(Buffer.from(String(err))));
@@ -210,7 +210,7 @@ const defaultExec: Exec = async (cmd, args, input) => {
 };
 
 /** The command the OS scheduler runs every 15 minutes. */
-export const scheduledCommand = () => `"${process.execPath}" "${process.argv[1]}" schedule run --due`;
+export const scheduledCommand = () => `"${process.execPath}" ${process.execArgv.map((a) => `"${a}"`).join(' ')}${process.execArgv.length ? ' ' : ''}"${process.argv[1]}" schedule run --due`;
 
 /** `rein schedule install`: register the project and add the OS scheduler entry (once for all projects). */
 export async function install(root: string, exec: Exec = defaultExec, platform = process.platform): Promise<string> {

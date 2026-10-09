@@ -76,6 +76,7 @@ export default defineConfig({
           {label: 'Secrets vault', slug: 'features/vault'},
           {label: 'Voice input', slug: 'features/voice'},
           {label: 'The terminal UI', slug: 'features/tui'},
+          {label: 'Background sessions', slug: 'features/sessions'},
         ]},
         {label: 'Reference', items: [
           {label: 'Slash commands', slug: 'reference/commands'},

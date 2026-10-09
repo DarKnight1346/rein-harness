@@ -75,7 +75,7 @@ export type Tester = (command: string, cwd: string) => Promise<boolean>;
 const reinAgent: Agent = (prompt, model, cwd) =>
   new Promise((resolve) => {
     let out = '';
-    const p = spawn(process.execPath, [process.argv[1]!, '-p', prompt, '--model', model, '--permission-mode', 'bypass', '--output-format', 'json'], {cwd, stdio: ['ignore', 'pipe', 'ignore'], windowsHide: true});
+    const p = spawn(process.execPath, [...process.execArgv, process.argv[1]!, '-p', prompt, '--model', model, '--permission-mode', 'bypass', '--output-format', 'json'], {cwd, stdio: ['ignore', 'pipe', 'ignore'], windowsHide: true});
     p.stdout.on('data', (d) => (out += d));
     p.on('error', (err) => resolve({ok: false, error: err.message}));
     p.on('close', (code) => {

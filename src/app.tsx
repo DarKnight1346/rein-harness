@@ -18,6 +18,7 @@ if (args.includes('--help') || args.includes('-h')) {
   console.log(`Usage: rein [--continue|-c] [--classic|--fullscreen]
        rein -p "<prompt>" [--model m] [--output-format text|json|stream-json]
        rein schedule [list | run [--due | <job>] | install | uninstall]
+       rein attach [id]
        rein bench [init [--count n] | run --model m [--model m2] [--tasks n] [--test cmd]]
        rein --update | --version
 
@@ -26,6 +27,8 @@ if (args.includes('--help') || args.includes('-h')) {
   --fullscreen     app-style renderer: top bar, sidebar, mouse clicks (default)
   --add-dir <path> also let the agent use this folder without asking (repeatable)
   --scope <dir>    work in one package of a monorepo: search, list and shell start there
+  --background     run the session in the background: closing the terminal (or Ctrl+\\) detaches,
+                   rein attach [id] comes back from any terminal
   -p, --print      headless: run one prompt (or stdin) and print the result; also --model,
                    --effort, --output-format, --permission-mode ask|auto|bypass,
                    --allowedTools "shell(npm test:*),edit(src/**)", --disallowedTools, --verbose
@@ -50,6 +53,39 @@ if (args.includes('--update')) {
     console.log(line.level ? color[line.level](text) : text);
   }
   process.exit(failed ? 1 : 0);
+}
+if (args[0] === 'host') {
+  // Internal: the detached process behind `rein --background` (see host/index.ts).
+  const {runHost} = await import('./host/index.js');
+  const [, id, cols, rows, file, ...rest] = args;
+  process.exit(await runHost({id: id!, cwd: process.cwd(), file: file!, args: rest, cols: Number(cols) || 100, rows: Number(rows) || 30}));
+}
+if (args[0] === 'attach' || args.includes('--background')) {
+  const h = await import('./host/index.js');
+  if (!process.stdin.isTTY) {
+    console.error('rein: attaching needs an interactive terminal');
+    process.exit(1);
+  }
+  let target: import('./host/index.js').HostInfo | undefined;
+  if (args.includes('--background')) {
+    try {
+      target = await h.startHost(process.cwd(), args.filter((a) => a !== '--background'));
+    } catch (err) {
+      console.error(`rein: ${(err as Error).message}`);
+      process.exit(1);
+    }
+  } else {
+    const hosts = h.listHosts();
+    const want = args[1];
+    target = want ? hosts.find((x) => x.id === want || x.id.startsWith(want)) : hosts.filter((x) => x.cwd === process.cwd()).length === 1 ? hosts.find((x) => x.cwd === process.cwd()) : hosts.length === 1 ? hosts[0] : undefined;
+    if (!target) {
+      console.log(hosts.length ? `Background sessions (rein attach <id>):\n${hosts.map((x) => `  ${x.id}  ${x.cwd}  started ${new Date(x.startedAt).toLocaleString()}`).join('\n')}` : 'No background sessions. rein --background starts one.');
+      process.exit(want ? 1 : 0);
+    }
+  }
+  const how = await h.attach(target);
+  console.log(how === 'exited' ? '\nThe session ended.' : `\nDetached: the session keeps running. rein attach ${target.id} comes back to it.`);
+  process.exit(0);
 }
 if (args[0] === 'bench') {
   // Benchmarks on this repo's own history: tasks from commits, run per model, judged by the commits' tests.

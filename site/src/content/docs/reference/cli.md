@@ -9,6 +9,7 @@ rein -p "<prompt>" [--model m] [--effort e] [--output-format text|json|stream-js
                    [--permission-mode ask|auto|bypass|plan] [--allowedTools …] [--disallowedTools …]
                    [-c [id]] [--verbose]
 rein schedule [list | run [--due | <job>] | install | uninstall]
+rein attach [id]
 rein bench [init [--count n] | run --model m [--model m2]… [--tasks n] [--test cmd]]
 rein --update | --version | --help
 ```
@@ -25,6 +26,7 @@ Run `rein` from the project folder you want to work in. That folder becomes the 
 | `--classic` | Inline renderer: native terminal scrollback, no mouse, no sidebar. |
 | `--fullscreen` | App-style renderer: top bar, sidebar, windows, mouse. This is the default. |
 | `--add-dir <path>` | Lets the agent also use this folder without asking, for this session. Repeatable. |
+| `--background` | Runs the session in a background host: closing the terminal (or `Ctrl+\`) only detaches, and `rein attach` comes back to it from any terminal. Combines with the other flags. See [Background sessions](../../features/sessions/). |
 | `--scope <dir>` | Works in one package of a monorepo: `list`, `search` and `shell` start there and its instructions are loaded. See [Workspaces](../../features/workspaces/#one-package-of-a-monorepo). |
 | `--update` | Updates Rein and the `claude` / `codex` CLIs, prints the steps, then exits (no TTY needed). Exits `1` if a step failed. |
 | `-v`, `--version` | Prints Rein's version. |
@@ -120,6 +122,16 @@ Headless mode needs at least one account: run `rein` once to import or add one.
 | `rein schedule uninstall` | Takes this project off; removes the OS entry when it was the last one |
 
 Exits `1` when a job fails or the file has errors. See [Scheduled jobs](../../features/headless/#scheduled-jobs).
+
+## Background sessions: `rein attach`
+
+| Command | What it does |
+| --- | --- |
+| `rein --background` | Starts Rein in a background host and attaches this terminal to it |
+| `rein attach` | Attaches to this folder's background session (or the only one); lists them when there are several |
+| `rein attach <id>` | Attaches to that session (a prefix of its id is enough) |
+
+`rein host …` is the background process itself; you don't run it by hand. See [Background sessions](../../features/sessions/).
 
 ## Benchmarks: `rein bench`
 
