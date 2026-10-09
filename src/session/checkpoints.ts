@@ -105,6 +105,19 @@ export class Checkpoints {
     await appendFile(path.join(this.dir(), 'index.jsonl'), JSON.stringify(snap) + '\n', {mode: 0o600});
   }
 
+  /** `file` as it was before `turn` first changed it: its text, null if it didn't exist, undefined if unknown (not saved or too large). */
+  before(turn: number, file: string): string | null | undefined {
+    const s = this.load().find((x) => x.turn >= turn && x.file === file);
+    if (!s) return undefined;
+    if (!s.existed) return null;
+    if (!s.blob) return undefined;
+    try {
+      return readFileSync(path.join(this.dir(), 'blobs', s.blob), 'utf8');
+    } catch {
+      return undefined;
+    }
+  }
+
   /** Files changed at or after `turn` (what a rewind to it would restore). */
   changedSince(turn: number): string[] {
     return [...new Set(this.load().filter((s) => s.turn >= turn).map((s) => s.file))];

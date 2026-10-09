@@ -91,6 +91,10 @@ export type Config = {
   contextWarnings: boolean;
   /** A write or edit that adds something like a credential: tell the agent (warn), refuse it (block), or nothing (off). */
   secretScan: 'off' | 'warn' | 'block';
+  /** Static analysis of each request's changes at the end of the turn: semgrep (when installed) or off. */
+  sast: 'off' | 'semgrep';
+  /** Semgrep rules (--config): auto, a registry pack like p/owasp-top-ten, or a path. */
+  sastConfig: string;
   /** OpenTelemetry export of turns, tool calls, tokens and cost (metadata only). Off unless set. */
   otel?: OtelConfig;
   /** Efficiency experiments to turn on, by name (see the configuration reference): measured before they become defaults. */
@@ -156,6 +160,8 @@ export const DEFAULT_CONFIG: Config = {
   goalConfirmUsd: 0,
   contextWarnings: true,
   secretScan: 'off',
+  sast: 'off',
+  sastConfig: 'auto',
   steerShell: true,
   mcpSampling: 'ask',
   inlineImages: 'auto',

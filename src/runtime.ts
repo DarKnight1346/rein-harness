@@ -6,6 +6,7 @@ import {onSideUsage} from './providers/usage.js';
 import {formatUsd, setCacheWriteTtl, setPriceOverrides} from './providers/prices.js';
 import {Telemetry} from './telemetry/otel.js';
 import {maskSecrets} from './tools/secrets.js';
+import {sastCheck} from './tools/sast.js';
 import {effectiveBudget, overBudget, type Spend} from './budget.js';
 import {catalog, toRef} from './router/catalog.js';
 import {mergeNote, Worktrees} from './agents/worktrees.js';
@@ -85,6 +86,8 @@ export class Runtime {
   /** --scope / /scope: the package of a monorepo this session works in (absolute), if any. */
   scope: string | undefined;
 
+  /** Whether sast has checked this request's changes. */
+  private sastChecked = false;
   /** The last budget stop (for rein -p's exit status), cleared by your next message. */
   budgetStop: string | undefined;
 
@@ -507,6 +510,7 @@ Drop superseded reads of the same file, routine listings, and output that no lon
     // A message from the user (not Rein's own follow-up) ends an escalation: routing is normal again.
     if (!/^<(code_check|stop_hook)>/.test(text)) {
       this.requestStartUsd = this.engine?.sessionTokens.usd ?? 0;
+      this.sastChecked = false;
       this.budgetStop = undefined;
       this.tools.watchdog.reset();
       this.escalation = undefined;
@@ -588,6 +592,16 @@ Drop superseded reads of the same file, routine listings, and output that no lon
     }
     const problems = await this.lsp.turnEnd().catch(() => undefined);
     if (problems) return {reason: problems, kind: 'diagnostics'};
+    // sast: Semgrep on the files this request changed, once per request (findings on added lines only).
+    if (this.config.sast === 'semgrep' && !this.sastChecked && this.engine) {
+      const since = this.currentTurn();
+      const files = this.checkpoints.changedSince(since).filter((f) => existsSync(f));
+      if (files.length) {
+        this.sastChecked = true;
+        const found = await sastCheck(files.map((file) => ({file, before: this.checkpoints.before(since, file)})), process.cwd(), this.config.sastConfig || 'auto').catch(() => undefined);
+        if (found) return {reason: found, kind: 'diagnostics'};
+      }
+    }
     // keep-going: the agent ended its turn but its own reply says the work isn't done ("I've only
     // partly done this"), and it isn't waiting on the user: send it back, a few times per request.
     // Models stop like this on long tasks, more often right after a compaction.

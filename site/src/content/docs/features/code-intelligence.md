@@ -117,6 +117,23 @@ To turn the feature off, set `"lsp": "off"` in `config.json`.
 The server only sees what Rein tells it: the files the agent opens, reads or changes, as they are on disk. After a foreground shell command, Rein resends any open file that changed (a formatter, `sed`, `git checkout`).
 :::
 
+
+## Static analysis with Semgrep
+
+With `sast` set to `semgrep` and [Semgrep](https://semgrep.dev) installed, Rein runs it on the files a request changed, at the end of the turn, after the language-server check. Only findings on lines that request **added** go back to the agent, so a file's old problems don't come up every time:
+
+```text
+Semgrep found 1 problem in lines this turn added:
+app.py:12: [warning] Detected the use of eval() (eval-detected)
+Fix it, or if one is a false positive, say why in your reply.
+```
+
+- It runs once per request, on files changed with Rein's file tools (`write`, `edit`, `delete`), not files changed only by shell commands.
+- `sastConfig` picks the rules: `auto` (the default, Semgrep's recommended rules for the languages it finds), a registry pack such as `p/owasp-top-ten`, or a path to your own rules. Registry rules need network access; a local path doesn't.
+- Rein runs Semgrep with `--metrics=off`. Without Semgrep installed, `sast` does nothing.
+
+Turn it on with `/settings sast semgrep`.
+
 ## Related
 
 - [Editor integration](../ide/): your editor's diagnostics, selection and diffs

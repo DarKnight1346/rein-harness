@@ -47,6 +47,8 @@ export const CONFIG_KEYS: KeyInfo[] = [
   k('sandbox', 'Command sandbox: write (default), strict (no network) or off', oneOf('write', 'strict', 'off')),
   k('shellMaxMinutes', 'Longest a foreground shell command may run, in minutes (0 = no limit)', num(0)),
   k('secretScan', 'A write or edit that adds something like a credential: warn the agent, block the change, or off. On, credentials are also masked in saved conversations', oneOf('off', 'warn', 'block')),
+  k('sast', 'Run Semgrep on what each request changed, at the end of the turn (findings on added lines go back to the agent): semgrep or off', oneOf('off', 'semgrep')),
+  k('sastConfig', 'Semgrep rules: auto, a registry pack like p/owasp-top-ten, or a path to your rules', str),
   k('steerShell', 'Run simple shell reads and searches (cat, grep -rn, sed -n…) as the built-in tools', bool),
   k('goalMaxRounds', 'Most automatic continuations per goal (0 = no limit)', num(0)),
   k('subagentLimit', 'Most subagents running at once', num(1)),
