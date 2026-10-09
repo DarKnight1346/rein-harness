@@ -65,6 +65,16 @@ export function ContextView({report}: {report: ContextReport}) {
         {report.measured !== undefined ? ` · last request measured ${k(report.measured)} input tokens` : ' · estimates (~4 chars/token)'}
         {report.autoCompactAt ? ` · auto-compacts at ${k(report.autoCompactAt)}` : ' · auto-compact off'}
       </Text>
+      {!!report.largest?.length && (
+        <Box flexDirection="column" marginTop={1}>
+          <Text bold>Largest items</Text>
+          {report.largest.map((i, n) => (
+            <Text key={n} wrap="truncate">
+              {k(i.tokens).padStart(6)} <Text dimColor>{i.what}</Text>
+            </Text>
+          ))}
+        </Box>
+      )}
     </Box>
   );
 }

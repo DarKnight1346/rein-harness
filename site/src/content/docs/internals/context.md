@@ -168,6 +168,8 @@ While it runs you see `Compacting N messages…`, then a rule:
 
 Rein's own numbers are estimates (~4 chars/token). When the provider measured the last request on the same model, the header says `measured` and the difference shows as **Other**. That covers CLI overhead and full tool outputs Rein only keeps 4,000 characters of. Claude's figure is the **last API call's** input, not the turn's sum across tool calls, so it reflects what the context holds right now. The footer shows message count, how many were folded into the summary, and where auto-compaction will trigger.
 
+Below the grid, **Largest items** lists the 8 biggest single things in the main conversation's context, largest first: each instruction file (`instructions /path/AGENTS.md`), the compaction summary, and each tool result (`Read(src/huge.ts)`, `Shell($ npm test)`). Items under about 200 tokens are left out. It shows what to drop: a huge file read whole, a test log, an instruction file that's grown too big.
+
 When you're viewing a subagent, `/context` shows that subagent's context instead. For a fork, the parent's inherited history appears under "Inherited from the parent + provider overhead".
 
 ## Related

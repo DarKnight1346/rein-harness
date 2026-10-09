@@ -320,5 +320,6 @@ function contextLines(entry: Extract<Entry, {kind: 'context'}>): string[] {
         (report.summarizedCount ? ` · ${report.summarizedCount} folded into the summary` : '') +
         (report.autoCompactAt ? ` · auto-compacts at ${k(report.autoCompactAt)}` : ' · auto-compact off'),
     ),
+    ...(report.largest?.length ? ['', chalk.bold('  Largest items'), ...report.largest.map((i) => `  ${k(i.tokens).padStart(6)} ${chalk.dim(i.what)}`)] : []),
   ];
 }
