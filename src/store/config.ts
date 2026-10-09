@@ -4,6 +4,7 @@ import type {Price} from '../providers/prices.js';
 import type {OtelConfig} from '../telemetry/otel.js';
 import type {Budget} from '../budget.js';
 import type {CodeSearchConfig} from '../context/orgSearch.js';
+import type {SemanticConfig} from '../context/semantic.js';
 
 export type Config = {
   version: 1;
@@ -110,6 +111,8 @@ export type Config = {
   prMaxLines: number;
   /** Org-wide code search: {"type": "sourcegraph" | "zoekt", "url": "…"}; the agent gets org_search. */
   codeSearch?: CodeSearchConfig;
+  /** Local semantic index through Ollama: {} for the defaults, or {"model", "url"}. /index builds it; the agent gets semantic_search. */
+  semanticIndex?: SemanticConfig;
   /** Semgrep rules (--config): auto, a registry pack like p/owasp-top-ten, or a path. */
   sastConfig: string;
   /** OpenTelemetry export of turns, tool calls, tokens and cost (metadata only). Off unless set. */

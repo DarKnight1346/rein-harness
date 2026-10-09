@@ -50,6 +50,7 @@ An existing `~/.rein` keeps being used as it is, and so does `REIN_HOME`. To swi
 | `sessions/<id>.meta.json` | Small index entry per conversation, used for listing and `/resume` |
 | `scratch/<id>/` | The session's scratchpad. The agent can write here without approval. Pasted and dropped images are copied to `scratch/<id>/images/` |
 | `checkpoints/<id>/` | [`/rewind`](../../features/rewind/) data: `tree.git` (a private git store of whole-project snapshots, never your project's `.git`), `trees.json`, and per-file checkpoints (`index.jsonl` + content-addressed `blobs/`, ≤ 10 MB per file) |
+| `index/<hash>.json` | [Semantic indexes](../../features/large-codebases/#search-by-meaning), one per project: each file's change key and its chunks' vectors. `/index` rebuilds it |
 | `skills/` | Global skills, one folder each with a `SKILL.md` |
 | `mcp.json` | User-scope MCP servers (`mcp_add` with `scope: "user"`) |
 | `settings.json` | Global permission rules and hooks (Claude Code format) |
@@ -186,6 +187,7 @@ Quit Rein first.
 | `checkpoints/` | Yes | `/rewind` for past conversations |
 | `voice/` | Yes | The speech model (`/voice setup` downloads it again) |
 | `lsp/` | Yes | Installed language servers (the agent offers to install them again) |
+| `index/` | Yes | Semantic indexes (`/index` builds them again) |
 | `sessions/` | Yes | Conversation history: `/resume`, `rein --continue`, `sessions_search` |
 | `config.json` | Yes | Your settings (defaults return) |
 | `accounts/<provider>/<id>/` | **No.** Use `/login` → remove | The login of an account you added. Deleting it by hand leaves `accounts.json` pointing at a missing folder |

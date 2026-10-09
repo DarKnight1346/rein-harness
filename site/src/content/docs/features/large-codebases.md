@@ -66,6 +66,32 @@ Rein looks in order:
 2. **Backstage**: the `spec.owner` of the `catalog-info.yaml` in the closest folder above the file.
 3. **Git history**: the three people with the most commits to the file in the last year.
 
+## Search by meaning
+
+`search` finds exact text. When you don't know the name, ask in words: "where do we retry failed charges?". `/index` builds a **semantic index** of the project: its source and docs files in chunks of about 60 lines, embedded by a model on your own machine through [Ollama](https://ollama.com). Nothing is sent anywhere else.
+
+```text title="rein"
+> /index
+  ⎿ Indexing with nomic-embed-text through Ollama…
+    embedded 1,840 of 1,840 chunks
+    Semantic index: 612 files, 1,840 chunks (612 files embedded, 0 removed).
+
+> /index retry a failed payment
+  ⎿ services/payments/charge.ts:41-100  (0.71)
+      export async function chargeWithRetry(order: Order) {
+    …
+```
+
+Set it up once:
+
+1. Install Ollama, then `ollama pull nomic-embed-text`.
+2. `/settings semanticIndex {}` (or `{"model": "mxbai-embed-large"}`, or a `url` for an Ollama elsewhere).
+3. `/index`. Run it again after big changes: it's incremental. A file is embedded again only when its git blob changes (or its content, if it's changed but not committed), and deleted files are dropped. Files git ignores are never read.
+
+With the setting on and an index built, the agent gets a [`semantic_search`](../../reference/tools/#semantic_search) tool. `/index <query>` searches it yourself, and `/index status` shows its size, model and age. Indexes live in `~/.rein/index/`, one per project. Changing the model means running `/index` again.
+
+Without Ollama, `/index` says how to install it and does nothing else.
+
 ## Search the whole org
 
 The code you need is often in a repo you haven't cloned: who else calls this endpoint, how other teams use the library you're changing. If your company runs [Sourcegraph](https://sourcegraph.com) or [Zoekt](https://github.com/sourcegraph/zoekt), point Rein at it:

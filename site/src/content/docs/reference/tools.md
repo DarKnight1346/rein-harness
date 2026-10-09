@@ -355,6 +355,17 @@ Label `OrgSearch`. Approval: none (read-only). Only listed once `codeSearch` is 
 
 Searches every repo your Sourcegraph or Zoekt server indexes, and returns `repo  file:line: text` per match. See [Search the whole org](../../features/large-codebases/#search-the-whole-org).
 
+### `semantic_search`
+
+Label `SemanticSearch`. Approval: none (read-only). Only listed once `semanticIndex` is [configured](../configuration/) and `/index` has built this project's index.
+
+| Parameter | Type | Notes |
+| --- | --- | --- |
+| `query` **(required)** | string | What you're looking for, in words |
+| `k` | integer | How many chunks, 1–30 (default 8) |
+
+The chunks (about 60 lines each) closest in meaning to the query, with `file:start-end`, a similarity score and their first lines. See [Search by meaning](../../features/large-codebases/#search-by-meaning).
+
 ### `lsp_install`
 
 Label `InstallLanguageServer`. Approval: **always asks, even in bypass mode.**

@@ -9,8 +9,8 @@ import {run} from '../util/proc.js';
  * Files are ranked by how much they export, then by depth (shallow first); tests, vendored and
  * generated files are left out.
  */
-const SOURCE = /\.(?:[cm]?[jt]sx?|py|go|rs|java|kt|kts|scala|swift|rb|php|cs|fs|c|cc|cpp|cxx|h|hh|hpp|m|mm|ex|exs|erl|hs|ml|clj|dart|lua|r|jl|sol|zig|nim|vue|svelte)$/i;
-const SKIP = /(?:^|\/)(?:node_modules|vendor|third_party|dist|build|out|target|\.next|coverage|__generated__|generated|gen)\/|(?:\.min\.|\.d\.ts$|_pb2?\.|\.pb\.go$|\.g\.dart$)|(?:^|\/)(?:tests?|__tests__|spec|testdata|fixtures)\/|(?:[._-](?:test|spec))\.[a-z]+$/i;
+export const SOURCE = /\.(?:[cm]?[jt]sx?|py|go|rs|java|kt|kts|scala|swift|rb|php|cs|fs|c|cc|cpp|cxx|h|hh|hpp|m|mm|ex|exs|erl|hs|ml|clj|dart|lua|r|jl|sol|zig|nim|vue|svelte)$/i;
+export const SKIP = /(?:^|\/)(?:node_modules|vendor|third_party|dist|build|out|target|\.next|coverage|__generated__|generated|gen)\/|(?:\.min\.|\.d\.ts$|_pb2?\.|\.pb\.go$|\.g\.dart$)|(?:^|\/)(?:tests?|__tests__|spec|testdata|fixtures)\/|(?:[._-](?:test|spec))\.[a-z]+$/i;
 const EXPORTED = /^\s*(?:export\b|pub\b|public\b|def [^_]|func [A-Z]|class |interface |type |struct |trait |module |object )/;
 const MAX_FILES = 5000;
 const MAX_BYTES = 400_000;

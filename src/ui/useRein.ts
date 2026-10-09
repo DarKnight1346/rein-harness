@@ -57,6 +57,7 @@ import nodePath from 'node:path';
 import {cloneMissing, findWorkspace} from '../workspace/index.js';
 import {CONFIG_KEYS, defaultValue, formatValue, keyInfo, parseValue} from '../store/configKeys.js';
 import {TAB_TITLES} from './ConfigureScreen.js';
+import {buildIndex, DEFAULT_MODEL as EMBED_MODEL, formatSemanticHits, loadIndex, semanticSearch} from '../context/semantic.js';
 import {estimateGoalCost} from '../goals/estimate.js';
 import {loadPolicy, type PolicyRule} from '../policy.js';
 import {reinConfigDir} from '../store/paths.js';
@@ -1247,6 +1248,29 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
           if (!files.length) return log('info', 'No changes (vs HEAD). /owners <path> looks up a file or folder.');
           log('info', `Owners of ${arg || `your ${files.length} changed file${files.length === 1 ? '' : 's'}`}:\n${formatOwners(await ownersOf(root, files))}`);
         });
+        break;
+      }
+      case 'index': {
+        const root = process.cwd();
+        const arg = parsed.args.trim();
+        const cfg = runtime.config.semanticIndex;
+        if (arg === 'status') {
+          const idx = loadIndex(root);
+          log('info', idx ? `Semantic index: ${Object.keys(idx.files).length} files, ${Object.values(idx.files).reduce((n, f) => n + f.chunks.length, 0)} chunks, ${idx.model}, built ${idx.built.slice(0, 16).replace('T', ' ')}.${cfg ? '' : ' Set semanticIndex in /settings to give the agent semantic_search.'}` : 'No semantic index for this project yet: /index builds it.');
+          break;
+        }
+        if (arg) {
+          void semanticSearch(root, cfg, arg, 8).then((hits) => log('info', formatSemanticHits(hits, 6)), (err) => log('error', (err as Error).message));
+          break;
+        }
+        log('info', `Indexing with ${cfg?.model || EMBED_MODEL} through Ollama…`);
+        let last = 0;
+        void buildIndex(root, cfg, (done, total) => {
+          if (done - last >= 500 || done === total) (last = done), log('info', `  embedded ${done} of ${total} chunks`);
+        }).then(
+          (r) => log('info', `Semantic index: ${r.files} files, ${r.chunks} chunks (${r.embedded} file${r.embedded === 1 ? '' : 's'} embedded, ${r.removed} removed).${cfg ? ' The agent can use semantic_search.' : ' Set semanticIndex in /settings (e.g. /settings semanticIndex {}) to give the agent semantic_search.'}`),
+          (err) => log('error', (err as Error).message),
+        );
         break;
       }
       case 'map': {
