@@ -67,6 +67,7 @@ import {detectTestCommand} from '../agents/bestOf.js';
 import {branchContracts} from '../contracts/changes.js';
 import {formatChanges} from '../contracts/diff.js';
 import {branchMigrations, formatFindings} from '../contracts/migrations.js';
+import {collectStats, formatStats} from '../insight/stats.js';
 import {deadCodeTask, findDeadCode, findFlags, flagRemovalTask, formatFlags, isStale} from '../contracts/deadcode.js';
 import {checkoutState, describeCheckout, sparseAdd} from '../workspace/sparse.js';
 import {buildIndex, DEFAULT_MODEL as EMBED_MODEL, formatSemanticHits, loadIndex, semanticSearch} from '../context/semantic.js';
@@ -1262,6 +1263,13 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
           if (!files.length) return log('info', 'No changes (vs HEAD). /owners <path> looks up a file or folder.');
           log('info', `Owners of ${arg || `your ${files.length} changed file${files.length === 1 ? '' : 's'}`}:\n${formatOwners(await ownersOf(root, files))}`);
         });
+        break;
+      }
+      case 'stats': {
+        const words = parsed.args.trim().split(/\s+/).filter(Boolean);
+        const days = Math.max(1, Number(words.find((w) => /^\d+$/.test(w)) ?? 30));
+        const everywhere = words.includes('all');
+        void collectStats({...(everywhere ? {} : {cwd: process.cwd()}), days}).then((s) => log('info', `${formatStats(s, days)}${everywhere ? '' : '\n/stats all covers every project; /stats 90 a longer window.'}`));
         break;
       }
       case 'deadcode': {

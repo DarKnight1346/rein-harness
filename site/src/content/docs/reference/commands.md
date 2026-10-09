@@ -89,6 +89,7 @@ See [Goals](../../features/goals/) and [Plan mode](../../features/plans/).
 | Command | Arguments | What it does |
 |---|---|---|
 | `/cost` | — | What the conversation, the latest request and the current goal cost at API list prices, with token totals. See [Cost & budgets](../../features/cost/). |
+| `/stats` | `[days] [all]` | How your requests go, from the conversations saved on this machine: time per request, tool calls, failures and retries, how often the tests passed at the end, and cost, overall and per model. This project and 30 days by default; `all` covers every project. See [Insight](../../features/insight/#how-your-requests-go) |
 | `/affected` | — | What your working tree's changes affect, from the monorepo's build graph (Nx, Turborepo, Bazel, Pants), and the command that tests just that. See [Build & test](../../features/build-and-test/#what-a-change-affects). |
 | `/coverage` | `[tests]` | Lines your changes add that no test ran, from the newest coverage report (lcov, Istanbul, Cobertura, Go). `tests` asks the agent to write tests for them. See [Tests for what you changed](../../features/build-and-test/#tests-for-what-you-changed). |
 | `/mutate` | `[tests]` | Mutation testing of your changed files (Stryker, mutmut, go-mutesting): which planted bugs the tests miss. `tests` asks the agent to tighten the tests. See [Do the tests catch bugs?](../../features/build-and-test/#do-the-tests-catch-bugs). |

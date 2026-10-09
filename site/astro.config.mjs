@@ -48,6 +48,7 @@ export default defineConfig({
           {label: 'Large codebases', slug: 'features/large-codebases'},
           {label: 'Model routing', slug: 'features/routing'},
           {label: 'Cost & budgets', slug: 'features/cost'},
+          {label: 'Insight', slug: 'features/insight'},
           {label: 'Observability', slug: 'features/observability'},
           {label: 'Goals', slug: 'features/goals'},
           {label: 'Plan mode', slug: 'features/plans'},
