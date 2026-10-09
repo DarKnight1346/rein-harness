@@ -66,6 +66,22 @@ Rein looks in order:
 2. **Backstage**: the `spec.owner` of the `catalog-info.yaml` in the closest folder above the file.
 3. **Git history**: the three people with the most commits to the file in the last year.
 
+## Search the whole org
+
+The code you need is often in a repo you haven't cloned: who else calls this endpoint, how other teams use the library you're changing. If your company runs [Sourcegraph](https://sourcegraph.com) or [Zoekt](https://github.com/sourcegraph/zoekt), point Rein at it:
+
+```json title="~/.rein/config.json"
+{"codeSearch": {"type": "sourcegraph", "url": "https://sourcegraph.example.com"}}
+```
+
+or `/settings codeSearch {"type":"zoekt","url":"http://zoekt.internal:6070"}`. The agent then gets an [`org_search`](../../reference/tools/#org_search) tool that searches every repo the server indexes, in that server's query syntax (`repo:^acme/ lang:go RetryPolicy`), and gets back the repo, file, line and matching text.
+
+For Sourcegraph, put an access token in `SRC_ACCESS_TOKEN` (the same variable the `src` CLI uses); Rein reads it from the environment and never saves it. Zoekt's webserver needs none. Without `codeSearch` the tool isn't offered at all.
+
+:::note
+Code from other repos is outside content: with `injectionScan` on, `org_search` results are checked for planted instructions like web results are. See [Safety](../safety/).
+:::
+
 ## Related
 
 - [Workspaces](../workspaces/): several repos in one session, or one package with `--scope`

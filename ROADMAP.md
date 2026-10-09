@@ -75,7 +75,7 @@ agent works by default ships as an experiment (`experiments` in config) until it
 | 30 | Repo map | AST summary per repo (symbols, signatures) sized to a token budget. | features/large-codebases/#a-map-of-the-repo | done |
 | 31 | Ownership map | Owners from CODEOWNERS, git history and Backstage catalogs. | features/large-codebases/#who-owns-what | done |
 | 32 | Workspace memory | Decisions and gotchas remembered per workspace. Builds on #29. | features/workspaces/#workspace-memory | done |
-| 33 | Org code search connector | Sourcegraph or Zoekt as a search backend. |  | todo |
+| 33 | Org code search connector | Sourcegraph or Zoekt as a search backend. | features/large-codebases/#search-the-whole-org | done |
 | 34 | Local semantic index | Incremental, git-aware embeddings for search by meaning. |  | todo |
 | 35 | Synthetic monorepo view | One file tree and search across the workspace's repos. Builds on #29. |  | todo |
 | 36 | Sparse and partial clones | Open huge monorepos without checking out everything. |  | todo |

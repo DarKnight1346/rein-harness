@@ -344,6 +344,17 @@ Label `RepoMap`. Approval: none (read-only). Only listed with the `repo-map` [ex
 
 Each source file's top-level declarations, ranked by how much the file exports. See [A map of the repo](../../features/large-codebases/#a-map-of-the-repo).
 
+### `org_search`
+
+Label `OrgSearch`. Approval: none (read-only). Only listed once `codeSearch` is [configured](../configuration/).
+
+| Parameter | Type | Notes |
+| --- | --- | --- |
+| `query` **(required)** | string | In the server's own syntax (Sourcegraph or Zoekt) |
+| `max` | integer | Most results, 1–100 (default 30) |
+
+Searches every repo your Sourcegraph or Zoekt server indexes, and returns `repo  file:line: text` per match. See [Search the whole org](../../features/large-codebases/#search-the-whole-org).
+
 ### `lsp_install`
 
 Label `InstallLanguageServer`. Approval: **always asks, even in bypass mode.**

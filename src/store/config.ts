@@ -3,6 +3,7 @@ import {paths} from './paths.js';
 import type {Price} from '../providers/prices.js';
 import type {OtelConfig} from '../telemetry/otel.js';
 import type {Budget} from '../budget.js';
+import type {CodeSearchConfig} from '../context/orgSearch.js';
 
 export type Config = {
   version: 1;
@@ -107,6 +108,8 @@ export type Config = {
   provenance: boolean;
   /** Tell you when the branch changes more lines than this (reviews slow down past a few hundred). 0 = off. */
   prMaxLines: number;
+  /** Org-wide code search: {"type": "sourcegraph" | "zoekt", "url": "…"}; the agent gets org_search. */
+  codeSearch?: CodeSearchConfig;
   /** Semgrep rules (--config): auto, a registry pack like p/owasp-top-ten, or a path. */
   sastConfig: string;
   /** OpenTelemetry export of turns, tool calls, tokens and cost (metadata only). Off unless set. */

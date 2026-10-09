@@ -137,6 +137,7 @@ Added to the system prompt for every provider, up to 64 KB each, duplicates remo
 | `REIN_KEYCHAIN` | `1` (macOS): keep using the Keychain for secrets even with `REIN_HOME` set |
 | `REIN_CLAUDE_BIN` | Path to the `claude` binary (default: `claude` on `PATH`) |
 | `REIN_CODEX_BIN` | Path to the `codex` binary (default: `codex` on `PATH`) |
+| `SRC_ACCESS_TOKEN` | Sourcegraph access token for [`org_search`](../../features/large-codebases/#search-the-whole-org) (`codeSearch` in config) |
 | `HTTPS_PROXY`, `HTTP_PROXY`, `ALL_PROXY`, `NO_PROXY` | Route Rein's own requests through a proxy (never local connections). See [Install → Behind a corporate proxy](../../start/install/#behind-a-corporate-proxy) |
 | `NODE_EXTRA_CA_CERTS` | A PEM file of extra CA certificates, for a TLS-inspecting proxy (read by Node at startup) |
 | `XDG_CONFIG_HOME`, `XDG_DATA_HOME`, `XDG_STATE_HOME` | Where a new install keeps its config, data and state on Linux (see above) |
