@@ -68,6 +68,8 @@ import {mcpProxyCommand, ToolHost, type ApprovalDecision, type ApprovalRequest, 
 const KEEP_GOING_MAX = 3;
 /** verify-requirements: checks per request (the second only when the first one changed the code). */
 const VERIFY_MAX = 2;
+const VERIFY_FIRST =
+  "Before you finish, check your change against the user's request line by line. For every concrete requirement (each behaviour, error case and its message, edge case, name, value and attribute), run it: one quick script or test that exercises several requirements at once is fine, rereading the code is not. Fix whatever fails or is missing, then run the project's tests. If everything already passes, reply with a short confirmation and stop: don't redo work.";
 
 export class Runtime {
   config: Config = DEFAULT_CONFIG;
@@ -480,12 +482,18 @@ Drop superseded reads of the same file, routine listings, and output that no lon
         const since = again ? this.verifiedAt! : this.currentTurn();
         if (await this.changedSince(since)) {
           this.verifyPasses++;
+          // advisor-review: on the first pass the advisor also reads the diff against the request, and its
+          // findings come with the same message (a model the agent would rarely ask on its own).
+          const advisor = !again && activeExperiments(this.config).includes('advisor-review') ? advisorRef(this.config) : undefined;
+          const review = advisor ? await this.crossReview(advisor).catch(() => undefined) : undefined;
           this.verifiedAt = this.engine.transcript.messages.length; // the index the hook's message gets
           return {
             kind: 'hook',
-            reason: again
+            reason: review
+              ? `${VERIFY_FIRST}\n\n${review}`
+              : again
               ? "You changed the code while checking it. Run your requirement checks again against the final code (the same quick scripts or tests), fix whatever fails, then run the project's tests. If everything passes, reply with a short confirmation and stop."
-              : "Before you finish, check your change against the user's request line by line. For every concrete requirement (each behaviour, error case and its message, edge case, name, value and attribute), run it: one quick script or test that exercises several requirements at once is fine, rereading the code is not. Fix whatever fails or is missing, then run the project's tests. If everything already passes, reply with a short confirmation and stop: don't redo work.",
+              : VERIFY_FIRST,
           };
         }
         this.verifiedAt = undefined;
@@ -561,10 +569,10 @@ Drop superseded reads of the same file, routine listings, and output that no lon
     return best ? toRef(best) : undefined;
   }
 
-  /** cross-review: the reviewer's findings as a message for the agent, or undefined when it found nothing. */
-  private async crossReview(): Promise<string | undefined> {
+  /** cross-review (or advisor-review, `by`): the reviewer's findings as a message for the agent, or undefined when it found nothing. */
+  private async crossReview(by?: ModelRef): Promise<string | undefined> {
     const cur = this.engine?.currentRef();
-    const reviewer = cur && this.reviewerFor(cur);
+    const reviewer = by ?? (cur && this.reviewerFor(cur));
     if (!reviewer || !this.engine) return undefined;
     const root = process.cwd();
     const git = async (...a: string[]) => (await run('git', a, {cwd: root, timeoutMs: 20_000})).stdout;
