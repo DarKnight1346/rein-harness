@@ -170,7 +170,7 @@ function blocks(text: string, prefix = ''): {kind: string; name: string; body: s
     const body = text.slice(re.lastIndex, i - 1);
     const name = `${prefix}${m[2]}`;
     // The block's own lines, without nested blocks.
-    const own = body.replace(/\b(?:message|enum|oneof)\s+\w+\s*\{(?:[^{}]|\{[^{}]*\})*\}/g, (blk) => (/^oneof/.test(blk) ? blk.replace(/^oneof\s+\w+\s*\{|\}$/g, '') : ''));
+    const own = body.replace(/\b(?:message|enum|oneof)\s+\w+\s*\{(?:[^{}]|\{[^{}]*\})*\}/g, (blk) => (/^oneof/.test(blk) ? blk.slice(blk.indexOf('{') + 1, blk.lastIndexOf('}')) : '')); // a oneof's fields belong to the message
     out.push({kind: m[1]!, name, body: own});
     if (m[1] === 'message') out.push(...blocks(body, `${name}.`));
     re.lastIndex = i;
