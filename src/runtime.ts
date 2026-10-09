@@ -590,6 +590,13 @@ Drop superseded reads of the same file, routine listings, and output that no lon
       const findings = await this.crossReview().catch(() => undefined);
       if (findings) return {kind: 'hook', reason: findings};
     }
+    // self-review: the same model, in a fresh call without this conversation, reviews the change against the request.
+    if (!active && activeExperiments(this.config).includes('self-review') && !this.reviewed && this.engine && this.checkpoints.changedSince(this.currentTurn()).length) {
+      this.reviewed = true;
+      const self = this.engine.currentRef();
+      const findings = self ? await this.crossReview(self, 'A fresh review of your change (the same model, without this conversation)').catch(() => undefined) : undefined;
+      if (findings) return {kind: 'hook', reason: findings};
+    }
     // verify-requirements: once per request, before the agent stops after changing files, it runs its
     // change against every requirement in the request (hard tasks fail on the edge case it never tried).
     // Once more if that pass changed the code: its fixes were never run against the requirements.
@@ -697,9 +704,9 @@ Drop superseded reads of the same file, routine listings, and output that no lon
   }
 
   /** cross-review: the reviewer's findings as a message for the agent, or undefined when it found nothing. */
-  private async crossReview(): Promise<string | undefined> {
+  private async crossReview(by?: ModelRef, who?: string): Promise<string | undefined> {
     const cur = this.engine?.currentRef();
-    const reviewer = cur && this.reviewerFor(cur);
+    const reviewer = by ?? (cur && this.reviewerFor(cur));
     if (!reviewer || !this.engine) return undefined;
     const root = process.cwd();
     const git = async (...a: string[]) => (await run('git', a, {cwd: root, timeoutMs: 20_000})).stdout;
@@ -718,7 +725,7 @@ Drop superseded reads of the same file, routine listings, and output that no lon
     const prompt = `The request:\n${request.slice(0, 20_000)}\n\nThe change (git diff, then new files):\n${diff}\n${added}\n\nList each problem on one line: the file, what is wrong, and which part of the request it breaks. If there are none, reply exactly NONE.`;
     const reply = (await completeWith(reviewer, this.config, system, prompt, {timeoutMs: 240_000})).trim(); // its tokens count via onSideUsage
     if (!reply || /^none\b/i.test(reply)) return undefined;
-    return `A second model (${reviewer.provider}:${reviewer.model}) reviewed your change against the request and reported:\n${reply.slice(0, 6000)}\nCheck each point against the code. Fix the ones that are real; for any that are wrong, say so in a line. Don't redo work that is fine.`;
+    return `${who ?? `A second model (${reviewer.provider}:${reviewer.model})`} reviewed your change against the request and reported:\n${reply.slice(0, 6000)}\nCheck each point against the code. Fix the ones that are real; for any that are wrong, say so in a line. Don't redo work that is fine.`;
   }
 
   /** escalate: the model the task moves to (set by stopHook, cleared by the user's next message). */
