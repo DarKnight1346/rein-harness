@@ -151,6 +151,7 @@ These entries look like commands but are **skills**. Each one sends a prepared p
 | `/review:deep` | `[what to review]` | The thorough version, in plan mode: a reviewer per area **on each provider you're signed into**, each on that provider's best model for the area. Findings are merged, checked against the code, then checked with the [advisor](../../features/subagents/) and with you. You pick which to fix (none is fine), and only those go into a `/plan:deep`-style plan for approval. |
 | `/skill:create` | `<what it should do>` | Has the agent create a new Rein skill, global or for this project. |
 | `/skill:edit` | `<skill and change>` | Has the agent edit an existing Rein skill. |
+| `/tour` | `[what]` | Writes a guided onboarding tour of the repo (or the service or feature you name): 8–20 stops in reading order, each a real file and line, as a [CodeTour](https://github.com/microsoft/codetour) in `.tours/` and a markdown page. See [Onboarding tours](../../features/insight/#onboarding-tours) |
 
 Your own skills from `<project>/.rein/skills/` and `~/.rein/skills/` appear in the same list. When names clash, the built-in wins, then the project skill, then the global one. A skill named like a built-in command is hidden, and Rein tells you at startup (`Skill "…" hidden by built-in command; rename to use it.`). See [Skills](../../features/skills/).
 

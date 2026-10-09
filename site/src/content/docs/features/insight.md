@@ -66,6 +66,32 @@ For every reply, Rein records the turn's input tokens, how many were cached, and
 
 A turn that read under half its input from the cache with none of these reasons shows as **unexplained**. That usually means the system prompt or tool list changed mid-conversation, or the provider evicted the cache early. The data is recorded from this version of Rein on, so older conversations don't count. `/cache 90` and `/cache all` work like `/stats`.
 
+## Onboarding tours
+
+A new teammate's first week goes on finding the ten files that explain the rest. `/tour` writes that path down:
+
+```text title="rein"
+> /tour the orders service
+```
+
+The agent reads the README and instructions, finds the entry points, and follows one real request or job end to end. Then it picks **8 to 20 stops** in reading order:
+
+1. What this is and how to run it.
+2. The entry point.
+3. Each layer the request passes through.
+4. The core types and logic.
+5. The data layer.
+6. Config, auth, errors and logging.
+7. Where the tests are and how to run one.
+8. Who to ask (from [`/owners`](../large-codebases/#who-owns-what)).
+
+Each stop is a real file and line it has checked, with a short paragraph on why it matters. It writes two files:
+
+- **`.tours/<name>.tour`** in the [CodeTour](https://github.com/microsoft/codetour) format. With the CodeTour extension, VS Code plays it step by step, opening each file at its line.
+- **`docs/tours/<name>.md`**: the same stops as a page with `path:line` links, for reading anywhere.
+
+Commit them, and the next person who joins gets the tour.
+
 ## Related
 
 - [Cost & budgets](../cost/): what a conversation costs, and caps

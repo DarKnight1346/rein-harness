@@ -150,6 +150,7 @@ Fix issue #$1 with priority $2. Recent changes: !`git log --oneline -5`
 | `/review:deep [what]` | Plan mode on. A reviewer per area on each signed-in provider, every finding checked with the advisor and you, then a plan that fixes only what you picked. |
 | `/skill:create <what>` | The agent writes a new skill for you, project or global. |
 | `/skill:edit <which, what>` | The agent edits an existing project or global skill. Built-ins are off-limits; it offers to make a differently named copy instead. |
+| `/tour [what]` | The agent follows a real request through the code and writes an onboarding tour: a CodeTour (`.tours/<name>.tour`) VS Code can play, and the same stops as a markdown page. See [Onboarding tours](../insight/#onboarding-tours). |
 
 ## Reviewing code: `/review` and `/review:deep`
 
