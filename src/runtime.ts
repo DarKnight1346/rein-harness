@@ -279,7 +279,7 @@ export class Runtime {
           get tools() {
             return host.specs({subagent: true, includeMainOnly: agent.mode === 'fork'}).filter((t) => permitted(t.name));
           },
-          call: (name, args) => (permitted(name) ? host.call(name, args, origin) : Promise.resolve({ok: false, text: `${name} isn't available to the ${agent.definition?.name} subagent`})),
+          call: (name, args) => (permitted(name) ? host.callInOrder(name, args, origin) : Promise.resolve({ok: false, text: `${name} isn't available to the ${agent.definition?.name} subagent`})),
           listen: async () => {
             const l = await host.listenFor(origin);
             closeSocket = l.close;
@@ -783,7 +783,7 @@ Drop superseded reads of the same file, routine listings, and output that no lon
             get tools() {
               return host.specs();
             },
-            call: (name, args) => this.tools.call(name, args),
+            call: (name, args) => this.tools.callInOrder(name, args),
             listen: () => this.tools.listen(),
             proxy: mcpProxyCommand(),
           },

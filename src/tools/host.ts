@@ -18,6 +18,12 @@ import {ShellManager} from './shells.js';
 import type {DiffLine} from './diff.js';
 import {skillDirs} from '../skills/index.js';
 
+type Lane = {running: Set<Promise<unknown>>; barrier: Promise<unknown>; lastDone: number; inResponse: number; single: number; nudgeAt: number};
+/** Calls this close to the previous result come from the same model response. */
+const SAME_RESPONSE_MS = 400;
+/** many-calls: single-call responses in a row before Rein reminds the model to batch. */
+const NUDGE_AFTER = 4;
+
 export type ApprovalRequest = {
   tool: ToolDef;
   args: any;
@@ -241,6 +247,64 @@ export class ToolHost extends EventEmitter {
   /** Untrusted work (an issue from a tracker) always asks, whatever mode the user chose. */
   private modeFor(origin: Origin | undefined): ApprovalMode {
     return origin && this.opts.untrusted?.(origin) ? 'ask' : this.opts.mode();
+  }
+
+  /** Per agent (main or a subagent): calls still running, the last one that may change files, and batching counts. */
+  private lanes = new Map<string, Lane>();
+
+  /**
+   * A model's calls, run in the order it made them. CLIs may send one response's calls at once;
+   * reads next to each other still run side by side, but a call that may change something waits for
+   * every call before it, and every later call waits for it. So a response can edit files and then
+   * run the tests, and get results that match the order it wrote them in.
+   */
+  callInOrder(name: string, args: unknown, origin?: Origin): Promise<ToolResult> {
+    const key = origin?.agentId === undefined ? '' : String(origin.agentId);
+    let lane = this.lanes.get(key);
+    if (!lane) this.lanes.set(key, (lane = {running: new Set(), barrier: Promise.resolve(), lastDone: 0, inResponse: 0, single: 0, nudgeAt: NUDGE_AFTER}));
+    const now = Date.now();
+    // A call that arrives while others run, or right after one returned, belongs to the same model
+    // response: a new response takes the model at least a second to write.
+    const sameResponse = lane.running.size > 0 || now - lane.lastDone < SAME_RESPONSE_MS;
+    let nudge: string | undefined;
+    if (sameResponse) lane.inResponse++;
+    else {
+      lane.single = lane.inResponse === 1 ? lane.single + 1 : 0;
+      lane.inResponse = 1;
+      if (lane.single >= lane.nudgeAt && this.experiment('many-calls')) {
+        nudge = `[Rein: your last ${lane.single} responses each made a single tool call, and each response re-reads the whole conversation. Put the calls you can already see into one response: the reads, searches and edits you've decided on, and independent commands. They run in the order you write them.]`;
+        lane.nudgeAt *= 2; // remind less often each time
+        lane.single = 0;
+      }
+    }
+    const reads = this.readsOnly(name, args);
+    const start = reads ? lane.barrier : Promise.all([...lane.running]);
+    const l = lane;
+    // Cleared before the result goes back, so the model's next call counts as a new response.
+    const run = start
+      .then(() => this.call(name, args, origin))
+      .finally(() => {
+        l.running.delete(done);
+        l.lastDone = Date.now();
+      });
+    const done: Promise<unknown> = run.then(
+      () => {},
+      () => {},
+    );
+    l.running.add(done);
+    if (!reads) l.barrier = done;
+    return nudge ? run.then((r) => ({...r, text: `${r.text}\n\n${nudge}`})) : run;
+  }
+
+  /** Calls that only look: they may run alongside other reads. */
+  private readsOnly(name: string, args: unknown): boolean {
+    const tool = this.find(name.replace(/^mcp__rein__/, ''));
+    if (!tool || tool.name === 'tool' || tool.name === 'ask') return false;
+    if (tool.name === 'shell') {
+      const a = (args ?? {}) as {command?: unknown; background?: unknown};
+      return typeof a.command === 'string' && !a.background && readOnlyCommand(a.command);
+    }
+    return !tool.mutating;
   }
 
   async call(name: string, rawArgs: unknown, origin?: Origin): Promise<ToolResult> {
@@ -701,12 +765,12 @@ export class ToolHost extends EventEmitter {
 
   /** Unix socket for the Claude MCP proxy: newline JSON `{id, method:'list'|'call', name?, args?}`. */
   listen(): Promise<string> {
-    return (this.mainSocket ??= this.serve((name, args) => this.call(name, args)));
+    return (this.mainSocket ??= this.serve((name, args) => this.callInOrder(name, args)));
   }
 
   /** A subagent's own socket (Claude MCP): its calls are tagged with `origin`. Close it when done. */
   async listenFor(origin: Origin): Promise<{socket: string; close(): void}> {
-    const socket = await this.serve((name, args) => this.call(name, args, origin));
+    const socket = await this.serve((name, args) => this.callInOrder(name, args, origin));
     return {
       socket,
       close: () => {

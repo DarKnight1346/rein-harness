@@ -22,6 +22,8 @@ Claude and Codex in Rein work with the **same** tools. They aren't two lookalike
 
 In both cases the call lands in Rein's `ToolHost`, which applies your [permissions](../permissions/), runs [hooks](../hooks/), checkpoints files for [/rewind](../rewind/), and draws the line in the transcript.
 
+**Calls run in the order the model made them.** A CLI may hand Rein all of one response's calls at once. Reads next to each other (`read`, `search`, `list`, read-only shell commands) still run side by side, but a call that may change something waits for every call before it, and every later call waits for it. So a model can make its edits and run the tests in one response, and each result matches the order it wrote the calls in.
+
 ## The tool set
 
 Parameters for every tool are in the [tools reference](../../reference/tools/).
