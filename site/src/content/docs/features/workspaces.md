@@ -64,7 +64,7 @@ Entries Rein can't use (no path or name, a name used twice, invalid YAML) are sk
 `/workspace clone` clones every repo that has a `url` and no folder yet (with `--branch` when `branch` is set), then updates what the agent sees.
 
 :::note
-Rewind's whole-project snapshots still cover only the repo you launched in. Edits in the other repos are restored from Rein's per-file checkpoints (see [Rewind](../rewind/)).
+`/rewind` covers every repo: each one is snapshotted before every message, and a code rewind restores them all to the same point (see [Rewind](../rewind/#every-repo-of-a-workspace)).
 :::
 
 ## Huge repos: sparse and partial clones

@@ -76,3 +76,30 @@ describe('whole-tree snapshots', () => {
     expect(execFileSync('git', ['status', '--porcelain'], {cwd: root, encoding: 'utf8'})).not.toContain('src/a.ts');
   });
 });
+
+describe('cross-repo rewind', () => {
+  it('snapshots every workspace repo at once and rewinds them all to the same message', async () => {
+    const {WorkspaceSnapshots} = await import('../src/session/snapshots.js');
+    const api = realpathSync(mkdtempSync(path.join(os.tmpdir(), 'rein-api-')));
+    writeFileSync(path.join(api, 'orders.ts'), 'v1\n');
+    let repos = [api];
+    const ws = new WorkspaceSnapshots(root, () => 'ws1', () => repos);
+    await ws.snapshot(1);
+    writeFileSync(f('src/a.ts'), 'a2\n');
+    writeFileSync(path.join(api, 'orders.ts'), 'v2\n');
+    writeFileSync(path.join(api, 'new.ts'), 'added\n');
+    const relApi = path.relative(root, api).split(path.sep).join('/');
+    expect((await ws.changedSince(1)).sort()).toEqual(['src/a.ts', `${relApi}/new.ts`, `${relApi}/orders.ts`].sort());
+    const r = await ws.restore(1);
+    expect(r.failed).toEqual([]);
+    expect(r.removed).toEqual([`${relApi}/new.ts`]);
+    expect([readFileSync(f('src/a.ts'), 'utf8'), readFileSync(path.join(api, 'orders.ts'), 'utf8'), existsSync(path.join(api, 'new.ts'))]).toEqual(['a1\n', 'v1\n', false]);
+    // A repo that joined later has no snapshot for the older message: the rest still rewinds.
+    const web = realpathSync(mkdtempSync(path.join(os.tmpdir(), 'rein-web-')));
+    writeFileSync(path.join(web, 'x.ts'), 'w\n');
+    await ws.snapshot(2);
+    repos = [api, web];
+    writeFileSync(f('src/a.ts'), 'a3\n');
+    expect((await ws.restore(2)).restored).toEqual(['src/a.ts']);
+  });
+});

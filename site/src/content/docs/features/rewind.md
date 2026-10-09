@@ -73,6 +73,12 @@ Before each message you send runs, Rein records the entire working tree in a **p
 
 Restoring compares the snapshot with the tree as it is now and rewrites **only the files that differ**: changed or deleted files are put back, and files created since the message are removed.
 
+### Every repo of a workspace
+
+In a [workspace](../workspaces/), each cloned repo gets its own snapshot store (`~/.rein/checkpoints/<session>/repos/<repo>-<hash>/`), taken at the same moment as the launch repo's. A code rewind puts **every repo** back to that message together: the API change and the client change it broke come back as one. Files in the other repos are reported relative to the launch repo (`../api/src/orders.ts`).
+
+A repo cloned partway through the conversation has no snapshots for the messages before it arrived; rewinding to one of those leaves it as it is and restores the rest. If one repo's restore fails, the others still go through and the failure is reported.
+
 ### Per-file checkpoints
 
 Before `edit`, `write`, `delete` or `image_generate` changes a file, Rein saves that file's previous state once per turn — or notes that it didn't exist yet. Contents are stored as content-addressed blobs (`~/.rein/checkpoints/<session>/blobs/<sha256>`) indexed by `index.jsonl`.
@@ -102,7 +108,7 @@ After the rewind:
 ## Limits and gotchas
 
 :::caution[What a rewind can't undo]
-- **Shell changes outside the project.** Snapshots cover the project directory only. A command that writes to `~/` or another folder isn't recorded.
+- **Shell changes outside the project.** Snapshots cover the project directory (and, in a workspace, its other repos) only. A command that writes to `~/` or another folder isn't recorded.
 - **Ignored files changed by shell.** `.gitignore`d files are only restored when Rein's own file tools changed them.
 - **Side effects that aren't files.** Commits, pushes, database writes, installed packages and network calls stay done.
 :::

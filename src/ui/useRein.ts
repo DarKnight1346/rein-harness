@@ -487,6 +487,7 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
           t.restored.forEach((f) => changed.add(f));
           removedCount += t.removed.length;
           t.removed.forEach((f) => changed.add(f));
+          for (const f of t.failed) log('error', `Couldn't restore the snapshot of ${f}`);
         } catch (err) {
           log('error', `Couldn't restore the project snapshot: ${(err as Error).message}`);
         }

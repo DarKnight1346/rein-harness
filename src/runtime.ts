@@ -46,7 +46,7 @@ import {agentTools} from './agents/tools.js';
 import {advisorRef, advisorTool} from './agents/advisor.js';
 import {GoalManager} from './goals/manager.js';
 import {Checkpoints} from './session/checkpoints.js';
-import {TreeSnapshots} from './session/snapshots.js';
+import {WorkspaceSnapshots} from './session/snapshots.js';
 import {McpManager} from './mcp/manager.js';
 import {mcpTools} from './mcp/tools.js';
 import {skillTool} from './skills/tool.js';
@@ -348,7 +348,7 @@ export class Runtime {
   /** File checkpoints for /rewind, per conversation (Rein's own file changes, ignored files too). */
   readonly checkpoints = new Checkpoints(() => this.engine?.transcript.id ?? 'none');
   /** Whole-tree snapshots for /rewind (covers shell-made changes); see snapshots.ts. */
-  readonly snapshots = new TreeSnapshots(process.cwd(), () => this.engine?.transcript.id ?? 'none');
+  readonly snapshots = new WorkspaceSnapshots(process.cwd(), () => this.engine?.transcript.id ?? 'none', () => workspaceDirs(this.workspace));
 
   /** Index of the user message the agent is working on (checkpoints are grouped by it). */
   currentTurn(): number {

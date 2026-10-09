@@ -79,7 +79,7 @@ agent works by default ships as an experiment (`experiments` in config) until it
 | 34 | Local semantic index | Incremental, git-aware embeddings for search by meaning. | features/large-codebases/#search-by-meaning | done |
 | 35 | Synthetic monorepo view | One file tree and search across the workspace's repos. Builds on #29. | features/workspaces/#one-tree-for-every-repo | done |
 | 36 | Sparse and partial clones | Open huge monorepos without checking out everything. | features/workspaces/#huge-repos-sparse-and-partial-clones | done |
-| 37 | Cross-repo rewind | One checkpoint across every repo in the workspace. |  | todo |
+| 37 | Cross-repo rewind | One checkpoint across every repo in the workspace. | features/rewind/#every-repo-of-a-workspace | done |
 
 ## Wave 6: Specs and planning
 

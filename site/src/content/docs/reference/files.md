@@ -49,7 +49,7 @@ An existing `~/.rein` keeps being used as it is, and so does `REIN_HOME`. To swi
 | `sessions/<id>.jsonl` | Conversation transcripts, append-only: one line per message, plus meta lines (summary, native session refs, tokens, subagents, goal) and `progress` lines that record a running turn's tool calls, so a crash mid-turn loses nothing |
 | `sessions/<id>.meta.json` | Small index entry per conversation, used for listing and `/resume` |
 | `scratch/<id>/` | The session's scratchpad. The agent can write here without approval. Pasted and dropped images are copied to `scratch/<id>/images/` |
-| `checkpoints/<id>/` | [`/rewind`](../../features/rewind/) data: `tree.git` (a private git store of whole-project snapshots, never your project's `.git`), `trees.json`, and per-file checkpoints (`index.jsonl` + content-addressed `blobs/`, ≤ 10 MB per file) |
+| `checkpoints/<id>/` | [`/rewind`](../../features/rewind/) data: `tree.git` (a private git store of whole-project snapshots, never your project's `.git`), `trees.json`, and per-file checkpoints (`index.jsonl` + content-addressed `blobs/`, ≤ 10 MB per file); in a workspace, `repos/<repo>-<hash>/` holds the same snapshot store for each other repo |
 | `index/<hash>.json` | [Semantic indexes](../../features/large-codebases/#search-by-meaning), one per project: each file's change key and its chunks' vectors. `/index` rebuilds it |
 | `skills/` | Global skills, one folder each with a `SKILL.md` |
 | `mcp.json` | User-scope MCP servers (`mcp_add` with `scope: "user"`) |
