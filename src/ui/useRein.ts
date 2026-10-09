@@ -74,6 +74,8 @@ import {describeDevEnv, detectDevEnv} from '../env/devenv.js';
 import {describeLive, listLive, removeLive, sendTo, watchInbox, writeLive} from '../host/live.js';
 import {formatGraph, mermaid} from '../system/services.js';
 import {graphFor} from '../system/tools.js';
+import {findServices} from '../system/services.js';
+import {buildSymbolGraph, crossRepo, formatLookup, indexRepos, lookup} from '../system/scip.js';
 import {deadCodeTask, findDeadCode, findFlags, flagRemovalTask, formatFlags, isStale} from '../contracts/deadcode.js';
 import {checkoutState, describeCheckout, sparseAdd} from '../workspace/sparse.js';
 import {buildIndex, DEFAULT_MODEL as EMBED_MODEL, formatSemanticHits, loadIndex, semanticSearch} from '../context/semantic.js';
@@ -1301,6 +1303,26 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
           if (!files.length) return log('info', 'No changes (vs HEAD). /owners <path> looks up a file or folder.');
           log('info', `Owners of ${arg || `your ${files.length} changed file${files.length === 1 ? '' : 's'}`}:\n${formatOwners(await ownersOf(root, files))}`);
         });
+        break;
+      }
+      case 'symbols': {
+        const arg = parsed.args.trim();
+        const repos = findServices(process.cwd());
+        if (arg === 'index') {
+          void indexRepos(repos, (line) => log('info', line));
+          break;
+        }
+        const g = buildSymbolGraph(repos);
+        if (!g.repos.length) {
+          log('info', 'No SCIP indexes (index.scip) here yet. /symbols index writes one per repo with scip-typescript, scip-python, scip-go, scip-java or rust-analyzer, where installed.');
+          break;
+        }
+        if (!arg || arg === 'cross') {
+          const seams = crossRepo(g);
+          log('info', seams.length ? [`${seams.length} symbol${seams.length === 1 ? '' : 's'} used outside the repo that defines ${seams.length === 1 ? 'it' : 'them'} (indexes from ${g.repos.join(', ')}):`, ...seams.slice(0, 40).map((s) => `  ${s.name}  ${s.from} → ${s.usedIn.join(', ')}`)].join('\n') : `Nothing is shared between ${g.repos.join(', ')} (by their indexes).`);
+          break;
+        }
+        log('info', formatLookup(lookup(g, arg)));
         break;
       }
       case 'services': {

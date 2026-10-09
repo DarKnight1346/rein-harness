@@ -15,7 +15,7 @@ import {affectedTool} from './build/tool.js';
 import {repoMapTool} from './context/repoMap.js';
 import {orgSearchTool} from './context/orgSearch.js';
 import {semanticSearchTool} from './context/semantic.js';
-import {serviceGraphTool} from './system/tools.js';
+import {serviceGraphTool, symbolRefsTool} from './system/tools.js';
 import {affected, changedFiles} from './build/affected.js';
 import {CiWatcher} from './build/ci.js';
 import {branchSize} from './pr/github.js';
@@ -986,6 +986,7 @@ Drop superseded reads of the same file, routine listings, and output that no lon
       orgSearchTool(() => this.config),
       semanticSearchTool(() => this.config, () => process.cwd()),
       serviceGraphTool(() => activeExperiments(this.config), () => process.cwd()),
+      symbolRefsTool(() => activeExperiments(this.config), () => process.cwd()),
       skillTool(() => process.cwd(), () => (this.planMode = true)),
       ...memoryTools(() => process.cwd()),
       askUserTool(() => this.askPresenter),

@@ -34,6 +34,29 @@ A change to one service is a change to everything that calls it. These features 
 
 Each service's contracts (OpenAPI, protobuf services, GraphQL) are listed as what it **provides**. `/services mermaid` prints the graph as a Mermaid diagram for docs and PRs. With the `system-graph` [experiment](../../reference/configuration/#experiments) on, the agent gets a [`service_graph`](../../reference/tools/#service_graph) tool to ask who calls a service before changing its API.
 
+## Symbols across repos
+
+A language server knows one repo. When `@shop/money` defines `format` and three other repos call it, finding those calls means joining the repos' indexes. Rein reads [SCIP](https://github.com/sourcegraph/scip) indexes, the format code-intelligence indexers write, from each repo (`index.scip` or `.rein/index.scip`), and joins them:
+
+```text title="rein"
+> /symbols
+  ⎿ 2 symbols used outside the repo that defines them (indexes from money, web, orders):
+      format  money → web, orders
+      Currency  money → orders
+
+> /symbols format
+  ⎿ format  scip-typescript npm @shop/money src/`format.ts`/format().
+      defined  money  src/format.ts:5
+      used     web  src/cart.tsx:12
+      used     orders  src/invoice.ts:40
+```
+
+A symbol in one repo matches one in another when the package and the path to it are the same. The version is left out, since repos pin different versions of a shared library. Local symbols (inside one function) aren't joined.
+
+`/symbols index` writes each repo's `index.scip` with the indexer for its language, when it's installed: `scip-typescript`, `scip-python`, `scip-go`, `scip-java` or `rust-analyzer scip`. Indexers that aren't installed are skipped and listed. You can also produce the indexes in CI and check them out with the code. With the `system-graph` [experiment](../../reference/configuration/#experiments) on, the agent gets a [`symbol_refs`](../../reference/tools/#symbol_refs) tool for the same lookups.
+
+Within one repo, the agent's usual code intelligence (language servers) still answers go-to-definition and references. SCIP is what connects the repos.
+
 ## Related
 
 - [Workspaces](../workspaces/): several repos as one system

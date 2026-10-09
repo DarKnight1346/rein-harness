@@ -1,5 +1,6 @@
 import type {ToolDef} from '../tools/registry.js';
-import {buildGraph, formatGraph, neighbours, type ServiceGraph} from './services.js';
+import {buildGraph, findServices, formatGraph, neighbours, type ServiceGraph} from './services.js';
+import {buildSymbolGraph, formatLookup, lookup} from './scip.js';
 
 /** The graph, built once per few minutes (it reads every repo). */
 let cached: {root: string; at: number; graph: ServiceGraph} | undefined;
@@ -33,6 +34,26 @@ export function serviceGraphTool(experiments: () => string[], root: () => string
         ok: true,
         text: [`${s.name}${s.provides.length ? ` provides ${s.provides.join(', ')}` : ''}`, `Called by:${callers.length ? '' : ' nothing found'}`, ...callers.map((e) => `  ${e.from} [${e.kind}] ${e.evidence}`), `Calls:${callees.length ? '' : ' nothing found'}`, ...callees.map((e) => `  ${e.to} [${e.kind}] ${e.evidence}`)].join('\n'),
       };
+    },
+  };
+}
+
+/** `symbol_refs` (experiment system-graph): where a symbol is defined and used, across repos, from their SCIP indexes. */
+export function symbolRefsTool(experiments: () => string[], root: () => string): ToolDef {
+  return {
+    name: 'symbol_refs',
+    label: 'SymbolRefs',
+    description: '',
+    describe: () =>
+      'Where a function, type or constant is defined and every place it is used, across all the repos (from their SCIP indexes, index.scip). Give its name (e.g. formatMoney, OrderStatus). Use it before changing a shared library or API to find callers in other repos.',
+    inputSchema: {type: 'object', properties: {name: {type: 'string', description: 'The symbol name'}}, required: ['name']},
+    mutating: false,
+    enabled: () => experiments().includes('system-graph'),
+    summarize: (a) => String(a?.name ?? ''),
+    async run(_ctx, args) {
+      const g = buildSymbolGraph(findServices(root()));
+      if (!g.repos.length) return {ok: false, text: 'no SCIP indexes (index.scip) in these repos: /symbols index writes them where the indexers are installed'};
+      return {ok: true, text: formatLookup(lookup(g, String(args?.name ?? '')))};
     },
   };
 }

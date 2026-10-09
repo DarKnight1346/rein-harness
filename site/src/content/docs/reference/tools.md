@@ -403,6 +403,16 @@ Label `Services`. Approval: none (read-only). Only listed with the `system-graph
 
 The service's callers and what it calls, each with the evidence (file and line). See [Which service calls which](../../features/system/#which-service-calls-which).
 
+### `symbol_refs`
+
+Label `SymbolRefs`. Approval: none (read-only). Only listed with the `system-graph` [experiment](../configuration/#experiments) on.
+
+| Parameter | Type | Notes |
+| --- | --- | --- |
+| `name` **(required)** | string | The symbol's name, e.g. `formatMoney` |
+
+Where it's defined and every use, across repos, from their SCIP indexes. See [Symbols across repos](../../features/system/#symbols-across-repos).
+
 ### `lsp_install`
 
 Label `InstallLanguageServer`. Approval: **always asks, even in bypass mode.**
