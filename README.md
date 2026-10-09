@@ -18,9 +18,12 @@ and a compaction model. No OAuth tokens are extracted: all traffic goes through 
 
 - **Multi-repo workspaces:** a `rein.workspace.yaml` makes every repo a working directory, with one
   AGENTS.md for all; `--scope` focuses on one package of a monorepo.
-- **Cost and budgets:** dollars per request, conversation and goal (`/cost`), OpenTelemetry export.
-- **Coming next:** safety guards, CI and PR automation, specs, contracts and migrations, and
-  system-level understanding across repos.
+- **Cost and budgets:** dollars per request, conversation and goal (`/cost`), caps that stop runaway
+  work, goal estimates, OpenTelemetry export.
+- **Safety guards:** secret scanning, Semgrep on changes, planted-instruction and exfiltration guards,
+  pinned MCP servers, a dependency check and policy as code (`.rein/policy.yaml`).
+- **Coming next:** CI and PR automation, specs, contracts and migrations, and system-level
+  understanding across repos.
 
 ## Install
 
