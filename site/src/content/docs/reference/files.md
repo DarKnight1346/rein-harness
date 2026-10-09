@@ -98,13 +98,18 @@ Existing Claude Code rules and hooks keep working: `Bash(npm test:*)`, `Edit(src
 
 Earlier sources win on a name clash: `<project>/.mcp.json`, then `~/.rein/mcp.json`, then `~/.claude.json` (servers added with `claude mcp add`). `${VAR}` and `${VAR:-default}` are expanded from your environment. See [MCP](../../features/mcp/).
 
+### Workspace manifest
+
+`rein.workspace.yaml` (or `.yml`), the nearest one at or above the launch folder: the repos of a [workspace](../../features/workspaces/). They become working directories and are listed in the system prompt.
+
 ### Instruction files
 
 Added to the system prompt for every provider, up to 64 KB each, duplicates removed:
 
 1. `~/.rein/AGENTS.md`
 2. `~/.claude/CLAUDE.md`
-3. From the git root down to the current folder: `AGENTS.md`, `CLAUDE.md`, `.claude/CLAUDE.md` in each folder
+3. In a [workspace](../../features/workspaces/), the same files next to `rein.workspace.yaml` (when that folder is above the git root)
+4. From the git root down to the current folder: `AGENTS.md`, `CLAUDE.md`, `.claude/CLAUDE.md` in each folder
 
 `AGENTS.md` / `CLAUDE.md` files in subfolders are delivered with the first tool result that touches that folder, once per conversation (again after a compaction). Codex's own project-doc loading is switched off (`project_doc_max_bytes=0`) so nothing is injected twice.
 

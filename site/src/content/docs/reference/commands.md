@@ -79,6 +79,7 @@ See [Goals](../../features/goals/) and [Plan mode](../../features/plans/).
 
 | Command | Arguments | What it does |
 |---|---|---|
+| `/workspace` | `[clone]` | Lists the repos of this [workspace](../../features/workspaces/) (`rein.workspace.yaml`), which are cloned and what each does. `clone` clones the missing repos that have a `url`. |
 | `/add-dir` | `<path>` | Adds a working directory the agent can use without asking, for this session. Another repo's own `AGENTS.md` / `CLAUDE.md` is delivered the first time the agent works in it. |
 | | *(none)* | Lists the current working directories. |
 | `/permissions` | — | Lists the allow/deny rules in effect, grouped by the settings file they come from. |

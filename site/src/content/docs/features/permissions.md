@@ -103,6 +103,7 @@ The tools work freely in:
 - your global skills folder (`~/.rein/skills`), so `/skill:create` can write there,
 - anything in `additionalDirectories` in `~/.rein/config.json`,
 - folders added with `/add-dir <path>` or `rein --add-dir <path>` (session only),
+- the cloned repos of a [workspace](../workspaces/) (`rein.workspace.yaml`),
 - folders you allowed with option 2 of an outside-path prompt (session only).
 
 `/add-dir` with no argument lists them all. Symlinks are resolved before the check, so a link inside the project pointing at `/etc` counts as `/etc`.

@@ -62,15 +62,16 @@ Rein reads the open `AGENTS.md` standard **and** Claude Code's `CLAUDE.md`, so a
 
 1. `~/.rein/AGENTS.md`: your instructions for every project.
 2. `~/.claude/CLAUDE.md`: your Claude Code user instructions.
-3. For each folder from the **git root** down to the folder you launched `rein` in: `AGENTS.md`, then `CLAUDE.md`, then `.claude/CLAUDE.md`.
+3. In a [workspace](../workspaces/): the `AGENTS.md`, `CLAUDE.md` and `.claude/CLAUDE.md` next to `rein.workspace.yaml`, when that folder is above the git root. They apply to every repo in the workspace.
+4. For each folder from the **git root** down to the folder you launched `rein` in: `AGENTS.md`, then `CLAUDE.md`, then `.claude/CLAUDE.md`.
 
 ```text
 ~/code/monorepo/              ← git root
-├── AGENTS.md                 ③ loaded
-├── CLAUDE.md                 ③ loaded (unless identical to AGENTS.md)
+├── AGENTS.md                 ④ loaded
+├── CLAUDE.md                 ④ loaded (unless identical to AGENTS.md)
 └── services/
     └── billing/              ← you ran `rein` here
-        ├── AGENTS.md         ③ loaded
+        ├── AGENTS.md         ④ loaded
         └── src/
             └── AGENTS.md     → scoped (see below)
 ```
@@ -94,7 +95,7 @@ Don't modernize this code. Match the existing ES5 style; no arrow functions.
 </scoped_instructions>
 ```
 
-**Other repos you work in** ([`/add-dir`](../../reference/commands/), `--add-dir`, or `additionalDirectories`) get the same treatment from their own top: the first time the agent works in one, that repo's `AGENTS.md` / `CLAUDE.md` comes along, scoped to it (`applies_to="other-repo/"`).
+**Other repos you work in** ([`/add-dir`](../../reference/commands/), `--add-dir`, `additionalDirectories`, or a [workspace](../workspaces/)) get the same treatment from their own top: the first time the agent works in one, that repo's `AGENTS.md` / `CLAUDE.md` comes along, scoped to it (`applies_to="other-repo/"`).
 
 That way a monorepo can hold per-package rules without spending context on packages the agent never touches. Each file is delivered **once per conversation**. Rein delivers them again after `/clear`, `/resume` or [compaction](../../internals/context/), since a summary may not keep them word for word.
 

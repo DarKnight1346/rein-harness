@@ -68,6 +68,7 @@ export async function runHeadless(argv: string[]): Promise<number> {
     return fail((err as Error).message);
   }
   await runtime.init({resume: resumeId ?? false});
+  for (const e of runtime.workspace?.errors ?? []) process.stderr.write(`rein: workspace: ${e}\n`);
   await runtime.refreshCatalog();
   const {catalog} = await import('./router/catalog.js');
   if (catalog.codexCompat?.ok === false) {

@@ -43,6 +43,7 @@ export default defineConfig({
         ]},
         {label: 'Features', items: [
           {label: 'Accounts & failover', slug: 'features/accounts'},
+          {label: 'Workspaces', slug: 'features/workspaces'},
           {label: 'Model routing', slug: 'features/routing'},
           {label: 'Goals', slug: 'features/goals'},
           {label: 'Plan mode', slug: 'features/plans'},

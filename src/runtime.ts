@@ -62,6 +62,7 @@ const AUTO_APPROVE_MIN = 0.85;
 /** Plan mode: how sure the decision model must be that an unlisted command only reads. */
 const READ_ONLY_MIN = 0.85;
 import {mcpProxyCommand, ToolHost, type ApprovalDecision, type ApprovalRequest, type ToolActivity} from './tools/host.js';
+import {findWorkspace, workspaceDirs, type Workspace} from './workspace/index.js';
 
 /** Process-wide state shared by the UI and commands. */
 /** keep-going: times per request the agent is sent back after stopping partway. */
@@ -71,6 +72,8 @@ const VERIFY_MAX = 2;
 
 export class Runtime {
   config: Config = DEFAULT_CONFIG;
+  /** The workspace (rein.workspace.yaml) the launch folder belongs to, if any. */
+  workspace: Workspace | undefined;
   engine!: Engine;
   /** Last auto-routing decision, for the status line / debugging. */
   lastDecision: string | undefined;
@@ -113,7 +116,7 @@ export class Runtime {
     sessionId: () => this.engine?.transcript.id,
     judge: (req) => this.judgeChange(req),
     readOnlyJudge: (command) => this.judgeReadOnly(command),
-    configDirs: () => this.config?.additionalDirectories ?? [],
+    configDirs: () => [...(this.config?.additionalDirectories ?? []), ...workspaceDirs(this.workspace)],
     checkpoint: (file) => this.checkpoints.snapshot(this.currentTurn(), file),
     experiments: () => activeExperiments(this.config),
     contextId: () => this.engine?.contextId(),
@@ -657,6 +660,7 @@ Drop superseded reads of the same file, routine listings, and output that no lon
   }
 
   async init(opts: {resume: Resume}): Promise<{resumed?: Transcript}> {
+    this.workspace = findWorkspace();
     await this.vault.load();
     this.tools.shells.vault = this.vault;
     setVaultNames(() => this.vault.names());

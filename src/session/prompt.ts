@@ -5,6 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import {reinConfigDir} from '../store/paths.js';
 import {memoryFacts} from '../tools/memory.js';
+import {describeWorkspace, findWorkspace} from '../workspace/index.js';
 
 const BASE_PROMPT = `You are Rein, a coding assistant working in the user's project from a terminal chat.
 - Be direct and concise. Lead with the answer.
@@ -120,7 +121,10 @@ export async function agentsFiles(cwd = process.cwd()): Promise<{path: string; t
     if (parent === dir) break;
     dir = parent;
   }
-  const candidates = [path.join(reinConfigDir(), 'AGENTS.md'), claudeGlobal(), ...dirs.flatMap((d) => PROJECT_FILES.map((f) => path.join(d, f)))];
+  // A workspace's own instructions (next to rein.workspace.yaml) sit above every repo's.
+  const ws = findWorkspace(cwd);
+  const wsDirs = ws && !dirs.includes(ws.root) ? [ws.root] : [];
+  const candidates = [path.join(reinConfigDir(), 'AGENTS.md'), claudeGlobal(), ...[...wsDirs, ...dirs].flatMap((d) => PROJECT_FILES.map((f) => path.join(d, f)))];
   const out: {path: string; text: string}[] = [];
   const seen = new Set<string>();
   for (const file of [...new Set(candidates)]) {
@@ -159,6 +163,8 @@ export async function systemPrompt(opts: {tools?: boolean; scratch?: string; pro
         ].join('\n'),
       );
     sections.push(`Project root: ${process.cwd()}${extra.length ? `\nAlso working directories: ${extra.join(', ')}` : ''}`);
+    const ws = findWorkspace();
+    if (ws?.repos.length) sections.push(describeWorkspace(ws));
     if (opts.scratch) {
       sections.push(
         `Scratchpad: ${opts.scratch}\nA private folder for this session only. Put temporary files, notes, drafts and experiments here (absolute paths) instead of the project; changes there never need approval. It persists if the session is resumed.`,

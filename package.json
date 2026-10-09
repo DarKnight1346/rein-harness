@@ -59,7 +59,8 @@
     "turndown": "^7.2.4",
     "undici": "^7.30.0",
     "unpdf": "^1.8.1",
-    "wrap-ansi": "^10.0.2"
+    "wrap-ansi": "^10.0.2",
+    "yaml": "^2.9.0"
   },
   "devDependencies": {
     "@types/cross-spawn": "^6.0.6",

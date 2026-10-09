@@ -54,6 +54,7 @@ import {memoryFacts, memoryFile} from '../tools/memory.js';
 import {readFileSync} from 'node:fs';
 import {accountName, hidingIdentity, redact} from './privacy.js';
 import nodePath from 'node:path';
+import {cloneMissing, findWorkspace} from '../workspace/index.js';
 
 export const VERSION = reinVersion();
 
@@ -1186,6 +1187,28 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
           for (const r of p.deny ?? []) lines.push(`  deny  ${r}`);
         }
         log('info', lines.length ? `Permission rules (deny wins):\n${lines.join('\n')}` : 'No permission rules yet. Choose "3 Always allow" in an approval prompt, or add "permissions": {"allow": [...], "deny": [...]} to .rein/settings.json (Claude Code format; .claude/settings.json rules apply too).');
+        break;
+      }
+      case 'workspace': {
+        const ws = (runtime.workspace = findWorkspace());
+        if (!ws) {
+          log('info', 'No workspace here. Put a rein.workspace.yaml in a folder above your repos to work on them together (see the Workspaces docs page).');
+          break;
+        }
+        if (parsed.args.trim() === 'clone') {
+          const missing = ws.repos.filter((r) => !r.present && r.url);
+          if (!missing.length) {
+            log('info', 'Nothing to clone: every repo with a url is already there.');
+            break;
+          }
+          void cloneMissing(ws, (line) => log('info', line)).then(({cloned, failed}) => {
+            runtime.engine?.refreshTools(); // the system prompt lists the repos
+            log(failed.length ? 'error' : 'info', [cloned.length && `Cloned ${cloned.join(', ')}.`, ...failed].filter(Boolean).join('\n'));
+          });
+          break;
+        }
+        const rows = ws.repos.map((r) => `  ${r.present ? '✓' : '·'} ${r.name}  ${r.path}${r.role ? `  (${r.role})` : ''}${r.present ? '' : r.url ? '  not cloned: /workspace clone' : '  missing, no url'}`);
+        log('info', [`Workspace${ws.name ? ` ${ws.name}` : ''}: ${ws.file}`, ...rows, ...ws.errors.map((e) => `  ! ${e}`)].join('\n'));
         break;
       }
       case 'add-dir': {
