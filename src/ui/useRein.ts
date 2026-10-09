@@ -62,6 +62,7 @@ import {reinConfigDir} from '../store/paths.js';
 import {affected, changedFiles, detectBuild, formatAffected} from '../build/affected.js';
 import {clearFlaky, knownFlaky} from '../build/flaky.js';
 import {detectCaches} from '../build/caches.js';
+import {failed as failedChecks, MAX_FIX_ROUNDS, prChecks, summary as ciSummary} from '../build/ci.js';
 import {activeExperiments} from '../store/config.js';
 import {formatUsd} from '../providers/prices.js';
 
@@ -513,6 +514,9 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
   // The input stays live while the agent works: /btw and info commands run at once, plain messages queue.
   const inputActive = overlay.name === 'none' && ready && (!updating || windowed);
   const [queued, setQueued] = useState<string[]>([]);
+  // /ci watch hands its fix tasks over through these (set every render: they need the current chat).
+  runtime.ciSubmit = (task) => (chat.busy ? setQueued((q) => [...q, task]) : void chat.send(task));
+  runtime.ciLog = (text, kind) => log(kind ?? 'info', text);
   const runRef = useRef<(raw: string) => void>(() => {});
   const pendingDelivery = useRef(new Set<number>());
 
@@ -1213,6 +1217,25 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
           if (!files.length) return log('info', 'No changes (vs HEAD) to analyze.');
           const a = await affected(root, files);
           log(a?.note && !a.targets.length ? 'error' : 'info', a ? `${files.length} changed file${files.length === 1 ? '' : 's'}. ${formatAffected(a)}` : 'No build system answered.');
+        });
+        break;
+      }
+      case 'ci': {
+        const sub = parsed.args.trim();
+        if (sub === 'stop') {
+          log('info', runtime.ci.watching ? 'Stopped watching CI.' : 'Not watching CI.');
+          runtime.ci.stop();
+          break;
+        }
+        if (sub === 'watch') {
+          log('info', `Watching this branch's pull request checks (every minute). When they fail, the agent gets the logs and fixes them, ${MAX_FIX_ROUNDS} rounds at most; it asks before pushing. /ci stop ends it.`);
+          runtime.ci.start(process.cwd());
+          break;
+        }
+        void prChecks(process.cwd()).then((res) => {
+          if ('error' in res) return log('error', `Couldn't read the checks: ${res.error}`);
+          if (!res.checks.length) return log('info', 'No checks on this branch\'s pull request yet.');
+          log(failedChecks(res.checks).length ? 'error' : 'info', [`${ciSummary(res.checks)}${runtime.ci.watching ? ' · watching' : ''}`, ...res.checks.map((c) => `  ${c.bucket === 'pass' ? '✓' : c.bucket === 'fail' ? '✗' : c.bucket === 'pending' ? '…' : '·'} ${c.workflow ? `${c.workflow} / ` : ''}${c.name}`), ...(failedChecks(res.checks).length && !runtime.ci.watching ? ['/ci watch hands failures to the agent.'] : [])].join('\n'));
         });
         break;
       }

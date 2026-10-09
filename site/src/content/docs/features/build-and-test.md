@@ -52,6 +52,24 @@ The [command sandbox](../permissions/#the-command-sandbox) leaves these writable
     Agent builds use these: the sandbox (write) leaves build caches writable and the network open.
 ```
 
+## Watching CI
+
+`/ci` shows the checks on the current branch's pull request, through the [GitHub CLI](https://cli.github.com) (`gh`, signed in):
+
+```text title="rein"
+> /ci
+  ⎿ 4 checks: 3 passed, 1 failed
+      ✓ CI / lint
+      ✗ CI / test (ubuntu)
+      ✓ CI / test (macos)
+      ✓ CI / build
+    /ci watch hands failures to the agent.
+```
+
+`/ci watch` checks every minute. When the checks have finished and some failed, Rein reads each failed job's log (`gh run view --log-failed`), boils it down to the failing step, first errors and `file:line` locations, and hands that to the agent as a task: find the cause, fix it, commit, and **ask before pushing**. When you push (or approve the agent's push) and CI runs again, the watcher looks at the new run. It stops when CI passes, after 3 fix rounds, or with `/ci stop`.
+
+The same failed run is only handed over once. Logs are read for GitHub Actions checks; other checks show with their link. GitLab isn't supported yet.
+
 ## Testing what a request changed
 
 With the `verify-affected` [experiment](../../reference/configuration/#experiments) on, in an Nx, Turborepo, Bazel or Pants workspace, Rein runs the tests for what a request changed once, at the end of its turn, after the [code check](../code-intelligence/):

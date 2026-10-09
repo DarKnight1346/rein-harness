@@ -11,6 +11,7 @@ import {loadPolicy, modelBlocked} from './policy.js';
 import {reinConfigDir} from './store/paths.js';
 import {affectedTool} from './build/tool.js';
 import {affected, changedFiles} from './build/affected.js';
+import {CiWatcher} from './build/ci.js';
 import {digestLog, formatDigest} from './tools/logDigest.js';
 import {effectiveBudget, overBudget, type Spend} from './budget.js';
 import {catalog, toRef} from './router/catalog.js';
@@ -84,6 +85,10 @@ export class Runtime {
   config: Config = DEFAULT_CONFIG;
   /** The workspace (rein.workspace.yaml) the launch folder belongs to, if any. */
   workspace: Workspace | undefined;
+  /** /ci watch: what to send the agent, refreshed by the UI on every render (it owns the chat). */
+  ciSubmit: (task: string) => void = () => {};
+  ciLog: (text: string, kind?: 'info' | 'error') => void = () => {};
+  readonly ci = new CiWatcher({log: (t, k) => this.ciLog(t, k), submit: (t) => this.ciSubmit(t)});
   /** OpenTelemetry export (config `otel`). */
   readonly telemetry = new Telemetry(() => this.config);
   /** The conversation's cost when the user's latest message arrived (for /cost's "this request"). */
@@ -1025,6 +1030,7 @@ Drop superseded reads of the same file, routine listings, and output that no lon
   }
 
   shutdown(): void {
+    this.ci.stop();
     void this.mcp.closeAll();
     void this.ide?.close();
     void this.lsp.closeAll();
