@@ -30,6 +30,12 @@ export type ToolContext = {
   sessionId?: string;
   /** Set when a subagent is calling (its shells are tagged with it). */
   origin?: Origin;
+  /** compact-read experiment: line numbers without padding (`12\t` instead of `    12\t`), a token a line less. */
+  compactLines?: boolean;
+  /** shell-cap experiment: long command output keeps its head and tail; the whole of it goes to a file. */
+  shellCap?: boolean;
+  /** outline-reads experiment: a long file read without a range comes back as an outline. */
+  outlineReads?: boolean;
 };
 
 /** Which subagent made a tool call (undefined = the main agent). */
@@ -105,7 +111,7 @@ export const rel = (ctx: ToolContext, abs: string) => toPosix(path.relative(real
  * huge file (or a slice of it) never loads the whole thing. Only the first 8 KB are inspected for
  * binary content.
  */
-export async function readTool(ctx: ToolContext, args: {path: string; offset?: number; limit?: number; pages?: string}): Promise<ToolResult> {
+export async function readTool(ctx: ToolContext, args: {path: string; offset?: number; limit?: number; pages?: string; full?: boolean}): Promise<ToolResult> {
   const file = resolveInRoot(ctx, args.path);
   const st = await stat(file).catch(() => undefined);
   if (!st) throw new ToolError(`${args.path} does not exist`);
@@ -118,6 +124,10 @@ export async function readTool(ctx: ToolContext, args: {path: string; offset?: n
   if (isImage(file)) return readImage(file, rel(ctx, file));
   if (isPdf(file)) return readPdf(file, rel(ctx, file), args.pages);
   if (await looksBinary(file)) return {ok: true, text: `${rel(ctx, file)} is a binary file (${st.size} bytes)`};
+  if (ctx.outlineReads && args.offset === undefined && args.limit === undefined && !args.full) {
+    const o = await outlineOf(file, ctx.compactLines);
+    if (o) return {ok: true, text: `${rel(ctx, file)} has ${o.lines} lines (${size(st.size)}); here is its outline. Read the parts you need with offset/limit, several ranges in one response, or read it with full: true if you need all of it.\n${o.text}`};
+  }
   const start = Math.max(1, Math.floor(args.offset ?? 1));
   const limit = Math.max(1, Math.min(MAX_READ_LINES, Math.floor(args.limit ?? MAX_READ_LINES)));
   const out: string[] = [];
@@ -133,7 +143,7 @@ export async function readTool(ctx: ToolContext, args: {path: string; offset?: n
         more = true;
         break;
       }
-      out.push(`${String(n).padStart(6)}\t${line.length > MAX_LINE_CHARS ? line.slice(0, MAX_LINE_CHARS) + '… [line truncated]' : line}`);
+      out.push(`${ctx.compactLines ? n : String(n).padStart(6)}\t${line.length > MAX_LINE_CHARS ? line.slice(0, MAX_LINE_CHARS) + '… [line truncated]' : line}`);
     }
   } finally {
     rl.close();
@@ -142,6 +152,68 @@ export async function readTool(ctx: ToolContext, args: {path: string; offset?: n
   if (!out.length) return {ok: true, text: n ? `(the file has only ${n} lines)` : '(empty file)'};
   const end = start + out.length - 1;
   return {ok: true, text: out.join('\n') + (more ? `\n… more lines follow (use offset=${end + 1}; file is ${size(st.size)})` : '')};
+}
+
+/** outline-reads: files longer than this, read without a range, come back as an outline. */
+const OUTLINE_MIN_LINES = 500;
+const OUTLINE_MAX_ENTRIES = 200;
+// Declarations at the top level or one level in, in most languages: functions, methods, classes,
+// types, constants, sections. Comments and closing braces are skipped.
+const DECLARATION =
+  /^(?:\t|  |    )?(?:export\s+|default\s+|public\s+|private\s+|protected\s+|internal\s+|static\s+|async\s+|abstract\s+|final\s+|pub(?:\(crate\))?\s+|override\s+|@\w+\s+)*(?:function\*?|class|interface|type|enum|struct|trait|impl|module|namespace|object|record|def|func|fn|const|let|var|val|package|import\s*\(|describe|it|test|macro_rules!|#{1,3}\s|\w[\w.<>\[\], *&:]*\s+\**\w+\s*\()/;
+
+// Indented variables and statements are a function's insides, not part of the outline.
+const LOCAL = /^\s+(?:const|let|var|val|return|if|for|while|switch|await|throw|else|import|case|default)\b/;
+
+/** The declarations of a long text file with their line numbers, or undefined for a short one. */
+async function outlineOf(file: string, compact?: boolean): Promise<{lines: number; text: string} | undefined> {
+  const entries: string[] = [];
+  let n = 0;
+  const stream = createReadStream(file, {encoding: 'utf8', highWaterMark: 256 * 1024});
+  const rl = readline.createInterface({input: stream, crlfDelay: Infinity});
+  try {
+    for await (const line of rl) {
+      n++;
+      if (entries.length < OUTLINE_MAX_ENTRIES * 4 && DECLARATION.test(line) && !/^\s*(\/\/|\/\*|\*|#(?!#* )|--|;)/.test(line) && !LOCAL.test(line))
+        entries.push(`${compact ? n : String(n).padStart(6)}\t${line.length > 160 ? line.slice(0, 160) + '…' : line}`);
+    }
+  } finally {
+    rl.close();
+    stream.destroy();
+  }
+  if (n <= OUTLINE_MIN_LINES || !entries.length) return undefined;
+  // Too many: keep the top level only.
+  const shown = entries.length > OUTLINE_MAX_ENTRIES ? entries.filter((e) => !/^\S+\t[\t ]/.test(e.trimStart())) : entries;
+  return {lines: n, text: shown.slice(0, OUTLINE_MAX_ENTRIES).join('\n') + (shown.length > OUTLINE_MAX_ENTRIES ? `\n… ${shown.length - OUTLINE_MAX_ENTRIES} more` : '')};
+}
+
+const MAX_READ_MANY = 20;
+
+/**
+ * Several files in one call (`paths`), each headed by its path: the files a change needs, read in one
+ * round trip instead of one per file. Whole text files only; a failure on one is reported in its place.
+ */
+export async function readManyTool(ctx: ToolContext, args: {paths: string[]}): Promise<ToolResult> {
+  if (!Array.isArray(args.paths) || !args.paths.length || args.paths.some((p) => typeof p !== 'string')) throw new ToolError('paths must be a non-empty list of file paths');
+  if (args.paths.length > MAX_READ_MANY) throw new ToolError(`at most ${MAX_READ_MANY} paths per call`);
+  const parts: string[] = [];
+  let ok = false;
+  for (const p of [...new Set(args.paths)]) {
+    let text: string;
+    try {
+      const file = resolveInRoot(ctx, p);
+      if (isImage(file) || isPdf(file)) text = '(an image or PDF: read it on its own)';
+      else {
+        const r = await readTool(ctx, {path: p});
+        text = r.text;
+        ok ||= r.ok;
+      }
+    } catch (err) {
+      text = `error: ${(err as Error).message}`;
+    }
+    parts.push(`==> ${p} <==\n${text}`);
+  }
+  return {ok, text: parts.join('\n\n')};
 }
 
 async function looksBinary(file: string): Promise<boolean> {
@@ -219,7 +291,10 @@ export async function writeTool(ctx: ToolContext, args: {path: string; content: 
 /** Files above this are edited by streaming (constant memory) instead of in memory. */
 const STREAM_EDIT_BYTES = 8 * 1024 * 1024;
 
-export async function editTool(ctx: ToolContext, args: {path: string; old_string: string; new_string: string; replace_all?: boolean}): Promise<ToolResult> {
+export type EditSpec = {path?: string; old_string: string; new_string: string; replace_all?: boolean};
+
+export async function editTool(ctx: ToolContext, args: {path: string; old_string: string; new_string: string; replace_all?: boolean; edits?: EditSpec[]}): Promise<ToolResult> {
+  if (args.edits !== undefined) return multiEdit(ctx, args);
   const file = resolveInRoot(ctx, args.path);
   if (typeof args.old_string !== 'string' || typeof args.new_string !== 'string') throw new ToolError('old_string and new_string are required');
   if (!args.old_string) throw new ToolError('old_string is empty; use write to create a file');
@@ -251,6 +326,63 @@ export async function editTool(ctx: ToolContext, args: {path: string; old_string
   const line = text.slice(0, text.indexOf(args.old_string)).split('\n').length;
   const diff = fileDiff(text, next) ?? regionDiff(line, args.old_string, args.new_string);
   return {ok: true, text: `Edited ${rel(ctx, file)}: ${args.replace_all ? `${count} replacements` : `1 replacement at line ${line}`}`, diff};
+}
+
+/**
+ * Several replacements in one call, in one file or several: each edit applies to the file as the
+ * edits before it left it. Every edit is checked before anything is written, so the call changes all
+ * of its files or none (a failed edit names its index). One call instead of a round trip per edit.
+ */
+async function multiEdit(ctx: ToolContext, args: {path?: string; old_string?: string; edits?: EditSpec[]}): Promise<ToolResult> {
+  if (!Array.isArray(args.edits) || !args.edits.length) throw new ToolError('edits must be a non-empty list of {path, old_string, new_string}');
+  if (args.old_string !== undefined) throw new ToolError('pass either old_string/new_string or edits, not both');
+  // One handle per file, opened once and used for both the read and the write (no check-then-use race).
+  const files = new Map<string, {display: string; fh: FileHandle; before: string; text: string; count: number}>();
+  try {
+    for (const [i, e] of args.edits.entries()) {
+      const where = `edits[${i}]`;
+      const display = e?.path ?? args.path;
+      if (typeof display !== 'string') throw new ToolError(`${where}: path is required (on the edit, or for all of them at the top level)`);
+      if (typeof e.old_string !== 'string' || typeof e.new_string !== 'string') throw new ToolError(`${where}: old_string and new_string are required`);
+      if (!e.old_string) throw new ToolError(`${where}: old_string is empty; use write to create a file`);
+      if (e.old_string === e.new_string) throw new ToolError(`${where}: old_string and new_string are identical`);
+      const file = resolveInRoot(ctx, display);
+      let f = files.get(file);
+      if (!f) {
+        let fh: FileHandle;
+        try {
+          fh = await openConfined(file, display, constants.O_RDWR);
+        } catch (err) {
+          if ((err as NodeJS.ErrnoException).code === 'ENOENT' || (err as NodeJS.ErrnoException).code === 'EISDIR') throw new ToolError(`${where}: ${display} does not exist`);
+          throw err;
+        }
+        files.set(file, (f = {display, fh, before: '', text: '', count: 0}));
+        const st = await fh.stat();
+        if (st.isDirectory()) throw new ToolError(`${where}: ${display} does not exist`);
+        if (st.size > STREAM_EDIT_BYTES) throw new ToolError(`${where}: ${display} is over ${size(STREAM_EDIT_BYTES)}; edit it with a single edit call`);
+        checkFresh(ctx, file, display, st);
+        f.before = f.text = await fh.readFile('utf8');
+      }
+      const n = f.text.split(e.old_string).length - 1;
+      if (n === 0) throw new ToolError(`${where}: old_string not found in ${rel(ctx, file)} (it must match exactly, including whitespace, and edits apply in order)`);
+      if (n > 1 && !e.replace_all) throw new ToolError(`${where}: old_string matches ${n} places in ${rel(ctx, file)}; include more surrounding context to make it unique, or set replace_all`);
+      f.text = e.replace_all ? f.text.split(e.old_string).join(e.new_string) : f.text.replace(e.old_string, () => e.new_string);
+      f.count += e.replace_all ? n : 1;
+    }
+    // All checked: write them.
+    const diff: DiffLine[] = [];
+    const done: string[] = [];
+    for (const [file, f] of files) {
+      await overwrite(f.fh, f.text);
+      ctx.reads?.set(file, stampOf(await f.fh.stat()));
+      if (files.size > 1) diff.push({kind: 'note', text: rel(ctx, file)});
+      diff.push(...(fileDiff(f.before, f.text) ?? []));
+      done.push(`${rel(ctx, file)} (${f.count} replacement${f.count === 1 ? '' : 's'})`);
+    }
+    return {ok: true, text: `Edited ${files.size === 1 ? done[0] : `${files.size} files: ${done.join(', ')}`}`, diff};
+  } finally {
+    for (const f of files.values()) await f.fh.close().catch(() => {});
+  }
 }
 
 function checkCount(ctx: ToolContext, file: string, count: number, replaceAll?: boolean): void {

@@ -38,12 +38,14 @@ Reads a file and returns lines prefixed with their 1-based line number and a tab
 
 | Parameter | Type | Notes |
 | --- | --- | --- |
-| `path` **(required)** | string | Relative to the project root; absolute and `~/` paths work too |
+| `path` | string | Relative to the project root; absolute and `~/` paths work too. Required unless `paths` is given |
+| `paths` | string[] | Several files in one call (up to 20), each shown under a `==> path <==` header. Whole text files; a file that can't be read reports its error in its place. Images and PDFs are read one at a time |
+| `full` | boolean | Read a long file whole. Only matters with the [`outline-reads`](../configuration/#experiments) experiment (on by default), which otherwise shows a file over 500 lines read without `offset` / `limit` as an outline |
 | `offset` | integer | First line to read (1-based) |
 | `limit` | integer | Max lines, default and cap 2000 |
 | `pages` | string | PDF pages, for example `"3-8"` (max 20 per read) |
 
-Lines longer than 2000 characters are truncated. A successful read records the file's size and mtime for stale-file protection (see `edit`).
+Lines longer than 2000 characters are truncated. A successful read records the file's size and mtime for stale-file protection (see `edit`). Every tool call is a request that re-sends the conversation, so reading the files a change needs with `paths` in one call costs one round trip instead of one per file.
 
 ### `list`
 
@@ -90,10 +92,13 @@ Replaces an exact string. `old_string` must match exactly (whitespace included, 
 
 | Parameter | Type | Notes |
 | --- | --- | --- |
-| `path` **(required)** | string | |
-| `old_string` **(required)** | string | Exact text to replace |
-| `new_string` **(required)** | string | Replacement |
+| `path` | string | The file. With `edits`, the default for entries that don't name one |
+| `old_string` | string | Exact text to replace |
+| `new_string` | string | Replacement |
 | `replace_all` | boolean | Replace every occurrence, default false |
+| `edits` | array | Several replacements in one call, instead of `old_string` / `new_string`: each `{path?, old_string, new_string, replace_all?}`, in one file or several |
+
+With `edits`, each replacement applies to the file as the ones before it left it. Every replacement is checked before anything is written, so the call changes all of its files or none; an error names the failing entry (`edits[2]: old_string not found in src/b.ts`). Every file must have been read first, as with a single edit. Approval, [permission rules](../../features/permissions/#saved-rules) (a `deny` on any file blocks the call), [checkpoints](../../features/rewind/) and the end-of-turn code check cover every file in the batch. Batches are for files up to 8 MB; larger files take a single edit. A batch that changes several files shows its preview in the approval prompt, not as an editor diff. The second single-change `edit` (or single-file `read`) in a row gets a one-line note in its result pointing at `edits` (or `paths`), once per session: models that make one call per change pay a round trip each time, and follow what results tell them more than what descriptions say.
 
 Files changed with `write`, `edit` or `delete` are checked by Rein's [language servers](../../features/code-intelligence/) when the agent finishes its turn; problems the changes left come back as one `<code_check>` message.
 
@@ -297,6 +302,17 @@ Ticks milestone *N* (`- [x]` in the plan file) after the same evidence check (p 
 
 ## Subagents and helpers
 
+### `tool`
+
+Label: the tool it runs. Only with the `lazy-tools` [experiment](../configuration/#experiments) on (the default in `rein -p`).
+
+| Parameter | Type | Notes |
+| --- | --- | --- |
+| `name` **(required)** | string | An on-demand tool from the list in this tool's description |
+| `args` | object | Its arguments. Leave out to get its description and parameters |
+
+Runs one of the tools a coding task rarely needs, which are then left out of the model's tool list. A call with `args` goes through the same approvals, rules and checkpoints as calling the tool directly.
+
 ### `diagnostics`
 
 Label `Diagnostics`. Approval: none (read-only).
@@ -342,6 +358,16 @@ Label `AgentResult`. Approval: none. **Main agent only.**
 | `wait` | boolean | Block until it finishes |
 
 Background reports the agent never collects are delivered to it as a message when they finish.
+
+### `explore`
+
+Label `Explore`. Approval: none. **Main agent only.** Listed only with the [`cheap-explore`](../configuration/#experiments) experiment on and a Claude account signed in.
+
+| Parameter | Type | Notes |
+| --- | --- | --- |
+| `question` **(required)** | string | What to find out in the codebase, with any names or paths that help |
+
+Runs a subagent on the cheapest signed-in Claude model (Haiku) with only `read`, `list` and `search`, and returns its findings: file paths, line numbers, names and short snippets. The files it reads stay out of the main model's context.
 
 ### `advisor`
 

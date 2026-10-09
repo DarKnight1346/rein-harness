@@ -4,7 +4,7 @@ import {makeRouter} from '../src/router/index.js';
 import {makeAutoRouter} from '../src/router/auto.js';
 import {Engine, limitWait, type EngineEvent} from '../src/session/engine.js';
 import {compactTranscript} from '../src/session/compactor.js';
-import {DEFAULT_CONFIG, type Config} from '../src/store/config.js';
+import {DEFAULT_CONFIG, DEFAULT_EXPERIMENTS, HEADLESS_EXPERIMENTS, type Config} from '../src/store/config.js';
 import {usageStore} from '../src/store/usage.js';
 import {acct, CLAUDE_FAKE_MODELS, CODEX_FAKE_MODELS, fakeAdapter, install, reply, tempHome} from './fakes.js';
 
@@ -21,7 +21,7 @@ function engineWith(auto = false) {
 }
 
 beforeEach(() => {
-  config = {...DEFAULT_CONFIG, chatModel: 'claude:sonnet'};
+  config = {...DEFAULT_CONFIG, chatModel: 'claude:sonnet', experiments: [...DEFAULT_EXPERIMENTS, ...HEADLESS_EXPERIMENTS].map((e) => `-${e}`)}; // the behaviour without experiments
   usageStore.reset();
   catalog.authFailed.clear();
 });
@@ -184,6 +184,76 @@ describe('auto-compaction events', () => {
     config = {...config, autoCompactPct: 0};
     const quiet = await collect(e.send('four'));
     expect(quiet.some((x) => x.type === 'compact')).toBe(false);
+  });
+});
+
+describe('price-break', () => {
+  it('keeps a model with a pricier rate card above some prompt size below it, when on', async () => {
+    await tempHome([acct('claude', 'c1')]);
+    const priced = [{...CLAUDE_FAKE_MODELS[0]!, contextWindow: 1_000_000, priceBreak: 100_000}, CLAUDE_FAKE_MODELS[1]!];
+    const {adapter} = fakeAdapter('claude', priced, () => reply('ok'));
+    install('claude', adapter);
+    await catalog.refresh();
+    const ref = {provider: 'claude' as const, model: priced[0]!.id};
+    const e = engineWith() as any;
+    expect(e.autoCompactLimit(ref)).toBe(800_000); // off: 80% of the window
+    config = {...config, experiments: ['price-break']};
+    expect(e.autoCompactLimit(ref)).toBe(80_000); // under the 100K break, with headroom
+    expect(e.autoCompactLimit({provider: 'claude', model: CLAUDE_FAKE_MODELS[1]!.id})).toBe(CLAUDE_FAKE_MODELS[1]!.contextWindow * 0.8); // flat-priced
+  });
+});
+
+describe('context-cap', () => {
+  it('compacts large windows at 200K when on', async () => {
+    await tempHome([acct('claude', 'c1')]);
+    const big = [{...CLAUDE_FAKE_MODELS[0]!, contextWindow: 1_000_000}, CLAUDE_FAKE_MODELS[1]!];
+    const {adapter} = fakeAdapter('claude', big, () => reply('ok'));
+    install('claude', adapter);
+    await catalog.refresh();
+    const e = engineWith() as any;
+    expect(e.autoCompactLimit({provider: 'claude', model: big[0]!.id})).toBe(800_000);
+    config = {...config, experiments: ['context-cap']};
+    expect(e.autoCompactLimit({provider: 'claude', model: big[0]!.id})).toBe(200_000);
+    expect(e.autoCompactLimit({provider: 'claude', model: big[1]!.id})).toBe(Math.min(200_000, big[1]!.contextWindow * 0.8));
+  });
+});
+
+describe('faithful-compaction', () => {
+  it("keeps the user's requests word for word, shows the summarizer real tool output, and uses the working model", async () => {
+    await tempHome([acct('claude', 'c1')]);
+    const {adapter, log} = fakeAdapter('claude', CLAUDE_FAKE_MODELS, () => reply('ok'), () => 'GOAL: test');
+    install('claude', adapter);
+    await catalog.refresh();
+    const e = engineWith();
+    const spec = 'Implement classes. Exact error: `SyntaxError: Unexpected token` at 3:7, and keep ASI working.';
+    await collect(e.send(spec));
+    e.transcript.messages.push({role: 'assistant', text: 'working', at: 0, tools: [{label: 'Shell', summary: '$ go test', ok: false, result: 'x'.repeat(1000) + 'FAIL TestClassFields: want 3 got 4'}]});
+    for (const m of ['two', 'three']) await collect(e.send(m));
+    const working = {provider: 'claude' as const, model: CLAUDE_FAKE_MODELS[1]!.id};
+    await compactTranscript(e.transcript, {...config, experiments: ['faithful-compaction']}, {keepRecent: 0, model: working});
+    expect(log.oneShots[0]!.model).toBe(working.model);
+    expect(log.oneShots[0]!.prompt).toContain('FAIL TestClassFields: want 3 got 4'); // past the old 300-char excerpt
+    expect(log.oneShots[0]!.system).toContain('FAILED APPROACHES');
+    expect(e.transcript.summary!.map).toContain(`--- request 1 ---\n${spec}`);
+  });
+});
+
+describe('faithful-compaction, live', () => {
+  it('asks the open session for the summary instead of a separate model call, and counts its tokens', async () => {
+    await tempHome([acct('claude', 'c1')]);
+    const {adapter, log} = fakeAdapter('claude', CLAUDE_FAKE_MODELS, (p) => (p.includes('<compaction_request>') ? [{type: 'tokens', call: {input: 9_000, cached: 8_000, output: 300}}, ...reply('GOAL: from the session itself')] : reply('ok')), () => 'GOAL: separate call');
+    install('claude', adapter);
+    await catalog.refresh();
+    config = {...config, experiments: ['faithful-compaction']};
+    const e = engineWith();
+    for (const m of ['one', 'two', 'three']) await collect(e.send(m));
+    const before = e.transcript.tokens?.output ?? 0;
+    await e.compactNow();
+    expect(e.transcript.summary!.text).toBe('GOAL: from the session itself');
+    expect(log.oneShots).toHaveLength(0);
+    expect(log.prompts.at(-1)!.prompt).toContain('FAILED APPROACHES');
+    expect(e.transcript.summary!.map).toContain('--- request 1 ---\none');
+    expect(e.transcript.tokens!.output).toBeGreaterThan(before);
   });
 });
 

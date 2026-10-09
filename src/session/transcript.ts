@@ -274,12 +274,15 @@ export function renderMessages(messages: Message[]): string {
  * Messages for the compaction model: the text plus a one-line trace per tool call with a short
  * excerpt of its result, so a summary of a tool-heavy turn knows what was read, run and changed.
  */
-export function renderForSummary(messages: Message[]): string {
+export function renderForSummary(messages: Message[], excerptChars = 300): string {
   return messages
     .map((m) => {
       const tools = (m.tools ?? []).map((c) => {
-        const excerpt = c.result.slice(0, 300).replace(/\s+/g, ' ');
-        const more = c.result.length > 300 ? ` … [excerpt; full result ${c.result.split('\n').length} lines, ${c.result.length} chars]` : '';
+        // A long excerpt keeps its start and end, where errors and test summaries are.
+        const r = c.result;
+        const cut = r.length > excerptChars;
+        const excerpt = excerptChars <= 300 ? r.slice(0, excerptChars).replace(/\s+/g, ' ') : cut ? `${r.slice(0, excerptChars / 2)}\n…\n${r.slice(-excerptChars / 2)}` : r;
+        const more = cut ? ` … [excerpt; full result ${r.split('\n').length} lines, ${r.length} chars]` : '';
         return `[tool ${c.label}(${c.summary}) ${c.ok ? '✓' : '✗'}] ${excerpt}${more}`;
       });
       return renderMessages([m]) + (tools.length ? `\n${tools.join('\n')}` : '');

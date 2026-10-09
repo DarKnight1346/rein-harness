@@ -18,7 +18,8 @@ You have tools for working in the project: list, read, write, edit, delete, sear
 - Use list to see what's in a folder and search to find code, before guessing at paths.
 - shell runs commands in the project root (no stdin/TTY; use non-interactive flags). Use background: true for servers/watchers, then check shell_logs. Prefer read/search/edit over shell equivalents (cat, grep, sed).
 - Skills (packaged instructions for specific tasks) are listed in the skill tool; when a request matches one, load it and follow it.
-- For multi-step work keep a task list with todo_write (one task in_progress at a time; mark tasks completed as you finish them).
+- For work with 3 or more distinct steps keep a task list with todo_write (one task in_progress at a time); skip it for smaller jobs. Update it as you go, several tasks in one call when they finish together.
+- Every tool call is a round trip: batch them. Read several files in one call (read paths), make several changes in one call (edit edits), and issue independent calls together.
 - write/edit/delete/shell may need the user's approval; if one is denied, ask how to proceed instead of retrying.`;
 
 const MAX_AGENTS_BYTES = 64 * 1024;
@@ -36,6 +37,59 @@ let attribution: () => boolean = () => true;
 export function setAttribution(fn: () => boolean): void {
   attribution = fn;
 }
+
+/** brief-final is on (config `experiments`): a short final reply. */
+let briefFinal: () => boolean = () => false;
+export function setBriefFinal(fn: () => boolean): void {
+  briefFinal = fn;
+}
+const BRIEF_PROMPT = `- When you've finished, reply in at most three short sentences: what changed, and anything the user must do or know. No recap of every file, no restating the request.`;
+
+/** in-scope is on (config `experiments`): one line against work the request didn't ask for. */
+let inScope: () => boolean = () => false;
+export function setInScope(fn: () => boolean): void {
+  inScope = fn;
+}
+const SCOPE_PROMPT = `- Do what was asked, completely, and no more: update the existing code and tests your change affects, but don't add new test files, refactors or features the request doesn't need. Extra work costs time and tokens.`;
+
+/** self-test is on (config `experiments`), and always for Codex models: check your own change before finishing. */
+let selfTest: () => boolean = () => false;
+export function setSelfTest(fn: () => boolean): void {
+  selfTest = fn;
+}
+// Codex's own instructions tell its models to test their work and Rein's replace them: under Rein, Sol ran
+// a fifth as many commands as in Codex and handed work to subagents instead of checking it.
+const SELF_TEST_PROMPT = `- Before you finish a code change, run the project's tests (or build) yourself and fix what fails. Do the work and the checking yourself; a subagent's report is not a test run.`;
+
+/** many-calls is on (config `experiments`): many tool calls per response is the preferred way to work. */
+let manyCalls: () => boolean = () => false;
+export function setManyCalls(fn: () => boolean): void {
+  manyCalls = fn;
+}
+const BATCH_LINE = '- Every tool call is a round trip: batch them.';
+// Each round trip re-sends the whole conversation (cache reads were ~60% of a large task's cost), and
+// 83-87% of requests carried a single tool call even with the line above.
+const MANY_CALLS_PROMPT = `- Round trips are the main cost of a task: every response you send re-reads the whole conversation. Work in as few responses as you can by making MANY tool calls in each one. Plan the next several steps, then issue every call they need together: read all the files you'll need, run all the searches, make every edit you've decided on, and run independent commands (build, tests, greps, git) side by side. Five to ten calls in one response is normal and preferred. Calls in one response run in the order you write them, so you can make the edits and run the tests in the same response; wait for a result only when you need to read it before deciding the next call.`;
+
+/** no-todo is on (config `experiments`): no task list tool, so the prompt doesn't mention it. */
+let noTodo: () => boolean = () => false;
+export function setNoTodo(fn: () => boolean): void {
+  noTodo = fn;
+}
+
+/** lazy-tools is on (config `experiments`): rarely needed tools are reached through `tool`. */
+let lazyTools: () => boolean = () => false;
+export function setLazyTools(fn: () => boolean): void {
+  lazyTools = fn;
+}
+const LAZY_PROMPT = `- Tools that aren't in your list (web_search, web_fetch, image_generate, agent, skill, decide, MCP servers, memory, past sessions) load on demand through tool: tool {name} shows what one takes, tool {name, args} runs it.`;
+
+/** cheap-explore is on (config `experiments`): exploring goes to a cheap model through `explore`. */
+let cheapExplore: () => boolean = () => false;
+export function setCheapExplore(fn: () => boolean): void {
+  cheapExplore = fn;
+}
+const EXPLORE_PROMPT = `- To find where something is or how existing code works, especially across many files, call explore first: a cheap model reads the code and reports file:line findings with short snippets, so you don't pay to carry every file it read. Then read only the lines you will change or must understand exactly.`;
 
 /** Names in the secrets vault (never values), supplied by the runtime. */
 let vaultNames: () => string[] = () => [];
@@ -82,7 +136,7 @@ export async function agentsFiles(cwd = process.cwd()): Promise<{path: string; t
  * Rein's system prompt for chat sessions (all providers): base instructions (or
  * `~/.rein/system-prompt.md`), the tools section, the project root, and AGENTS.md files.
  */
-export async function systemPrompt(opts: {tools?: boolean; scratch?: string} = {}): Promise<string> {
+export async function systemPrompt(opts: {tools?: boolean; scratch?: string; provider?: string} = {}): Promise<string> {
   let base = BASE_PROMPT;
   try {
     const custom = (await readFile(path.join(reinConfigDir(), 'system-prompt.md'), 'utf8')).trim();
@@ -91,7 +145,9 @@ export async function systemPrompt(opts: {tools?: boolean; scratch?: string} = {
   const sections = [base];
   if (opts.tools) {
     const extra = extraDirs();
-    sections.push(TOOLS_PROMPT);
+    let tools = noTodo() ? TOOLS_PROMPT.split('\n').filter((l) => !l.includes('todo_write')).join('\n') : TOOLS_PROMPT;
+    if (manyCalls()) tools = tools.split('\n').map((l) => (l.startsWith(BATCH_LINE) ? MANY_CALLS_PROMPT : l)).join('\n');
+    sections.push([tools, lazyTools() && LAZY_PROMPT, cheapExplore() && EXPLORE_PROMPT, inScope() && SCOPE_PROMPT, (selfTest() || opts.provider === 'codex') && SELF_TEST_PROMPT, briefFinal() && BRIEF_PROMPT].filter(Boolean).join('\n'));
     if (attribution())
       sections.push(
         [

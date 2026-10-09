@@ -1,4 +1,4 @@
-import {mkdirSync, readFileSync, rmSync, writeFileSync} from 'node:fs';
+import {existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync} from 'node:fs';
 import path from 'node:path';
 import {reinHome} from '../store/paths.js';
 import {run} from '../util/proc.js';
@@ -56,12 +56,40 @@ export class TreeSnapshots {
       writeFileSync(path.join(this.gitDir(), 'info', 'exclude'), '.git\n.rein/checkpoints/\n');
       // Byte-exact: overrides the project's .gitattributes — no eol conversion, no filters (LFS…).
       writeFileSync(path.join(this.gitDir(), 'info', 'attributes'), '* -text -filter -diff -merge\n');
+      await this.seedFromProject();
     }
     const add = await this.git(['add', '-A', '--ignore-errors', '--', '.']);
     if (add.code !== 0 && !/warning|error: unable to index/i.test(add.stderr)) throw new Error(add.stderr.trim() || 'git add failed');
     const tree = await this.git(['write-tree']);
     if (tree.code !== 0) throw new Error(tree.stderr.trim() || 'git write-tree failed');
     return tree.stdout.trim();
+  }
+
+  /**
+   * A project that's a git repo already has every tracked file hashed: borrow its objects (alternates)
+   * and start from a copy of its index, so the first snapshot only hashes what changed instead of the
+   * whole tree (a kernel checkout: 30 s and a timeout before, about as long as `git status` now). Any
+   * problem (a split index, a worktree layout we don't expect) leaves the store as it was: a full add.
+   */
+  private async seedFromProject(): Promise<void> {
+    try {
+      const where = await run('git', ['rev-parse', '--absolute-git-dir', '--git-common-dir'], {cwd: this.root, timeoutMs: 5000});
+      if (where.code !== 0) return;
+      const [gitDir, common] = where.stdout.trim().split('\n');
+      if (!gitDir || !common) return;
+      const objects = path.resolve(this.root, common, 'objects');
+      const index = path.join(gitDir, 'index');
+      if (!existsSync(objects) || !existsSync(index)) return;
+      // A split index keeps its shared part in sharedindex.* next to it: a copy alone wouldn't load.
+      if (readdirSync(gitDir).some((f) => f.startsWith('sharedindex.'))) return;
+      const bytes = readFileSync(index);
+      mkdirSync(path.join(this.gitDir(), 'objects', 'info'), {recursive: true});
+      writeFileSync(path.join(this.gitDir(), 'objects', 'info', 'alternates'), `${objects}\n`);
+      writeFileSync(path.join(this.gitDir(), 'index'), bytes);
+    } catch {
+      rmSync(path.join(this.gitDir(), 'index'), {force: true});
+      rmSync(path.join(this.gitDir(), 'objects', 'info', 'alternates'), {force: true});
+    }
   }
 
   /** Snapshot before the user message at `turn` runs (once per turn). */

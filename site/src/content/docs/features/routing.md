@@ -15,10 +15,10 @@ Chat model: auto
   → Haiku · Claude Account 1 (auto · 0.91)
 
 > ok, now refactor src/session/engine.ts so the retry loop is testable
-  → Opus · effort high · Claude Account 2 (auto · 0.83)
+  → Opus · Claude Account 2 (auto · 0.83)
 
 > also add a test for the 5-attempt limit
-  → Opus · effort high · Claude Account 2 (auto · stayed)
+  → Opus · Claude Account 2 (auto · stayed)
 ```
 
 The dim `→` line under each message is the route. It shows the model, the effort (when one was set), the account that served the turn, and why that model was picked:
@@ -117,7 +117,7 @@ The levels listed are the ones that model reports supporting. Codex models may a
 
 - **A fixed level** is clamped to what the current model supports. If you pick `xhigh` and a model tops out at `high`, it gets `high`.
 - **Model default** leaves effort unset, so the CLI uses its own default.
-- **Auto** asks the decision model one question: *"How much reasoning effort does the assistant need for this message? Pick the lowest level that will do it well."* The levels it can choose from are `low` (lookups, small mechanical edits), `medium` (typical coding tasks), `high` (tricky bugs, careful refactors) and `xhigh` (long multi-step problems). Auto **never picks `max` or `ultra`**.
+- **Auto** asks the decision model one question: is this a simple message (a lookup, a small mechanical edit)? If so it runs at `low`; otherwise effort is left at the **model's own default**. A message longer than about 2,000 characters always gets the model's default without asking: a long message is a spec, not a quick question. Rein's own follow-ups to your request (the continuation after a compaction, the code check, Stop hooks) keep the effort chosen for the request: they're short, but they aren't a new, simple message. Auto only ever lowers effort. Raising it for hard-looking requests was measured on hard coding tasks: `high` and `xhigh` doubled output and time without solving more tasks than the model's default.
 
 The clever part is *when* auto effort runs. Changing effort mid-conversation throws away the provider's prompt cache. So auto effort only decides when the cache is **already cold**: a new session, a different account, after compaction, or after an hour idle (Rein measured both providers keeping caches warm for about 60 minutes). While the session is warm, it keeps its current effort.
 

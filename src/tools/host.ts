@@ -18,6 +18,12 @@ import {ShellManager} from './shells.js';
 import type {DiffLine} from './diff.js';
 import {skillDirs} from '../skills/index.js';
 
+type Lane = {running: Set<Promise<unknown>>; barrier: Promise<unknown>; lastDone: number; inResponse: number; single: number; nudgeAt: number};
+/** Calls this close to the previous result come from the same model response. */
+const SAME_RESPONSE_MS = 400;
+/** many-calls: single-call responses in a row before Rein reminds the model to batch. */
+const NUDGE_AFTER = 4;
+
 export type ApprovalRequest = {
   tool: ToolDef;
   args: any;
@@ -74,6 +80,10 @@ export type ToolHostOptions = {
   checkpoint?: (file: string) => Promise<void>;
   /** Run simple shell reads/searches (cat, grep, sed -n…) as the built-in tools (default on). */
   steerShell?: () => boolean;
+  /** Efficiency experiments that are on (config `experiments`). */
+  experiments?: () => string[];
+  /** The model context results go to now (engine.contextId): a change means earlier results may be gone. */
+  contextId?: () => string | undefined;
   /** Mask secrets (the vault) in every tool result before the model, hooks or the transcript see it. */
   mask?: (text: string) => string;
   /**
@@ -95,6 +105,9 @@ export type ToolHostOptions = {
 };
 
 const MAX_RESULT_CHARS = 60_000;
+/** Commands whose passing output is mostly noise (every test listed): quiet-passing-output trims them. */
+const BUILD_OR_TEST = /(^|[;&|(\s])(npm|pnpm|yarn|bun)\s+(run\s+)?(test|build|lint|typecheck|check)\b|(^|[;&|(\s])(npx\s+)?(tsc|jest|vitest|mocha|pytest|tox|cargo\s+(test|build|check)|go\s+(test|build|vet)|make|cmake|ctest|gradle|mvn|dotnet\s+(test|build)|mix\s+test|rspec|phpunit|swift\s+(test|build)|python3?\s+-m\s+(pytest|unittest)|node\s+--test)\b/;
+const QUIET_KEEP = 25;
 
 /**
  * Runs Rein's tools for whichever provider is chatting: Claude reaches it through the MCP proxy
@@ -110,6 +123,15 @@ const realRoot = (p: string) => {
 
 export class ToolHost extends EventEmitter {
   private sessionAllowed = false;
+  /**
+   * Batching nudges: a model that edits (or reads) one thing per call pays a round trip each time.
+   * The second single call in a row gets a one-line note about edits / paths, once per session:
+   * models follow what tool results tell them more than what the tool description says.
+   */
+  /** reread-unchanged: whole-file reads the current model context has seen, by file. */
+  private shown = new Map<string, {context: string; mtimeMs: number; size: number; lines: number}>();
+  private streak = {tool: '', n: 0};
+  private nudged = new Set<string>();
   /** "Allow reads outside the project this session" was chosen. */
   private outsideReadsAllowed = false;
   /** Working directories added this session (/add-dir, --add-dir, "allow this folder"). */
@@ -172,7 +194,52 @@ export class ToolHost extends EventEmitter {
     return this.tools
       .filter((t) => t.enabled?.() ?? true)
       .filter((t) => !opts.subagent || !t.mainOnly || opts.includeMainOnly)
-      .map((t) => ({name: t.name, description: t.describe?.() ?? t.description, inputSchema: t.schema?.() ?? t.inputSchema}));
+      .filter((t) => !this.deferred(t.name))
+      .map((t) => ({name: t.name, description: t.describe?.() ?? t.description, inputSchema: this.withTodos(t, t.schema?.() ?? t.inputSchema)}))
+      .concat(this.experiment('lazy-tools') ? [this.toolIndex(opts)] : []);
+  }
+
+  /**
+   * lazy-tools: tools a coding task rarely needs stay out of every request (their definitions are
+   * ~3k tokens a request); one `tool` entry lists them by name and loads or runs them on demand.
+   */
+  private static readonly ON_DEMAND = new Set(['skill', 'agent', 'decide', 'mcp_add', 'mcp_list', 'mcp_call', 'mcp_remove', 'web_fetch', 'web_search', 'image_generate', 'recall', 'remember', 'forget', 'sessions_search', 'session_read', 'lsp_install']);
+
+  private deferred(name: string): boolean {
+    return this.experiment('lazy-tools') && ToolHost.ON_DEMAND.has(name);
+  }
+
+  private onDemand(opts: {subagent?: boolean; includeMainOnly?: boolean} = {}): ToolDef[] {
+    return this.tools.filter((t) => ToolHost.ON_DEMAND.has(t.name) && (t.enabled?.() ?? true) && (!opts.subagent || !t.mainOnly || opts.includeMainOnly));
+  }
+
+  private toolIndex(opts: {subagent?: boolean; includeMainOnly?: boolean}): ToolSpec {
+    const first = (d: string) => (d.split(/(?<=\.)\s|\n/)[0] ?? d).slice(0, 110);
+    const list = this.onDemand(opts).map((t) => `${t.name}: ${first(t.describe?.() ?? t.description)}`);
+    return {
+      name: 'tool',
+      description: `More tools, loaded on demand. {name} returns that tool's description and parameters; {name, args} runs it (same approvals as calling it directly).\n${list.join('\n')}`,
+      inputSchema: {type: 'object', properties: {name: {type: 'string', description: 'The tool'}, args: {type: 'object', description: "Its arguments; leave out to see what it takes"}}, required: ['name']},
+    };
+  }
+
+  /** todo-piggyback: the tools that do the work also take the task list, so updating it costs no round trip. */
+  private static readonly CARRY_TODOS = ['edit', 'write', 'shell'];
+
+  private withTodos(t: ToolDef, schema: Record<string, unknown>): Record<string, unknown> {
+    if (!this.experiment('todo-piggyback') || !ToolHost.CARRY_TODOS.includes(t.name) || !this.find('todo_write')) return schema;
+    const props = (schema as {properties?: Record<string, unknown>}).properties ?? {};
+    return {
+      ...schema,
+      properties: {
+        ...props,
+        todos: {
+          type: 'array',
+          description: 'Optional: the updated task list (same as todo_write), applied with this call so it costs no extra round trip',
+          items: {type: 'object', properties: {content: {type: 'string'}, status: {type: 'string', enum: ['pending', 'in_progress', 'completed']}, activeForm: {type: 'string'}}, required: ['content', 'status']},
+        },
+      },
+    };
   }
 
   /** The agent was told once that a shell read ran as a tool. */
@@ -182,7 +249,73 @@ export class ToolHost extends EventEmitter {
     return origin && this.opts.untrusted?.(origin) ? 'ask' : this.opts.mode();
   }
 
+  /** Per agent (main or a subagent): calls still running, the last one that may change files, and batching counts. */
+  private lanes = new Map<string, Lane>();
+
+  /**
+   * A model's calls, run in the order it made them. CLIs may send one response's calls at once;
+   * reads next to each other still run side by side, but a call that may change something waits for
+   * every call before it, and every later call waits for it. So a response can edit files and then
+   * run the tests, and get results that match the order it wrote them in.
+   */
+  callInOrder(name: string, args: unknown, origin?: Origin): Promise<ToolResult> {
+    const key = origin?.agentId === undefined ? '' : String(origin.agentId);
+    let lane = this.lanes.get(key);
+    if (!lane) this.lanes.set(key, (lane = {running: new Set(), barrier: Promise.resolve(), lastDone: 0, inResponse: 0, single: 0, nudgeAt: NUDGE_AFTER}));
+    const now = Date.now();
+    // A call that arrives while others run, or right after one returned, belongs to the same model
+    // response: a new response takes the model at least a second to write.
+    const sameResponse = lane.running.size > 0 || now - lane.lastDone < SAME_RESPONSE_MS;
+    let nudge: string | undefined;
+    if (sameResponse) lane.inResponse++;
+    else {
+      lane.single = lane.inResponse === 1 ? lane.single + 1 : 0;
+      lane.inResponse = 1;
+      if (lane.single >= lane.nudgeAt && this.experiment('many-calls')) {
+        nudge = `[Rein: your last ${lane.single} responses each made a single tool call, and each response re-reads the whole conversation. Put the calls you can already see into one response: the reads, searches and edits you've decided on, and independent commands. They run in the order you write them.]`;
+        lane.nudgeAt *= 2; // remind less often each time
+        lane.single = 0;
+      }
+    }
+    const reads = this.readsOnly(name, args);
+    const start = reads ? lane.barrier : Promise.all([...lane.running]);
+    const l = lane;
+    // Cleared before the result goes back, so the model's next call counts as a new response.
+    const run = start
+      .then(() => this.call(name, args, origin))
+      .finally(() => {
+        l.running.delete(done);
+        l.lastDone = Date.now();
+      });
+    const done: Promise<unknown> = run.then(
+      () => {},
+      () => {},
+    );
+    l.running.add(done);
+    if (!reads) l.barrier = done;
+    return nudge ? run.then((r) => ({...r, text: `${r.text}\n\n${nudge}`})) : run;
+  }
+
+  /** Calls that only look: they may run alongside other reads. */
+  private readsOnly(name: string, args: unknown): boolean {
+    const tool = this.find(name.replace(/^mcp__rein__/, ''));
+    if (!tool || tool.name === 'tool' || tool.name === 'ask') return false;
+    if (tool.name === 'shell') {
+      const a = (args ?? {}) as {command?: unknown; background?: unknown};
+      return typeof a.command === 'string' && !a.background && readOnlyCommand(a.command);
+    }
+    return !tool.mutating;
+  }
+
   async call(name: string, rawArgs: unknown, origin?: Origin): Promise<ToolResult> {
+    if (name.replace(/^mcp__rein__/, '') === 'tool' && this.experiment('lazy-tools')) {
+      const a = (rawArgs ?? {}) as {name?: unknown; args?: unknown};
+      const wanted = typeof a.name === 'string' ? a.name.replace(/^mcp__rein__/, '') : undefined;
+      const target = wanted ? this.onDemand({subagent: !!origin}).find((t) => t.name === wanted) : undefined;
+      if (!target) return {ok: false, text: `no on-demand tool ${String(a.name)}; the list is in the tool description`};
+      if (a.args === undefined) return {ok: true, text: `${target.name}: ${target.describe?.() ?? target.description}\nParameters (JSON Schema): ${JSON.stringify(target.schema?.() ?? target.inputSchema)}`};
+      return this.call(target.name, a.args, origin);
+    }
     // `cat F`, `grep -rn x src`, `sed -n '10,40p' F`…: run as the built-in tool (tools/steer.ts).
     if (name === 'shell' && this.opts.steerShell?.() !== false) {
       const a = (rawArgs ?? {}) as {command?: unknown; cwd?: unknown; background?: unknown; interactive?: unknown};
@@ -197,6 +330,15 @@ export class ToolHost extends EventEmitter {
     let args = rawArgs;
     const tool = this.find(name);
     if (!tool) return {ok: false, text: `unknown tool ${name}`};
+    let todoNote: string | undefined;
+    if (ToolHost.CARRY_TODOS.includes(tool.name) && Array.isArray((args as {todos?: unknown})?.todos)) {
+      const {todos, ...rest} = args as {todos: unknown[]};
+      args = rest;
+      if (this.experiment('todo-piggyback')) {
+        const r = await this.call('todo_write', {todos}, origin).catch((err: Error) => ({ok: false, text: err.message}));
+        todoNote = r.ok ? '(task list updated)' : `(task list not updated: ${r.text})`;
+      }
+    }
     if (origin && tool.mainOnly) return {ok: false, text: `${tool.name} is only available to the main agent (subagents can't spawn subagents)`};
     const summary = tool.summarize(args);
     const id = this.nextId++;
@@ -324,7 +466,10 @@ export class ToolHost extends EventEmitter {
         // Files a write/edit/delete touches: their diagnostics before, to report what the change broke.
         const changes = this.opts.diagnostics && ['write', 'edit', 'delete'].includes(tool.name) ? this.filesOf(ctx, tool, args) : [];
         const snapshot = changes.length ? await this.opts.diagnostics!.before(changes, ctx.root).catch(() => undefined) : undefined;
-        result = await tool.run(ctx, args ?? {});
+        const repeat = tool.name === 'read' ? this.unchangedRead(ctx, args, origin) : undefined;
+        result = repeat ?? (await tool.run(ctx, args ?? {}));
+        if (!repeat && tool.name === 'read') this.noteRead(ctx, args, result, origin);
+        if (tool.name === 'shell') result = this.quietPassing(args, result);
         if (result.ok && snapshot) {
           const note = await this.opts.diagnostics!.after(snapshot).catch(() => undefined);
           if (note) result = {...result, text: `${result.text}\n\n${note}`};
@@ -343,6 +488,11 @@ export class ToolHost extends EventEmitter {
       result = {ok: false, text: err instanceof ToolError ? err.message : `error: ${(err as Error).message}`};
     }
     if (this.opts.mask) result = {...result, text: this.opts.mask(result.text)}; // errors too (and hook notes)
+    if (todoNote) result = {...result, text: `${result.text}\n${todoNote}`};
+    if (result.ok) {
+      const note = this.batchNudge(tool?.name ?? name, args);
+      if (note) result = {...result, text: `${result.text}\n\n${note}`};
+    }
     if (result.text.length > MAX_RESULT_CHARS) result = {...result, text: result.text.slice(0, MAX_RESULT_CHARS) + '\n… [output truncated]'};
     // A subfolder's own AGENTS.md / CLAUDE.md, the first time the agent works in it (scoped to it).
     if (result.ok) {
@@ -351,6 +501,77 @@ export class ToolHost extends EventEmitter {
     }
     this.emit('activity', {phase: 'end', id, label: tool.label, summary, ok: result.ok, result: result.text, approvedBy, judge, origin, diff: result.diff} satisfies ToolActivity);
     return {ok: result.ok, text: result.text, ...(result.images?.length ? {images: result.images} : {})}; // the diff is for the user, not the model
+  }
+
+  private experiment(name: string): boolean {
+    return this.opts.experiments?.().includes(name) ?? false;
+  }
+
+  private wholeRead(ctx: ToolContext, args: any): string | undefined {
+    if (typeof args?.path !== 'string' || args.offset || args.limit || args.pages || Array.isArray(args.paths)) return undefined;
+    try {
+      return resolvePath(ctx, args.path).real;
+    } catch {
+      return undefined;
+    }
+  }
+
+  /**
+   * reread-unchanged: reading a whole file again that this model context already read, and that
+   * hasn't changed since, returns a one-line note instead of the file. Only within the same native
+   * session: after compaction, failover or a model switch the earlier read is gone, so it's re-sent.
+   */
+  private unchangedRead(ctx: ToolContext, args: any, origin: Origin | undefined): ToolResult | undefined {
+    if (!this.experiment('reread-unchanged')) return undefined;
+    const file = this.wholeRead(ctx, args);
+    const context = this.opts.contextId?.();
+    if (!file || !context) return undefined;
+    const seen = this.shown.get(`${origin?.agentId ?? 0}|${file}`);
+    let st;
+    try {
+      st = statSync(file);
+    } catch {
+      return undefined;
+    }
+    if (!seen || seen.context !== context || seen.mtimeMs !== st.mtimeMs || seen.size !== st.size) return undefined;
+    return {ok: true, text: `(${args.path} is unchanged since you read it earlier in this conversation (${seen.lines} lines); it's above. Pass offset/limit to see part of it again.)`};
+  }
+
+  private noteRead(ctx: ToolContext, args: any, result: ToolResult, origin: Origin | undefined): void {
+    if (!this.experiment('reread-unchanged') || !result.ok || /\n… more lines follow/.test(result.text)) return;
+    const file = this.wholeRead(ctx, args);
+    const context = this.opts.contextId?.();
+    if (!file || !context) return;
+    try {
+      const st = statSync(file);
+      this.shown.set(`${origin?.agentId ?? 0}|${file}`, {context, mtimeMs: st.mtimeMs, size: st.size, lines: result.text.split('\n').length});
+    } catch {}
+  }
+
+  /**
+   * quiet-passing-output: a build or test command that passed (exit 0) returns its last lines, where
+   * the summary is, instead of every passing test. Failures always come back in full.
+   */
+  private quietPassing(args: any, result: ToolResult): ToolResult {
+    if (!this.experiment('quiet-passing-output') || !result.ok || args?.background) return result;
+    const command = String(args?.command ?? '');
+    if (!BUILD_OR_TEST.test(command)) return result;
+    const m = /^\[exit 0 after [^\]]*\]\n/.exec(result.text);
+    if (!m) return result;
+    const lines = result.text.slice(m[0].length).split('\n');
+    if (lines.length <= QUIET_KEEP + 10) return result;
+    const kept = lines.slice(-QUIET_KEEP);
+    return {...result, text: `${m[0]}(passed: ${lines.length - QUIET_KEEP} earlier lines of output left out; the end, with the summary, follows. Rerun with a narrower command if you need them.)\n${kept.join('\n')}`};
+  }
+
+  private batchNudge(name: string, args: any): string | undefined {
+    const single = (name === 'edit' && !Array.isArray(args?.edits)) || (name === 'read' && !Array.isArray(args?.paths));
+    this.streak = single ? {tool: name, n: this.streak.tool === name ? this.streak.n + 1 : 1} : {tool: '', n: 0};
+    if (this.streak.n < 2 || this.nudged.has(name)) return undefined;
+    this.nudged.add(name);
+    return name === 'edit'
+      ? '(Several changes to make? Pass them all as `edits` in one edit call, across files too: one round trip instead of one per change.)'
+      : '(Several files to read? Pass them all as `paths` in one read call: one round trip instead of one per file.)';
   }
 
   private scopedFor(name: string, args: any): string | undefined {
@@ -501,6 +722,9 @@ export class ToolHost extends EventEmitter {
       root: this.opts.root,
       scratch,
       reads: this.reads,
+      compactLines: this.experiment('compact-read'),
+      outlineReads: this.experiment('outline-reads'),
+      shellCap: this.experiment('shell-cap'),
       extraRoots: [...(scratch ? [scratch] : []), globalSkills, ...config, ...this.addedDirs],
       shells: this.shells,
       shellMaxMs: this.opts.shellMaxMs?.(),
@@ -543,12 +767,12 @@ export class ToolHost extends EventEmitter {
 
   /** Unix socket for the Claude MCP proxy: newline JSON `{id, method:'list'|'call', name?, args?}`. */
   listen(): Promise<string> {
-    return (this.mainSocket ??= this.serve((name, args) => this.call(name, args)));
+    return (this.mainSocket ??= this.serve((name, args) => this.callInOrder(name, args)));
   }
 
   /** A subagent's own socket (Claude MCP): its calls are tagged with `origin`. Close it when done. */
   async listenFor(origin: Origin): Promise<{socket: string; close(): void}> {
-    const socket = await this.serve((name, args) => this.call(name, args, origin));
+    const socket = await this.serve((name, args) => this.callInOrder(name, args, origin));
     return {
       socket,
       close: () => {
@@ -625,6 +849,9 @@ function preview(tool: ToolDef, args: any): string {
     return t.length > n ? t.slice(0, n) + `\n… (${t.length - n} more chars)` : t;
   };
   if (tool.name === 'write') return clip(args?.content);
+  if (tool.name === 'edit' && Array.isArray(args?.edits)) {
+    return clip(args.edits.map((e: any) => `${e?.path ?? args?.path ?? ''}\n- ${clip(e?.old_string, 200).replace(/\n/g, '\n- ')}\n+ ${clip(e?.new_string, 200).replace(/\n/g, '\n+ ')}`).join('\n'), 2000);
+  }
   if (tool.name === 'edit') return `- ${clip(args?.old_string, 300).replace(/\n/g, '\n- ')}\n+ ${clip(args?.new_string, 300).replace(/\n/g, '\n+ ')}`;
   if (tool.name === 'delete') return args?.recursive ? 'Deletes the directory and everything in it.' : '';
   if (tool.name === 'mcp_add') {

@@ -1,5 +1,6 @@
 import {fstatSync} from 'node:fs';
 import {loadAccounts} from './store/accounts.js';
+import {addDefaultExperiments, HEADLESS_EXPERIMENTS} from './store/config.js';
 import type {ApprovalMode} from './tools/host.js';
 import {runtime} from './runtime.js';
 import {onUntrustedHooks} from './hooks.js';
@@ -56,6 +57,8 @@ export async function runHeadless(argv: string[]): Promise<number> {
   const resumeId = resume === true ? (await listTranscripts({cwd: process.cwd()}))[0]?.id : resume || undefined;
   // Nobody can review a project's hooks here: untrusted ones are skipped (trust them in `rein` first).
   onUntrustedHooks((p) => process.stderr.write(`rein: skipping ${p.commands.length} project hook${p.commands.length === 1 ? '' : 's'} (not trusted yet). Run \`rein\` in this folder once to review and trust them.\n`));
+  // The settings measured on one-off runs (see HEADLESS_EXPERIMENTS).
+  addDefaultExperiments(HEADLESS_EXPERIMENTS);
   await runtime.init({resume: resumeId ?? false});
   await runtime.refreshCatalog();
   const {catalog} = await import('./router/catalog.js');

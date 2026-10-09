@@ -21,6 +21,25 @@ beforeEach(() => {
 });
 
 describe('whole-tree snapshots', () => {
+  it("in a git repo, start from the project's own index and objects (no re-hashing), and still restore", async () => {
+    const git = (...a: string[]) => execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', ...a], {cwd: root});
+    git('init', '-q');
+    git('add', '-A');
+    git('commit', '-qm', 'base');
+    writeFileSync(f('src/untracked.ts'), 'u1\n'); // not committed: still part of the snapshot
+    await snaps.snapshot(1);
+    const store = path.join(process.env.REIN_HOME!, 'checkpoints', 's1', 'tree.git');
+    expect(readFileSync(path.join(store, 'objects', 'info', 'alternates'), 'utf8').trim()).toBe(path.join(root, '.git', 'objects'));
+    writeFileSync(f('src/a.ts'), 'a2\n');
+    writeFileSync(f('src/untracked.ts'), 'u2\n');
+    execFileSync('rm', [f('src/b.ts')]);
+    const r = await snaps.restore(1);
+    expect(r.restored.sort()).toEqual(['src/a.ts', 'src/b.ts', 'src/untracked.ts']);
+    expect(readFileSync(f('src/a.ts'), 'utf8')).toBe('a1\n');
+    expect(readFileSync(f('src/b.ts'), 'utf8')).toBe('b1\n');
+    expect(readFileSync(f('src/untracked.ts'), 'utf8')).toBe('u1\n');
+  });
+
   it('undoes shell-style changes: edits, deletions and new files — ignored files untouched', async () => {
     await snaps.snapshot(1);
     // What a `sed -i`, `rm` and a generator would do — none of it through Rein's file tools.

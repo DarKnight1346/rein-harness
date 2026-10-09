@@ -4,14 +4,14 @@ import type {ToolActivity} from '../tools/host.js';
 import {EventQueue} from '../util/proc.js';
 import {refKey} from '../providers/types.js';
 import {BUSY_PENALTY, catalog, toRef} from '../router/catalog.js';
-import type {Config} from '../store/config.js';
+import {activeExperiments, type Config} from '../store/config.js';
 import {DANGER_HEADROOM, headroom, usageStore} from '../store/usage.js';
-import {compactableCount, compactTranscript, type CompactReason, type CompactResult} from './compactor.js';
+import {compactableCount, compactTranscript, type CompactReason, type CompactResult, type LiveSummarizer} from './compactor.js';
 import {systemPrompt} from './prompt.js';
 import {buildCarry, carryStart, estimateTokens, newTranscript, recordProgress, saveTranscript, scratchDir, truncateTranscript, type Message, type Transcript} from './transcript.js';
 import {CARRY_TOOL_BUDGET, carriedTools, selectCarriedTools, type CarrySelector} from './carry.js';
 
-export type Route = {ref: ModelRef; reason: 'fixed' | 'auto' | 'sticky' | 'default' | 'failover'; confidence?: number};
+export type Route = {ref: ModelRef; reason: 'fixed' | 'auto' | 'sticky' | 'default' | 'failover' | 'escalated'; confidence?: number};
 
 export type EngineEvent =
   | {type: 'route'; route: Route; account: Account; effort?: string}
@@ -33,7 +33,7 @@ export type EngineDeps = {
   /** Pick a replacement model when every account for `failed` is unavailable. */
   alternative: (text: string, t: Transcript, failed: ModelRef, exclude: ReadonlySet<string>) => Promise<ModelRef | undefined>;
   /** Summarize older messages into `t.summary` (M6). */
-  compact: (t: Transcript, reason: CompactReason, opts?: {keepRecent?: number}) => Promise<CompactResult>;
+  compact: (t: Transcript, reason: CompactReason, opts?: {keepRecent?: number; model?: ModelRef; live?: LiveSummarizer}) => Promise<CompactResult>;
   /** Rein's tools for chat sessions, plus their activity feed (tool lines in the transcript). */
   tools?: {binding: ToolBinding; forkBinding?: ToolBinding; onActivity(fn: (a: ToolActivity) => void): () => void};
   /** Picks which tool results a new session needs when the conversation moves (compaction model). */
@@ -53,13 +53,21 @@ const CARRY_BUDGET_TOKENS = 24_000;
  * Rein's own sessions (PLAN.md §22): Claude writes `ephemeral_1h` and served 99% from cache after
  * 58 min, 0% after 65; Codex still served 94% after 61 min. One hour for both.
  */
+/** Auto effort considers low only for messages up to this size (~2,000 characters). */
+const SIMPLE_MAX_TOKENS = 500;
 const CACHE_WARM_MS: Record<string, number> = {claude: 60 * 60_000, codex: 60 * 60_000};
 /** A cold switch needs the other account to be at least this much better (no flip-flopping). */
 const BALANCE_MARGIN = 15;
 const MAX_ATTEMPTS = 5;
 /** Compactions inside one turn before Rein stops compacting it: a backstop (each needs progress first, see `laterRequest`). */
 const MAX_MIDTURN_COMPACTIONS = 20;
+/** price-break: compact at this share of the model's price break (headroom for one large tool result). */
+const PRICE_BREAK_MARGIN = 0.8;
+/** context-cap: every request re-reads the whole conversation, so past this size it costs more than a compaction. */
+const CONTEXT_CAP = 200_000;
 /** Sent after a mid-turn compaction so the agent picks the task back up instead of ending its turn. */
+/** Messages Rein sends on its own to carry on the user's request (not a new request). */
+const REIN_FOLLOW_UP = /^<(context_compacted|code_check|stop_hook)>/;
 const CONTINUE_AFTER_COMPACTION = `<context_compacted>
 The conversation was compacted in the middle of your work because the context window was filling up. The summary above covers everything so far, including your tool calls and where you stopped. Continue the task from exactly where you left off: don't start over, don't repeat finished steps, and don't stop to ask the user unless you genuinely need their input.
 </context_compacted>`;
@@ -71,6 +79,22 @@ The conversation was compacted in the middle of your work because the context wi
 export class Engine {
   transcript: Transcript;
   private active: {session: ProviderSession; key: string; ref: ModelRef} | undefined;
+  /** A number per native session object: a new one (compaction, failover, a model switch) means the model lost what it saw. */
+  private serials = new WeakMap<ProviderSession, number>();
+  private nextSerial = 1;
+
+  /** The model the conversation is on right now. */
+  currentRef(): ModelRef | undefined {
+    return this.active?.ref;
+  }
+
+  /** Which model context tool results go to now: changes whenever earlier results may be gone. */
+  contextId(): string | undefined {
+    const a = this.active;
+    if (!a) return undefined;
+    if (!this.serials.has(a.session)) this.serials.set(a.session, this.nextSerial++);
+    return `${a.key}#${this.serials.get(a.session)}#${this.transcript.summary?.coversUpTo ?? 0}`;
+  }
   private running: ProviderSession | undefined;
   private interruptRequested = false;
   /** Tokens of the call in flight (live), folded into `transcript.tokens` when it ends. */
@@ -142,7 +166,7 @@ export class Engine {
     return adapters[active.ref.provider].fork({
       account,
       model: active.ref.model,
-      systemPrompt: await systemPrompt({tools: !!this.deps.tools, scratch: this.scratch}),
+      systemPrompt: await systemPrompt({tools: !!this.deps.tools, scratch: this.scratch, provider: active.ref.provider}),
       nativeId,
       tools,
     });
@@ -166,7 +190,7 @@ export class Engine {
 
   /** `/compact`: summarize now; the next turn starts a fresh native session from the summary. */
   async compactNow(focus?: string): Promise<CompactResult> {
-    const res = await compactTranscript(this.transcript, this.deps.config(), {keepRecent: 2, focus});
+    const res = await compactTranscript(this.transcript, this.deps.config(), {keepRecent: 2, focus, model: this.active?.ref, live: this.liveSummarizer()});
     if (!('skipped' in res)) {
       this.closeActive();
       this.cacheBroken = true;
@@ -556,11 +580,22 @@ export class Engine {
     const key = `${ref.provider}:${account.id}`;
     const warm = this.active?.key === key && !this.cacheBroken && Date.now() - (this.lastUsed.get(account.id) ?? 0) < (CACHE_WARM_MS[ref.provider] ?? 5 * 60_000);
     if (warm) return this.active!.session.effort;
-    // Auto never reaches for the levels the CLIs flag as excessive.
-    const choices = levels.filter((l) => l !== 'max' && l !== 'ultra');
-    const picked = await this.deps.pickEffort?.(text, choices).catch(() => undefined);
-    return picked && choices.includes(picked) ? picked : undefined;
+    // Rein's own follow-ups (the continuation after a compaction, the code check, Stop hooks,
+    // keep-going) are short but belong to the user's request: they keep its effort. Judged on their
+    // own they read as "simple", and a long task carried on at low.
+    if (REIN_FOLLOW_UP.test(text)) return this.requestEffort;
+    // Auto only ever lowers effort: low for a simple message, else the model's own default (no flag).
+    // Raising it on hard-looking requests (high, xhigh) doubled output and time on hard benchmark tasks
+    // without solving more of them than the model's default did.
+    // A long message is a spec, never a quick one: asked anyway, the decision model sometimes saw a
+    // 15K-character feature spec as "mechanical" and ran it on low.
+    if (!levels.includes('low') || estimateTokens(text) > SIMPLE_MAX_TOKENS) return (this.requestEffort = undefined);
+    const picked = await this.deps.pickEffort?.(text, ['low', 'medium']).catch(() => undefined);
+    return (this.requestEffort = picked === 'low' ? 'low' : undefined);
   }
+
+  /** Auto effort chosen for the user's current request, which Rein's follow-ups to it keep. */
+  private requestEffort: string | undefined;
 
   /** Account of the native session this conversation used most recently for a provider. */
   private lastAccount(provider: string): string | undefined {
@@ -584,7 +619,7 @@ export class Engine {
       const known = t.native[key];
       // Resume the native session only if it saw everything up to now; otherwise carry context.
       const resumeId = known && known.coversUpTo === userIndex ? known.nativeId : undefined;
-      const session = catalog.track(await adapters[ref.provider].openSession({account, model: ref.model, systemPrompt: await systemPrompt({tools: !!this.deps.tools, scratch: this.scratch}), resumeId, tools: this.deps.tools?.binding, effort}));
+      const session = catalog.track(await adapters[ref.provider].openSession({account, model: ref.model, systemPrompt: await systemPrompt({tools: !!this.deps.tools, scratch: this.scratch, provider: ref.provider}), resumeId, tools: this.deps.tools?.binding, effort}));
       this.active = {session, key, ref};
       if (!resumeId) t.native[key] = {provider: ref.provider, accountId: account.id, nativeId: '', coversUpTo: 0};
     }
@@ -613,7 +648,17 @@ export class Engine {
   /** Prompt size at which a conversation on `ref` is compacted (undefined = auto-compact off). */
   private autoCompactLimit(ref: ModelRef): number | undefined {
     const pct = this.deps.config().autoCompactPct;
-    return pct ? (catalog.get(ref)?.contextWindow ?? 200_000) * (pct / 100) : undefined;
+    if (!pct) return undefined;
+    const m = catalog.get(ref);
+    const limit = (m?.contextWindow ?? 200_000) * (pct / 100);
+    // price-break: stay on the cheaper rate card. Compacting checks a request's prompt after it was
+    // sent, and the next tool result adds to it, so the limit sits below the break.
+    const experiments = activeExperiments(this.deps.config());
+    if (m?.priceBreak && experiments.includes('price-break')) return Math.min(limit, m.priceBreak * PRICE_BREAK_MARGIN);
+    // context-cap: on large windows the conversation otherwise grows to 300-500K, and cache reads of it
+    // were about 60% of what a large task cost.
+    if (experiments.includes('context-cap')) return Math.min(limit, CONTEXT_CAP);
+    return limit;
   }
 
   /**
@@ -642,13 +687,30 @@ export class Engine {
     this.closeActive();
   }
 
+  /** The open session, asked one more turn for its own summary (faithful-compaction); its tokens count. */
+  private liveSummarizer(): LiveSummarizer | undefined {
+    const session = this.active?.session;
+    if (!session) return undefined;
+    return async (ask) => {
+      let text = '';
+      let used: TokenCount | undefined;
+      for await (const ev of session.send(ask)) {
+        if (ev.type === 'text') text += ev.delta;
+        else if (ev.type === 'tokens') used = ev.call;
+        else if (ev.type === 'error') throw new Error(ev.message);
+      }
+      if (used) this.addTokens(used);
+      return text;
+    };
+  }
+
   /** Run a compaction, surfacing start/end so the UI can animate it and show the result. */
   private async *compactWithEvents(reason: CompactReason, keepRecent?: number): AsyncGenerator<EngineEvent> {
     const messages = compactableCount(this.transcript, keepRecent);
     if (!messages) return;
     yield {type: 'compact', phase: 'start', reason, messages};
     try {
-      const result = await this.deps.compact(this.transcript, reason, keepRecent === undefined ? undefined : {keepRecent});
+      const result = await this.deps.compact(this.transcript, reason, {...(keepRecent === undefined ? {} : {keepRecent}), model: this.active?.ref, live: this.liveSummarizer()});
       if (!('skipped' in result)) this.cacheBroken = true;
       yield {type: 'compact', phase: 'end', reason, result};
     } catch (err) {

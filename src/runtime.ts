@@ -1,6 +1,9 @@
+import {readFileSync} from 'node:fs';
+import {run} from './util/proc.js';
 import {EventEmitter} from 'node:events';
 import {adapters} from './providers/index.js';
-import {catalog} from './router/catalog.js';
+import {onSideUsage} from './providers/usage.js';
+import {catalog, toRef} from './router/catalog.js';
 import {mergeNote, Worktrees} from './agents/worktrees.js';
 import type {Origin} from './tools/fs.js';
 import {makeRouter, type AutoRouter} from './router/index.js';
@@ -20,7 +23,7 @@ import {loadTranscript, type Transcript} from './session/transcript.js';
 
 /** `true` = show the picker, a string = continue that session id, `false` = new conversation. */
 export type Resume = boolean | string;
-import {DEFAULT_CONFIG, loadConfig, saveConfig, type Config} from './store/config.js';
+import {activeExperiments, DEFAULT_CONFIG, loadConfig, saveConfig, type Config} from './store/config.js';
 import {usageStore} from './store/usage.js';
 import {SubagentManager, SUBAGENT_PROMPT, type Subagent} from './agents/manager.js';
 import {agentTools} from './agents/tools.js';
@@ -44,7 +47,8 @@ import {webTools} from './tools/web.js';
 import {isMilestoneCopy, todoTool} from './tools/todo.js';
 import {imageGenRef, imageTool} from './tools/image.js';
 import {newTranscript, saveTranscript} from './session/transcript.js';
-import {setAttribution, setExtraWorkingDirs, setVaultNames, systemPrompt} from './session/prompt.js';
+import {setPromptCacheTtl} from './providers/claude/session.js';
+import {setAttribution, setBriefFinal, setCheapExplore, setExtraWorkingDirs, setInScope, setLazyTools, setManyCalls, setNoTodo, setSelfTest, setVaultNames, systemPrompt} from './session/prompt.js';
 import {Vault} from './vault/vault.js';
 import {parseRef, refKey, type Account, type ModelRef, type TokenCount, type ToolBinding} from './providers/types.js';
 import {removeAccount} from './accounts/service.js';
@@ -60,13 +64,18 @@ const READ_ONLY_MIN = 0.85;
 import {mcpProxyCommand, ToolHost, type ApprovalDecision, type ApprovalRequest, type ToolActivity} from './tools/host.js';
 
 /** Process-wide state shared by the UI and commands. */
+/** keep-going: times per request the agent is sent back after stopping partway. */
+const KEEP_GOING_MAX = 3;
+/** verify-requirements: checks per request (the second only when the first one changed the code). */
+const VERIFY_MAX = 2;
+
 export class Runtime {
   config: Config = DEFAULT_CONFIG;
   engine!: Engine;
   /** Last auto-routing decision, for the status line / debugging. */
   lastDecision: string | undefined;
   auto: AutoRouter = makeAutoRouter({config: () => this.config, onDecision: (d) => (this.lastDecision = d)});
-  compact = (t: Transcript, _reason: CompactReason, opts?: {keepRecent?: number}): Promise<CompactResult> => {
+  compact = (t: Transcript, _reason: CompactReason, opts?: Parameters<typeof compactTranscript>[2]): Promise<CompactResult> => {
     // The summary may not keep subfolder instructions word for word: deliver them again as needed.
     this.tools.deliveredInstructions.clear();
     return compactTranscript(t, this.config, opts);
@@ -106,6 +115,8 @@ export class Runtime {
     readOnlyJudge: (command) => this.judgeReadOnly(command),
     configDirs: () => this.config?.additionalDirectories ?? [],
     checkpoint: (file) => this.checkpoints.snapshot(this.currentTurn(), file),
+    experiments: () => activeExperiments(this.config),
+    contextId: () => this.engine?.contextId(),
     untrusted: (origin) => origin.agentId !== undefined && !!this.agents.get(origin.agentId)?.untrusted,
     mask: (text) => this.vault.mask(text),
     steerShell: () => this.config.steerShell !== false,
@@ -271,7 +282,7 @@ export class Runtime {
           get tools() {
             return host.specs({subagent: true, includeMainOnly: agent.mode === 'fork'}).filter((t) => permitted(t.name));
           },
-          call: (name, args) => (permitted(name) ? host.call(name, args, origin) : Promise.resolve({ok: false, text: `${name} isn't available to the ${agent.definition?.name} subagent`})),
+          call: (name, args) => (permitted(name) ? host.callInOrder(name, args, origin) : Promise.resolve({ok: false, text: `${name} isn't available to the ${agent.definition?.name} subagent`})),
           listen: async () => {
             const l = await host.listenFor(origin);
             closeSocket = l.close;
@@ -355,7 +366,7 @@ export class Runtime {
     const account = catalog.healthyAccounts(ref, this.config.maxUsedPct)[0];
     if (!account) throw new Error(`no healthy account for ${ref.model}`);
     const role = agent.definition ? `\n\n# Your role: ${agent.definition.name}\n${agent.definition.prompt}` : '';
-    const prompt = `${await systemPrompt({tools: true, scratch: this.engine.scratch})}\n\n${SUBAGENT_PROMPT(agent.name)}${role}`;
+    const prompt = `${await systemPrompt({tools: true, scratch: this.engine.scratch, provider: ref.provider})}\n\n${SUBAGENT_PROMPT(agent.name)}${role}`;
     const session = catalog.track(await adapters[ref.provider].openSession({account, model: ref.model, systemPrompt: prompt, tools}));
     return {session, ref, accountId: account.id, label: catalog.get(ref)?.label ?? ref.model};
   }
@@ -414,6 +425,14 @@ Drop superseded reads of the same file, routine listings, and output that no lon
 
   private async beforePrompt(text: string): Promise<{block?: string; context?: string}> {
     const root = process.cwd();
+    // A message from the user (not Rein's own follow-up) ends an escalation: routing is normal again.
+    if (!/^<(code_check|stop_hook)>/.test(text)) {
+      this.escalation = undefined;
+      this.verifyPasses = 0;
+      this.verifiedAt = undefined;
+      this.reviewed = false;
+      this.keptGoing = 0;
+    }
     // Snapshot the project before this message runs, so /rewind can undo everything it causes.
     if (this.engine) await this.snapshots.snapshot(this.engine.transcript.messages.length);
     const session_id = this.engine?.transcript.id;
@@ -445,8 +464,139 @@ Drop superseded reads of the same file, routine listings, and output that no lon
       const out = await runHooks('Stop', root, {session_id: this.engine?.transcript.id, stop_hook_active: active});
       if (out.block) return {reason: out.block, kind: 'hook'};
     }
+    // cross-review: once per request, a strong model from the other provider reviews the change against
+    // the request; what it finds goes back to the agent (a second pair of eyes no single-vendor CLI has).
+    if (!active && activeExperiments(this.config).includes('cross-review') && !this.reviewed && this.engine && this.checkpoints.changedSince(this.currentTurn()).length) {
+      this.reviewed = true;
+      const findings = await this.crossReview().catch(() => undefined);
+      if (findings) return {kind: 'hook', reason: findings};
+    }
+    // verify-requirements: once per request, before the agent stops after changing files, it runs its
+    // change against every requirement in the request (hard tasks fail on the edge case it never tried).
+    // Once more if that pass changed the code: its fixes were never run against the requirements.
+    if (activeExperiments(this.config).includes('verify-requirements') && this.engine) {
+      const again = active && this.verifiedAt !== undefined && this.verifyPasses < VERIFY_MAX;
+      if ((!active && !this.verifyPasses) || again) {
+        const since = again ? this.verifiedAt! : this.currentTurn();
+        if (await this.changedSince(since)) {
+          this.verifyPasses++;
+          this.verifiedAt = this.engine.transcript.messages.length; // the index the hook's message gets
+          return {
+            kind: 'hook',
+            reason: again
+              ? "You changed the code while checking it. Run your requirement checks again against the final code (the same quick scripts or tests), fix whatever fails, then run the project's tests. If everything passes, reply with a short confirmation and stop."
+              : "Before you finish, check your change against the user's request line by line. For every concrete requirement (each behaviour, error case and its message, edge case, name, value and attribute), run it: one quick script or test that exercises several requirements at once is fine, rereading the code is not. Fix whatever fails or is missing, then run the project's tests. If everything already passes, reply with a short confirmation and stop: don't redo work.",
+          };
+        }
+        this.verifiedAt = undefined;
+      }
+    }
+    // escalate: the check already reported these and the agent's follow-up turn left them: a stronger
+    // model takes the task over (for the rest of it; the next message from the user routes normally).
+    if (active && activeExperiments(this.config).includes('escalate') && !this.escalation) {
+      const left = await this.lsp.stillThere().catch(() => [] as string[]);
+      const to = left.length ? this.strongerModel() : undefined;
+      if (to) {
+        this.escalation = to;
+        return {
+          kind: 'diagnostics',
+          reason: `These problems from the last check are still there after another attempt:\n${left.slice(0, 10).join('\n')}\nA stronger model is taking over this task: fix them, or if one should stay, say why.`,
+        };
+      }
+    }
     const problems = await this.lsp.turnEnd().catch(() => undefined);
-    return problems ? {reason: problems, kind: 'diagnostics'} : undefined;
+    if (problems) return {reason: problems, kind: 'diagnostics'};
+    // keep-going: the agent ended its turn but its own reply says the work isn't done ("I've only
+    // partly done this"), and it isn't waiting on the user: send it back, a few times per request.
+    // Models stop like this on long tasks, more often right after a compaction.
+    if (activeExperiments(this.config).includes('keep-going') && this.keptGoing < KEEP_GOING_MAX && this.engine) {
+      const unfinished = await this.stoppedEarly().catch(() => false);
+      if (unfinished) {
+        this.keptGoing++;
+        return {
+          kind: 'hook',
+          reason: "Your last message says the task isn't finished, and nothing in it needs the user's input. Keep going: carry on from where you stopped and finish the whole request. Only stop when it's done, or when you genuinely need the user to decide something.",
+        };
+      }
+    }
+    return undefined;
+  }
+
+  /** keep-going: rounds used for the current request. */
+  private keptGoing = 0;
+
+  /** keep-going: does the agent's final reply admit it stopped partway, without needing the user? */
+  private async stoppedEarly(): Promise<boolean> {
+    const messages = this.engine.transcript.messages;
+    const reply = messages.at(-1)?.role === 'assistant' ? messages.at(-1)!.text : '';
+    if (!reply.trim()) return false;
+    const request = [...messages].reverse().find((m) => m.role === 'user' && !/^<(code_check|stop_hook)>/.test(m.text))?.text ?? '';
+    const d = await decide(this.config, {request: headTail(request), final_reply: headTail(reply)}, {
+      unfinished: {
+        type: 'noul',
+        instructions: "The assistant just ended its turn with final_reply. By its own account, did it stop before finishing the request (it says the work is partial, lists remaining or next steps it hasn't done, or says the code doesn't build or pass yet), while not needing anything from the user (no question for them, no decision only they can make, nothing it is blocked on)?",
+        criteria: {true: 'stopped partway on its own, could have kept going', false: 'finished, or genuinely needs the user, or blocked'},
+      },
+    });
+    const a = d.answers.unfinished;
+    return a?.type === 'noul' ? a.noul >= 0.5 : false;
+  }
+
+  /** verify-requirements: checks sent for the current request, and the message index of the last one. */
+  private verifyPasses = 0;
+  private verifiedAt: number | undefined;
+
+  /** Did files change since the message at `turn`: Rein's own edits, or anything else (shell) per the tree snapshot. */
+  private async changedSince(turn: number): Promise<boolean> {
+    if (this.checkpoints.changedSince(turn).length) return true;
+    return (await this.snapshots.changedSince(turn).catch(() => [])).length > 0;
+  }
+  /** cross-review: the review already ran for the current request. */
+  private reviewed = false;
+
+  /** The other provider's strongest available model, for a review (undefined if none is signed in). */
+  private reviewerFor(cur: ModelRef): ModelRef | undefined {
+    const others = catalog.available(this.config.maxUsedPct).filter((m) => m.provider !== cur.provider);
+    const best = others.sort((a, b) => b.tier - a.tier)[0];
+    return best ? toRef(best) : undefined;
+  }
+
+  /** cross-review: the reviewer's findings as a message for the agent, or undefined when it found nothing. */
+  private async crossReview(): Promise<string | undefined> {
+    const cur = this.engine?.currentRef();
+    const reviewer = cur && this.reviewerFor(cur);
+    if (!reviewer || !this.engine) return undefined;
+    const root = process.cwd();
+    const git = async (...a: string[]) => (await run('git', a, {cwd: root, timeoutMs: 20_000})).stdout;
+    const diff = (await git('diff', 'HEAD', '--no-color')).slice(0, 60_000);
+    const untracked = (await git('ls-files', '--others', '--exclude-standard')).split('\n').filter(Boolean).slice(0, 20);
+    const added = untracked.map((f) => {
+      try {
+        return `--- new file ${f}\n${readFileSync(path.join(root, f), 'utf8').slice(0, 8000)}`;
+      } catch {
+        return '';
+      }
+    }).join('\n');
+    if (!diff.trim() && !added.trim()) return undefined;
+    const request = [...this.engine.transcript.messages].reverse().find((m) => m.role === 'user' && !/^<(code_check|stop_hook)>/.test(m.text))?.text ?? '';
+    const system = 'You review a code change against the request that asked for it. Report only concrete problems: requirements or edge cases the request states that the change does not handle, and real bugs. No style comments, no praise.';
+    const prompt = `The request:\n${request.slice(0, 20_000)}\n\nThe change (git diff, then new files):\n${diff}\n${added}\n\nList each problem on one line: the file, what is wrong, and which part of the request it breaks. If there are none, reply exactly NONE.`;
+    const reply = (await completeWith(reviewer, this.config, system, prompt, {timeoutMs: 240_000})).trim(); // its tokens count via onSideUsage
+    if (!reply || /^none\b/i.test(reply)) return undefined;
+    return `A second model (${reviewer.provider}:${reviewer.model}) reviewed your change against the request and reported:\n${reply.slice(0, 6000)}\nCheck each point against the code. Fix the ones that are real; for any that are wrong, say so in a line. Don't redo work that is fine.`;
+  }
+
+  /** escalate: the model the task moves to (set by stopHook, cleared by the user's next message). */
+  escalation: ModelRef | undefined;
+
+  /** The cheapest available model in a higher cost tier than the current one (same provider first). */
+  private strongerModel(): ModelRef | undefined {
+    const cur = this.engine?.currentRef();
+    if (!cur) return undefined;
+    const tier = catalog.get(cur)?.tier ?? 0;
+    const up = catalog.available(this.config.maxUsedPct).filter((m) => m.tier > tier);
+    const best = up.sort((a, b) => Number(b.provider === cur.provider) - Number(a.provider === cur.provider) || a.tier - b.tier)[0];
+    return best ? toRef(best) : undefined;
   }
 
   /** Auto effort: one decision-model question (Jev or the cheap model) about how hard the message is. */
@@ -542,6 +692,8 @@ Drop superseded reads of the same file, routine listings, and output that no lon
       ...mcpTools({mcp: this.mcp, root: () => process.cwd(), call: (name, args, origin) => this.tools.call(name, args, origin)}),
       recallTool(() => this.engine?.transcript),
       todoTool({
+        carried: () => activeExperiments(this.config).includes('todo-piggyback'),
+        enabled: () => !activeExperiments(this.config).includes('no-todo'),
         transcript: () => this.engine?.transcript,
         milestones: () => (this.goals.goal?.status === 'active' ? this.goals.plan()?.milestones.map((m) => m.text) : undefined),
         changed: () => {
@@ -623,6 +775,14 @@ Drop superseded reads of the same file, routine listings, and output that no lon
     this.stopUsageRefresh = startUsageRefresh({balancing: () => this.config.loadBalancing !== 'sticky', busy: (id) => catalog.busy.get(id) ?? 0});
     setExtraWorkingDirs(() => this.tools.extraWorkingDirs());
     setAttribution(() => this.config.attribution !== false);
+    setLazyTools(() => activeExperiments(this.config).includes('lazy-tools'));
+    setCheapExplore(() => activeExperiments(this.config).includes('cheap-explore'));
+    setNoTodo(() => activeExperiments(this.config).includes('no-todo'));
+    setInScope(() => activeExperiments(this.config).includes('in-scope'));
+    setManyCalls(() => activeExperiments(this.config).includes('many-calls'));
+    setSelfTest(() => activeExperiments(this.config).includes('self-test'));
+    setPromptCacheTtl(() => (activeExperiments(this.config).includes('cache-5m') ? '5m' : undefined));
+    setBriefFinal(() => activeExperiments(this.config).includes('brief-final'));
     await usageStore.load();
     const router = makeRouter(() => this.config, (...a) => this.auto(...a));
     const host = this.tools;
@@ -630,7 +790,7 @@ Drop superseded reads of the same file, routine listings, and output that no lon
     this.engine = new Engine(
       {
         config: () => this.config,
-        route: router.route,
+        route: (text, t, current) => (this.escalation ? Promise.resolve({ref: this.escalation, reason: 'escalated' as const}) : router.route(text, t, current)),
         alternative: router.alternative,
         compact: (t, reason, opts) => this.compact(t, reason, opts),
         selectCarry: (input) => this.selectCarry(input),
@@ -646,7 +806,7 @@ Drop superseded reads of the same file, routine listings, and output that no lon
             get tools() {
               return host.specs();
             },
-            call: (name, args) => this.tools.call(name, args),
+            call: (name, args) => this.tools.callInOrder(name, args),
             listen: () => this.tools.listen(),
             proxy: mcpProxyCommand(),
           },
@@ -667,8 +827,13 @@ Drop superseded reads of the same file, routine listings, and output that no lon
       },
       resumed,
     );
+    // Helper calls (compaction, decisions, advisor, reviews, web_fetch) count toward the conversation.
+    this.stopSideUsage?.();
+    this.stopSideUsage = onSideUsage((_ref, t) => this.engine.addTokens(t));
     return {resumed};
   }
+
+  private stopSideUsage?: () => void;
 
   /**
    * Remove an account without interrupting anything: it's retired at once (no new turns or
@@ -704,7 +869,9 @@ Drop superseded reads of the same file, routine listings, and output that no lon
   async setConfig(patch: Partial<Config>): Promise<void> {
     // These change what tools exist or their schemas: reload the agent's tool list.
     // (attribution changes the system prompt: same reload.)
-    const toolsChanged = (['advisorModel', 'subagentModel', 'subagentPriority', 'attribution'] as const).some((k) => patch[k] !== undefined && patch[k] !== this.config[k]);
+    const toolsChanged =
+      (['advisorModel', 'subagentModel', 'subagentPriority', 'attribution'] as const).some((k) => patch[k] !== undefined && patch[k] !== this.config[k]) ||
+      (patch.experiments !== undefined && JSON.stringify(patch.experiments) !== JSON.stringify(this.config.experiments)); // they change tools and schemas
     this.config = {...this.config, ...patch};
     catalog.apiAccounts = this.config.apiAccounts ?? 'fallback';
     if (toolsChanged) this.engine?.refreshTools();
@@ -720,6 +887,7 @@ Drop superseded reads of the same file, routine listings, and output that no lon
     this.stopUsageRefresh();
     this.agents.closeAll();
     this.engine?.shutdown();
+    this.stopSideUsage?.();
     this.tools.close();
     for (const a of Object.values(adapters)) a.shutdown();
   }

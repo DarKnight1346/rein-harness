@@ -49,12 +49,13 @@ describe('effort', () => {
     expect(log.opened.at(-1)!.effort).toBeUndefined();
   });
 
-  it('auto asks the decision model (never offering max) only when the cache is cold', async () => {
+  it('auto only lowers effort: low for a simple message, else the model default; only when the cache is cold', async () => {
     config.chatEffort = 'auto';
-    const e = engine('high');
+    const e = engine('low');
     await collect(e.send('one'));
-    expect(log.opened.at(-1)!.effort).toBe('high');
-    expect(picks).toEqual(['low/medium/high/xhigh']);
+    expect(log.opened.at(-1)!.effort).toBe('low');
+    expect(picks).toEqual(['low/medium']); // never offered high/xhigh/max
+    expect(log.opened).toHaveLength(1);
     vi.setSystemTime(Date.now() + 2 * 60_000);
     await collect(e.send('two')); // warm: keeps its effort, no question, no new session
     expect(picks).toHaveLength(1);
@@ -62,6 +63,34 @@ describe('effort', () => {
     vi.setSystemTime(Date.now() + 61 * 60_000);
     await collect(e.send('three')); // cold: asks again
     expect(picks).toHaveLength(2);
+  });
+
+  it("auto leaves effort at the model's default when the message isn't simple", async () => {
+    config.chatEffort = 'auto';
+    const e = engine('medium');
+    await collect(e.send('a hard one'));
+    expect(log.opened.at(-1)!.effort).toBeUndefined();
+  });
+
+  it("Rein's own follow-ups keep the request's effort, even on a cold cache", async () => {
+    config.chatEffort = 'auto';
+    const e = engine('low');
+    await collect(e.send('Implement the following feature exactly as specified.\n' + '- requirement\n'.repeat(300)));
+    expect(log.opened.at(-1)!.effort).toBeUndefined(); // a spec: the model's default
+    vi.setSystemTime(Date.now() + 61 * 60_000); // cold, like right after a compaction
+    for (const follow of ['<context_compacted>\nContinue.\n</context_compacted>', '<code_check>\n1 problem\n</code_check>', '<stop_hook>\nKeep going.\n</stop_hook>']) {
+      await collect(e.send(follow));
+      expect(log.opened.at(-1)!.effort).toBeUndefined(); // not "simple, so low"
+    }
+    expect(picks).toEqual([]); // and the decision model wasn't asked
+  });
+
+  it('auto never lowers effort for a long message, and does not ask', async () => {
+    config.chatEffort = 'auto';
+    const e = engine('low');
+    await collect(e.send('Implement the following feature exactly as specified.\n' + '- requirement\n'.repeat(300)));
+    expect(log.opened.at(-1)!.effort).toBeUndefined();
+    expect(picks).toEqual([]);
   });
 });
 

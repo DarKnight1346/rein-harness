@@ -15,6 +15,7 @@ export function routeLabel(route: Route, account: Account, effort?: string): str
     : route.reason === 'sticky' ? 'auto · stayed'
     : route.reason === 'failover' ? 'failover'
     : route.reason === 'default' ? 'default'
+    : route.reason === 'escalated' ? 'escalated: the code check found problems the model left twice'
     : undefined;
   return `${modelLabel(route.ref)}${effort ? ` · effort ${effort}` : ''} · ${accountLabel(account)}${why ? ` (${why})` : ''}`;
 }

@@ -12,7 +12,7 @@ ls ~/.rein
 
 ## `~/.rein` (`REIN_HOME`)
 
-Set `REIN_HOME` to move the whole folder, for example to keep a test setup apart from your real one.
+Set `REIN_HOME` to move the whole folder, for example to keep a test setup apart from your real one. Secrets (API keys, the Jev key) then live in that folder's `secrets/` instead of the macOS Keychain; set `REIN_KEYCHAIN=1` as well to keep using the Keychain, so the separate setup shares the keys of your normal one.
 
 :::note[Linux: XDG base directories]
 On Linux (or anywhere the `XDG_*` variables are set), a new install follows the [XDG Base Directory spec](https://specifications.freedesktop.org/basedir-spec/latest/) instead of one `~/.rein` folder:
@@ -115,6 +115,7 @@ Added to the system prompt for every provider, up to 64 KB each, duplicates remo
 | Variable | Effect |
 | --- | --- |
 | `REIN_HOME` | Root of Rein's state instead of `~/.rein`. Also disables Keychain/DPAPI for the Jev key |
+| `REIN_KEYCHAIN` | `1` (macOS): keep using the Keychain for secrets even with `REIN_HOME` set |
 | `REIN_CLAUDE_BIN` | Path to the `claude` binary (default: `claude` on `PATH`) |
 | `REIN_CODEX_BIN` | Path to the `codex` binary (default: `codex` on `PATH`) |
 | `HTTPS_PROXY`, `HTTP_PROXY`, `ALL_PROXY`, `NO_PROXY` | Route Rein's own requests through a proxy (never local connections). See [Install → Behind a corporate proxy](../../start/install/#behind-a-corporate-proxy) |

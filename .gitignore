@@ -1,4 +1,4 @@
-node_modules/
+/node_modules
 dist/
 spikes/ink/node_modules/
 # raw spike captures (trace logs may contain auth headers)
@@ -6,3 +6,4 @@ spikes/out/
 spikes/codex-ts/
 spikes/rein-model-catalog.json
 codex-ts-exp/
+dist-*/

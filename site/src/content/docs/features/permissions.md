@@ -198,7 +198,7 @@ Rules use Claude Code's format: a tool name, optionally with a specifier in pare
 | `shell(npm test)` | Exactly `npm test` (whitespace normalized). |
 | `shell(npm test:*)` | `npm test` and `npm test` followed by anything (`npm test -- --watch`). It's a prefix on words, so `npm tests` doesn't match. |
 | `edit` | Every file change. |
-| `edit(src/**)` | `edit`, `write`, `delete` and `image_generate` under `src/`, at any depth. |
+| `edit(src/**)` | `edit`, `write`, `delete` and `image_generate` under `src/`, at any depth. An `edit` with several `edits` is checked against every file in it. |
 | `edit(*.md)` | Markdown files at the project root only (`*` doesn't cross `/`). |
 | `edit(/abs/path/**)`, `edit(~/x/**)` | Absolute or home-relative paths. |
 | `read(~/notes/**)` | The `read` tool on those paths. `list(…)` and `search(…)` work the same way. |

@@ -78,6 +78,8 @@ export type Config = {
   lspServers?: Record<string, {command: string; args?: string[]}>;
   /** Every account at its limit: wait for the reset (up to 12 hours) and continue, instead of stopping. */
   waitForLimits: boolean;
+  /** Efficiency experiments to turn on, by name (see the configuration reference): measured before they become defaults. */
+  experiments: string[];
   /** Run simple shell reads and searches the agent writes (cat, head, grep -rn, sed -n, ls, find -name) as the built-in tools. */
   steerShell: boolean;
   /** MCP servers asking for a completion (sampling): ask you per server (default), allow, or refuse. */
@@ -149,7 +151,32 @@ export const DEFAULT_CONFIG: Config = {
   lsp: 'auto',
   lspIdleMinutes: 10,
   worktrees: 'auto',
+  experiments: [],
 };
+
+/**
+ * Experiments that measured better than plain Claude Code (cost, time and tasks solved, epic benchmark)
+ * and are now on unless turned off with `-name` in `experiments`. These change no feature you see.
+ */
+export const DEFAULT_EXPERIMENTS = ['lean-subagents', 'compact-read', 'outline-reads', 'shell-cap', 'faithful-compaction'];
+/**
+ * Also on in `rein -p`, where they were measured: a one-off run has no idle pauses (5-minute cache), no
+ * one reading a task list, MCP tools or a long final reply, no one to mind a capped context, and a
+ * task long enough that an extra turn checking every requirement is cheap next to it.
+ */
+export const HEADLESS_EXPERIMENTS = ['lazy-tools', 'no-todo', 'brief-final', 'context-cap', 'cache-5m', 'verify-requirements'];
+/** Defaults for this process only (`rein -p` adds HEADLESS_EXPERIMENTS). */
+const processDefaults: string[] = [];
+export function addDefaultExperiments(names: string[]): void {
+  processDefaults.push(...names);
+}
+
+/** The experiments that are on: the defaults plus `experiments`, minus any listed as `-name`. */
+export function activeExperiments(cfg: Pick<Config, 'experiments'>): string[] {
+  const listed = cfg.experiments ?? [];
+  const off = new Set(listed.filter((e) => e.startsWith('-')).map((e) => e.slice(1)));
+  return [...new Set([...DEFAULT_EXPERIMENTS, ...processDefaults, ...listed])].filter((e) => !e.startsWith('-') && !off.has(e));
+}
 
 export async function loadConfig(): Promise<Config> {
   return {...DEFAULT_CONFIG, ...(await readJson<Partial<Config>>(paths.config(), {}))};

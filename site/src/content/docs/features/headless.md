@@ -95,7 +95,7 @@ A single JSON object on stdout when the run ends:
 
 - `model` and `effort` come from the last routing decision. `effort` is left out when the model has none.
 - `tools` lists the main agent's tool calls (label, summary, success). Subagents' calls aren't included.
-- `tokens` are the conversation's running totals: `uncached` input, `cached` input and `output`.
+- `tokens` are the conversation's running totals: `uncached` input, `cached` input and `output`. They include subagents and Rein's helper calls (compaction, the decision model, the advisor, `web_fetch`), not only the main model.
 - On an early failure (bad flag, no prompt, no accounts) you get `{"type": "result", "is_error": true, "error": "…"}` instead.
 - If the run hits an error partway through, `is_error` is `true`, `error` is set, and `result` holds whatever reply text arrived before it.
 
@@ -169,6 +169,10 @@ In `text` mode the plan is printed after the agent's reply. In `json` mode it re
 | `1` | No prompt, no accounts, an invalid `--permission-mode`, or an error during the run (routing failed, every account unavailable, a `UserPromptSubmit` hook blocked the prompt, …). |
 
 To fail a CI step on the *content* of the answer, check `result` yourself (see the example below).
+
+## Tuned for one-off runs
+
+`rein -p` turns on a few [experiments](../../reference/configuration/#experiments) that pay off on a single unattended task: rarely needed tools behind one `tool` entry (`lazy-tools`), no task list (`no-todo`), a short final reply (`brief-final`), compaction at 200K tokens (`context-cap`), a 5-minute Claude prompt cache (`cache-5m`, cheaper to write when nothing pauses) and a check of every requirement before it finishes (`verify-requirements`). Put `-name` in `experiments` to turn one off.
 
 ## Hooks in headless runs
 
