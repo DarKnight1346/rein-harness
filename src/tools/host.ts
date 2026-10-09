@@ -723,6 +723,7 @@ export class ToolHost extends EventEmitter {
       scratch,
       reads: this.reads,
       compactLines: this.experiment('compact-read'),
+      outlineReads: this.experiment('outline-reads'),
       extraRoots: [...(scratch ? [scratch] : []), globalSkills, ...config, ...this.addedDirs],
       shells: this.shells,
       shellMaxMs: this.opts.shellMaxMs?.(),

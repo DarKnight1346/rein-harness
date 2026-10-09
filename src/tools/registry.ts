@@ -51,6 +51,7 @@ export const TOOLS: ToolDef[] = [
         offset: {type: 'integer', description: 'First line to read (1-based)'},
         limit: {type: 'integer', description: 'Max lines (default 2000)'},
         pages: str('PDF pages to read, e.g. "1-5" (max 20 per read)'),
+        full: {type: 'boolean', description: 'Read a long file whole even when only its outline would be shown'},
       },
     },
     mutating: false,

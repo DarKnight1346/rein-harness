@@ -32,6 +32,8 @@ export type ToolContext = {
   origin?: Origin;
   /** compact-read experiment: line numbers without padding (`12\t` instead of `    12\t`), a token a line less. */
   compactLines?: boolean;
+  /** outline-reads experiment: a long file read without a range comes back as an outline. */
+  outlineReads?: boolean;
 };
 
 /** Which subagent made a tool call (undefined = the main agent). */
@@ -107,7 +109,7 @@ export const rel = (ctx: ToolContext, abs: string) => toPosix(path.relative(real
  * huge file (or a slice of it) never loads the whole thing. Only the first 8 KB are inspected for
  * binary content.
  */
-export async function readTool(ctx: ToolContext, args: {path: string; offset?: number; limit?: number; pages?: string}): Promise<ToolResult> {
+export async function readTool(ctx: ToolContext, args: {path: string; offset?: number; limit?: number; pages?: string; full?: boolean}): Promise<ToolResult> {
   const file = resolveInRoot(ctx, args.path);
   const st = await stat(file).catch(() => undefined);
   if (!st) throw new ToolError(`${args.path} does not exist`);
@@ -120,6 +122,10 @@ export async function readTool(ctx: ToolContext, args: {path: string; offset?: n
   if (isImage(file)) return readImage(file, rel(ctx, file));
   if (isPdf(file)) return readPdf(file, rel(ctx, file), args.pages);
   if (await looksBinary(file)) return {ok: true, text: `${rel(ctx, file)} is a binary file (${st.size} bytes)`};
+  if (ctx.outlineReads && args.offset === undefined && args.limit === undefined && !args.full) {
+    const o = await outlineOf(file, ctx.compactLines);
+    if (o) return {ok: true, text: `${rel(ctx, file)} has ${o.lines} lines (${size(st.size)}); here is its outline. Read the parts you need with offset/limit, several ranges in one response, or read it with full: true if you need all of it.\n${o.text}`};
+  }
   const start = Math.max(1, Math.floor(args.offset ?? 1));
   const limit = Math.max(1, Math.min(MAX_READ_LINES, Math.floor(args.limit ?? MAX_READ_LINES)));
   const out: string[] = [];
@@ -144,6 +150,39 @@ export async function readTool(ctx: ToolContext, args: {path: string; offset?: n
   if (!out.length) return {ok: true, text: n ? `(the file has only ${n} lines)` : '(empty file)'};
   const end = start + out.length - 1;
   return {ok: true, text: out.join('\n') + (more ? `\n… more lines follow (use offset=${end + 1}; file is ${size(st.size)})` : '')};
+}
+
+/** outline-reads: files longer than this, read without a range, come back as an outline. */
+const OUTLINE_MIN_LINES = 500;
+const OUTLINE_MAX_ENTRIES = 200;
+// Declarations at the top level or one level in, in most languages: functions, methods, classes,
+// types, constants, sections. Comments and closing braces are skipped.
+const DECLARATION =
+  /^(?:\t|  |    )?(?:export\s+|default\s+|public\s+|private\s+|protected\s+|internal\s+|static\s+|async\s+|abstract\s+|final\s+|pub(?:\(crate\))?\s+|override\s+|@\w+\s+)*(?:function\*?|class|interface|type|enum|struct|trait|impl|module|namespace|object|record|def|func|fn|const|let|var|val|package|import\s*\(|describe|it|test|macro_rules!|#{1,3}\s|\w[\w.<>\[\], *&:]*\s+\**\w+\s*\()/;
+
+// Indented variables and statements are a function's insides, not part of the outline.
+const LOCAL = /^\s+(?:const|let|var|val|return|if|for|while|switch|await|throw|else|import|case|default)\b/;
+
+/** The declarations of a long text file with their line numbers, or undefined for a short one. */
+async function outlineOf(file: string, compact?: boolean): Promise<{lines: number; text: string} | undefined> {
+  const entries: string[] = [];
+  let n = 0;
+  const stream = createReadStream(file, {encoding: 'utf8', highWaterMark: 256 * 1024});
+  const rl = readline.createInterface({input: stream, crlfDelay: Infinity});
+  try {
+    for await (const line of rl) {
+      n++;
+      if (entries.length < OUTLINE_MAX_ENTRIES * 4 && DECLARATION.test(line) && !/^\s*(\/\/|\/\*|\*|#(?!#* )|--|;)/.test(line) && !LOCAL.test(line))
+        entries.push(`${compact ? n : String(n).padStart(6)}\t${line.length > 160 ? line.slice(0, 160) + '…' : line}`);
+    }
+  } finally {
+    rl.close();
+    stream.destroy();
+  }
+  if (n <= OUTLINE_MIN_LINES || !entries.length) return undefined;
+  // Too many: keep the top level only.
+  const shown = entries.length > OUTLINE_MAX_ENTRIES ? entries.filter((e) => !/^\S+\t[\t ]/.test(e.trimStart())) : entries;
+  return {lines: n, text: shown.slice(0, OUTLINE_MAX_ENTRIES).join('\n') + (shown.length > OUTLINE_MAX_ENTRIES ? `\n… ${shown.length - OUTLINE_MAX_ENTRIES} more` : '')};
 }
 
 const MAX_READ_MANY = 20;

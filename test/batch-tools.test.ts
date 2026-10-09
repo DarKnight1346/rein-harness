@@ -187,3 +187,23 @@ describe('experiments', () => {
   });
 });
 
+
+describe('outline-reads', () => {
+  const long = () => {
+    const body = Array.from({length: 600}, (_, i) => (i % 100 === 0 ? `export function f${i}(x: number) {\n  const y = x;\n  return y;\n}` : `// line ${i}`)).join('\n');
+    writeFileSync(path.join(root, 'src/long.ts'), body + '\n');
+  };
+
+  it('a long file read whole comes back as an outline with line numbers; ranges and full: true read the text', async () => {
+    long();
+    const on = {...ctx, outlineReads: true};
+    const outline = await readTool(on, {path: 'src/long.ts'});
+    expect(outline.text).toMatch(/src\/long\.ts has \d+ lines .* outline/);
+    expect(outline.text).toMatch(/export function f100\(x: number\)/);
+    expect(outline.text).not.toMatch(/const y|\/\/ line/); // a function's insides and comments are left out
+    expect((await readTool(on, {path: 'src/long.ts', offset: 1, limit: 3})).text).toMatch(/const y = x/);
+    expect((await readTool(on, {path: 'src/long.ts', full: true})).text).toMatch(/\/\/ line 1\n/);
+    expect((await readTool(ctx, {path: 'src/long.ts'})).text).toMatch(/\/\/ line 1\n/); // off unless listed
+    expect((await readTool(on, {path: 'src/a.ts'})).text).toMatch(/export const total = 1/); // short files read whole
+  });
+});

@@ -40,6 +40,7 @@ Reads a file and returns lines prefixed with their 1-based line number and a tab
 | --- | --- | --- |
 | `path` | string | Relative to the project root; absolute and `~/` paths work too. Required unless `paths` is given |
 | `paths` | string[] | Several files in one call (up to 20), each shown under a `==> path <==` header. Whole text files; a file that can't be read reports its error in its place. Images and PDFs are read one at a time |
+| `full` | boolean | Read a long file whole. Only matters with the [`outline-reads`](../configuration/#experiments) experiment, which otherwise shows a file over 500 lines read without `offset` / `limit` as an outline |
 | `offset` | integer | First line to read (1-based) |
 | `limit` | integer | Max lines, default and cap 2000 |
 | `pages` | string | PDF pages, for example `"3-8"` (max 20 per read) |
