@@ -1,4 +1,4 @@
-import {readFileSync, statSync} from 'node:fs';
+import {closeSync, fstatSync, openSync, readFileSync} from 'node:fs';
 import path from 'node:path';
 import {parse} from 'yaml';
 import {globToRegExp} from './tools/fs.js';
@@ -64,17 +64,23 @@ export function parsePolicy(text: string, source: string): Policy {
 
 const cache = new Map<string, {mtime: number; policy: Policy}>();
 function read(file: string, label: string): Policy | undefined {
-  let mtime = 0;
+  // One open: the timestamp and the contents come from the same file, never a swapped one.
+  let fd: number;
   try {
-    mtime = statSync(file).mtimeMs;
+    fd = openSync(file, 'r');
   } catch {
     return undefined;
   }
-  const hit = cache.get(file);
-  if (hit?.mtime === mtime) return hit.policy;
-  const policy = parsePolicy(readFileSync(file, 'utf8'), label);
-  cache.set(file, {mtime, policy});
-  return policy;
+  try {
+    const mtime = fstatSync(fd).mtimeMs;
+    const hit = cache.get(file);
+    if (hit?.mtime === mtime) return hit.policy;
+    const policy = parsePolicy(readFileSync(fd, 'utf8'), label);
+    cache.set(file, {mtime, policy});
+    return policy;
+  } finally {
+    closeSync(fd);
+  }
 }
 
 /** The policy in force in `root`: the user's (~/.rein/policy.yaml), then the project's, combined. */

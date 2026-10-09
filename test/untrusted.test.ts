@@ -57,3 +57,12 @@ describe('exfiltration guard', () => {
     h.close();
   });
 });
+
+describe('sensitive paths', () => {
+  it('knows .env files with either path separator', async () => {
+    const {isSensitivePath} = await import('../src/tools/host.js');
+    expect(isSensitivePath('C:\\app\\.env')).toBe(true);
+    expect(isSensitivePath('/srv/app/.env.production')).toBe(true);
+    expect(isSensitivePath('/srv/app/settings.env.example')).toBe(false);
+  });
+});

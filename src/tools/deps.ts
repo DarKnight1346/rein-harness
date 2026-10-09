@@ -125,7 +125,7 @@ const COPYLEFT = /\b(?:A?GPL|LGPL|SSPL|EUPL|OSL|CPAL)\b/i;
 async function registry(d: Dep): Promise<{exists: boolean; license?: string} | undefined> {
   const url =
     d.ecosystem === 'npm'
-      ? `https://registry.npmjs.org/${d.name.replace('/', '%2F')}/latest`
+      ? `https://registry.npmjs.org/${d.name.split('/').map(encodeURIComponent).join('%2F').replace(/^%40/, '@')}/latest`
       : d.ecosystem === 'PyPI'
         ? `https://pypi.org/pypi/${encodeURIComponent(d.name)}/json`
         : d.ecosystem === 'crates.io'

@@ -997,7 +997,8 @@ export function isSensitivePath(real: string): boolean {
   // Rein's own secrets folder (the vault, the Jev key), wherever the data folder is (REIN_HOME, XDG).
   const secrets = secretsDir();
   if ([...SENSITIVE, secrets].some((p) => real === p || real.startsWith(p + path.sep))) return true;
-  return /(^|\/)\.env(\.[\w.-]+)?$/.test(real) || /\.(pem|key|p12|pfx|keychain)$/i.test(real);
+  // Either separator: on Windows the path has backslashes (C:\app\.env).
+  return /(^|[\\/])\.env(\.[\w.-]+)?$/.test(real) || /\.(pem|key|p12|pfx|keychain)$/i.test(real);
 }
 
 /** log-digest: a failing command's long output gets a digest in front (failing step, first errors, file:line). */
