@@ -61,6 +61,7 @@ import {loadPolicy, type PolicyRule} from '../policy.js';
 import {reinConfigDir} from '../store/paths.js';
 import {affected, changedFiles, detectBuild, formatAffected} from '../build/affected.js';
 import {clearFlaky, knownFlaky} from '../build/flaky.js';
+import {detectCaches} from '../build/caches.js';
 import {activeExperiments} from '../store/config.js';
 import {formatUsd} from '../providers/prices.js';
 
@@ -1213,6 +1214,23 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
           const a = await affected(root, files);
           log(a?.note && !a.targets.length ? 'error' : 'info', a ? `${files.length} changed file${files.length === 1 ? '' : 's'}. ${formatAffected(a)}` : 'No build system answered.');
         });
+        break;
+      }
+      case 'build': {
+        const root = process.cwd();
+        const b = detectBuild(root);
+        const caches = detectCaches(root);
+        const sandbox = runtime.config.sandbox ?? 'write';
+        if (!b && !caches.length) {
+          log('info', 'No Nx, Turborepo, Bazel or Pants workspace and no build cache configured here.');
+          break;
+        }
+        const remoteBlocked = sandbox === 'strict' && caches.some((c) => c.kind === 'remote');
+        log(remoteBlocked ? 'error' : 'info', [
+          b ? `Build system: ${b.system}${b.bin.includes('node_modules') ? ' (from node_modules)' : ''}. /affected shows what your changes affect.` : 'No monorepo build system (Nx, Turborepo, Bazel, Pants).',
+          ...(caches.length ? ['Caches:', ...caches.map((c) => `  ${c.system}: ${c.kind} (${c.where})`)] : ['No build cache configured.']),
+          remoteBlocked ? 'The sandbox is strict (no network), so agent builds can\'t reach the remote cache: /settings sandbox write allows it.' : caches.length ? `Agent builds use these: the sandbox (${sandbox}) leaves build caches writable${caches.some((c) => c.kind === 'remote') && sandbox !== 'off' ? ' and the network open' : ''}.` : '',
+        ].filter(Boolean).join('\n'));
         break;
       }
       case 'flaky': {

@@ -29,6 +29,29 @@ In a monorepo with **Nx**, **Turborepo**, **Bazel** or **Pants**, the build syst
 
 With the `affected-tool` [experiment](../../reference/configuration/#experiments) on, the agent gets an [`affected`](../../reference/tools/#affected) tool that answers the same question, so it can run the tests that matter instead of the whole suite. The tool only appears in workspaces with one of these build systems.
 
+## Build caches
+
+Rein looks for the build caches a repo is set up with, so the agent's builds use them like yours do:
+
+| System | Detected from |
+|---|---|
+| Bazel | `--remote_cache`, `--remote_executor` or `--disk_cache` in `.bazelrc`, `user.bazelrc`, `.bazelrc.user` or `~/.bazelrc` |
+| Nx | Nx Cloud (`nxCloudId` / `nxCloudAccessToken` in `nx.json`, or `NX_CLOUD_ACCESS_TOKEN`); otherwise the local `.nx/cache` |
+| Turborepo | Remote caching (`TURBO_TOKEN`, or a token in `.turbo/config.json`); otherwise the local `.turbo/cache` |
+| Gradle | `org.gradle.caching=true` or a `buildCache { … }` block (remote when it has a `remote` cache) |
+
+The [command sandbox](../permissions/#the-command-sandbox) leaves these writable: local caches live in the project or in package caches it already allows, and on macOS it also allows Bazel's output folder (`/private/var/tmp/_bazel_<you>`). Remote caches need the network, which the default sandbox allows and `strict` doesn't.
+
+`/build` shows the build system, its caches, and whether the sandbox lets agent builds use them:
+
+```text title="rein"
+> /build
+  ⎿ Build system: bazel. /affected shows what your changes affect.
+    Caches:
+      bazel: remote (grpcs://cache.example.com)
+    Agent builds use these: the sandbox (write) leaves build caches writable and the network open.
+```
+
 ## Testing what a request changed
 
 With the `verify-affected` [experiment](../../reference/configuration/#experiments) on, in an Nx, Turborepo, Bazel or Pants workspace, Rein runs the tests for what a request changed once, at the end of its turn, after the [code check](../code-intelligence/):

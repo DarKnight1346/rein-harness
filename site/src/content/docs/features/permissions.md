@@ -46,6 +46,9 @@ When a command fails because of the sandbox (`Operation not permitted`, or a net
 
 macOS uses `sandbox-exec` (Seatbelt), as Claude Code and Codex do. Linux uses bubblewrap (install the `bubblewrap` package); without it, and on Windows, commands run unsandboxed and Rein says so at startup. Only the agent's commands are sandboxed: your own [`!` commands](../../reference/commands/#shell-commands-with-), hooks and MCP servers aren't.
 
+
+On macOS it also allows Bazel's output folder (`/private/var/tmp/_bazel_<you>`) when it exists, so sandboxed Bazel builds work. See [Build caches](../build-and-test/#build-caches).
+
 ## Approval modes
 
 Pick a mode in `/settings` → **Approvals** (saved as `toolApproval` in `~/.rein/config.json`). The mode only decides what happens to mutating calls that nothing else (a rule, a hook, the scratchpad, the read-only list) has already settled.

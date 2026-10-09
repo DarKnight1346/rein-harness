@@ -3,6 +3,7 @@ import {existsSync, realpathSync} from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import {isWindows} from '../util/platform.js';
+import {buildOutputDirs} from '../build/caches.js';
 
 /**
  * OS-level sandbox for the agent's shell commands, on by default (/settings → Sandbox):
@@ -50,7 +51,7 @@ export function writablePaths(roots: string[]): string[] {
   const home = os.homedir();
   const tmp = [os.tmpdir(), '/tmp', process.env.TMPDIR].filter((p): p is string => !!p);
   const caches = CACHES.map((c) => path.join(home, c)).filter((p) => existsSync(p));
-  return [...new Set([...roots, ...tmp, ...caches].map(real))];
+  return [...new Set([...roots, ...tmp, ...caches, ...buildOutputDirs()].map(real))]; // + Bazel's output base on macOS
 }
 
 const sb = (s: string) => `"${s.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;

@@ -81,6 +81,7 @@ See [Goals](../../features/goals/) and [Plan mode](../../features/plans/).
 |---|---|---|
 | `/cost` | — | What the conversation, the latest request and the current goal cost at API list prices, with token totals. See [Cost & budgets](../../features/cost/). |
 | `/affected` | — | What your working tree's changes affect, from the monorepo's build graph (Nx, Turborepo, Bazel, Pants), and the command that tests just that. See [Build & test](../../features/build-and-test/#what-a-change-affects). |
+| `/build` | — | The build system here (Nx, Turborepo, Bazel, Pants), the build caches it's set up with, and whether the sandbox lets agent builds use them. See [Build caches](../../features/build-and-test/#build-caches). |
 | `/flaky` | `[clear]` | The tests known to be flaky in this project (they failed and passed on the same code), recorded with the `flaky-quarantine` experiment. `clear` forgets them. See [Flaky tests](../../features/build-and-test/#flaky-tests). |
 | `/policy` | — | Shows the policy in force (`.rein/policy.yaml`, `~/.rein/policy.yaml`): its deny and ask rules, allowed and denied models, and mistakes in the files. See [Policy as code](../../features/safety/#policy-as-code-reinpolicyyaml). |
 | `/workspace` | `[clone]` | Lists the repos of this [workspace](../../features/workspaces/) (`rein.workspace.yaml`), which are cloned and what each does. `clone` clones the missing repos that have a `url`. |
