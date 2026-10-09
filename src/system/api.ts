@@ -45,7 +45,7 @@ async function grep(dir: string, needle: string, ignoreCase = false): Promise<{f
     .split(/\r?\n/)
     .map((l) => l.match(/^(.*?):(\d+):(.*)$/))
     .filter((m): m is RegExpMatchArray => !!m)
-    .map((m) => ({file: m[1]!.replace(/^\.\//, '').replace(/\\/g, '/'), line: Number(m[2]), text: m[3]!.trim().slice(0, 200)}));
+    .map((m) => ({file: m[1]!.replace(/\\/g, '/').replace(/^\.\//, ''), line: Number(m[2]), text: m[3]!.trim().slice(0, 200)}));
 }
 
 export async function findApiRefs(root: string, services: Service[], target: string): Promise<ApiRefs | undefined> {
@@ -67,7 +67,7 @@ export async function findApiRefs(root: string, services: Service[], target: str
       // fetch(url) with no options is a GET; fetch(url, {…}) on several lines stays unknown (kept).
       const method = (m?.[1] ?? m?.[2] ?? m?.[3])?.toLowerCase() ?? (/\bfetch\s*\([^,]*\)/.test(hit.text) && !/\bmethod\b/.test(hit.text) ? 'get' : undefined); // one argument, no options: a GET
       if (/\.(?:ya?ml|json)$/.test(f) && /openapi|swagger/i.test(f + readHead(path.join(s.dir, f)))) out.providers.push(place);
-      else if (/(?:^|\/)(?:nginx|ingress|gateway|kong|envoy|traefik)|\.conf$/i.test(f) || /^\s*location\s/.test(hit.text) || /\bpath:\s/.test(hit.text)) out.gateways.push(place);
+      else if ((/(?:^|\/)(?:nginx|ingress|gateway|kong|envoy|traefik)/i.test(f) || /\.conf$/i.test(f)) || /^\s*location\s/.test(hit.text) || /\bpath:\s/.test(hit.text)) out.gateways.push(place);
       else if (ROUTE_DEF.test(hit.text)) out.providers.push(place);
       else if (/\.(?:md|txt|rst)$/.test(f) || /(?:^|\/)(?:docs?|tests?|__tests__)\//.test(f)) continue;
       else if (!ep.method || !method || method === ep.method) out.consumers.push(place);

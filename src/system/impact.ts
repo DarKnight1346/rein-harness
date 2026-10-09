@@ -53,7 +53,7 @@ async function wordUses(dir: string, name: string): Promise<{file: string; line:
   const rg = await ripgrep();
   if (!rg) return [];
   const r = await run(rg, ['-n', '--no-heading', '--color', 'never', '-w', '-g', '!**/node_modules/**', '-g', '!**/vendor/**', '-g', '!**/dist/**', '--', name, '.'], {cwd: dir, timeoutMs: 60_000}).catch(() => undefined);
-  return (r?.stdout ?? '').split(/\r?\n/).map((l) => l.match(/^\.?\/?(.*?):(\d+):(.*)$/)).filter((m): m is RegExpMatchArray => !!m).map((m) => ({file: m[1]!, line: Number(m[2]), text: m[3]!.trim().slice(0, 200)}));
+  return (r?.stdout ?? '').split(/\r?\n/).map((l) => l.replace(/^\.[\\/]/, '').match(/^(.*?):(\d+):(.*)$/)).filter((m): m is RegExpMatchArray => !!m).map((m) => ({file: m[1]!.replace(/\\/g, '/'), line: Number(m[2]), text: m[3]!.trim().slice(0, 200)}));
 }
 
 export async function impactReport(root: string, services: Service[]): Promise<{items: Impact[]; base: string}> {
