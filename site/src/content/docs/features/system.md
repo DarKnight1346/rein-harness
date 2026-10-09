@@ -143,6 +143,35 @@ Some tasks are one change in three places: the API, the client library and the a
 
 Without a name, these work on the newest change set. Testing in dependency order means a failing API shows up before the app that depends on it. Wiring local versions of one repo into another (npm workspaces, `go work`, `replace` directives) is up to your project's setup.
 
+## Codemaps
+
+`/codemap` writes an architecture map you can browse on GitHub and commit with the code, in `docs/codemap/`:
+
+- **`README.md`**: the service graph as a Mermaid diagram, and a table of every service with what it provides, calls and is called by.
+- **A page per service**, with these sections:
+  - **Notes.**
+  - **Provides:** its API contracts.
+  - **Calls** and **Called by**, with the evidence and links to those pages.
+  - **Entry points.**
+  - **Layout:** its main folders and how many files each has.
+  - **Key declarations**, from the [repo map](../large-codebases/#a-map-of-the-repo).
+
+  Its owners from CODEOWNERS or Backstage go at the top.
+
+```text title="rein"
+> /codemap
+  ⎿ Codemap: wrote ledger, money, orders, search, web, in docs/codemap/.
+
+> /codemap status
+  ⎿ Codemap in docs/codemap:
+      out of date: orders (/codemap refreshes them)
+      no notes yet: ledger, money, search, web (/codemap annotate)
+```
+
+**Kept fresh:** each page records what its service looked like when it was written, so `/codemap` rewrites only the services whose files or links changed, and `/codemap status` lists the stale ones. Run it before a release, or add it to a [scheduled job](../headless/#scheduled-jobs). `/codemap rebuild` rewrites every page.
+
+**Annotated:** the **Notes** section is yours. It sits between `<!-- rein:notes -->` markers and regeneration never touches it. `/codemap annotate` has the agent read each service without notes and write a few sentences: what it's for, how a request moves through it, what it depends on and why, and what surprises newcomers. Everything else on the page is generated.
+
 ## Related
 
 - [Workspaces](../workspaces/): several repos as one system

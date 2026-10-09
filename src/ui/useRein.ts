@@ -78,6 +78,7 @@ import {findServices} from '../system/services.js';
 import {buildSymbolGraph, crossRepo, formatLookup, indexRepos, lookup} from '../system/scip.js';
 import {findApiRefs, formatRefs} from '../system/api.js';
 import {formatImpact, impactReport} from '../system/impact.js';
+import {annotateTask, codemapDir, codemapStatus, writeCodemap} from '../system/codemap.js';
 import {changeSetState, formatState, formatTests, loadChangeSets, openPrs, startChangeSet, testChangeSet} from '../system/changeset.js';
 import {deadCodeTask, findDeadCode, findFlags, flagRemovalTask, formatFlags, isStale} from '../contracts/deadcode.js';
 import {checkoutState, describeCheckout, sparseAdd} from '../workspace/sparse.js';
@@ -1305,6 +1306,26 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
         void (arg ? Promise.resolve([arg]) : changedFiles(root)).then(async (files) => {
           if (!files.length) return log('info', 'No changes (vs HEAD). /owners <path> looks up a file or folder.');
           log('info', `Owners of ${arg || `your ${files.length} changed file${files.length === 1 ? '' : 's'}`}:\n${formatOwners(await ownersOf(root, files))}`);
+        });
+        break;
+      }
+      case 'codemap': {
+        const root = findWorkspace()?.root ?? process.cwd();
+        const arg = parsed.args.trim();
+        void graphFor(process.cwd(), 0).then(async (g) => {
+          if (arg === 'status') {
+            const s = await codemapStatus(root, g);
+            return log('info', [`Codemap in ${nodePath.relative(process.cwd(), codemapDir(root)) || 'docs/codemap'}:`, s.missing.length ? `  no page yet: ${s.missing.join(', ')}` : '', s.stale.length ? `  out of date: ${s.stale.join(', ')} (/codemap refreshes them)` : '', s.unannotated.length ? `  no notes yet: ${s.unannotated.join(', ')} (/codemap annotate)` : '', !s.missing.length && !s.stale.length && !s.unannotated.length ? '  up to date' : ''].filter(Boolean).join('\n'));
+          }
+          const r = await writeCodemap(root, g, {force: arg === 'rebuild'});
+          log('info', `Codemap: ${r.written.length ? `wrote ${r.written.join(', ')}` : 'every page was up to date'}${r.unchanged.length && r.written.length ? ` (${r.unchanged.length} unchanged)` : ''}, in ${nodePath.relative(process.cwd(), r.dir) || r.dir}/.`);
+          if (arg === 'annotate') {
+            const {unannotated} = await codemapStatus(root, g);
+            if (!unannotated.length) return log('info', 'Every page has notes.');
+            const msg = annotateTask(root, unannotated);
+            if (chat.busy) setQueued((q) => [...q, msg]);
+            else void chat.send(msg).then(bump);
+          }
         });
         break;
       }

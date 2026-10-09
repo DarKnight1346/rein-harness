@@ -1,6 +1,6 @@
 import type {Skill} from '../skills/index.js';
 
-export type CommandName = 'trackers' | 'remote' | 'voice' | 'vault' | 'lsp' | 'plugins' | 'export' | 'ide' | 'memory' | 'mcp' | 'rewind' | 'permissions' | 'add-dir' | 'workspace' | 'owners' | 'changeset' | 'impact' | 'refs' | 'symbols' | 'services' | 'sessions' | 'env' | 'schedule' | 'cache' | 'stats' | 'deadcode' | 'flags' | 'migrations' | 'contracts' | 'bestof' | 'risk' | 'arch' | 'adr' | 'spec' | 'index' | 'map' | 'pack' | 'pr' | 'mutate' | 'coverage' | 'ci' | 'build' | 'flaky' | 'affected' | 'policy' | 'cost' | 'scope' | 'goal' | 'goal:plan' | 'btw' | 'agents' | 'agent' | 'resume' | 'login' | 'usage' | 'model' | 'context' | 'compact' | 'shells' | 'settings' | 'update' | 'tui' | 'clear' | 'help' | 'exit';
+export type CommandName = 'trackers' | 'remote' | 'voice' | 'vault' | 'lsp' | 'plugins' | 'export' | 'ide' | 'memory' | 'mcp' | 'rewind' | 'permissions' | 'add-dir' | 'workspace' | 'owners' | 'codemap' | 'changeset' | 'impact' | 'refs' | 'symbols' | 'services' | 'sessions' | 'env' | 'schedule' | 'cache' | 'stats' | 'deadcode' | 'flags' | 'migrations' | 'contracts' | 'bestof' | 'risk' | 'arch' | 'adr' | 'spec' | 'index' | 'map' | 'pack' | 'pr' | 'mutate' | 'coverage' | 'ci' | 'build' | 'flaky' | 'affected' | 'policy' | 'cost' | 'scope' | 'goal' | 'goal:plan' | 'btw' | 'agents' | 'agent' | 'resume' | 'login' | 'usage' | 'model' | 'context' | 'compact' | 'shells' | 'settings' | 'update' | 'tui' | 'clear' | 'help' | 'exit';
 
 export const COMMANDS: {name: CommandName; description: string}[] = [
   {name: 'remote', description: 'Use this session from your phone or another computer: a page Rein serves (pairing code); /remote pair · status · unpair · off'},
@@ -25,6 +25,7 @@ export const COMMANDS: {name: CommandName; description: string}[] = [
   {name: 'mutate', description: 'Mutation testing of your changed files (Stryker, mutmut, go-mutesting): do the tests catch planted bugs? /mutate tests asks the agent to close the gaps'},
   {name: 'pr', description: "This branch's pull request: /pr (status), /pr digest [post], /pr split, /pr comments, /pr queue [yes]"},
   {name: 'pack', description: 'Context packs (.rein/packs.yaml): /pack lists them, /pack <name> [message] attaches one, /pack save <name> <globs…> makes one'},
+  {name: 'codemap', description: 'Architecture map in docs/codemap/: a page per service, kept fresh. /codemap writes or refreshes it, /codemap status, /codemap annotate'},
   {name: 'changeset', description: 'One change across several repos: /changeset start <name> [repos], status, test (in dependency order), pr [yes] (linked PRs)'},
   {name: 'impact', description: 'Every caller, in every repo, of the endpoints, RPCs and exported symbols this branch changes, breaking changes first'},
   {name: 'refs', description: 'Follow an endpoint (POST /orders/{id}) or RPC (Ledger.Post) across repos: gateway, the service that serves it, every caller'},

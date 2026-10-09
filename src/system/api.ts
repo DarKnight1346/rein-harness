@@ -76,8 +76,12 @@ export async function findApiRefs(root: string, services: Service[], target: str
   // A provider whose route is called from its own service isn't a consumer of itself.
   const providerServices = new Set(out.providers.map((p) => p.service));
   out.consumers = out.consumers.filter((c) => !providerServices.has(c.service) || !ROUTE_DEF.test(c.text));
-  return out;
+  return sorted(out);
 }
+
+/** In a stable order (ripgrep lists files in no particular one). */
+const byPlace = (a: Place, b: Place) => a.service.localeCompare(b.service) || a.file.localeCompare(b.file) || a.line - b.line;
+const sorted = (r: ApiRefs): ApiRefs => ({...r, gateways: r.gateways.sort(byPlace), providers: r.providers.sort(byPlace), consumers: r.consumers.sort(byPlace)});
 
 const readHead = (f: string) => {
   try {
@@ -106,7 +110,7 @@ async function findRpcRefs(services: Service[], svc: string, method: string, tar
       }
     }
   }
-  return out;
+  return sorted(out);
 }
 
 const readAll = async (f: string) => {
