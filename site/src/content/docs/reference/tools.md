@@ -359,6 +359,16 @@ Label `AgentResult`. Approval: none. **Main agent only.**
 
 Background reports the agent never collects are delivered to it as a message when they finish.
 
+### `explore`
+
+Label `Explore`. Approval: none. **Main agent only.** Listed only with the [`cheap-explore`](../configuration/#experiments) experiment on and a Claude account signed in.
+
+| Parameter | Type | Notes |
+| --- | --- | --- |
+| `question` **(required)** | string | What to find out in the codebase, with any names or paths that help |
+
+Runs a subagent on the cheapest signed-in Claude model (Haiku) with only `read`, `list` and `search`, and returns its findings: file paths, line numbers, names and short snippets. The files it reads stay out of the main model's context.
+
 ### `advisor`
 
 Label `Advisor`. Approval: none. Listed only when `/model` → Advisor is set.

@@ -48,7 +48,7 @@ import {isMilestoneCopy, todoTool} from './tools/todo.js';
 import {imageGenRef, imageTool} from './tools/image.js';
 import {newTranscript, saveTranscript} from './session/transcript.js';
 import {setPromptCacheTtl} from './providers/claude/session.js';
-import {setAttribution, setBriefFinal, setExtraWorkingDirs, setInScope, setLazyTools, setManyCalls, setNoTodo, setSelfTest, setVaultNames, systemPrompt} from './session/prompt.js';
+import {setAttribution, setBriefFinal, setCheapExplore, setExtraWorkingDirs, setInScope, setLazyTools, setManyCalls, setNoTodo, setSelfTest, setVaultNames, systemPrompt} from './session/prompt.js';
 import {Vault} from './vault/vault.js';
 import {parseRef, refKey, type Account, type ModelRef, type TokenCount, type ToolBinding} from './providers/types.js';
 import {removeAccount} from './accounts/service.js';
@@ -776,6 +776,7 @@ Drop superseded reads of the same file, routine listings, and output that no lon
     setExtraWorkingDirs(() => this.tools.extraWorkingDirs());
     setAttribution(() => this.config.attribution !== false);
     setLazyTools(() => activeExperiments(this.config).includes('lazy-tools'));
+    setCheapExplore(() => activeExperiments(this.config).includes('cheap-explore'));
     setNoTodo(() => activeExperiments(this.config).includes('no-todo'));
     setInScope(() => activeExperiments(this.config).includes('in-scope'));
     setManyCalls(() => activeExperiments(this.config).includes('many-calls'));

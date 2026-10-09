@@ -3,7 +3,7 @@ import {catalog, toRef} from '../router/catalog.js';
 import {activeExperiments, type Config} from '../store/config.js';
 import {ToolError} from '../tools/fs.js';
 import type {ToolDef} from '../tools/registry.js';
-import {definitionModel, loadAgentDefinitions} from './definitions.js';
+import {definitionModel, loadAgentDefinitions, type AgentDefinition} from './definitions.js';
 import {subagentStatusText, type Subagent, type SubagentManager} from './manager.js';
 
 const COST = ['', 'very low', 'low', 'medium', 'high', 'very high', 'highest'];
@@ -34,6 +34,21 @@ export function subagentModelFor(cfg: Config, requested: unknown): string {
   const mine = userModel(cfg)?.value;
   const order = (cfg.subagentPriority ?? 'user') === 'agent' ? [asked, mine] : [mine, asked];
   return order.find(Boolean) ?? 'auto';
+}
+
+/** cheap-explore: the explorer's role; read-only tools, findings sized for a pricier model's context. */
+const EXPLORER: AgentDefinition = {
+  name: 'explore',
+  description: 'Finds things in the codebase for the main agent',
+  tools: ['read', 'list', 'search'],
+  file: '',
+  prompt: `You explore a codebase for another agent, a more expensive model that will make the change. Answer its question by reading and searching the code. Report what you found: file paths with line numbers, exact names and signatures, and short verbatim snippets of the lines that matter (never whole files). Say plainly what you looked for and didn't find. Don't propose or make changes. Be concise: your report goes into the other model's context.`,
+};
+
+/** cheap-explore: the cheapest signed-in Claude model (Haiku), else none. */
+function explorerModel(cfg: Config): string | undefined {
+  const m = catalog.available(cfg.maxUsedPct).filter((x) => toRef(x).provider === 'claude').sort((a, b) => a.tier - b.tier || Number(b.id === 'haiku') - Number(a.id === 'haiku'))[0]; // the current Haiku, not an old one
+  return m ? refKey(toRef(m)) : undefined;
 }
 
 export function report(a: Subagent): string {
@@ -128,6 +143,34 @@ export function agentTools(agents: SubagentManager, config: () => Config): ToolD
         const a = await spawned.done;
         a.collected = true;
         return {ok: a.status === 'done', text: report(a)};
+      },
+    },
+    {
+      // cheap-explore: finding things across a codebase is a third of what a large task costs before its
+      // first edit, every file read staying in the expensive model's context; Claude Code sends this to Haiku too.
+      name: 'explore',
+      label: 'Explore',
+      description: 'Ask a fast, cheap model to find things in the codebase.',
+      describe: () =>
+        'Ask a fast, cheap model to explore the codebase and answer a question: where something is defined or used, how existing code works, which files a change touches. It reads and searches the code itself and reports file paths, line numbers, names and signatures with short verbatim snippets, so the files it read stay out of your context. Ask several questions in one call or in parallel calls. Read the exact lines yourself before you edit them.',
+      inputSchema: {type: 'object', properties: {question: {type: 'string', description: 'What to find out, with any names, paths or context that help'}}, required: ['question']},
+      enabled: () => activeExperiments(config()).includes('cheap-explore') && !!explorerModel(config()),
+      mutating: false,
+      mainOnly: true,
+      summarize: (a) => String(a?.question ?? '').slice(0, 80),
+      async run(_ctx, args) {
+        if (typeof args?.question !== 'string' || !args.question.trim()) throw new ToolError('question is required');
+        const model = explorerModel(config());
+        if (!model) throw new ToolError('no cheap model is signed in for exploring');
+        let spawned;
+        try {
+          spawned = agents.spawn({task: args.question, mode: 'new', model, name: 'explore', definition: EXPLORER});
+        } catch (err) {
+          throw new ToolError((err as Error).message);
+        }
+        const a = await spawned.done;
+        a.collected = true;
+        return {ok: a.status === 'done', text: a.status === 'done' ? a.output || '(no findings)' : report(a)};
       },
     },
     {

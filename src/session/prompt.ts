@@ -84,6 +84,13 @@ export function setLazyTools(fn: () => boolean): void {
 }
 const LAZY_PROMPT = `- Tools that aren't in your list (web_search, web_fetch, image_generate, agent, skill, decide, MCP servers, memory, past sessions) load on demand through tool: tool {name} shows what one takes, tool {name, args} runs it.`;
 
+/** cheap-explore is on (config `experiments`): exploring goes to a cheap model through `explore`. */
+let cheapExplore: () => boolean = () => false;
+export function setCheapExplore(fn: () => boolean): void {
+  cheapExplore = fn;
+}
+const EXPLORE_PROMPT = `- To find where something is or how existing code works, especially across many files, call explore first: a cheap model reads the code and reports file:line findings with short snippets, so you don't pay to carry every file it read. Then read only the lines you will change or must understand exactly.`;
+
 /** Names in the secrets vault (never values), supplied by the runtime. */
 let vaultNames: () => string[] = () => [];
 export function setVaultNames(fn: () => string[]): void {
@@ -140,7 +147,7 @@ export async function systemPrompt(opts: {tools?: boolean; scratch?: string; pro
     const extra = extraDirs();
     let tools = noTodo() ? TOOLS_PROMPT.split('\n').filter((l) => !l.includes('todo_write')).join('\n') : TOOLS_PROMPT;
     if (manyCalls()) tools = tools.split('\n').map((l) => (l.startsWith(BATCH_LINE) ? MANY_CALLS_PROMPT : l)).join('\n');
-    sections.push([tools, lazyTools() && LAZY_PROMPT, inScope() && SCOPE_PROMPT, (selfTest() || opts.provider === 'codex') && SELF_TEST_PROMPT, briefFinal() && BRIEF_PROMPT].filter(Boolean).join('\n'));
+    sections.push([tools, lazyTools() && LAZY_PROMPT, cheapExplore() && EXPLORE_PROMPT, inScope() && SCOPE_PROMPT, (selfTest() || opts.provider === 'codex') && SELF_TEST_PROMPT, briefFinal() && BRIEF_PROMPT].filter(Boolean).join('\n'));
     if (attribution())
       sections.push(
         [
