@@ -64,7 +64,7 @@ agent works by default ships as an experiment (`experiments` in config) until it
 | 39 | Linked-PR bundle | PRs for one task in several repos link to each other. Builds on #29. | features/workspaces/#pull-requests-across-repos | done |
 | 63 | Stacked PRs | Split a large change into a stack of dependent PRs. Builds on #16. | features/pull-requests/#smaller-prs | done |
 | 64 | Answer review comments | Read reviewer comments, fix or reply, push again. | features/pull-requests/#review-comments | done |
-| 65 | PR reviewer in CI | A headless review mode for `rein -p` that comments on PRs. Builds on #23. |  | todo |
+| 65 | PR reviewer in CI | A headless review mode for `rein -p` that comments on PRs. Builds on #23. | features/pull-requests/#a-reviewer-in-ci | done |
 | 66 | Merge-queue integration | Work with GitHub, GitLab, Graphite and Mergify merge queues. | features/pull-requests/#merge-queues | done |
 
 ## Wave 5: Context at scale

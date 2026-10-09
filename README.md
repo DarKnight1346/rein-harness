@@ -25,7 +25,9 @@ and a compaction model. No OAuth tokens are extracted: all traffic goes through 
 - **Build, test and CI:** affected targets from Nx/Turborepo/Bazel/Pants (`/affected`), a CI watcher
   that fixes failing checks (`/ci watch`), coverage and mutation testing of your changes, flaky-test
   quarantine, a [GitHub Action](action.yml) and a GitLab CI component.
-- **Coming next:** PR review flow, specs, contracts and migrations, and system-level understanding
+- **Pull requests:** `/pr` digests for reviewers, split into stacked PRs, review comments to the
+  agent, merge queues; linked PRs across repos; provenance trailers; a reviewer in CI.
+- **Coming next:** context at scale, specs, contracts and migrations, and system-level understanding
   across repos.
 
 ## Install

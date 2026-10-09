@@ -62,6 +62,10 @@ Big PRs wait longest for review. Set `prMaxLines` (`/settings prMaxLines 400`; `
 | GitLab (the `origin` remote is on GitLab) | `glab mr merge --auto-merge` |
 | Otherwise | `gh pr merge --auto --squash`: GitHub auto-merge, through the merge queue when the base branch has one |
 
+## A reviewer in CI
+
+The [Rein GitHub Action](../headless/#the-rein-github-action) with `post-comment: true` reviews each pull request in CI and leaves the review as a comment, with the model and what it cost.
+
 ## Changes across repos
 
 In a [workspace](../workspaces/), `/workspace prs` and `/workspace link-prs` find the pull request for the same branch in each repo and link them to each other. See [Pull requests across repos](../workspaces/#pull-requests-across-repos).

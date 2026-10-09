@@ -215,6 +215,9 @@ jobs:
 | `allowed-tools` | `''` | Rules that run without asking, like `shell(npm test:*),edit(src/**)`. |
 | `version` | `latest` | The `rein-harness` version to install. |
 | `working-directory` | `.` | Where to run. |
+| `post-comment` | `false` | On a pull request, post the reply as a PR comment (with the model and cost). The job needs `permissions: pull-requests: write`. |
+
+**A reviewer on every PR:** with `post-comment: true`, the prompt above and `permission-mode: ask` (read-only), the action leaves its review as a comment on each pull request. Give the job `permissions: {contents: read, pull-requests: write}`.
 
 Outputs: `result` (the final reply), `is-error`, and `cost-usd` (at API list prices). The reply is also written to the job summary. The action installs Node 22, `rein-harness` and Claude Code when they're missing, and fails the step when the run fails.
 

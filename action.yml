@@ -33,6 +33,10 @@ inputs:
     description: Where to run.
     required: false
     default: '.'
+  post-comment:
+    description: On a pull request, post Rein's reply as a comment (needs pull-requests write permission).
+    required: false
+    default: 'false'
 
 outputs:
   result:
@@ -90,3 +94,17 @@ runs:
           fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, `### Rein\n\n${r.result ?? r.error ?? ""}\n`);
         '
         exit $code
+
+    - name: Comment on the pull request
+      if: ${{ inputs.post-comment == 'true' && github.event.pull_request.number }}
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+        PR: ${{ github.event.pull_request.number }}
+      run: |
+        node -e '
+          const fs = require("fs");
+          const r = JSON.parse(fs.readFileSync(process.env.RUNNER_TEMP + "/rein-result.json", "utf8") || "{}");
+          fs.writeFileSync(process.env.RUNNER_TEMP + "/rein-comment.md", `${r.result ?? r.error ?? ""}\n\n<sub>Reviewed by Rein${r.model ? ` (${r.model})` : ""}${r.cost_usd !== undefined ? ` · $${r.cost_usd} at API prices` : ""}</sub>\n`);
+        '
+        gh pr comment "$PR" --repo "$GITHUB_REPOSITORY" --body-file "$RUNNER_TEMP/rein-comment.md"

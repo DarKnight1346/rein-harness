@@ -17,7 +17,8 @@ describe('GitHub Action and GitLab component', () => {
   it('action.yml is a composite action with the documented inputs and outputs, actions pinned to SHAs', () => {
     const a = parse(readFileSync(path.join(root, 'action.yml'), 'utf8'));
     expect(a.runs.using).toBe('composite');
-    expect(Object.keys(a.inputs)).toEqual(['prompt', 'anthropic-api-key', 'permission-mode', 'model', 'allowed-tools', 'version', 'working-directory']);
+    expect(Object.keys(a.inputs)).toEqual(['prompt', 'anthropic-api-key', 'permission-mode', 'model', 'allowed-tools', 'version', 'working-directory', 'post-comment']);
+    expect(a.runs.steps.at(-1).if).toMatch(/post-comment == 'true'/);
     expect(Object.keys(a.outputs)).toEqual(['result', 'is-error', 'cost-usd']);
     for (const s of a.runs.steps) if (s.uses) expect(s.uses).toMatch(/@[0-9a-f]{40}$/);
   });
