@@ -27,8 +27,10 @@ and a compaction model. No OAuth tokens are extracted: all traffic goes through 
   quarantine, a [GitHub Action](action.yml) and a GitLab CI component.
 - **Pull requests:** `/pr` digests for reviewers, split into stacked PRs, review comments to the
   agent, merge queues; linked PRs across repos; provenance trailers; a reviewer in CI.
-- **Coming next:** context at scale, specs, contracts and migrations, and system-level understanding
-  across repos.
+- **Large codebases:** context packs (`/pack`), a repo map (`/map`), code owners (`/owners`), local
+  semantic search (`/index`, through Ollama), Sourcegraph/Zoekt org search, sparse and partial
+  clones, one search and one `/rewind` across every repo of a workspace.
+- **Coming next:** specs, contracts and migrations, and system-level understanding across repos.
 
 ## Install
 
