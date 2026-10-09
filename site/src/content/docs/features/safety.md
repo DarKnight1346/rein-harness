@@ -72,6 +72,41 @@ On every later connection, and whenever the server announces a new tool list:
 
 Pins are kept as hashes plus tool names in `~/.rein/state/mcp-pins.json`; delete the file to start over. Project servers are pinned per project.
 
+## Policy as code (`.rein/policy.yaml`)
+
+Permission rules say what's allowed without asking. A policy says what's **never** allowed, what always needs a human, and which models may work on the code, with a reason the agent is told. Put it in `.rein/policy.yaml` (commit it, and it applies to everyone working in the repo with Rein) or `~/.rein/policy.yaml` (every project); both apply.
+
+```yaml title=".rein/policy.yaml"
+rules:
+  - deny: shell
+    command: "git push --force|rm -rf /"
+    reason: No force pushes or wiping the disk
+  - ask: [edit, write, delete]
+    paths: ["migrations/**", "infra/prod/**"]
+    reason: Migrations and production config need a human look
+  - deny: "*"
+    paths: ["secrets/**"]
+    reason: Nothing touches the secrets folder
+models:
+  allow: ["claude:*"]
+  deny: ["claude:fable"]
+```
+
+| Key | Meaning |
+|---|---|
+| `deny:` / `ask:` | The tools a rule covers: a name (`shell`, `edit`, `write`, `delete`, `read`, `web_fetch`, an MCP tool's name…), a list, or `"*"` for all. |
+| `paths` | Globs, relative to the project (`*`, `**`, `?`, `{a,b}`). The rule applies when the call touches a matching path. |
+| `command` | A regular expression (case-insensitive) a shell command must match. |
+| `reason` | Shown to the agent (and to you, for `ask`). |
+| `models.allow` / `models.deny` | Which chat and subagent models may work here, as `provider:model` globs (`claude:*`, `codex:gpt-6*`). |
+
+- **`deny`** refuses the call with the reason, in every mode.
+- **`ask`** needs your yes even in **bypass** (and in `rein -p`, where nobody can answer, it's refused). The prompt shows the reason and offers only *allow once* or *deny*.
+- A `deny` beats an `ask` when both match. A rule with `paths` and `command` needs both to match.
+- A model the policy doesn't allow is refused when a message is routed to it, or when a subagent is started on it, with the reason and a pointer to `/model`.
+
+The files are re-read when they change. `/policy` shows the rules in force and any mistakes in the files.
+
 ## Related
 
 - [Permissions](../permissions/): approval modes, rules and sensitive locations

@@ -1,6 +1,6 @@
 import type {Skill} from '../skills/index.js';
 
-export type CommandName = 'trackers' | 'remote' | 'voice' | 'vault' | 'lsp' | 'plugins' | 'export' | 'ide' | 'memory' | 'mcp' | 'rewind' | 'permissions' | 'add-dir' | 'workspace' | 'cost' | 'scope' | 'goal' | 'goal:plan' | 'btw' | 'agents' | 'agent' | 'resume' | 'login' | 'usage' | 'model' | 'context' | 'compact' | 'shells' | 'settings' | 'update' | 'tui' | 'clear' | 'help' | 'exit';
+export type CommandName = 'trackers' | 'remote' | 'voice' | 'vault' | 'lsp' | 'plugins' | 'export' | 'ide' | 'memory' | 'mcp' | 'rewind' | 'permissions' | 'add-dir' | 'workspace' | 'policy' | 'cost' | 'scope' | 'goal' | 'goal:plan' | 'btw' | 'agents' | 'agent' | 'resume' | 'login' | 'usage' | 'model' | 'context' | 'compact' | 'shells' | 'settings' | 'update' | 'tui' | 'clear' | 'help' | 'exit';
 
 export const COMMANDS: {name: CommandName; description: string}[] = [
   {name: 'remote', description: 'Use this session from your phone or another computer: a page Rein serves (pairing code); /remote pair · status · unpair · off'},
@@ -16,6 +16,7 @@ export const COMMANDS: {name: CommandName; description: string}[] = [
   {name: 'rewind', description: 'Undo: restore files and/or the conversation to before one of your messages (also esc twice)'},
   {name: 'permissions', description: 'Show the allow/deny rules in effect and where they come from'},
   {name: 'cost', description: 'What this conversation, the latest request and the goal cost at API list prices'},
+  {name: 'policy', description: 'The policy in force here (.rein/policy.yaml, ~/.rein/policy.yaml): its rules, allowed models and any mistakes in the files'},
   {name: 'workspace', description: 'The repos of this workspace (rein.workspace.yaml): /workspace lists them, /workspace clone clones the missing ones'},
   {name: 'scope', description: 'Work in one package of a monorepo: /scope <dir> (search, list, shell and instructions start there), /scope off, or no argument to show it'},
   {name: 'add-dir', description: 'Add a working directory the agent can use without asking: /add-dir <path> (no path: list them)'},

@@ -7,6 +7,8 @@ import {formatUsd, setCacheWriteTtl, setPriceOverrides} from './providers/prices
 import {Telemetry} from './telemetry/otel.js';
 import {maskSecrets} from './tools/secrets.js';
 import {sastCheck} from './tools/sast.js';
+import {loadPolicy, modelBlocked} from './policy.js';
+import {reinConfigDir} from './store/paths.js';
 import {effectiveBudget, overBudget, type Spend} from './budget.js';
 import {catalog, toRef} from './router/catalog.js';
 import {mergeNote, Worktrees} from './agents/worktrees.js';
@@ -197,6 +199,7 @@ export class Runtime {
     scope: () => this.scope,
     secretScan: () => this.config.secretScan ?? 'off',
     depCheck: () => this.config.depCheck ?? 'off',
+    policy: () => loadPolicy(process.cwd(), reinConfigDir()),
     injectionScan: () => this.config.injectionScan === true,
     exfilGuard: () => this.config.exfilGuard === true,
     checkpoint: (file) => this.checkpoints.snapshot(this.currentTurn(), file),
@@ -448,6 +451,8 @@ export class Runtime {
       ref = parseRef(agent.requested);
       if (!ref || !catalog.get(ref)) throw new Error(`model ${agent.requested} isn't available; use one from the tool description or "auto"`);
     }
+    const blocked = modelBlocked(loadPolicy(process.cwd(), reinConfigDir()), ref);
+    if (blocked) throw new Error(`${blocked}; give the subagent a model the policy allows`);
     const account = catalog.healthyAccounts(ref, this.config.maxUsedPct)[0];
     if (!account) throw new Error(`no healthy account for ${ref.model}`);
     const role = agent.definition ? `\n\n# Your role: ${agent.definition.name}\n${agent.definition.prompt}` : '';
@@ -896,7 +901,12 @@ Drop superseded reads of the same file, routine listings, and output that no lon
     this.engine = new Engine(
       {
         config: () => this.config,
-        route: (text, t, current) => (this.escalation ? Promise.resolve({ref: this.escalation, reason: 'escalated' as const}) : router.route(text, t, current)),
+        route: async (text, t, current) => {
+          const route = this.escalation ? {ref: this.escalation, reason: 'escalated' as const} : await router.route(text, t, current);
+          const blocked = modelBlocked(loadPolicy(process.cwd(), reinConfigDir()), route.ref);
+          if (blocked) throw new Error(`${blocked}. Pick a model it allows with /model.`);
+          return route;
+        },
         alternative: router.alternative,
         compact: (t, reason, opts) => this.compact(t, reason, opts),
         selectCarry: (input) => this.selectCarry(input),

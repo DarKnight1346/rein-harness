@@ -34,7 +34,7 @@ agent works by default ships as an experiment (`experiments` in config) until it
 | 68 | Exfiltration guard | When private data and untrusted input are both in context, network-capable tools need approval. | features/safety/#data-leaving-the-machine-exfilguard | done |
 | 69 | Pinned MCP servers | Allowlist MCP servers by version and hash; warn and ask when one changes. | features/safety/#changed-mcp-servers-mcppinning | done |
 | 70 | Dependency supply-chain check | Vet newly added packages (typosquats, license, known CVEs via OSV) before the edit lands. | features/safety/#new-dependencies-depcheck | done |
-| 71 | Local policy-as-code | YAML rules for tools, paths, commands and models, checked on every action, in `.rein/policy.yaml`. |  | todo |
+| 71 | Local policy-as-code | YAML rules for tools, paths, commands and models, checked on every action, in `.rein/policy.yaml`. | features/safety/#policy-as-code-reinpolicyyaml | done |
 
 ## Wave 3: Build, test and CI feedback
 

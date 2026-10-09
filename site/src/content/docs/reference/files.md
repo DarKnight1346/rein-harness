@@ -101,6 +101,10 @@ Existing Claude Code rules and hooks keep working: `Bash(npm test:*)`, `Edit(src
 
 Earlier sources win on a name clash: `<project>/.mcp.json`, then `~/.rein/mcp.json`, then `~/.claude.json` (servers added with `claude mcp add`). `${VAR}` and `${VAR:-default}` are expanded from your environment. See [MCP](../../features/mcp/).
 
+### Policy
+
+`<project>/.rein/policy.yaml` and `~/.rein/policy.yaml`: deny and ask rules over tools, paths and commands, and which models may work here. Both apply. See [Policy as code](../../features/safety/#policy-as-code-reinpolicyyaml).
+
 ### Workspace manifest
 
 `rein.workspace.yaml` (or `.yml`), the nearest one at or above the launch folder: the repos of a [workspace](../../features/workspaces/). They become working directories and are listed in the system prompt.

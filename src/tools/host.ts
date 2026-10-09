@@ -15,6 +15,7 @@ import {Watchdog} from './watchdog.js';
 import {addedText, findSecrets, secretMessage} from './secrets.js';
 import {injectionSigns, injectionWarning, networkCapable, untrustedSource} from './untrusted.js';
 import {addedDeps, afterEdit, checkDeps, commandDeps, depMessage} from './deps.js';
+import {checkPolicy, type Policy} from '../policy.js';
 import {readOnlyCommand} from './plan.js';
 import {steer} from './steer.js';
 import {ipcPath, isWindows} from '../util/platform.js';
@@ -78,6 +79,8 @@ export type ToolHostOptions = {
   injectionScan?: () => boolean;
   /** exfilGuard: network calls need a yes once untrusted content and private data are both in the conversation. */
   exfilGuard?: () => boolean;
+  /** Policy as code (.rein/policy.yaml, ~/.rein/policy.yaml): deny or ask rules over tools, paths and commands. */
+  policy?: () => Policy;
   /** depCheck: vet packages a change adds (exists, typosquat, license, known vulnerabilities). */
   depCheck?: () => 'off' | 'warn' | 'block';
   /** secretScan: what to do when a write or edit adds something that looks like a credential. */
@@ -386,6 +389,10 @@ export class ToolHost extends EventEmitter {
       const extra = this.opts.extraRules?.() ?? {allow: [], deny: []};
       const verdict = check({allow: [...fileRules.allow, ...extra.allow], deny: [...fileRules.deny, ...extra.deny]}, subject, (p) => this.pathForms(p));
       if (verdict === 'deny') throw new ToolError(`blocked by a permission rule (deny) in the user's settings; ask the user instead of retrying`);
+      // Policy as code: deny refuses outright; ask needs the user's yes further down, in every mode.
+      const policy = this.opts.policy?.();
+      const rule = policy?.rules.length ? checkPolicy(policy, tool.name, args, (subject.paths ?? []).map((p) => this.ruleRel(p))) : undefined;
+      if (rule?.effect === 'deny') throw new ToolError(`blocked by the project's policy (${rule.source}): ${rule.reason}. Don't retry; find another way or ask the user.`);
       // PreToolUse hooks (Claude Code format) may block, approve, or force the prompt.
       const hookInput = {session_id: this.opts.sessionId?.(), tool: tool.name, tool_input: args ?? {}};
       const pre = hasHooks('PreToolUse', this.opts.root) ? await runHooks('PreToolUse', this.opts.root, hookInput) : undefined;
@@ -444,6 +451,11 @@ export class ToolHost extends EventEmitter {
       }
       // exfilGuard: outside content and private data have both been in this conversation, so anything that
       // can send data to another machine is your call, whatever the mode (only once or deny).
+      if (rule?.effect === 'ask') {
+        const decision = await this.opts.approve({tool, args, summary, preview: preview(tool, args), origin, reason: `Policy (${rule.source}): ${rule.reason}.`});
+        if (decision === 'deny') throw new ToolError(`the user declined this (policy ${rule.source}: ${rule.reason}); ask them how to proceed`);
+        approvedBy = 'user';
+      }
       if (this.opts.exfilGuard?.() && this.untrustedSeen && this.privateSeen && networkCapable(tool.name, args)) {
         const reason = `This conversation has seen outside content (${this.untrustedSeen}) and private data (${this.privateSeen}), and this call can send data to another machine.`;
         const decision = await this.opts.approve({tool, args, summary, preview: preview(tool, args), origin, reason});

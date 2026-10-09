@@ -57,6 +57,8 @@ import nodePath from 'node:path';
 import {cloneMissing, findWorkspace} from '../workspace/index.js';
 import {CONFIG_KEYS, defaultValue, formatValue, keyInfo, parseValue} from '../store/configKeys.js';
 import {estimateGoalCost} from '../goals/estimate.js';
+import {loadPolicy, type PolicyRule} from '../policy.js';
+import {reinConfigDir} from '../store/paths.js';
 import {formatUsd} from '../providers/prices.js';
 
 /** /goal waiting for its confirmation (its estimate was above goalConfirmUsd). */
@@ -1195,6 +1197,22 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
           for (const r of p.deny ?? []) lines.push(`  deny  ${r}`);
         }
         log('info', lines.length ? `Permission rules (deny wins):\n${lines.join('\n')}` : 'No permission rules yet. Choose "3 Always allow" in an approval prompt, or add "permissions": {"allow": [...], "deny": [...]} to .rein/settings.json (Claude Code format; .claude/settings.json rules apply too).');
+        break;
+      }
+      case 'policy': {
+        const p = loadPolicy(process.cwd(), reinConfigDir());
+        if (!p.rules.length && !p.allowModels && !p.denyModels?.length && !p.errors.length) {
+          log('info', 'No policy here. Put rules in .rein/policy.yaml (this project) or ~/.rein/policy.yaml (every project); see the Safety guards docs.');
+          break;
+        }
+        const rule = (r: PolicyRule) => `  ${r.effect.padEnd(4)} ${r.tools.join(', ')}${r.globs.length ? ` on ${r.globs.join(', ')}` : ''}${r.command ? ` matching /${r.command.source}/` : ''}: ${r.reason}  (${r.source})`;
+        log(p.errors.length ? 'error' : 'info', [
+          'Policy (checked on every tool call, in every approval mode):',
+          ...p.rules.map(rule),
+          ...(p.modelNames.allow ? [`  models allowed: ${p.modelNames.allow.join(', ')}`] : []),
+          ...(p.modelNames.deny.length ? [`  models denied: ${p.modelNames.deny.join(', ')}`] : []),
+          ...p.errors.map((e) => `  ! ${e}`),
+        ].join('\n'));
         break;
       }
       case 'cost': {

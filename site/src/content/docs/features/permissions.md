@@ -176,6 +176,8 @@ With `secretScan` on, every `write` and `edit` is checked for credentials it wou
 
 While it's on, credentials are also masked in saved conversations (`~/.rein/sessions/`), keeping the first four characters (`AKIA…[secret: AWS access key]`). Set it with `/settings secretScan warn`. For secrets the agent needs to *use*, see the [vault](../vault/): it runs commands with them without ever seeing them.
 
+For rules that hold in every mode, bypass included, with reasons the agent sees (and limits on which models may work in a repo), see [Policy as code](../safety/#policy-as-code-reinpolicyyaml).
+
 ## Saved rules
 
 Rules use Claude Code's format: a tool name, optionally with a specifier in parentheses, in `allow` or `deny` lists under `permissions`.
