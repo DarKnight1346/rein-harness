@@ -2,7 +2,7 @@ import {execFileSync} from 'node:child_process';
 import {completeWith, resolveUtilityModel} from '../decider/index.js';
 import type {ModelRef} from '../providers/types.js';
 import {catalog} from '../router/catalog.js';
-import type {Config} from '../store/config.js';
+import {activeExperiments, type Config} from '../store/config.js';
 import {mkdir, writeFile} from 'node:fs/promises';
 import path from 'node:path';
 import {estimateTokens, renderForSummary, renderMessages, saveTranscript, scratchDir, summaryForModel, type Message, type Transcript} from './transcript.js';
@@ -127,7 +127,7 @@ export async function compactTranscript(t: Transcript, cfg: Config, opts: {keepR
   const upTo = Math.max(from, t.messages.length - keep);
   if (upTo <= from) return {skipped: 'nothing old enough to compact yet'};
   const beforeTokens = contextTokens(t);
-  const faithful = (cfg.experiments ?? []).includes('faithful-compaction');
+  const faithful = activeExperiments(cfg).includes('faithful-compaction');
   // faithful-compaction: the model doing the work summarizes it, not the cheapest one.
   const ref = (faithful && opts.model && catalog.get(opts.model) ? opts.model : undefined) ?? resolveUtilityModel(cfg.compactionModel, cfg);
   if (!ref) throw new Error('no compaction model available');

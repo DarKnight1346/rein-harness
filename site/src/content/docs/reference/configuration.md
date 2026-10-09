@@ -64,7 +64,7 @@ How these play together is covered in [load balancing](../../internals/load-bala
 | `worktrees` | string | `"auto"` | `auto`: subagents working alongside other work get their own git worktree, merged back when they finish. `off`: subagents always edit the project directly. | `/settings` → Worktrees |
 | `lsp` | `"auto"` \| `"off"` | `"auto"` | Built-in [code intelligence](../../features/code-intelligence/): Rein runs language servers itself and, when the agent finishes a turn, sends back problems its changes left. `"off"` never starts one. | `~/.rein/config.json` |
 | `lspIdleMinutes` | number | `10` | Stop a built-in language server after this many minutes unused. | `~/.rein/config.json` |
-| `experiments` | string[] | `[]` | Efficiency experiments to turn on, by name; see [Experiments](#experiments). Off until measured. | `~/.rein/config.json` |
+| `experiments` | string[] | `[]` | Efficiency experiments to turn on by name, or `-name` to turn a default one off; see [Experiments](#experiments). | `~/.rein/config.json` |
 | `lspServers` | object | — | Use your own server command instead of Rein's, per server id: `{"python": {"command": "/path/to/server", "args": ["--stdio"]}}`. | `~/.rein/config.json` |
 | `waitForLimits` | boolean | `true` | When every account for the model is at its limit and no other model can take over, wait for the earliest reset (up to 12 hours) and continue the turn. `false` stops with `Every account for … is at its limit`. | `/settings` → Limits |
 | `steerShell` | boolean | `true` | Run the agent's simple shell reads and searches (`cat F`, `head`/`tail`, `sed -n 'A,Bp' F`, `ls`, `grep -rn`, `rg`, `find -name`) as the built-in `read` / `list` / `search` tools. See [Tools](../../features/tools/#reads-and-searches-run-as-tools). | `~/.rein/config.json` |
@@ -212,7 +212,7 @@ On the other machine, `/settings import rein-settings.json` writes the files int
 
 ## Experiments
 
-Changes meant to cut what a task costs (tokens, round trips, time) that are still being measured. Each is off unless listed in `experiments`, so it can be compared with and without on the same tasks; one that pays off becomes a default.
+Changes meant to cut what a task costs (tokens, round trips, time), measured with and without on the same tasks. Those that paid off are on by default: `lean-subagents`, `compact-read`, `outline-reads`, `shell-cap`, `faithful-compaction` and `verify-requirements` everywhere, and in [`rein -p`](../../features/headless/), where they were measured, also `lazy-tools`, `no-todo`, `brief-final`, `context-cap` and `cache-5m` (a one-off run has no idle pauses and no one reading a task list or a long final reply). Together, on 15 large tasks taken from real pull requests and run with `rein -p`, they cost about a quarter less per solved task than plain Claude Code with the same model, took about a fifth less time, and solved slightly more. The rest are off unless listed in `experiments`. Put `-name` in `experiments` to turn a default one off, for example `["-verify-requirements"]`.
 
 | Name | What it does |
 |---|---|

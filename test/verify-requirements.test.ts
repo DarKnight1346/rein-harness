@@ -45,8 +45,9 @@ describe('verify-requirements', () => {
     expect(await r.stopHook(true)).toBeUndefined(); // two at most
   });
 
-  it('is off unless listed, and skipped when nothing changed', async () => {
-    expect(await runtime([], {0: ['bigint.go']}).r.stopHook(false)).toBeUndefined();
+  it('is on by default, off with -verify-requirements, and skipped when nothing changed', async () => {
+    expect(await runtime([], {0: ['bigint.go']}).r.stopHook(false)).toBeDefined();
+    expect(await runtime(['-verify-requirements'], {0: ['bigint.go']}).r.stopHook(false)).toBeUndefined();
     expect(await runtime(['verify-requirements'], {}).r.stopHook(false)).toBeUndefined();
   });
 });

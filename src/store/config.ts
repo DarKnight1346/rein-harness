@@ -154,6 +154,29 @@ export const DEFAULT_CONFIG: Config = {
   experiments: [],
 };
 
+/**
+ * Experiments that measured better than plain Claude Code (cost, time and tasks solved, epic benchmark)
+ * and are now on unless turned off with `-name` in `experiments`. These change no feature you see.
+ */
+export const DEFAULT_EXPERIMENTS = ['lean-subagents', 'compact-read', 'outline-reads', 'shell-cap', 'faithful-compaction', 'verify-requirements'];
+/**
+ * Also on in `rein -p`, where they were measured: a one-off run has no idle pauses (5-minute cache), no
+ * one reading a task list, MCP tools or a long final reply, and no one to mind a capped context.
+ */
+export const HEADLESS_EXPERIMENTS = ['lazy-tools', 'no-todo', 'brief-final', 'context-cap', 'cache-5m'];
+/** Defaults for this process only (`rein -p` adds HEADLESS_EXPERIMENTS). */
+const processDefaults: string[] = [];
+export function addDefaultExperiments(names: string[]): void {
+  processDefaults.push(...names);
+}
+
+/** The experiments that are on: the defaults plus `experiments`, minus any listed as `-name`. */
+export function activeExperiments(cfg: Pick<Config, 'experiments'>): string[] {
+  const listed = cfg.experiments ?? [];
+  const off = new Set(listed.filter((e) => e.startsWith('-')).map((e) => e.slice(1)));
+  return [...new Set([...DEFAULT_EXPERIMENTS, ...processDefaults, ...listed])].filter((e) => !e.startsWith('-') && !off.has(e));
+}
+
 export async function loadConfig(): Promise<Config> {
   return {...DEFAULT_CONFIG, ...(await readJson<Partial<Config>>(paths.config(), {}))};
 }

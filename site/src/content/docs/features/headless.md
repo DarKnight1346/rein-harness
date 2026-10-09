@@ -170,6 +170,10 @@ In `text` mode the plan is printed after the agent's reply. In `json` mode it re
 
 To fail a CI step on the *content* of the answer, check `result` yourself (see the example below).
 
+## Tuned for one-off runs
+
+`rein -p` turns on a few [experiments](../../reference/configuration/#experiments) that pay off on a single unattended task: rarely needed tools behind one `tool` entry (`lazy-tools`), no task list (`no-todo`), a short final reply (`brief-final`), compaction at 200K tokens (`context-cap`) and a 5-minute Claude prompt cache (`cache-5m`, cheaper to write when nothing pauses). Put `-name` in `experiments` to turn one off.
+
 ## Hooks in headless runs
 
 Your [hooks](../hooks/) all run. `SessionStart` fires with `source: "resume"` when you use `-c`. A `Stop` hook can send the agent back to work up to 10 times. This also means a repository's own hooks run in CI.

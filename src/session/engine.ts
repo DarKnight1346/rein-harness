@@ -4,7 +4,7 @@ import type {ToolActivity} from '../tools/host.js';
 import {EventQueue} from '../util/proc.js';
 import {refKey} from '../providers/types.js';
 import {BUSY_PENALTY, catalog, toRef} from '../router/catalog.js';
-import type {Config} from '../store/config.js';
+import {activeExperiments, type Config} from '../store/config.js';
 import {DANGER_HEADROOM, headroom, usageStore} from '../store/usage.js';
 import {compactableCount, compactTranscript, type CompactReason, type CompactResult, type LiveSummarizer} from './compactor.js';
 import {systemPrompt} from './prompt.js';
@@ -653,7 +653,7 @@ export class Engine {
     const limit = (m?.contextWindow ?? 200_000) * (pct / 100);
     // price-break: stay on the cheaper rate card. Compacting checks a request's prompt after it was
     // sent, and the next tool result adds to it, so the limit sits below the break.
-    const experiments = this.deps.config().experiments ?? [];
+    const experiments = activeExperiments(this.deps.config());
     if (m?.priceBreak && experiments.includes('price-break')) return Math.min(limit, m.priceBreak * PRICE_BREAK_MARGIN);
     // context-cap: on large windows the conversation otherwise grows to 300-500K, and cache reads of it
     // were about 60% of what a large task cost.

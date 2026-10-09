@@ -4,7 +4,7 @@ import {makeRouter} from '../src/router/index.js';
 import {makeAutoRouter} from '../src/router/auto.js';
 import {Engine, type EngineEvent} from '../src/session/engine.js';
 import {compactTranscript} from '../src/session/compactor.js';
-import {DEFAULT_CONFIG, type Config} from '../src/store/config.js';
+import {DEFAULT_CONFIG, DEFAULT_EXPERIMENTS, HEADLESS_EXPERIMENTS, type Config} from '../src/store/config.js';
 import {usageStore} from '../src/store/usage.js';
 import type {ChatEvent} from '../src/providers/types.js';
 import {acct, CLAUDE_FAKE_MODELS, fakeAdapter, install, reply, tempHome} from './fakes.js';
@@ -25,7 +25,7 @@ const firstRequest: ChatEvent = {type: 'tokens', call: {input: 5_000, cached: 0,
 const bigRequest: ChatEvent = {type: 'tokens', call: {input: 180_000, cached: 0, output: 0}};
 
 beforeEach(() => {
-  config = {...DEFAULT_CONFIG, chatModel: 'claude:sonnet', autoCompactPct: 80};
+  config = {...DEFAULT_CONFIG, chatModel: 'claude:sonnet', autoCompactPct: 80, experiments: [...DEFAULT_EXPERIMENTS, ...HEADLESS_EXPERIMENTS].map((e) => `-${e}`)}; // the behaviour without experiments
   usageStore.reset();
   catalog.authFailed.clear();
 });

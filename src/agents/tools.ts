@@ -1,6 +1,6 @@
 import {parseRef, refKey} from '../providers/types.js';
 import {catalog, toRef} from '../router/catalog.js';
-import type {Config} from '../store/config.js';
+import {activeExperiments, type Config} from '../store/config.js';
 import {ToolError} from '../tools/fs.js';
 import type {ToolDef} from '../tools/registry.js';
 import {definitionModel, loadAgentDefinitions} from './definitions.js';
@@ -57,7 +57,7 @@ export function agentTools(agents: SubagentManager, config: () => Config): ToolD
         const preferred = !fixed ? userModel(cfg) : undefined;
         return [
           'Delegate a task to a subagent that works autonomously with the same tools and returns a report.',
-          ...((cfg.experiments ?? []).includes('lean-subagents')
+          ...(activeExperiments(cfg).includes('lean-subagents')
             ? ["- Each subagent starts its own context (instructions, tools and everything it reads), so it costs about as much as doing that work yourself, plus the report. Use one for independent work that can run in parallel, a long side investigation, or another model; not to split one focused change across files (do that yourself, batching edits)."]
             : []),
           '- mode "fork": branches your current session — it keeps the full conversation history and uses your current model/account (good for parallel work that needs context).',

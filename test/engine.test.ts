@@ -4,7 +4,7 @@ import {makeRouter} from '../src/router/index.js';
 import {makeAutoRouter} from '../src/router/auto.js';
 import {Engine, limitWait, type EngineEvent} from '../src/session/engine.js';
 import {compactTranscript} from '../src/session/compactor.js';
-import {DEFAULT_CONFIG, type Config} from '../src/store/config.js';
+import {DEFAULT_CONFIG, DEFAULT_EXPERIMENTS, HEADLESS_EXPERIMENTS, type Config} from '../src/store/config.js';
 import {usageStore} from '../src/store/usage.js';
 import {acct, CLAUDE_FAKE_MODELS, CODEX_FAKE_MODELS, fakeAdapter, install, reply, tempHome} from './fakes.js';
 
@@ -21,7 +21,7 @@ function engineWith(auto = false) {
 }
 
 beforeEach(() => {
-  config = {...DEFAULT_CONFIG, chatModel: 'claude:sonnet'};
+  config = {...DEFAULT_CONFIG, chatModel: 'claude:sonnet', experiments: [...DEFAULT_EXPERIMENTS, ...HEADLESS_EXPERIMENTS].map((e) => `-${e}`)}; // the behaviour without experiments
   usageStore.reset();
   catalog.authFailed.clear();
 });

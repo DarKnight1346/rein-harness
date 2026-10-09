@@ -23,7 +23,7 @@ import {loadTranscript, type Transcript} from './session/transcript.js';
 
 /** `true` = show the picker, a string = continue that session id, `false` = new conversation. */
 export type Resume = boolean | string;
-import {DEFAULT_CONFIG, loadConfig, saveConfig, type Config} from './store/config.js';
+import {activeExperiments, DEFAULT_CONFIG, loadConfig, saveConfig, type Config} from './store/config.js';
 import {usageStore} from './store/usage.js';
 import {SubagentManager, SUBAGENT_PROMPT, type Subagent} from './agents/manager.js';
 import {agentTools} from './agents/tools.js';
@@ -115,7 +115,7 @@ export class Runtime {
     readOnlyJudge: (command) => this.judgeReadOnly(command),
     configDirs: () => this.config?.additionalDirectories ?? [],
     checkpoint: (file) => this.checkpoints.snapshot(this.currentTurn(), file),
-    experiments: () => this.config.experiments ?? [],
+    experiments: () => activeExperiments(this.config),
     contextId: () => this.engine?.contextId(),
     untrusted: (origin) => origin.agentId !== undefined && !!this.agents.get(origin.agentId)?.untrusted,
     mask: (text) => this.vault.mask(text),
@@ -466,7 +466,7 @@ Drop superseded reads of the same file, routine listings, and output that no lon
     }
     // cross-review: once per request, a strong model from the other provider reviews the change against
     // the request; what it finds goes back to the agent (a second pair of eyes no single-vendor CLI has).
-    if (!active && (this.config.experiments ?? []).includes('cross-review') && !this.reviewed && this.engine && this.checkpoints.changedSince(this.currentTurn()).length) {
+    if (!active && activeExperiments(this.config).includes('cross-review') && !this.reviewed && this.engine && this.checkpoints.changedSince(this.currentTurn()).length) {
       this.reviewed = true;
       const findings = await this.crossReview().catch(() => undefined);
       if (findings) return {kind: 'hook', reason: findings};
@@ -474,7 +474,7 @@ Drop superseded reads of the same file, routine listings, and output that no lon
     // verify-requirements: once per request, before the agent stops after changing files, it runs its
     // change against every requirement in the request (hard tasks fail on the edge case it never tried).
     // Once more if that pass changed the code: its fixes were never run against the requirements.
-    if ((this.config.experiments ?? []).includes('verify-requirements') && this.engine) {
+    if (activeExperiments(this.config).includes('verify-requirements') && this.engine) {
       const again = active && this.verifiedAt !== undefined && this.verifyPasses < VERIFY_MAX;
       if ((!active && !this.verifyPasses) || again) {
         const since = again ? this.verifiedAt! : this.currentTurn();
@@ -493,7 +493,7 @@ Drop superseded reads of the same file, routine listings, and output that no lon
     }
     // escalate: the check already reported these and the agent's follow-up turn left them: a stronger
     // model takes the task over (for the rest of it; the next message from the user routes normally).
-    if (active && (this.config.experiments ?? []).includes('escalate') && !this.escalation) {
+    if (active && activeExperiments(this.config).includes('escalate') && !this.escalation) {
       const left = await this.lsp.stillThere().catch(() => [] as string[]);
       const to = left.length ? this.strongerModel() : undefined;
       if (to) {
@@ -509,7 +509,7 @@ Drop superseded reads of the same file, routine listings, and output that no lon
     // keep-going: the agent ended its turn but its own reply says the work isn't done ("I've only
     // partly done this"), and it isn't waiting on the user: send it back, a few times per request.
     // Models stop like this on long tasks, more often right after a compaction.
-    if ((this.config.experiments ?? []).includes('keep-going') && this.keptGoing < KEEP_GOING_MAX && this.engine) {
+    if (activeExperiments(this.config).includes('keep-going') && this.keptGoing < KEEP_GOING_MAX && this.engine) {
       const unfinished = await this.stoppedEarly().catch(() => false);
       if (unfinished) {
         this.keptGoing++;
@@ -692,8 +692,8 @@ Drop superseded reads of the same file, routine listings, and output that no lon
       ...mcpTools({mcp: this.mcp, root: () => process.cwd(), call: (name, args, origin) => this.tools.call(name, args, origin)}),
       recallTool(() => this.engine?.transcript),
       todoTool({
-        carried: () => (this.config.experiments ?? []).includes('todo-piggyback'),
-        enabled: () => !(this.config.experiments ?? []).includes('no-todo'),
+        carried: () => activeExperiments(this.config).includes('todo-piggyback'),
+        enabled: () => !activeExperiments(this.config).includes('no-todo'),
         transcript: () => this.engine?.transcript,
         milestones: () => (this.goals.goal?.status === 'active' ? this.goals.plan()?.milestones.map((m) => m.text) : undefined),
         changed: () => {
@@ -775,13 +775,13 @@ Drop superseded reads of the same file, routine listings, and output that no lon
     this.stopUsageRefresh = startUsageRefresh({balancing: () => this.config.loadBalancing !== 'sticky', busy: (id) => catalog.busy.get(id) ?? 0});
     setExtraWorkingDirs(() => this.tools.extraWorkingDirs());
     setAttribution(() => this.config.attribution !== false);
-    setLazyTools(() => (this.config.experiments ?? []).includes('lazy-tools'));
-    setNoTodo(() => (this.config.experiments ?? []).includes('no-todo'));
-    setInScope(() => (this.config.experiments ?? []).includes('in-scope'));
-    setManyCalls(() => (this.config.experiments ?? []).includes('many-calls'));
-    setSelfTest(() => (this.config.experiments ?? []).includes('self-test'));
-    setPromptCacheTtl(() => ((this.config.experiments ?? []).includes('cache-5m') ? '5m' : undefined));
-    setBriefFinal(() => (this.config.experiments ?? []).includes('brief-final'));
+    setLazyTools(() => activeExperiments(this.config).includes('lazy-tools'));
+    setNoTodo(() => activeExperiments(this.config).includes('no-todo'));
+    setInScope(() => activeExperiments(this.config).includes('in-scope'));
+    setManyCalls(() => activeExperiments(this.config).includes('many-calls'));
+    setSelfTest(() => activeExperiments(this.config).includes('self-test'));
+    setPromptCacheTtl(() => (activeExperiments(this.config).includes('cache-5m') ? '5m' : undefined));
+    setBriefFinal(() => activeExperiments(this.config).includes('brief-final'));
     await usageStore.load();
     const router = makeRouter(() => this.config, (...a) => this.auto(...a));
     const host = this.tools;
