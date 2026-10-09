@@ -153,6 +153,16 @@ While it runs you see `Compacting N messages…`, then a rule:
   Auto-compacted at 80% of the context window · change it in /settings → Compaction
 ```
 
+## Context warnings
+
+The first time the context passes **50%**, **70%** and **85%** of the model's window, Rein says so after the turn, with the biggest tool results in it:
+
+```text
+Context is 72% full (144K of 200K tokens). Largest: Read(src/huge.ts) 40K, Shell($ npm test) 12K. /compact summarizes it now (/compact keep <what> steers the summary); /context shows the rest.
+```
+
+Each level warns once per stretch of conversation; after a compaction they start over. There's no warning when auto-compaction is about to run anyway. Sizes are of the full tool results (what the model received), not the 4,000 characters Rein stores. Turn the warnings off with `/settings contextWarnings false`.
+
 ## `/context`
 
 `/context` opens a live grid (`src/ui/ContextView.tsx`, data from `src/session/context.ts`): 20 × 8 cells, filled in proportion to the model's window, with a legend.

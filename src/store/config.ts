@@ -87,6 +87,8 @@ export type Config = {
   budget?: Budget;
   /** /goal asks before starting when goals here typically cost more than this (USD, API prices). 0 = never asks. */
   goalConfirmUsd: number;
+  /** Say when the context passes 50%, 70% and 85% full, and what's taking the space. */
+  contextWarnings: boolean;
   /** OpenTelemetry export of turns, tool calls, tokens and cost (metadata only). Off unless set. */
   otel?: OtelConfig;
   /** Efficiency experiments to turn on, by name (see the configuration reference): measured before they become defaults. */
@@ -150,6 +152,7 @@ export const DEFAULT_CONFIG: Config = {
   attribution: true,
   waitForLimits: true,
   goalConfirmUsd: 0,
+  contextWarnings: true,
   steerShell: true,
   mcpSampling: 'ask',
   inlineImages: 'auto',

@@ -8,7 +8,7 @@ import {activeExperiments, type Config} from '../store/config.js';
 import {DANGER_HEADROOM, headroom, usageStore} from '../store/usage.js';
 import {compactableCount, compactTranscript, type CompactReason, type CompactResult, type LiveSummarizer} from './compactor.js';
 import {systemPrompt} from './prompt.js';
-import {buildCarry, carryStart, estimateTokens, newTranscript, recordProgress, saveTranscript, scratchDir, truncateTranscript, type Message, type Transcript} from './transcript.js';
+import {buildCarry, carryStart, estimateTokens, newTranscript, recordProgress, resultTokens, saveTranscript, scratchDir, truncateTranscript, type Message, type Transcript} from './transcript.js';
 import {CARRY_TOOL_BUDGET, carriedTools, selectCarriedTools, type CarrySelector} from './carry.js';
 
 export type Route = {ref: ModelRef; reason: 'fixed' | 'auto' | 'sticky' | 'default' | 'failover' | 'escalated'; confidence?: number};
@@ -475,6 +475,7 @@ export class Engine {
           const usd = now.usd === undefined ? undefined : now.usd - (before.usd ?? 0);
           this.deps.onTurnEnd?.({ref: route.ref, startedAt, interrupted: ev.interrupted, tokens: {input: now.uncached - before.uncached + now.cached - before.cached, cached: now.cached - before.cached, output: now.output - before.output, ...(usd === undefined ? {} : {usd})}});
           yield {type: 'done', interrupted: ev.interrupted};
+          yield* this.contextWarning(route.ref, ev.tokens?.input);
           yield* this.maybeAutoCompact(route.ref, ev.tokens?.input);
           return;
         } else if (ev.type === 'error') {
@@ -701,6 +702,37 @@ export class Engine {
     t.messages.push({role: 'user', text: CONTINUE_AFTER_COMPACTION + recentResults(tools, fullResults), at: Date.now(), synthetic: true});
     await saveTranscript(t).catch(() => {});
     return t.messages.length - 1;
+  }
+
+  /** The fill level last warned about, and for which stretch of conversation (a compaction starts a new one). */
+  private warned = {segment: -1, level: 0};
+
+  /**
+   * Context-bloat warning (config contextWarnings): the first time the context passes 50%, 70% and 85%
+   * of the window, say how full it is and what's taking the space, so you can compact or steer it.
+   */
+  private *contextWarning(ref: ModelRef, input: number | undefined): Generator<EngineEvent> {
+    const window = catalog.get(ref)?.contextWindow;
+    if (this.deps.config().contextWarnings === false || !input || !window) return;
+    const limit = this.autoCompactLimit(ref);
+    if (limit && input >= limit) return; // compaction runs right after this anyway
+    const segment = this.transcript.summary?.coversUpTo ?? 0;
+    if (segment !== this.warned.segment) this.warned = {segment, level: 0};
+    const level = [0.85, 0.7, 0.5].find((l) => input / window >= l);
+    if (!level || level <= this.warned.level) return;
+    this.warned.level = level;
+    const k = (n: number) => (n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : `${Math.round(n / 1000)}K`);
+    const largest = this.transcript.messages
+      .slice(segment)
+      .flatMap((m) => m.tools ?? [])
+      .map((x) => ({what: `${x.label}(${x.summary.slice(0, 50)})`, tokens: resultTokens(x)}))
+      .filter((x) => x.tokens >= 1000)
+      .sort((a, b) => b.tokens - a.tokens)
+      .slice(0, 3);
+    yield {
+      type: 'notice',
+      text: `Context is ${Math.round((input / window) * 100)}% full (${k(input)} of ${k(window)} tokens).${largest.length ? ` Largest: ${largest.map((x) => `${x.what} ${k(x.tokens)}`).join(', ')}.` : ''} /compact summarizes it now (/compact keep <what> steers the summary); /context shows the rest.`,
+    };
   }
 
   private async *maybeAutoCompact(ref: ModelRef, inputTokens: number | undefined): AsyncGenerator<EngineEvent> {

@@ -50,6 +50,7 @@ export const CONFIG_KEYS: KeyInfo[] = [
   k('goalMaxRounds', 'Most automatic continuations per goal (0 = no limit)', num(0)),
   k('subagentLimit', 'Most subagents running at once', num(1)),
   k('worktrees', 'Give parallel subagents their own git worktree (auto) or not (off)', oneOf('auto', 'off')),
+  k('contextWarnings', "Say when the context passes 50%, 70% and 85% full, and what's taking the space", bool),
   k('autoCompactPct', 'Compact when the context is this % full (0 = off)', num(0, 100)),
   k('experiments', 'Efficiency experiments to turn on, or -name to turn a default one off', list),
   k('prices', 'USD per million tokens for models without a built-in price: {"codex:my-model": {"input": 1.5, "cached": 0.15, "output": 6}}', json),

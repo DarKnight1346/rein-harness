@@ -91,6 +91,7 @@ How these play together is covered in [load balancing](../../internals/load-bala
 | `subagentLimit` | number | `10` | How many subagents may run at once. The agent is told the limit. | `/settings` → Subagents |
 | `goalMaxRounds` | number | `0` | Automatic continuations a `/goal` may take before it pauses itself. `0` = unlimited. | `/settings` → Goals |
 | `autoCompactPct` | number | `80` | Auto-compact when the context reaches this % of the model's window, including in the middle of a turn (the agent carries on from the summary). `0` = off (only `/compact`, or when a model rejects a full context). | `/settings` → Compaction |
+| `contextWarnings` | boolean | `true` | Say when the context passes 50%, 70% and 85% of the window, and which tool results take the most space. See [Context warnings](../../internals/context/#context-warnings). | `/settings contextWarnings`, `/settings` → Advanced |
 | `notifications` | string | `"terminal"` | Get your attention when Rein needs you (an approval, a question, a plan, project hooks to trust) or finishes work that took 20 s or more. `terminal`: bell plus an OSC 9 notification (iTerm2, WezTerm, kitty, Ghostty, Windows Terminal). `system`: also a desktop notification (macOS Notification Center, `notify-send` on Linux). `off`. | `/settings` → Notifications |
 
 See [permissions](../../features/permissions/) for rules, plan mode and the full approval pipeline.
