@@ -77,6 +77,7 @@ export function entryLines(entry: Entry, width: number): string[] {
         // Long commands/paths wrap with a hanging indent instead of overflowing the pane.
         ...wrap(chalk.bold(entry.label) + chalk.dim(`(${entry.summary})${approvalNote(entry.approvedBy, entry.judge)}`) + diffStatText(entry.diff), width, entry.ok ? chalk.green('⏺ ') : chalk.red('⏺ '), '  '),
         ...gutter(toolResultSummary(entry.label, entry.result), width, entry.ok ? chalk.dim : chalk.red).slice(0, 1),
+        ...(entry.warning ? wrap(chalk.yellow(`⚠ ${entry.warning}`), width, '  ', '    ') : []),
         ...(entry.plan ? planPreviewLines(entry.plan, width) : diffLines(entry.diff, width, entry.summary)),
         ...(entry.ok && (entry.label === 'ImageGen' || entry.label === 'Read') ? imageLines(imagePaths(entry.result, process.cwd()), width) : []),
       ];

@@ -196,6 +196,8 @@ export class Runtime {
     configDirs: () => [...(this.config?.additionalDirectories ?? []), ...workspaceDirs(this.workspace)],
     scope: () => this.scope,
     secretScan: () => this.config.secretScan ?? 'off',
+    injectionScan: () => this.config.injectionScan === true,
+    exfilGuard: () => this.config.exfilGuard === true,
     checkpoint: (file) => this.checkpoints.snapshot(this.currentTurn(), file),
     experiments: () => activeExperiments(this.config),
     contextId: () => this.engine?.contextId(),
@@ -902,6 +904,7 @@ Drop superseded reads of the same file, routine listings, and output that no lon
         onTurnEnd: (turn) => this.telemetry.turnEnd({...turn, endedAt: Date.now(), sessionId: this.engine?.transcript.id}),
         onConversationChange: () => {
           this.tools.reads.clear();
+          this.tools.untrustedSeen = this.tools.privateSeen = undefined;
           this.tools.deliveredInstructions.clear();
         },
         tools: {

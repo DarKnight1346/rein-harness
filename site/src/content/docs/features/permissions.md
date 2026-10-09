@@ -94,6 +94,9 @@ Option 3 only appears when Rein can suggest a sensible rule. It suggests:
 
 Subagents share the same prompt. Their requests are labelled `Subagent <name> wants to …`. When several agents ask at once, requests queue and show one at a time (`Approve command (1 of 3) · subagent reviewer`). Choosing option 2 also approves **every request already waiting in the queue**, whatever it is, so check the count before pressing it.
 
+
+When the [exfiltration guard](../safety/#data-leaving-the-machine-exfilguard) asks about a network call, the prompt says why in red and offers only *allow once* or *deny*.
+
 ## Working directories
 
 The tools work freely in:

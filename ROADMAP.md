@@ -30,8 +30,8 @@ agent works by default ships as an experiment (`experiments` in config) until it
 | 10 | Stuck-loop watchdog | Detect repeated edits or the same failing command with no progress; stop or escalate. | reference/configuration/#experiments | done |
 | 18 | Secret scanning on every diff | Block secrets in agent edits and redact them from saved transcripts. | features/permissions/#secret-scanning | done |
 | 19 | SAST on changed code | Run Semgrep (when installed) on files a request changed; findings on added lines go back like the code check. CodeQL isn't run: it needs a full database build per run. | features/code-intelligence/#static-analysis-with-semgrep | done |
-| 67 | Prompt-injection scanner | Screen issue text, PR text, fetched pages and MCP results for injected instructions; warn the agent and the user. |  | todo |
-| 68 | Exfiltration guard | When private data and untrusted input are both in context, network-capable tools need approval. |  | todo |
+| 67 | Prompt-injection scanner | Screen issue text, PR text, fetched pages and MCP results for injected instructions; warn the agent and the user. | features/safety/#planted-instructions-injectionscan | done |
+| 68 | Exfiltration guard | When private data and untrusted input are both in context, network-capable tools need approval. | features/safety/#data-leaving-the-machine-exfilguard | done |
 | 69 | Pinned MCP servers | Allowlist MCP servers by version and hash; warn and ask when one changes. |  | todo |
 | 70 | Dependency supply-chain check | Vet newly added packages (typosquats, license, known CVEs via OSV) before the edit lands. |  | todo |
 | 71 | Local policy-as-code | YAML rules for tools, paths, commands and models, checked on every action, in `.rein/policy.yaml`. |  | todo |

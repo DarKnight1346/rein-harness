@@ -11,7 +11,7 @@ import type {Phase} from './Working.js';
 
 export type ChatEntry =
   | {id: number; kind: 'assistant'; text: string; first: boolean}
-  | {id: number; kind: 'tool'; label: string; summary: string; ok: boolean; result: string; approvedBy?: string; judge?: string; diff?: DiffLine[]; plan?: string}
+  | {id: number; kind: 'tool'; label: string; summary: string; ok: boolean; result: string; approvedBy?: string; judge?: string; diff?: DiffLine[]; plan?: string; warning?: string}
   | {id: number; kind: 'compact'; reason: CompactReason; result: Extract<CompactResult, {summarized: number}>}
   | {id: number; kind: 'route'; route: Route; account: Account; effort?: string; interrupted: boolean};
 
@@ -120,7 +120,7 @@ export function useChat(commit: (e: NewEntry<ChatEntry>) => void, notice: (kind:
               setToolLabel(undefined);
               setPhase('thinking');
               const plan = planPreview(a.label, a.summary, a.ok, a.result); // plans show rendered, not as a diff
-              commit({kind: 'tool', label: a.label, summary: a.summary, ok: a.ok, result: a.result, approvedBy: a.approvedBy, judge: a.judge, diff: a.diff, ...(plan ? {plan} : {})});
+              commit({kind: 'tool', label: a.label, summary: a.summary, ok: a.ok, result: a.result, approvedBy: a.approvedBy, judge: a.judge, diff: a.diff, ...(plan ? {plan} : {}), ...(a.warning ? {warning: a.warning} : {})});
             }
           } else if (ev.type === 'text') {
             pending.current += ev.delta;

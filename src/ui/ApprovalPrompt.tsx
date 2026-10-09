@@ -14,8 +14,8 @@ const MAX_PREVIEW_LINES = 14;
 export function ApprovalPrompt({req, onDecide, bare}: {req: ApprovalRequest; onDecide(d: ApprovalDecision): void; bare?: boolean}) {
   useInput((input, key) => {
     if (input === '1' || input === 'y' || key.return) onDecide('once');
-    else if ((input === '2' || input === 'a') && !req.sensitive && !req.planMode) onDecide('session');
-    else if (input === '3' && req.suggestion && !req.planMode) onDecide('always');
+    else if ((input === '2' || input === 'a') && !req.sensitive && !req.planMode && !req.reason) onDecide('session');
+    else if (input === '3' && req.suggestion && !req.planMode && !req.reason) onDecide('always');
     else if (input === '4' || input === 'n' || key.escape) onDecide('deny');
   });
   const lines = req.preview ? req.preview.split('\n') : [];
@@ -32,7 +32,7 @@ export function ApprovalPrompt({req, onDecide, bare}: {req: ApprovalRequest; onD
     : '2 Allow all changes & commands this session';
   const options: [ApprovalDecision, string][] = [
     ['once', '1 Allow'],
-    ...(req.sensitive || req.planMode ? [] : [['session', sessionLabel] as [ApprovalDecision, string]]),
+    ...(req.sensitive || req.planMode || req.reason ? [] : [['session', sessionLabel] as [ApprovalDecision, string]]),
     ...(req.suggestion ? [['always', `3 Always allow ${req.suggestion} (this project)`] as [ApprovalDecision, string]] : []),
     ['deny', '4 Deny'],
   ];
@@ -41,6 +41,7 @@ export function ApprovalPrompt({req, onDecide, bare}: {req: ApprovalRequest; onD
       <Text>
         {req.origin ? <Text color="magenta">Subagent {req.origin.name}</Text> : 'Rein'} wants to <Text bold color="yellow">{req.tool.label}</Text> <Text bold>{redact(req.summary)}</Text>
       </Text>
+      {req.reason ? <Text color="red">⚠ {req.reason} Allow it only if you expect it.</Text> : null}
       {req.planMode ? <Text color="yellow">⏸ Plan mode: this command isn't known to be read-only — allow it only if it just looks things up.</Text> : null}
       {outside ? (
         <Text color={req.sensitive ? 'red' : 'yellow'}>
@@ -69,7 +70,7 @@ export function ApprovalPrompt({req, onDecide, bare}: {req: ApprovalRequest; onD
           </Box>
         ))}
       </Box>
-      <Text dimColor>{req.sensitive ? 'enter/1 allow once · esc/4 deny' : `enter/1 allow · 2 allow session${req.suggestion ? ' · 3 always' : ''} · esc/4 deny`}</Text>
+      <Text dimColor>{req.sensitive || req.reason ? 'enter/1 allow once · esc/4 deny' : `enter/1 allow · 2 allow session${req.suggestion ? ' · 3 always' : ''} · esc/4 deny`}</Text>
     </Box>
   );
 }

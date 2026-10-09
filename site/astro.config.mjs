@@ -56,6 +56,7 @@ export default defineConfig({
           {label: 'Tools', slug: 'features/tools'},
           {label: 'Web & images', slug: 'features/web-and-images'},
           {label: 'Permissions', slug: 'features/permissions'},
+          {label: 'Safety guards', slug: 'features/safety'},
           {label: 'MCP servers', slug: 'features/mcp'},
           {label: 'Skills', slug: 'features/skills'},
           {label: 'Plugins', slug: 'features/plugins'},

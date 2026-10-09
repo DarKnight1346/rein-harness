@@ -13,6 +13,7 @@ import {hasHooks, runHooks} from '../hooks.js';
 import {renderScoped, scopedInstructions} from '../session/prompt.js';
 import {Watchdog} from './watchdog.js';
 import {addedText, findSecrets, secretMessage} from './secrets.js';
+import {injectionSigns, injectionWarning, networkCapable, untrustedSource} from './untrusted.js';
 import {readOnlyCommand} from './plan.js';
 import {steer} from './steer.js';
 import {ipcPath, isWindows} from '../util/platform.js';
@@ -42,6 +43,8 @@ export type ApprovalRequest = {
   planMode?: boolean;
   /** What "allow for the session" covers, when it isn't changes and commands (an MCP server's sampling…). */
   sessionLabel?: string;
+  /** Why this needs your yes even in bypass (exfilGuard): only allow once or deny. */
+  reason?: string;
 };
 export type ApprovalDecision = 'once' | 'session' | 'always' | 'deny';
 export type ApprovalMode = 'ask' | 'auto' | 'bypass';
@@ -49,7 +52,7 @@ export type ApprovalMode = 'ask' | 'auto' | 'bypass';
 export type ApprovedBy = 'user' | 'session' | 'auto' | 'bypass' | 'scratchpad' | 'rule' | 'hook' | 'read-only';
 export type ToolActivity =
   | {phase: 'start'; id: number; label: string; summary: string; origin?: Origin}
-  | {phase: 'end'; id: number; label: string; summary: string; ok: boolean; result: string; approvedBy?: ApprovedBy; judge?: string; origin?: Origin; diff?: DiffLine[]};
+  | {phase: 'end'; id: number; label: string; summary: string; ok: boolean; result: string; approvedBy?: ApprovedBy; judge?: string; origin?: Origin; diff?: DiffLine[]; warning?: string};
 
 /** Tool definition as sent to a model. */
 export type ToolSpec = {name: string; description: string; inputSchema: Record<string, unknown>};
@@ -70,6 +73,10 @@ export type ToolHostOptions = {
   judge?: (req: ApprovalRequest) => Promise<{allow: boolean; note: string}>;
   /** Extra working directories from config (`additionalDirectories`). */
   configDirs?: () => string[];
+  /** injectionScan: flag instructions planted in web pages, search results and MCP results. */
+  injectionScan?: () => boolean;
+  /** exfilGuard: network calls need a yes once untrusted content and private data are both in the conversation. */
+  exfilGuard?: () => boolean;
   /** secretScan: what to do when a write or edit adds something that looks like a credential. */
   secretScan?: () => 'off' | 'warn' | 'block';
   /** --scope / /scope: list, search and shell default to this folder (absolute) instead of the project root. */
@@ -353,6 +360,7 @@ export class ToolHost extends EventEmitter {
     let result: ToolResult;
     let approvedBy: ApprovedBy | undefined;
     let judge: string | undefined;
+    let warning: string | undefined;
     try {
       const ctx: ToolContext = {...this.context(), origin};
       // A subagent working alongside others gets its own worktree on its first change (see
@@ -431,6 +439,14 @@ export class ToolHost extends EventEmitter {
         }
         ctx.outsideAllowed = outside;
       }
+      // exfilGuard: outside content and private data have both been in this conversation, so anything that
+      // can send data to another machine is your call, whatever the mode (only once or deny).
+      if (this.opts.exfilGuard?.() && this.untrustedSeen && this.privateSeen && networkCapable(tool.name, args)) {
+        const reason = `This conversation has seen outside content (${this.untrustedSeen}) and private data (${this.privateSeen}), and this call can send data to another machine.`;
+        const decision = await this.opts.approve({tool, args, summary, preview: preview(tool, args), origin, reason});
+        if (decision === 'deny') throw new ToolError("the user declined a network call (exfiltration guard: outside content and private data are both in this conversation); continue without it, or ask them");
+        approvedBy = 'user';
+      }
       if (tool.mutating && tool.name !== 'shell' && this.inScratch(ctx, tool, args)) approvedBy = 'scratchpad';
       // (After the outside-path check: a read-only command in an outside cwd still asks about access.)
       if (readOnly && !pre?.ask && !approvedBy) approvedBy = 'read-only';
@@ -484,6 +500,20 @@ export class ToolHost extends EventEmitter {
         if (secrets.length && scan === 'block') throw new ToolError(secretMessage(secrets, file, true));
         result = repeat ?? (await tool.run(ctx, args ?? {}));
         if (secrets.length && result.ok) result = {...result, text: `${result.text}\n\n${secretMessage(secrets, file, false)}`};
+        const source = untrustedSource(tool.name);
+        if (source && result.ok) {
+          this.untrustedSeen ??= source;
+          const signs = this.opts.injectionScan?.() ? injectionSigns(result.text) : [];
+          if (signs.length) {
+            result = {...result, text: `${injectionWarning(source, signs)}\n\n${result.text}`};
+            warning = `Content from ${source} looks like it tries to instruct the agent (${signs.join(', ')}); it was flagged to the agent as data.`;
+          }
+        }
+        if (!this.privateSeen && result.ok && (tool.name === 'read' || tool.name === 'shell' || tool.name === 'search')) {
+          const sensitive = this.filesOf(ctx, tool, args).find(isSensitivePath);
+          if (sensitive) this.privateSeen = `a sensitive file, ${path.basename(sensitive)}`;
+          else if (findSecrets(result.text).length) this.privateSeen = 'a credential in a tool result';
+        }
         const loop = watched && this.watchdog.after(tool.name, args, result.ok, watched);
         if (loop) result = {...result, text: `${result.text}\n\n${loop}`};
         if (!repeat && tool.name === 'read') this.noteRead(ctx, args, result, origin);
@@ -517,9 +547,13 @@ export class ToolHost extends EventEmitter {
       const scoped = this.scopedFor(name, args);
       if (scoped) result = {...result, text: `${result.text}\n\n${scoped}`};
     }
-    this.emit('activity', {phase: 'end', id, label: tool.label, summary, ok: result.ok, result: result.text, approvedBy, judge, origin, diff: result.diff} satisfies ToolActivity);
+    this.emit('activity', {phase: 'end', id, label: tool.label, summary, ok: result.ok, result: result.text, approvedBy, judge, origin, diff: result.diff, ...(warning ? {warning} : {})} satisfies ToolActivity);
     return {ok: result.ok, text: result.text, ...(result.images?.length ? {images: result.images} : {})}; // the diff is for the user, not the model
   }
+
+  /** exfilGuard: what outside content and what private data this conversation has seen (cleared by /clear). */
+  untrustedSeen: string | undefined;
+  privateSeen: string | undefined;
 
   /** The `watchdog` experiment: the main agent repeating a failing command or undoing its own edits. */
   readonly watchdog = new Watchdog();

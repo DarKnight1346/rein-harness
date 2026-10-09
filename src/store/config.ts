@@ -93,6 +93,10 @@ export type Config = {
   secretScan: 'off' | 'warn' | 'block';
   /** Static analysis of each request's changes at the end of the turn: semgrep (when installed) or off. */
   sast: 'off' | 'semgrep';
+  /** Flag instructions planted in web pages, search results and MCP results (the agent is told they're data). */
+  injectionScan: boolean;
+  /** Once outside content and private data have both been in a conversation, network calls need your yes. */
+  exfilGuard: boolean;
   /** Semgrep rules (--config): auto, a registry pack like p/owasp-top-ten, or a path. */
   sastConfig: string;
   /** OpenTelemetry export of turns, tool calls, tokens and cost (metadata only). Off unless set. */
@@ -161,6 +165,8 @@ export const DEFAULT_CONFIG: Config = {
   contextWarnings: true,
   secretScan: 'off',
   sast: 'off',
+  injectionScan: false,
+  exfilGuard: false,
   sastConfig: 'auto',
   steerShell: true,
   mcpSampling: 'ask',
