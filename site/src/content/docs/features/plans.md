@@ -112,7 +112,7 @@ subagents alike.
   Deny rules still block as usual.
 
 :::caution[Bypass mode doesn't bypass plan mode]
-With `/settings` → Approvals set to **Bypass**, a command the decision model can't clear is **refused**, not
+With `/settings` → General → Approvals set to **Bypass**, a command the decision model can't clear is **refused**, not
 prompted. The agent is told to stick to plain read-only commands (one per call, no loops or substitutions) and get
 on with the plan. See [Permissions](../permissions/).
 :::

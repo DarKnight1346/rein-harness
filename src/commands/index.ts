@@ -42,7 +42,7 @@ export const COMMANDS: {name: CommandName; description: string}[] = [
   {name: 'context', description: 'Show what the current context holds and how full it is'},
   {name: 'compact', description: 'Summarize the conversation with the compaction model; /compact <what to keep> focuses the summary'},
   {name: 'shells', description: 'Shell commands the agent started; open one to see its logs (/shells <id>)'},
-  {name: 'settings', description: 'Settings: status line, sidebar, approvals, sandbox, shell, subagents, goals, load balancing, notifications, updates, privacy, compaction, advanced; /settings <key> [value] for any key'},
+  {name: 'settings', description: 'Settings in tabs (General, Agents, Accounts, Safety, layout, Advanced): /settings [tab]; /settings <key> [value] for any key'},
   {name: 'update', description: 'Update the claude and codex CLIs and Rein'},
   {name: 'tui', description: 'Switch renderer: /tui fullscreen or /tui classic'},
   {name: 'clear', description: 'Clear the conversation'},

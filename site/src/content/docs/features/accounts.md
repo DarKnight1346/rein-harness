@@ -144,7 +144,7 @@ If your company pays for Claude or OpenAI through an API, add that too. Rein sti
 
 How they're used:
 
-- **Subscriptions always come first**, since you've already paid for them. By default API accounts are a **fallback**: a model is served by an API account only when no subscription account can serve it (all limited, or the model is only available through the API). `/settings` → **API accounts** → **Always** uses them alongside subscriptions, still after them.
+- **Subscriptions always come first**, since you've already paid for them. By default API accounts are a **fallback**: a model is served by an API account only when no subscription account can serve it (all limited, or the model is only available through the API). `/settings` → **Accounts → API accounts** → **Always** uses them alongside subscriptions, still after them.
 - **No usage windows.** API accounts are pay-per-use, so `/usage` has no 5-hour or weekly bars for them, and Rein never sends them background "usage ping" requests.
 - **Out of credit, or a bad key?** The account is parked like a failed login ("Credit balance is too low", "invalid API key") until you fix it in `/login`, and work fails over to another account.
 - **Your shell's keys don't leak in.** Rein removes `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `CLAUDE_CODE_USE_BEDROCK` and similar variables from every account's environment, and gives each account only its own settings. A Bedrock account can't turn your subscription into a Bedrock one, or the other way round.
@@ -202,7 +202,7 @@ Rein spots a limit from the CLI's own signals: Claude's `rate_limit_event` or it
    turn: `Every account for Sonnet is at its limit — earliest reset 5:30 PM. Waiting, then continuing (Esc stops).`
    The status line shows `◷ Every account is at its limit · continuing at 5:30 PM (in 1h 12m)` until then. It
    checks every minute, so an account freed early is used right away. A goal left running overnight keeps going.
-   Resets more than 12 hours away (a weekly limit) aren't waited for, and `/settings` → **Limits** turns waiting
+   Resets more than 12 hours away (a weekly limit) aren't waited for, and `/settings` → **Accounts → Limits** turns waiting
    off (`waitForLimits`), so Rein stops with that message instead.
 5. After 5 attempts Rein stops with `gave up after several failovers`.
 
@@ -227,14 +227,14 @@ It moves when:
 - the cache is gone anyway (after compaction, or 60 minutes idle) **and** another account scores at least
   15 points better.
 
-Switch to `Sticky` in `/settings → Load balancing` to stay on one account until it can't continue. The full
+Switch to `Sticky` in `/settings → Accounts → Load balancing` to stay on one account until it can't continue. The full
 algorithm is in [Load balancing](../../internals/load-balancing/).
 
 ## Privacy
 
 Privacy mode is on by default. Accounts show as `Claude Account 1`, `Codex Account 1` and so on everywhere,
 including notices and windows, so you can share screenshots safely. Turn it off in
-`/settings → Privacy` to see emails instead.
+`/settings → General → Privacy` to see emails instead.
 
 ## Gotchas
 

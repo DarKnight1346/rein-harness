@@ -285,7 +285,7 @@ export function FullscreenApp({resume}: {resume: Resume}) {
       case 'settings':
         return (
           <Window title="Configure" width={windowWidth} height={TABBED_HEIGHT} onClose={r.closeOverlay}>
-            <ConfigureScreen bare onClose={r.closeOverlay} onChange={r.bump} />
+            <ConfigureScreen bare onClose={r.closeOverlay} onChange={r.bump} initialTab={overlay.tab} />
           </Window>
         );
       case 'usage':

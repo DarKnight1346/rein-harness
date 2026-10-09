@@ -56,6 +56,7 @@ import {accountName, hidingIdentity, redact} from './privacy.js';
 import nodePath from 'node:path';
 import {cloneMissing, findWorkspace} from '../workspace/index.js';
 import {CONFIG_KEYS, defaultValue, formatValue, keyInfo, parseValue} from '../store/configKeys.js';
+import {TAB_TITLES} from './ConfigureScreen.js';
 import {estimateGoalCost} from '../goals/estimate.js';
 import {loadPolicy, type PolicyRule} from '../policy.js';
 import {reinConfigDir} from '../store/paths.js';
@@ -101,7 +102,7 @@ export type Overlay =
   /** `/vault set NAME`: enter the value, hidden. */
   | {name: 'vault'; secret: string}
   | {name: 'model'}
-  | {name: 'settings'}
+  | {name: 'settings'; tab?: string}
   | {name: 'approval'; req: ApprovalRequest; resolve(d: ApprovalDecision): void; position: number; total: number}
   | {name: 'import'; rows: AccountRow[]}
   | {name: 'trust'; hooks: ProjectHooks}
@@ -1763,6 +1764,11 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
           } catch (err) {
             log('error', `Couldn't import: ${(err as Error).message}`);
           }
+          break;
+        }
+        // /settings general|agents|…: open on that tab.
+        if (sub && TAB_TITLES.some((t) => t.toLowerCase() === parsed.args.trim().toLowerCase())) {
+          setOverlay({name: 'settings', tab: parsed.args.trim()});
           break;
         }
         // /settings keys · /settings <key> [<value> | reset]: any key in config.json, from the prompt.

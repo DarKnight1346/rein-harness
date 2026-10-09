@@ -196,7 +196,7 @@ Privacy mode is on by default, so you can share screenshots without editing them
 - Your home folder shows as `~`.
 - Your OS username shows as `user` when it's 5 or more characters, so short names don't match ordinary words.
 
-To see real emails and paths, go to `/settings → Privacy` (or set `hidePersonalInfo` to `false`).
+To see real emails and paths, go to `/settings → General → Privacy` (or set `hidePersonalInfo` to `false`).
 
 ## Math and right-to-left text
 
@@ -244,7 +244,7 @@ Set `notifyUrl` in `config.json` and Rein pings your phone:
 | **Compaction** | Auto-compact at 50, 60, 70, **80**, 90 or 95% of the context window (mid-turn too; the agent keeps working), or Off (only `/compact`, or when a model rejects a full context) | `autoCompactPct` |
 
 :::note
-Rein reads and searches files without asking in every approval mode. The Approvals tab controls what happens when the agent wants to change something. See [Permissions](../permissions/).
+Rein reads and searches files without asking in every approval mode. The Approvals setting (`/settings` → General) controls what happens when the agent wants to change something. See [Permissions](../permissions/).
 :::
 
 ## Related

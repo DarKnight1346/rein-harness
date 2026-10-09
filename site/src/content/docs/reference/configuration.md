@@ -49,7 +49,7 @@ Changing `advisorModel`, `subagentModel` or `subagentPriority` changes which too
 
 | Key | Type | Default | Meaning | Set in |
 | --- | --- | --- | --- | --- |
-| `loadBalancing` | `"balanced"` \| `"sticky"` | `"balanced"` | `balanced` moves a conversation to a better account only at cache-cold moments or near a limit. New chats and subagents start on the least-used account. `sticky` stays on one account until it is limited. | `/settings` → Load balancing |
+| `loadBalancing` | `"balanced"` \| `"sticky"` | `"balanced"` | `balanced` moves a conversation to a better account only at cache-cold moments or near a limit. New chats and subagents start on the least-used account. `sticky` stays on one account until it is limited. | `/settings` → Accounts → Load balancing |
 | `autoSwitchThreshold` | number (0–1) | `0.7` | Mid-conversation, auto routing switches models only when the decider's "is this a different kind of task?" probability is at least this. Below it, the current model keeps the conversation (and its warm cache). | `/settings <key>`, `/settings` → Advanced |
 | `autoMinConfidence` | number (0–1) | `0.45` | Below this confidence in its model choice, auto routing uses the default model instead. | `/settings <key>`, `/settings` → Advanced |
 | `maxUsedPct` | number (0–100) | `98` | An account counts as exhausted at this used %. An account is healthy only while its tightest window has more than `100 − maxUsedPct` points of headroom. An account with no usage data yet counts as 50% headroom, so it stays healthy. | `/settings <key>`, `/settings` → Advanced |
@@ -60,8 +60,8 @@ How these play together is covered in [load balancing](../../internals/load-bala
 
 | Key | Type | Default | Meaning | Set in |
 | --- | --- | --- | --- | --- |
-| `toolApproval` | `"ask"` \| `"auto"` \| `"bypass"` | `"ask"` | What happens when the agent calls a tool that changes things: file writes, edits and deletes, plus `shell`, `image_generate`, `mcp_add`/`mcp_remove` and MCP tools without `readOnlyHint`. `ask` prompts you. `auto` lets the decision model allow changes that clearly match your request (p ≥ 0.85) and asks you about everything else. It never auto-denies. `bypass` allows all, except credentials outside the project, which always ask. Also the default for `rein -p --permission-mode`. | `/settings` → Approvals |
-| `worktrees` | string | `"auto"` | `auto`: subagents working alongside other work get their own git worktree, merged back when they finish. `off`: subagents always edit the project directly. | `/settings` → Worktrees |
+| `toolApproval` | `"ask"` \| `"auto"` \| `"bypass"` | `"ask"` | What happens when the agent calls a tool that changes things: file writes, edits and deletes, plus `shell`, `image_generate`, `mcp_add`/`mcp_remove` and MCP tools without `readOnlyHint`. `ask` prompts you. `auto` lets the decision model allow changes that clearly match your request (p ≥ 0.85) and asks you about everything else. It never auto-denies. `bypass` allows all, except credentials outside the project, which always ask. Also the default for `rein -p --permission-mode`. | `/settings` → General → Approvals |
+| `worktrees` | string | `"auto"` | `auto`: subagents working alongside other work get their own git worktree, merged back when they finish. `off`: subagents always edit the project directly. | `/settings` → Agents → Worktrees |
 | `lsp` | `"auto"` \| `"off"` | `"auto"` | Built-in [code intelligence](../../features/code-intelligence/): Rein runs language servers itself and, when the agent finishes a turn, sends back problems its changes left. `"off"` never starts one. | `/settings <key>`, `/settings` → Advanced |
 | `lspIdleMinutes` | number | `10` | Stop a built-in language server after this many minutes unused. | `/settings <key>`, `/settings` → Advanced |
 | `prices` | object | `{}` | USD per million tokens for models without a built-in price, or to replace one: `{"codex:my-model": {"input": 1.5, "cached": 0.15, "output": 6}}` (`write5m`, `write1h` optional). See [Cost & budgets](../../features/cost/). | `/settings <key>`, `/settings` → Advanced |
@@ -70,7 +70,7 @@ How these play together is covered in [load balancing](../../internals/load-bala
 | `otel` | object | unset (off) | OpenTelemetry export of turns, tool calls, tokens and cost: `{"endpoint": "http://localhost:4318", "headers": {…}, "serviceName": "rein"}`. Metadata only. See [Observability](../../features/observability/). | `/settings <key>`, `/settings` → Advanced |
 | `experiments` | string[] | `[]` | Efficiency experiments to turn on by name, or `-name` to turn a default one off; see [Experiments](#experiments). | `/settings <key>`, `/settings` → Advanced |
 | `lspServers` | object | — | Use your own server command instead of Rein's, per server id: `{"python": {"command": "/path/to/server", "args": ["--stdio"]}}`. | `/settings <key>`, `/settings` → Advanced |
-| `waitForLimits` | boolean | `true` | When every account for the model is at its limit and no other model can take over, wait for the earliest reset (up to 12 hours) and continue the turn. `false` stops with `Every account for … is at its limit`. | `/settings` → Limits |
+| `waitForLimits` | boolean | `true` | When every account for the model is at its limit and no other model can take over, wait for the earliest reset (up to 12 hours) and continue the turn. `false` stops with `Every account for … is at its limit`. | `/settings` → Accounts → Limits |
 | `secretScan` | `"off"` \| `"warn"` \| `"block"` | `"off"` | A `write` or `edit` that adds something that looks like a credential: tell the agent (`warn`) or refuse the change (`block`). When on, credentials are also masked in saved conversations. See [Secret scanning](../../features/permissions/#secret-scanning). | `/settings secretScan`, `/settings` → Advanced |
 | `sast` | `"off"` \| `"semgrep"` | `"off"` | At the end of a turn, run Semgrep (when installed) on the files the request changed; findings on added lines go back to the agent. See [Static analysis with Semgrep](../../features/code-intelligence/#static-analysis-with-semgrep). | `/settings sast`, `/settings` → Advanced |
 | `sastConfig` | string | `"auto"` | Semgrep rules: `auto`, a registry pack like `p/owasp-top-ten`, or a path to your own rules. | `/settings sastConfig`, `/settings` → Advanced |
@@ -88,21 +88,21 @@ How these play together is covered in [load balancing](../../internals/load-bala
 | `trackers` | array | `[]` | [Issue trackers](../../features/trackers/) that hand work to Rein: `{kind: "github" \| "linear" \| "gitlab" \| "azure" \| "jira", project, url, email, label, model}`. Tokens go in the vault. | `/settings <key>`, `/settings` → Advanced |
 | `trackerPollMinutes` | number | `2` | How often Rein looks for new issues. | `/settings <key>`, `/settings` → Advanced |
 | `notifyUrl` | string | `""` | Notifications on your phone: a URL Rein POSTs to when an approval has waited 30 s, and when work that took a while is done. [ntfy](https://ntfy.sh) (`https://ntfy.sh/your-topic`), Slack and Discord incoming webhooks are formatted for them; anything else gets `{"title", "message"}` JSON. See [Phone notifications](../../features/tui/#phone-notifications). | `/settings <key>`, `/settings` → Advanced |
-| `attribution` | boolean | `true` | Commits and pull requests the agent writes end with the line `Co-Authored by [Rein Harness](https://github.com/DarKnight1346/rein-harness)` (Rein's system prompt asks for it). `false` drops the instruction. | `/settings` → Attribution |
+| `attribution` | boolean | `true` | Commits and pull requests the agent writes end with the line `Co-Authored by [Rein Harness](https://github.com/DarKnight1346/rein-harness)` (Rein's system prompt asks for it). `false` drops the instruction. | `/settings` → General → Attribution |
 | `provenance` | boolean | `false` | Commits and PRs the agent makes end with `Rein-Session`, `Rein-Model` and `Rein-Goal` trailers, filled in by the shell. See [Provenance](../../features/pull-requests/#provenance-on-agent-commits). | `/settings provenance`, `/settings` → Advanced |
 | `prMaxLines` | number | `0` | Tell you (not the agent) when the branch changes more lines than this against its base. `0` = off. See [Smaller PRs](../../features/pull-requests/#smaller-prs). | `/settings prMaxLines`, `/settings` → Advanced |
 | `voiceModel` | string | `"base.en-q5_1"` | The whisper.cpp model for [voice input](../../features/voice/). English-only by default; `"base-q5_1"`, `"small-q5_1"` and so on understand other languages. Run `/voice setup` after changing it to download it. | `/settings <key>`, `/settings` → Advanced |
-| `collapsePastes` | boolean | `true` | Big pastes (more than 3 lines or 800 characters) show in the input as a `[Pasted text #1 +40 lines]` placeholder and are sent in full with your message. `false` pastes the text into the input as-is. | `/settings` → Paste |
-| `apiAccounts` | string | `"fallback"` | When pay-per-use API accounts (Console, Bedrock, Vertex, OpenAI key) are used. `fallback`: only when no subscription account can serve the model. `always`: alongside subscriptions, after them. Subscriptions always come first. | `/settings` → API accounts |
-| `sandbox` | string | `"write"` | OS sandbox around the agent's shell commands. `write`: commands can only write inside the project, its working directories, the session scratchpad, temp folders and package caches (git hooks/config and agent/editor settings stay read-only). `strict`: the same, and no network except localhost. `off`: no sandbox. macOS uses `sandbox-exec`, Linux bubblewrap; Windows runs unsandboxed. | `/settings` → Sandbox |
-| `shellMaxMinutes` | number | `120` | Longest a foreground shell command may run. The agent picks a timeout per command (2 minutes by default) up to this cap. `0` = no limit. Background commands have no limit. | `/settings` → Shell |
+| `collapsePastes` | boolean | `true` | Big pastes (more than 3 lines or 800 characters) show in the input as a `[Pasted text #1 +40 lines]` placeholder and are sent in full with your message. `false` pastes the text into the input as-is. | `/settings` → General → Paste |
+| `apiAccounts` | string | `"fallback"` | When pay-per-use API accounts (Console, Bedrock, Vertex, OpenAI key) are used. `fallback`: only when no subscription account can serve the model. `always`: alongside subscriptions, after them. Subscriptions always come first. | `/settings` → Accounts → API accounts |
+| `sandbox` | string | `"write"` | OS sandbox around the agent's shell commands. `write`: commands can only write inside the project, its working directories, the session scratchpad, temp folders and package caches (git hooks/config and agent/editor settings stay read-only). `strict`: the same, and no network except localhost. `off`: no sandbox. macOS uses `sandbox-exec`, Linux bubblewrap; Windows runs unsandboxed. | `/settings` → General → Sandbox |
+| `shellMaxMinutes` | number | `120` | Longest a foreground shell command may run. The agent picks a timeout per command (2 minutes by default) up to this cap. `0` = no limit. Background commands have no limit. | `/settings` → General → Shell |
 | `backgroundCheckMinutes` | number | `60` | Every this many minutes of a background command's life, a fork of the agent (like `/btw`) checks whether it's still needed and stops it if not. Unsure keeps it running. `0` = off. | `/settings <key>`, `/settings` → Advanced |
 | `additionalDirectories` | string[] | `[]` | Extra working directories. Tools use them without asking, like the project folder. Relative paths resolve against the project, `~/` against your home folder. Directories that don't exist are skipped. | `/settings <key>`, `/settings` → Advanced (per session: `/add-dir`, `rein --add-dir`) |
-| `subagentLimit` | number | `10` | How many subagents may run at once. The agent is told the limit. | `/settings` → Subagents |
-| `goalMaxRounds` | number | `0` | Automatic continuations a `/goal` may take before it pauses itself. `0` = unlimited. | `/settings` → Goals |
-| `autoCompactPct` | number | `80` | Auto-compact when the context reaches this % of the model's window, including in the middle of a turn (the agent carries on from the summary). `0` = off (only `/compact`, or when a model rejects a full context). | `/settings` → Compaction |
+| `subagentLimit` | number | `10` | How many subagents may run at once. The agent is told the limit. | `/settings` → Agents → Subagents |
+| `goalMaxRounds` | number | `0` | Automatic continuations a `/goal` may take before it pauses itself. `0` = unlimited. | `/settings` → Agents → Goals |
+| `autoCompactPct` | number | `80` | Auto-compact when the context reaches this % of the model's window, including in the middle of a turn (the agent carries on from the summary). `0` = off (only `/compact`, or when a model rejects a full context). | `/settings` → Agents → Compaction |
 | `contextWarnings` | boolean | `true` | Say when the context passes 50%, 70% and 85% of the window, and which tool results take the most space. See [Context warnings](../../internals/context/#context-warnings). | `/settings contextWarnings`, `/settings` → Advanced |
-| `notifications` | string | `"terminal"` | Get your attention when Rein needs you (an approval, a question, a plan, project hooks to trust) or finishes work that took 20 s or more. `terminal`: bell plus an OSC 9 notification (iTerm2, WezTerm, kitty, Ghostty, Windows Terminal). `system`: also a desktop notification (macOS Notification Center, `notify-send` on Linux). `off`. | `/settings` → Notifications |
+| `notifications` | string | `"terminal"` | Get your attention when Rein needs you (an approval, a question, a plan, project hooks to trust) or finishes work that took 20 s or more. `terminal`: bell plus an OSC 9 notification (iTerm2, WezTerm, kitty, Ghostty, Windows Terminal). `system`: also a desktop notification (macOS Notification Center, `notify-send` on Linux). `off`. | `/settings` → General → Notifications |
 
 See [permissions](../../features/permissions/) for rules, plan mode and the full approval pipeline.
 
@@ -110,8 +110,8 @@ See [permissions](../../features/permissions/) for rules, plan mode and the full
 
 | Key | Type | Default | Meaning | Set in |
 | --- | --- | --- | --- | --- |
-| `autoUpdate` | boolean | `true` | On launch, check npm for a newer Rein and install it in the background. It takes effect on the next start. `REIN_NO_AUTOUPDATE` also turns it off. | `/settings` → Updates |
-| `hidePersonalInfo` | boolean | `true` | Privacy mode. Accounts show as "Claude Account 1" / "Codex Account 1", known emails in rendered text become those names, your home folder becomes `~` and your username becomes `user`. | `/settings` → Privacy |
+| `autoUpdate` | boolean | `true` | On launch, check npm for a newer Rein and install it in the background. It takes effect on the next start. `REIN_NO_AUTOUPDATE` also turns it off. | `/settings` → General → Updates |
+| `hidePersonalInfo` | boolean | `true` | Privacy mode. Accounts show as "Claude Account 1" / "Codex Account 1", known emails in rendered text become those names, your home folder becomes `~` and your username becomes `user`. | `/settings` → General → Privacy |
 | `tui` | `"fullscreen"` \| `"classic"` | unset (= fullscreen) | The renderer. `rein --classic` / `--fullscreen` override it for one run without saving. | `/tui fullscreen`, `/tui classic` |
 | `sidebar` | boolean | unset (= shown) | Whether the fullscreen sidebar is open. It auto-hides below 96 columns regardless. | `Ctrl+B` or the `[≡]` button |
 | `statusLine` | string[] | `["model","account","usage","context","sidebarToggle"]` | Top status line segments, left to right. | `/settings` → Status line |
@@ -136,28 +136,40 @@ Valid `sidebarSections` ids: `agents`, `accounts`, `models` (chat model picker),
 
 ## The `/settings` tabs
 
-`/settings` opens a window with tabs. Switch with click, `←` `→` or `Tab`. Close with `Esc`.
+`/settings` opens a window with seven tabs. Switch with click, `←` `→` or `Tab`; close with `Esc`. `/settings <tab>` (`/settings safety`) opens on that tab.
 
-| Tab | Key | Choices |
-| --- | --- | --- |
-| **Status line** | `statusLine` | Toggle segments (click / `Space`), reorder (`▲▼`, `Shift+↑↓` or `[` `]`), `r` resets |
-| **Sidebar** | `sidebarSections` | Same controls as Status line |
-| **Approvals** | `toolApproval` | Ask *(default)* · Auto · Bypass |
-| **Shell** | `shellMaxMinutes` | 10 minutes · 30 minutes · 1 hour · 2 hours *(default)* · 4 hours · 8 hours · No limit |
-| **Subagents** | `subagentLimit` | 1 · 2 · 3 · 5 · 10 *(default)* · 20 at a time |
-| **Goals** | `goalMaxRounds` | Unlimited *(default)* · 10 · 25 · 50 · 100 · 250 continuations |
-| **Load balancing** | `loadBalancing` | Balanced *(default, cache-aware)* · Sticky |
-| **Sandbox** | `sandbox` | On *(default)* · Strict · Off |
-| **Worktrees** | `worktrees` | Automatic *(default)* · Off |
-| **Paste** | `collapsePastes` | Placeholder *(default)* · Plain text |
-| **Limits** | `waitForLimits` | Wait for the reset and continue *(default)* · Stop and tell me |
-| **Attribution** | `attribution` | On *(default)* · Off |
-| **API accounts** | `apiAccounts` | Fallback *(default)* · Always |
-| **Notifications** | `notifications` | Terminal *(default)* · Desktop · Off |
-| **Updates** | `autoUpdate` | Auto-update Rein *(default)* · Only when I run `/update` |
-| **Privacy** | `hidePersonalInfo` | Hide personal info *(default)* · Show emails and paths |
-| **Compaction** | `autoCompactPct` | Off · 50 · 60 · 70 · 80% *(default)* · 90 · 95% |
-| **Advanced** | every key | The whole config file as a list: `Enter` cycles a choice or on/off, or opens an editor for text, numbers, lists (comma-separated) and JSON; `r` resets the key to its default |
+| Tab | What's in it |
+| --- | --- |
+| **Status line** | `statusLine`: toggle segments (click / `Space`), reorder (`▲▼`, `Shift+↑↓` or `[` `]`), `r` resets |
+| **Sidebar** | `sidebarSections`: same controls as Status line |
+| **General** | Approvals (`toolApproval`), Sandbox (`sandbox`), Shell (`shellMaxMinutes`), Notifications (`notifications`), Paste (`collapsePastes`), Attribution (`attribution`), Updates (`autoUpdate`), Privacy (`hidePersonalInfo`) |
+| **Agents** | Subagents (`subagentLimit`), Goals (`goalMaxRounds`), Worktrees (`worktrees`), Compaction (`autoCompactPct`) |
+| **Accounts** | Load balancing (`loadBalancing`), Limits (`waitForLimits`), API accounts (`apiAccounts`) |
+| **Safety** | Secrets (`secretScan`), Semgrep (`sast`), Planted instructions (`injectionScan`), Data leaving (`exfilGuard`), MCP pinning (`mcpPinning`), Dependencies (`depCheck`) |
+| **Advanced** | Every key in the file as a list: `Enter` cycles a choice or on/off, or opens an editor for text, numbers, lists (comma-separated) and JSON; `r` resets the key to its default |
+
+In General, Agents, Accounts and Safety, `↑` `↓` pick a setting, and `Enter`, `Space` or a click cycles its value. The focused setting's explanation and all its choices show below the list; click a choice to pick it.
+
+| Setting | Choices |
+| --- | --- |
+| Approvals | Ask *(default)* · Auto · Bypass |
+| Sandbox | On *(default)* · Strict · Off |
+| Shell | 10 minutes · 30 minutes · 1 hour · 2 hours *(default)* · 4 hours · 8 hours · No limit |
+| Notifications | Terminal *(default)* · Desktop · Off |
+| Paste | Placeholder *(default)* · Plain text |
+| Attribution | On *(default)* · Off |
+| Updates | Auto-update Rein *(default)* · Only when I run `/update` |
+| Privacy | Hide personal info *(default)* · Show emails and paths |
+| Subagents | 1 · 2 · 3 · 5 · 10 *(default)* · 20 at a time |
+| Goals | Unlimited *(default)* · 10 · 25 · 50 · 100 · 250 continuations |
+| Worktrees | Automatic *(default)* · Off |
+| Compaction | Off · 50 · 60 · 70 · 80% *(default)* · 90 · 95% |
+| Load balancing | Balanced *(default, cache-aware)* · Sticky |
+| Limits | Wait for the reset and continue *(default)* · Stop and tell me |
+| API accounts | Fallback *(default)* · Always |
+| Secrets, Dependencies | Off *(default)* · Warn · Block |
+| Semgrep | Off *(default)* · Semgrep |
+| Planted instructions, Data leaving, MCP pinning | Off *(default)* · On |
 
 ## A full example
 
