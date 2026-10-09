@@ -158,12 +158,13 @@ export const DEFAULT_CONFIG: Config = {
  * Experiments that measured better than plain Claude Code (cost, time and tasks solved, epic benchmark)
  * and are now on unless turned off with `-name` in `experiments`. These change no feature you see.
  */
-export const DEFAULT_EXPERIMENTS = ['lean-subagents', 'compact-read', 'outline-reads', 'shell-cap', 'faithful-compaction', 'verify-requirements'];
+export const DEFAULT_EXPERIMENTS = ['lean-subagents', 'compact-read', 'outline-reads', 'shell-cap', 'faithful-compaction'];
 /**
  * Also on in `rein -p`, where they were measured: a one-off run has no idle pauses (5-minute cache), no
- * one reading a task list, MCP tools or a long final reply, and no one to mind a capped context.
+ * one reading a task list, MCP tools or a long final reply, no one to mind a capped context, and a
+ * task long enough that an extra turn checking every requirement is cheap next to it.
  */
-export const HEADLESS_EXPERIMENTS = ['lazy-tools', 'no-todo', 'brief-final', 'context-cap', 'cache-5m'];
+export const HEADLESS_EXPERIMENTS = ['lazy-tools', 'no-todo', 'brief-final', 'context-cap', 'cache-5m', 'verify-requirements'];
 /** Defaults for this process only (`rein -p` adds HEADLESS_EXPERIMENTS). */
 const processDefaults: string[] = [];
 export function addDefaultExperiments(names: string[]): void {

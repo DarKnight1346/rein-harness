@@ -172,7 +172,7 @@ To fail a CI step on the *content* of the answer, check `result` yourself (see t
 
 ## Tuned for one-off runs
 
-`rein -p` turns on a few [experiments](../../reference/configuration/#experiments) that pay off on a single unattended task: rarely needed tools behind one `tool` entry (`lazy-tools`), no task list (`no-todo`), a short final reply (`brief-final`), compaction at 200K tokens (`context-cap`) and a 5-minute Claude prompt cache (`cache-5m`, cheaper to write when nothing pauses). Put `-name` in `experiments` to turn one off.
+`rein -p` turns on a few [experiments](../../reference/configuration/#experiments) that pay off on a single unattended task: rarely needed tools behind one `tool` entry (`lazy-tools`), no task list (`no-todo`), a short final reply (`brief-final`), compaction at 200K tokens (`context-cap`), a 5-minute Claude prompt cache (`cache-5m`, cheaper to write when nothing pauses) and a check of every requirement before it finishes (`verify-requirements`). Put `-name` in `experiments` to turn one off.
 
 ## Hooks in headless runs
 

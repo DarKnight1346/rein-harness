@@ -13,7 +13,7 @@ const {Runtime} = await import('../src/runtime.js');
 /** Just what stopHook reads: config, the conversation, and a code check with nothing to report. */
 function runtime(experiments: string[], reply: string) {
   const r = Object.create(Runtime.prototype);
-  r.config = {experiments: [...experiments, '-verify-requirements']};
+  r.config = {experiments};
   r.engine = {transcript: {id: 't', messages: [{role: 'user', text: 'Implement the parser change'}, {role: 'assistant', text: reply}]}};
   r.lsp = {turnEnd: async () => undefined};
   r.keptGoing = 0;

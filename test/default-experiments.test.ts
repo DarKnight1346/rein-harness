@@ -7,7 +7,7 @@ describe('experiments', () => {
     const on = activeExperiments({experiments: ['-shell-cap', 'keep-going']});
     expect(on).not.toContain('shell-cap');
     expect(on).toContain('keep-going');
-    expect(on).toContain('verify-requirements');
+    expect(on).toContain('outline-reads');
     expect(activeExperiments({experiments: []})).not.toContain('no-todo'); // interactive keeps the task list
     addDefaultExperiments(HEADLESS_EXPERIMENTS); // what `rein -p` does
     expect(activeExperiments({experiments: []})).toContain('cache-5m');
