@@ -105,7 +105,7 @@ agent works by default ships as an experiment (`experiments` in config) until it
 | 42 | Schema migration safety | Flag lock-heavy migrations, missing backfills and irreversible steps. | features/contracts/#migration-safety | done |
 | 43 | Codemod synthesis | For repetitive changes, write a deterministic script (jscodeshift, OpenRewrite, Comby) instead of hand edits. | features/contracts/#codemods-for-repetitive-changes | done |
 | 44 | Migration playbooks | Skills such as Java 8 to 21, Python 2 to 3, React classes to hooks. | features/contracts/#migration-playbooks | done |
-| 45 | Dead code and stale-flag campaigns | Find and remove unused code and fully rolled-out flags. |  | todo |
+| 45 | Dead code and stale-flag campaigns | Find and remove unused code and fully rolled-out flags. | features/contracts/#dead-code-and-stale-flags | done |
 
 ## Wave 8: Sessions, environments and insight
 

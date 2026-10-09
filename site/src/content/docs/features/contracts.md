@@ -131,6 +131,46 @@ Big platform moves follow known paths. These built-in skills put the agent on on
 
 Add words after the command to steer it: `/migrate:java21 we're on 11 and Spring Boot 2.7`. For a path that isn't here, `/skill:create` writes your own playbook in the same shape.
 
+## Dead code and stale flags
+
+Code nobody calls and flags that were turned on for everyone a year ago both cost something: every reader has to understand them, and every change has to keep them working. Rein finds both and runs the cleanup as a campaign.
+
+### `/deadcode`
+
+```text title="rein"
+> /deadcode
+  ⎿ 3 definitions nothing else refers to (candidates: dynamic use can't be seen):
+      src/money.ts:3  const LEGACY_RATE
+      billing/charge.py:7  function old_export
+      pkg/util.go:4  func Orphan
+    /deadcode remove has the agent check each one and delete what is really unused.
+```
+
+It covers exported declarations in JS/TS, top-level functions and classes in Python (not `_private` ones), and exported functions and types in Go. A definition counts as dead when **no other file names it** and its own file mentions it only once, where it's defined.
+
+Entry points don't count: `index`, `main` and `app` files, the files `package.json` names (`main`, `bin`, `exports`), files re-exported whole (`export * from`), tests, configs, stories, migrations, and folders like `pages/`, `routes/` and `scripts/`. These are candidates. Code reached dynamically (string imports, reflection, framework conventions) can't be seen.
+
+`/deadcode remove` sends the list to the agent. It checks each one, deletes what's really unused along with whatever becomes unused with it, keeps the rest with a reason, and builds and tests.
+
+### `/flags`
+
+```text title="rein"
+> /flags
+  ⎿ 3 flags read in the code, 2 stale (! = fully on or off in the repo's flag files, or 90+ days old):
+      ! new-checkout  (fully on in the repo's flag files; 2 uses: web/checkout.tsx:12, web/cart.tsx:40)
+      ! legacy-pricing  (214 days old; 1 use: api/prices.py:88)
+        beta-search  (21 days old; 3 uses: web/search.tsx:9, …)
+```
+
+Flag reads are found through the usual SDK calls: LaunchDarkly (`variation`, `boolVariation`…), Unleash and generic `isEnabled`, OpenFeature (`getBooleanValue`…), GrowthBook (`isOn`, `getFeatureValue`), Flagsmith (`hasFeature`), Split (`getTreatment`) and Flipper (`Flipper.enabled?(:key)`). A flag is **stale** in either of two cases:
+
+- **Fully rolled out (or off) in the repo's own flag files.** That covers OpenFeature [flagd](https://flagd.dev) JSON (enabled with no targeting, or disabled), and JSON or YAML files of flags (`flags.json`, `features.yml`…) whose value is a plain boolean or `enabled` with no rules or a 100% rollout.
+- **90+ days since it first appeared**, according to git history.
+
+Rein doesn't ask your flag service (LaunchDarkly, Unleash…) about rollout. Flags that live only there are judged by age.
+
+`/flags remove <key>` has the agent remove the flag for good. It keeps the branch that's live (the one the flag files say; it asks you if they don't say), deletes the other, and cleans up what becomes unused, including tests of the removed branch and the flag's config entries. Then it builds, runs the tests, and reminds you to archive the flag in your flag service.
+
 ## Related
 
 - [Specs](../specs/): requirements and design before the change
