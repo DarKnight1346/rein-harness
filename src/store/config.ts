@@ -111,6 +111,8 @@ export type Config = {
   prMaxLines: number;
   /** A second model critiques a plan (and a spec's design) before you see it: off, the other provider's model, or the advisor. */
   planReview: 'off' | 'other' | 'advisor';
+  /** Run the agent's commands in the repo's dev container or Nix/devbox shell: off, auto (whichever the repo has), or one kind. */
+  devEnvironment: 'off' | 'auto' | 'devcontainer' | 'nix' | 'devbox';
   /** Org-wide code search: {"type": "sourcegraph" | "zoekt", "url": "…"}; the agent gets org_search. */
   codeSearch?: CodeSearchConfig;
   /** Local semantic index through Ollama: {} for the defaults, or {"model", "url"}. /index builds it; the agent gets semantic_search. */
@@ -191,6 +193,7 @@ export const DEFAULT_CONFIG: Config = {
   provenance: false,
   prMaxLines: 0,
   planReview: 'off',
+  devEnvironment: 'off',
   sastConfig: 'auto',
   steerShell: true,
   mcpSampling: 'ask',

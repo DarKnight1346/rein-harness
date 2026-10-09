@@ -24,6 +24,8 @@ export type Shell = {
   origin?: {agentId: number; name: string};
   /** Ran inside the OS sandbox (see sandbox.ts). */
   sandboxed?: boolean;
+  /** Ran in the repo's dev environment (devEnvironment). */
+  devEnv?: string;
   /** Runs in a pseudo-terminal (interactive: true): it can ask questions, the user can answer. */
   tty?: boolean;
   /** A terminal command that looks like it's waiting for the user (see waitingForInput). */
@@ -95,6 +97,8 @@ export class ShellManager extends EventEmitter {
   vault?: {env(): Record<string, string>; mask(text: string): string};
   /** More variables for every command (provenance: REIN_SESSION, REIN_MODEL, REIN_GOAL). */
   extraEnv?: () => Record<string, string>;
+  /** devEnvironment: the repo's devcontainer or Nix/devbox shell for the agent's commands. */
+  devEnv?: import('../env/devenv.js').DevEnv;
   private nextId = 1;
   private shells = new Map<number, Shell>();
   private procs = new Map<number, ChildProcess | {pid: number}>();
@@ -124,14 +128,17 @@ export class ShellManager extends EventEmitter {
   start(command: string, opts: {cwd: string; background: boolean; timeoutMs?: number; maxMs?: number; origin?: Shell['origin']; sandbox?: SandboxSpec; tty?: boolean}): {shell: Shell; done: Promise<Shell>} {
     const shell: Shell = {id: this.nextId++, command, cwd: opts.cwd, background: opts.background, startedAt: Date.now(), status: 'running', lines: [], dropped: 0, origin: opts.origin};
     this.shells.set(shell.id, shell);
-    const plain = shellFor(command);
-    const boxed = wrap(plain, opts.sandbox);
+    // In the dev container, the container is the boundary: the OS sandbox isn't applied on top.
+    const dev = this.devEnv?.apply(command, opts.cwd);
+    const plain = shellFor(dev?.command ?? command);
+    const boxed = dev?.container ? undefined : wrap(plain, opts.sandbox);
+    if (dev) shell.devEnv = this.devEnv!.current().kind;
     if (boxed) shell.sandboxed = true;
     const sh = boxed ?? plain;
-    if (opts.tty) return this.startTty(shell, sh, opts);
+    if (opts.tty) return this.startTty(shell, sh, {...opts, env: dev?.env});
     const child = spawn(sh.file, sh.args, {
       cwd: opts.cwd,
-      env: {...process.env, ...this.extraEnv?.(), ...this.vault?.env(), FORCE_COLOR: '0', CI: process.env.CI ?? '1', PAGER: 'cat', GIT_PAGER: 'cat'},
+      env: {...process.env, ...dev?.env, ...this.extraEnv?.(), ...this.vault?.env(), FORCE_COLOR: '0', CI: process.env.CI ?? '1', PAGER: 'cat', GIT_PAGER: 'cat'},
       stdio: ['ignore', 'pipe', 'pipe'],
       // Own process group → killTree reaches children (dev servers, watchers). Windows uses
       // taskkill /T instead, and a detached child there would open its own console window.
@@ -172,12 +179,12 @@ export class ShellManager extends EventEmitter {
    * command, plus the last RAW_KEEP bytes as they came, to repaint the screen when the user takes
    * over. When it goes quiet looking like a prompt, `waiting` is set and `input` emitted.
    */
-  private startTty(shell: Shell, shellCmd: {file: string; args: string[]}, opts: {cwd: string; background: boolean; timeoutMs?: number; maxMs?: number}): {shell: Shell; done: Promise<Shell>} {
+  private startTty(shell: Shell, shellCmd: {file: string; args: string[]}, opts: {cwd: string; background: boolean; timeoutMs?: number; maxMs?: number; env?: Record<string, string>}): {shell: Shell; done: Promise<Shell>} {
     shell.tty = true;
     // PowerShell's -NonInteractive makes Read-Host fail: the point here is to be interactive.
     const sh = {...shellCmd, args: shellCmd.args.filter((a) => a !== '-NonInteractive')};
     const {CI: _ci, FORCE_COLOR: _fc, NO_COLOR: _nc, ...base} = process.env;
-    const env = {...base, ...this.extraEnv?.(), ...this.vault?.env(), TERM: 'xterm-256color', PAGER: 'cat', GIT_PAGER: 'cat'} as Record<string, string>;
+    const env = {...base, ...opts.env, ...this.extraEnv?.(), ...this.vault?.env(), TERM: 'xterm-256color', PAGER: 'cat', GIT_PAGER: 'cat'} as Record<string, string>;
     const cols = process.stdout.columns || 100;
     const rows = process.stdout.rows || 30;
     const term: Term = {write: () => {}, resize: () => {}, raw: '', alt: false};

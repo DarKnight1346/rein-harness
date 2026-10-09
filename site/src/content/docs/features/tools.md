@@ -211,6 +211,25 @@ Pressing Esc or Ctrl+C to interrupt the agent also kills its foreground command.
 - **macOS / Linux:** `$SHELL -c` (falling back to `/bin/sh`).
 - **Windows:** **Git Bash** when it's installed, so commands use bash syntax as in Claude Code. Rein looks at `REIN_GIT_BASH_PATH`, then `CLAUDE_CODE_GIT_BASH_PATH`, then the standard install locations (`Program Files`, `Program Files (x86)`, `%LOCALAPPDATA%\Programs\Git`), then `bash.exe` next to `git` on your PATH. Without Git Bash it falls back to **PowerShell** (`-NoProfile -NonInteractive`), and the tool's description tells the model which one it has.
 
+### In the repo's own environment
+
+Many repos say exactly what they need to build: a dev container, a Nix flake, a devbox file. With **Dev environment** on (`/settings` → General, key `devEnvironment`), the agent's commands use it instead of whatever happens to be installed on your machine:
+
+| Repo has | How commands run |
+| --- | --- |
+| `.devcontainer/devcontainer.json` or `.devcontainer.json` | `devcontainer up` starts the container once (it can take a few minutes the first time). Then each command runs inside it with `devcontainer exec`, starting from the folder that matches the one on your machine |
+| `flake.nix` | `nix develop --command env -0` captures the shell's environment once, and its variables (PATH, compilers, SDKs) are added to every command, which still runs on your machine |
+| `shell.nix` / `default.nix` | The same, with `nix-shell` |
+| `devbox.json` | The same, with `devbox run` |
+
+`auto` uses whichever the repo has, a dev container first. You can also pick one kind. The environment starts with the agent's first command; `/env` shows its state and `/env up` starts it now. A Nix or devbox environment is captured again when its lock file changes.
+
+When the tool isn't installed (the [`devcontainer` CLI](https://github.com/devcontainers/cli), `nix`, `devbox`) or fails to start, commands run on your machine as usual, and Rein says why once. Commands in subagent worktrees, or in folders outside the project, also run on your machine, since they aren't inside the container.
+
+:::note
+Inside a dev container the container is the isolation, so Rein's [OS sandbox](../permissions/#the-command-sandbox) isn't applied on top. With Nix and devbox, commands run on your machine, so the sandbox applies as usual.
+:::
+
 ## Limits worth knowing
 
 - Every tool result is capped at 60,000 characters before it reaches the model.

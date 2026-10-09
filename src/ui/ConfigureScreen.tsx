@@ -40,6 +40,19 @@ export const CHOICE_TABS: ChoiceTabDef[] = [
     ],
   },
   {
+    title: 'Dev environment',
+    group: 'General',
+    key: 'devEnvironment',
+    description: "Run the agent's commands in the repo's own environment: its dev container (devcontainer exec) or its Nix / devbox shell. Commands run on this machine when the tool isn't installed.",
+    choices: [
+      {value: 'off', label: 'Off — commands run on this machine  (default)'},
+      {value: 'auto', label: 'Auto — whichever the repo has (.devcontainer, flake.nix, shell.nix, devbox.json)'},
+      {value: 'devcontainer', label: 'Dev container only'},
+      {value: 'nix', label: 'Nix shell only'},
+      {value: 'devbox', label: 'devbox only'},
+    ],
+  },
+  {
     title: 'Shell',
     group: 'General',
     key: 'shellMaxMinutes',

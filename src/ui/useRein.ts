@@ -70,6 +70,7 @@ import {branchMigrations, formatFindings} from '../contracts/migrations.js';
 import {collectStats, formatStats} from '../insight/stats.js';
 import {collectCache, formatCache} from '../insight/cache.js';
 import {describeJobs, loadJobs, scheduledProjects} from '../schedule/index.js';
+import {describeDevEnv, detectDevEnv} from '../env/devenv.js';
 import {deadCodeTask, findDeadCode, findFlags, flagRemovalTask, formatFlags, isStale} from '../contracts/deadcode.js';
 import {checkoutState, describeCheckout, sparseAdd} from '../workspace/sparse.js';
 import {buildIndex, DEFAULT_MODEL as EMBED_MODEL, formatSemanticHits, loadIndex, semanticSearch} from '../context/semantic.js';
@@ -1265,6 +1266,17 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
           if (!files.length) return log('info', 'No changes (vs HEAD). /owners <path> looks up a file or folder.');
           log('info', `Owners of ${arg || `your ${files.length} changed file${files.length === 1 ? '' : 's'}`}:\n${formatOwners(await ownersOf(root, files))}`);
         });
+        break;
+      }
+      case 'env': {
+        const found = detectDevEnv(process.cwd());
+        const mode = runtime.config.devEnvironment ?? 'off';
+        if (parsed.args.trim() === 'up') {
+          if (mode === 'off') log('info', `devEnvironment is off${found ? ` (this repo has a ${found})` : ''}: turn it on in /settings → General → Dev environment.`);
+          else void runtime.devEnv.ready().then(() => log('info', describeDevEnv(runtime.devEnv.current())));
+          break;
+        }
+        log('info', `${describeDevEnv(runtime.devEnv.current())}${mode === 'off' && found ? ` This repo has a ${found}: /settings → General → Dev environment runs commands in it.` : ''}`);
         break;
       }
       case 'schedule': {

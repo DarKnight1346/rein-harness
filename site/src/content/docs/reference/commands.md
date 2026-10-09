@@ -82,6 +82,7 @@ See [Goals](../../features/goals/) and [Plan mode](../../features/plans/).
 | | `main` *(or none)* | Switches back to the main agent. |
 | | `<id> <message>` | Sends a message to that subagent (useful in classic). |
 | `/shells` | *(none)* | Shell commands the agent started. Open one to see its logs (`k` kills it). |
+| `/env` | `[up]` | The dev environment the agent's commands run in (dev container, Nix or devbox shell) and its state; `up` starts it now instead of at the first command. See [In the repo's own environment](../../features/tools/#in-the-repos-own-environment) |
 | | `<id>` | Opens that shell's logs directly. |
 
 ### Project and permissions
