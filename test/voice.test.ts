@@ -37,8 +37,11 @@ posix('voice recording', () => {
     const v = await import('../src/voice/voice.js');
     const s = v.detect();
     const rec = new v.Recording(s.recorder!);
-    await new Promise((r) => setTimeout(r, 1200)); // node starting up (sox is quicker)
+    // Until the (fake) recorder has written something: node starting up takes longer on a busy machine.
+    const {statSync} = await import('node:fs');
+    for (let i = 0; i < 100 && !(statSync(rec.wav, {throwIfNoEntry: false})?.size ?? 0); i++) await new Promise((r) => setTimeout(r, 100));
+    await new Promise((r) => setTimeout(r, 200));
     const wav = await rec.stop();
     expect(await v.transcribe(s.whisper!, s.model, wav)).toBe('Run the tests and fix what fails.');
-  });
+  }, 20_000);
 });
