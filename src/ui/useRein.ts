@@ -76,6 +76,7 @@ import {formatGraph, mermaid} from '../system/services.js';
 import {graphFor} from '../system/tools.js';
 import {findServices} from '../system/services.js';
 import {buildSymbolGraph, crossRepo, formatLookup, indexRepos, lookup} from '../system/scip.js';
+import {findApiRefs, formatRefs} from '../system/api.js';
 import {deadCodeTask, findDeadCode, findFlags, flagRemovalTask, formatFlags, isStale} from '../contracts/deadcode.js';
 import {checkoutState, describeCheckout, sparseAdd} from '../workspace/sparse.js';
 import {buildIndex, DEFAULT_MODEL as EMBED_MODEL, formatSemanticHits, loadIndex, semanticSearch} from '../context/semantic.js';
@@ -1302,6 +1303,18 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
         void (arg ? Promise.resolve([arg]) : changedFiles(root)).then(async (files) => {
           if (!files.length) return log('info', 'No changes (vs HEAD). /owners <path> looks up a file or folder.');
           log('info', `Owners of ${arg || `your ${files.length} changed file${files.length === 1 ? '' : 's'}`}:\n${formatOwners(await ownersOf(root, files))}`);
+        });
+        break;
+      }
+      case 'refs': {
+        const target = parsed.args.trim();
+        if (!target) {
+          log('error', 'Usage: /refs <endpoint or RPC>, e.g. /refs POST /orders/{id} or /refs Ledger.Post');
+          break;
+        }
+        void graphFor(process.cwd()).then(async (g) => {
+          const r = await findApiRefs(process.cwd(), g.services, target);
+          log(r ? 'info' : 'error', r ? formatRefs(r) : 'Give an endpoint like POST /orders/{id} or an RPC like Ledger.Post (for a function or type, /symbols <name>).');
         });
         break;
       }

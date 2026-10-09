@@ -413,6 +413,16 @@ Label `SymbolRefs`. Approval: none (read-only). Only listed with the `system-gra
 
 Where it's defined and every use, across repos, from their SCIP indexes. See [Symbols across repos](../../features/system/#symbols-across-repos).
 
+### `api_refs`
+
+Label `ApiRefs`. Approval: none (read-only). Only listed with the `system-graph` [experiment](../configuration/#experiments) on.
+
+| Parameter | Type | Notes |
+| --- | --- | --- |
+| `target` **(required)** | string | An endpoint (`GET /users/{id}`) or an RPC (`Service.Method`) |
+
+The gateway route, the places it's served, and every call site across repos. See [Follow a call across repos](../../features/system/#follow-a-call-across-repos).
+
 ### `lsp_install`
 
 Label `InstallLanguageServer`. Approval: **always asks, even in bypass mode.**

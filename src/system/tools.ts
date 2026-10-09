@@ -1,6 +1,7 @@
 import type {ToolDef} from '../tools/registry.js';
 import {buildGraph, findServices, formatGraph, neighbours, type ServiceGraph} from './services.js';
 import {buildSymbolGraph, formatLookup, lookup} from './scip.js';
+import {findApiRefs, formatRefs} from './api.js';
 
 /** The graph, built once per few minutes (it reads every repo). */
 let cached: {root: string; at: number; graph: ServiceGraph} | undefined;
@@ -54,6 +55,27 @@ export function symbolRefsTool(experiments: () => string[], root: () => string):
       const g = buildSymbolGraph(findServices(root()));
       if (!g.repos.length) return {ok: false, text: 'no SCIP indexes (index.scip) in these repos: /symbols index writes them where the indexers are installed'};
       return {ok: true, text: formatLookup(lookup(g, String(args?.name ?? '')))};
+    },
+  };
+}
+
+/** `api_refs` (experiment system-graph): follow an endpoint or RPC from the gateway to the service to every caller. */
+export function apiRefsTool(experiments: () => string[], root: () => string): ToolDef {
+  return {
+    name: 'api_refs',
+    label: 'ApiRefs',
+    description: '',
+    describe: () =>
+      'Follow an HTTP endpoint ("POST /orders/{id}") or a gRPC method ("Ledger.Post") across every repo: the gateway route in front of it, where it is served (OpenAPI path, route registration or implementation), and every call site in the other services. For a function or type name, use symbol_refs.',
+    inputSchema: {type: 'object', properties: {target: {type: 'string', description: 'An endpoint ("GET /users/{id}") or an RPC ("Service.Method")'}}, required: ['target']},
+    mutating: false,
+    enabled: () => experiments().includes('system-graph'),
+    summarize: (a) => String(a?.target ?? ''),
+    async run(_ctx, args) {
+      const g = await graphFor(root());
+      const r = await findApiRefs(root(), g.services, String(args?.target ?? ''));
+      if (!r) return {ok: false, text: 'give an endpoint like "POST /orders/{id}" or an RPC like "Ledger.Post"'};
+      return {ok: true, text: formatRefs(r)};
     },
   };
 }

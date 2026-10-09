@@ -57,6 +57,35 @@ A symbol in one repo matches one in another when the package and the path to it 
 
 Within one repo, the agent's usual code intelligence (language servers) still answers go-to-definition and references. SCIP is what connects the repos.
 
+## Follow a call across repos
+
+An endpoint is a string, not a symbol: no language server connects `fetch(\`${base}/orders/${id}\`)` in the web app to `router.get('/orders/:id', …)` in the orders service. `/refs` does:
+
+```text title="rein"
+> /refs GET /orders/{id}
+  ⎿ GET /orders/{id}
+    Gateway:
+      gateway  services/gateway/ingress.yaml:6  - path: /orders
+    Served by:
+      orders  services/orders/openapi.yaml:3  /orders/{id}:
+      orders  services/orders/src/routes.ts:1  router.get('/orders/:id', getOrder);
+    Called from:
+      web  services/web/src/api.ts:1  export const order = (id) => fetch(`${base}/orders/${id}`);
+      mobile-bff  services/mobile-bff/app.py:1  resp = requests.get(f"{ORDERS}/orders/{order_id}")
+```
+
+**Endpoints** are matched whatever the parameter syntax: `{id}`, `:id`, `${id}`, `<id>`, `%s`, `'/orders/' + id`. Each match is sorted into one of three places:
+
+- **Gateway:** Kubernetes Ingress paths, and nginx, Kong, Envoy and Traefik config.
+- **Served by:** OpenAPI paths, and route registrations. That covers Express, Koa and Fastify routers, FastAPI and Flask decorators, Spring `@GetMapping`…, and Go's `HandleFunc`, gin, echo and chi.
+- **Called from:** call sites in code.
+
+When the method shows on the line (`axios.post`, `requests.get`, `method: 'POST'`, a one-argument `fetch` is a GET), calls with another method are left out. When it doesn't, the call is kept. Docs and tests aren't counted as callers.
+
+**gRPC methods** (`/refs Ledger.Post`) go from the `rpc` in the `.proto`, to its implementation in the service that owns it, to the calls in files that use a `LedgerClient` or `LedgerStub`.
+
+For a function or type, use [`/symbols <name>`](#symbols-across-repos). With the `system-graph` experiment on, the agent gets [`api_refs`](../../reference/tools/#api_refs) for the same search.
+
 ## Related
 
 - [Workspaces](../workspaces/): several repos as one system
