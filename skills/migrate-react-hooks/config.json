@@ -1,0 +1,5 @@
+{
+  "name": "migrate:react-hooks",
+  "description": "Plan converting React class components to function components with hooks, leaf components first, behaviour kept exactly",
+  "planMode": true
+}

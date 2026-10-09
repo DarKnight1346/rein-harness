@@ -36,7 +36,7 @@ describe('skills', () => {
     await mk(g, 'git-sync', 'unused default', {'config.json': JSON.stringify({name: 'git:sync', main: 'PROMPT.md', aliases: ['gs', 'help'], description: 'Sync with origin'}), 'PROMPT.md': 'Fetch and rebase.'});
     const skills = loadSkills(proj);
     const by = Object.fromEntries(skills.map((s) => [s.name, s]));
-    expect(Object.keys(by).sort()).toEqual(['audit', 'codemod', 'contract-tests', 'deploy', 'expand-contract', 'git:sync', 'help', 'init', 'plan', 'plan:deep', 'review', 'review:deep', 'skill:create', 'skill:edit']);
+    expect(Object.keys(by).sort()).toEqual(['audit', 'codemod', 'contract-tests', 'deploy', 'expand-contract', 'git:sync', 'help', 'init', 'migrate:java21', 'migrate:python3', 'migrate:react-hooks', 'plan', 'plan:deep', 'review', 'review:deep', 'skill:create', 'skill:edit']);
     expect([by['git:sync']!.body, by['git:sync']!.description, by['git:sync']!.files[0]]).toEqual(['Fetch and rebase.', 'Sync with origin', 'PROMPT.md']);
     expect(parseInput('/gs now', skills)).toMatchObject({kind: 'skill', skill: {name: 'git:sync'}}); // alias
     expect(parseInput('/help', skills)).toMatchObject({kind: 'command', name: 'help'}); // alias can't beat a command

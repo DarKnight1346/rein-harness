@@ -119,6 +119,18 @@ Renaming a function used in 300 files, moving every call site to a new API, swap
 
 With the `codemod-nudge` [experiment](../../reference/configuration/#experiments) on, Rein notices when the agent makes the **same hand edit in four files** within a request. It tells the agent to write a codemod for the rest. That happens once per change.
 
+## Migration playbooks
+
+Big platform moves follow known paths. These built-in skills put the agent on one. Each turns on [plan mode](../plans/) and plans the move as phases that build, pass the tests and ship on their own. Each one starts by working out where the code stands today: versions, dependencies, and the uses of whatever is going away.
+
+| Skill | The path |
+| --- | --- |
+| `/migrate:java21` | Java 8, 11 or 17 → 21. Build on JDK 21 while still targeting the old version, upgrading the build tool and plugins (Gradle 8.5+, Lombok, Mockito, Spring Boot 3.2+). Then dependencies, and the removed modules (`javax.xml.bind`…) and encapsulated internals (found with `jdeps --jdk-internals`). Then `release 21` with CI, Docker images and JVM flags. Records, pattern matching and virtual threads come last, in their own PRs. OpenRewrite's `UpgradeToJava21` does the mechanical parts when the build allows it. |
+| `/migrate:python3` | Python 2 → 3, staying runnable on Python 2 until the switch. First a test safety net and `__future__` imports, then a reviewed `futurize`/`modernize` pass. Bytes vs text at every I/O boundary, `/` vs `//`, iterators and old pickles are fixed by hand. Then dependencies, CI on both versions, and finally dropping Python 2 with `pyupgrade`. |
+| `/migrate:react-hooks` | React class components → function components with hooks. Components are inventoried and converted in batches, leaves first. Tests pin the behaviour first, since Enzyme tests of internals need rewriting. A conversion table covers state, lifecycles, derived state, `memo`, refs and `useImperativeHandle`. Error boundaries stay classes. |
+
+Add words after the command to steer it: `/migrate:java21 we're on 11 and Spring Boot 2.7`. For a path that isn't here, `/skill:create` writes your own playbook in the same shape.
+
 ## Related
 
 - [Specs](../specs/): requirements and design before the change
