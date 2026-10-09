@@ -467,14 +467,14 @@ Drop superseded reads of the same file, routine listings, and output that no lon
       const findings = await this.crossReview().catch(() => undefined);
       if (findings) return {kind: 'hook', reason: findings};
     }
-    // verify-requirements: once per request, before the agent stops after changing files, it checks its
-    // change against every requirement in the request (hard tasks fail on the one it skipped).
+    // verify-requirements: once per request, before the agent stops after changing files, it runs its
+    // change against every requirement in the request (hard tasks fail on the edge case it never tried).
     if (!active && (this.config.experiments ?? []).includes('verify-requirements') && !this.verified && this.engine && this.checkpoints.changedSince(this.currentTurn()).length) {
       this.verified = true;
       return {
         kind: 'hook',
         reason:
-          "Before you finish: list every requirement and edge case in the user's request, and for each one say where your change handles it. Fix anything missing or only partly done. If everything is covered, reply with a short confirmation and stop: don't redo work.",
+          "Before you finish, check your change against the user's request line by line. For every concrete requirement (each behaviour, error case and its message, edge case, name, value and attribute), run it: one quick script or test that exercises several requirements at once is fine, rereading the code is not. Fix whatever fails or is missing, then run the project's tests. If everything already passes, reply with a short confirmation and stop: don't redo work.",
       };
     }
     // escalate: the check already reported these and the agent's follow-up turn left them: a stronger
