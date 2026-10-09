@@ -66,6 +66,31 @@ For every reply, Rein records the turn's input tokens, how many were cached, and
 
 A turn that read under half its input from the cache with none of these reasons shows as **unexplained**. That usually means the system prompt or tool list changed mid-conversation, or the provider evicted the cache early. The data is recorded from this version of Rein on, so older conversations don't count. `/cache 90` and `/cache all` work like `/stats`.
 
+## Benchmark on your own repo
+
+Public benchmarks measure someone else's code. `rein bench` measures models and settings on yours, using changes your team already made:
+
+```sh
+rein bench init                      # pick 10 recent commits as tasks
+rein bench run --model claude:opus --model codex:gpt-5.5
+```
+
+```text
+Running 10 tasks × 2 models (real runs on your accounts)…
+  3f9a21c0 claude:opus: passed (212s, $0.48)
+  3f9a21c0 codex:gpt-5.5: failed (140s, $0.19)
+  …
+10 tasks from this repo's history:
+  claude:opus                    8/10 passed (80%) · 231s a task · $0.52 a task
+  codex:gpt-5.5                  6/10 passed (60%) · 162s a task · $0.21 a task
+```
+
+1. **Tasks.** `rein bench init` picks recent commits that change code *and* its tests (non-merge, under 400 lines), and saves them to `.rein/bench/tasks.json`. Each task is the commit message as the prompt, the code before the commit, and the commit's test files. Edit the file to drop tasks or reword prompts that only make sense with context.
+2. **Runs.** For each task and model, Rein exports the code as it was before the commit into a fresh folder (`git archive`, so there's no history to read the answer from). It runs `rein -p` there with that model in bypass mode.
+3. **Judging.** Then it puts in the commit's own test files, as they were after the commit, and runs the test command (detected like [`/bestof`](../subagents/#best-of-both-providers), or `--test "<cmd>"`). Passing those hidden tests means the task was done.
+
+Results go to `.rein/bench/results/` with the time and cost of every run. `--tasks 3` runs only the first three, which is useful for trying it cheaply. Every run uses your accounts like any other, so a full run of 10 tasks on two models is 20 real agent runs.
+
 ## Onboarding tours
 
 A new teammate's first week goes on finding the ten files that explain the rest. `/tour` writes that path down:

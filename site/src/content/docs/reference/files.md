@@ -83,6 +83,7 @@ When Rein imports your existing `claude` and `codex` logins on first run, it reg
 | `.rein/MEMORY.md` | [Project memory](../../features/memory/): facts the agent saved with `remember`, loaded into every session here. Edit it freely | Usually |
 | `.rein/MEMORY.md` in a workspace folder | [Workspace memory](../../features/workspaces/#workspace-memory): facts shared by every repo of the workspace (`remember` with `scope: "workspace"`) | Usually |
 | `.rein/plans/` | Saved plans, `YYYY-MM-DD-<slug>.md`, with `## Milestones` checkboxes | Yes |
+| `.rein/bench/` | [`rein bench`](../../features/insight/#benchmark-on-your-own-repo): `tasks.json` (tasks from the repo's commits) and `results/` (each run's results) | Optional |
 | `.rein/schedule.yaml` | [Scheduled jobs](../../features/headless/#scheduled-jobs): a cron time and a prompt each | Yes |
 | `.rein/architecture.yaml` | [Architecture rules](../../features/specs/#architecture-guardrails): layers, and which may import which. Checked on every edit | Yes |
 | `.rein/specs/<name>/` | [Specs](../../features/specs/): `requirements.md`, `design.md`, `tasks.md` (an approved stage starts with `<!-- approved YYYY-MM-DD -->`), and `trace.json` / `trace.md` linking requirements to code | Yes |

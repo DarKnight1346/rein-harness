@@ -117,7 +117,7 @@ agent works by default ships as an experiment (`experiments` in config) until it
 | 61 | Environment bootstrap | Start each repo's devcontainer or Nix shell for the agent's commands. | features/tools/#in-the-repos-own-environment | done |
 | 62 | ACP server mode | Run Rein as an Agent Client Protocol agent in Zed, JetBrains and other ACP editors. |  | todo |
 | 73 | Prompt-cache analytics | Cache hit rates and what breaks the cache. | features/insight/#the-prompt-cache | done |
-| 74 | Benchmark on your own repos | `rein bench`: replay tasks from the repo's history to compare models and settings. |  | todo |
+| 74 | Benchmark on your own repos | `rein bench`: replay tasks from the repo's history to compare models and settings. | features/insight/#benchmark-on-your-own-repo | done |
 | 75 | Onboarding tour | Generate a guided tour of a repo or service. | features/insight/#onboarding-tours | done |
 | 76 | Scheduled jobs | Recurring local runs (dependency bumps, flaky-test triage) on a cron-like schedule. | features/headless/#scheduled-jobs | done |
 

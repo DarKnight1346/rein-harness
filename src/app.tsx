@@ -18,6 +18,7 @@ if (args.includes('--help') || args.includes('-h')) {
   console.log(`Usage: rein [--continue|-c] [--classic|--fullscreen]
        rein -p "<prompt>" [--model m] [--output-format text|json|stream-json]
        rein schedule [list | run [--due | <job>] | install | uninstall]
+       rein bench [init [--count n] | run --model m [--model m2] [--tasks n] [--test cmd]]
        rein --update | --version
 
   -c, --continue [id]   pick a saved conversation from this project to continue (or continue <id>)
@@ -49,6 +50,44 @@ if (args.includes('--update')) {
     console.log(line.level ? color[line.level](text) : text);
   }
   process.exit(failed ? 1 : 0);
+}
+if (args[0] === 'bench') {
+  // Benchmarks on this repo's own history: tasks from commits, run per model, judged by the commits' tests.
+  const b = await import('./insight/bench.js');
+  const root = process.cwd();
+  const opt = (name: string) => {
+    const i = args.indexOf(name);
+    return i >= 0 ? args[i + 1] : undefined;
+  };
+  const sub = args[1] ?? 'show';
+  if (sub === 'init') {
+    const tasks = await b.pickTasks(root, Number(opt('--count') ?? 10));
+    if (!tasks.length) {
+      console.error('rein: no suitable commits (non-merge, changing code and its tests, under 400 lines)');
+      process.exit(1);
+    }
+    console.log(`${tasks.length} tasks saved to ${b.saveTasks(root, tasks)}:\n${tasks.map((t) => `  ${t.id}  ${t.prompt.split('\n')[0]!.slice(0, 70)}  (${t.lines} lines, ${t.tests.length} test file${t.tests.length === 1 ? '' : 's'})`).join('\n')}\nEdit the file to drop or reword tasks, then: rein bench run --model <a> --model <b>`);
+    process.exit(0);
+  }
+  if (sub === 'run') {
+    const models = args.flatMap((x, i) => (x === '--model' && args[i + 1] ? [args[i + 1]!] : []));
+    const tasks = b.loadTasks(root).slice(0, Number(opt('--tasks') ?? Infinity));
+    if (!tasks.length) {
+      console.error('rein: no tasks yet: rein bench init');
+      process.exit(1);
+    }
+    if (!models.length) {
+      console.error('rein: name the models to compare: rein bench run --model claude:opus --model codex:gpt-5.5');
+      process.exit(1);
+    }
+    console.log(`Running ${tasks.length} task${tasks.length === 1 ? '' : 's'} × ${models.length} model${models.length === 1 ? '' : 's'} (real runs on your accounts)…`);
+    const results = await b.runBench(root, tasks, models, {...(opt('--test') ? {test: opt('--test')} : {}), log: (l) => console.log(`  ${l}`)});
+    console.log(`${b.formatBench(results)}\nSaved to ${b.saveResults(root, results)}`);
+    process.exit(0);
+  }
+  const tasks = b.loadTasks(root);
+  console.log(tasks.length ? `${tasks.length} bench tasks in .rein/bench/tasks.json. rein bench run --model <a> --model <b> compares models on them.` : 'No bench tasks yet: rein bench init picks them from this repo\'s history.');
+  process.exit(0);
 }
 if (args[0] === 'schedule') {
   // Scheduled jobs (.rein/schedule.yaml): list, run (due ones, or one by name), install / uninstall the OS entry.

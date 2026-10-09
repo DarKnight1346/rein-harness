@@ -9,6 +9,7 @@ rein -p "<prompt>" [--model m] [--effort e] [--output-format text|json|stream-js
                    [--permission-mode ask|auto|bypass|plan] [--allowedTools …] [--disallowedTools …]
                    [-c [id]] [--verbose]
 rein schedule [list | run [--due | <job>] | install | uninstall]
+rein bench [init [--count n] | run --model m [--model m2]… [--tasks n] [--test cmd]]
 rein --update | --version | --help
 ```
 
@@ -119,6 +120,16 @@ Headless mode needs at least one account: run `rein` once to import or add one.
 | `rein schedule uninstall` | Takes this project off; removes the OS entry when it was the last one |
 
 Exits `1` when a job fails or the file has errors. See [Scheduled jobs](../../features/headless/#scheduled-jobs).
+
+## Benchmarks: `rein bench`
+
+| Command | What it does |
+| --- | --- |
+| `rein bench init [--count n]` | Picks up to `n` (default 10) recent commits that change code and its tests (non-merge, under 400 lines) and saves them as tasks in `.rein/bench/tasks.json` |
+| `rein bench run --model <a> [--model <b>]… [--tasks n] [--test "<cmd>"]` | Runs every task on each model and prints the pass rate, time and cost per model; results go to `.rein/bench/results/` |
+| `rein bench` | Says how many tasks there are |
+
+Each run is a real headless run on your accounts. See [Benchmark on your own repo](../../features/insight/#benchmark-on-your-own-repo).
 
 ## Environment variables
 
