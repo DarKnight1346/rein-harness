@@ -68,6 +68,7 @@ import {detectMutator, formatMutation, mutate} from '../build/mutate.js';
 import {branchSize, currentPr, describePr, queueFor, reviewComments, runQueue} from '../pr/github.js';
 import {linkPrs, prsForBranch} from '../pr/linked.js';
 import {loadPacks, packFiles, packMessage, savePack} from '../context/packs.js';
+import {repoMap} from '../context/repoMap.js';
 import {run} from '../util/proc.js';
 import {activeExperiments} from '../store/config.js';
 import {formatUsd} from '../providers/prices.js';
@@ -1234,6 +1235,18 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
           if (!files.length) return log('info', 'No changes (vs HEAD) to analyze.');
           const a = await affected(root, files);
           log(a?.note && !a.targets.length ? 'error' : 'info', a ? `${files.length} changed file${files.length === 1 ? '' : 's'}. ${formatAffected(a)}` : 'No build system answered.');
+        });
+        break;
+      }
+      case 'map': {
+        const send = parsed.args.trim() === 'send';
+        void repoMap(process.cwd()).then((m) => {
+          if (!m.shown) return log('info', 'No source files with declarations here.');
+          const text = `Repo map (${m.shown} of ${m.files} files with declarations, top-level declarations only):\n${m.text}`;
+          if (!send) return log('info', `${text.split('\n').slice(0, 80).join('\n')}${text.split('\n').length > 80 ? '\n…' : ''}\n/map send gives the whole map to the agent.`);
+          const msg = `${text}\n\nUse this map to find your way; read only the files you need.`;
+          if (chat.busy) setQueued((q) => [...q, msg]);
+          else void chat.send(msg).then(bump);
         });
         break;
       }

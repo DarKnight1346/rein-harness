@@ -333,6 +333,17 @@ Label `Affected`. Approval: none (read-only). Only listed with the `affected-too
 
 Asks the build system which projects or targets the change affects, and returns them with the command that tests just those. See [What a change affects](../../features/build-and-test/#what-a-change-affects).
 
+### `repo_map`
+
+Label `RepoMap`. Approval: none (read-only). Only listed with the `repo-map` [experiment](../configuration/#experiments) on.
+
+| Parameter | Type | Notes |
+| --- | --- | --- |
+| `path` | string | A folder to map, project-relative. Omit for the whole project |
+| `budget_tokens` | integer | Size of the map, 500–20,000 (default 4,000) |
+
+Each source file's top-level declarations, ranked by how much the file exports. See [A map of the repo](../../features/large-codebases/#a-map-of-the-repo).
+
 ### `lsp_install`
 
 Label `InstallLanguageServer`. Approval: **always asks, even in bypass mode.**

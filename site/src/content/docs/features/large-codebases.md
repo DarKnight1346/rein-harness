@@ -29,6 +29,23 @@ users: ["services/users/**"]
 
 Globs are relative to the project (`*`, `**`, `?`, `{a,b}`) and match the files git doesn't ignore.
 
+## A map of the repo
+
+`/map` lists each source file's top-level declarations (functions, classes, types, constants), one line each, as much as fits in about 4,000 tokens:
+
+```text title="rein"
+> /map
+  ⎿ Repo map (412 of 1,830 files with declarations, top-level declarations only):
+    services/payments/charge.ts
+      export async function charge(order: Order, card: Card): Promise<Receipt>
+      export class ChargeError extends Error
+    …
+```
+
+`/map send` gives the whole map to the agent. With the `repo-map` [experiment](../../reference/configuration/#experiments) on, the agent gets a [`repo_map`](../../reference/tools/#repo_map) tool to ask for it (or for one folder, with a larger budget) when it starts in an unfamiliar codebase.
+
+Files are ranked by how much they export, then by how shallow they sit, and filled in until the budget runs out. Tests, vendored and generated files (`node_modules/`, `vendor/`, `dist/`, `*.pb.go`, `*.min.js`…) are left out, and only the first 5,000 source files are read. The declarations come from the same pattern as the outlines of long files (the `outline-reads` [experiment](../../reference/configuration/#experiments)), so they work across most languages without a parser or language server.
+
 ## Related
 
 - [Workspaces](../workspaces/): several repos in one session, or one package with `--scope`

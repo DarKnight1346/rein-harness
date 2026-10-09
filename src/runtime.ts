@@ -10,6 +10,7 @@ import {sastCheck} from './tools/sast.js';
 import {loadPolicy, modelBlocked} from './policy.js';
 import {reinConfigDir} from './store/paths.js';
 import {affectedTool} from './build/tool.js';
+import {repoMapTool} from './context/repoMap.js';
 import {affected, changedFiles} from './build/affected.js';
 import {CiWatcher} from './build/ci.js';
 import {branchSize} from './pr/github.js';
@@ -856,6 +857,7 @@ Drop superseded reads of the same file, routine listings, and output that no lon
       }),
       ...webTools(() => this.config),
       affectedTool(() => activeExperiments(this.config), () => process.cwd()),
+      repoMapTool(() => activeExperiments(this.config)),
       skillTool(() => process.cwd(), () => (this.planMode = true)),
       ...memoryTools(() => process.cwd()),
       askUserTool(() => this.askPresenter),

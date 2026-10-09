@@ -159,11 +159,11 @@ const OUTLINE_MIN_LINES = 500;
 const OUTLINE_MAX_ENTRIES = 200;
 // Declarations at the top level or one level in, in most languages: functions, methods, classes,
 // types, constants, sections. Comments and closing braces are skipped.
-const DECLARATION =
+export const DECLARATION =
   /^(?:\t|  |    )?(?:export\s+|default\s+|public\s+|private\s+|protected\s+|internal\s+|static\s+|async\s+|abstract\s+|final\s+|pub(?:\(crate\))?\s+|override\s+|@\w+\s+)*(?:function\*?|class|interface|type|enum|struct|trait|impl|module|namespace|object|record|def|func|fn|const|let|var|val|package|import\s*\(|describe|it|test|macro_rules!|#{1,3}\s|\w[\w.<>\[\], *&:]*\s+\**\w+\s*\()/;
 
 // Indented variables and statements are a function's insides, not part of the outline.
-const LOCAL = /^\s+(?:const|let|var|val|return|if|for|while|switch|await|throw|else|import|case|default)\b/;
+export const LOCAL = /^\s+(?:const|let|var|val|return|if|for|while|switch|await|throw|else|import|case|default)\b/;
 
 /** The declarations of a long text file with their line numbers, or undefined for a short one. */
 async function outlineOf(file: string, compact?: boolean): Promise<{lines: number; text: string} | undefined> {
