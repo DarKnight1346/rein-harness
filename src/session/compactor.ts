@@ -113,7 +113,15 @@ export function contextTokens(t: Transcript): number {
  * with the compaction model. Native session refs are dropped so the next turn starts a fresh
  * session from the summary instead of resuming the full history.
  */
-export async function compactTranscript(t: Transcript, cfg: Config, opts: {keepRecent?: number; focus?: string; model?: ModelRef} = {}): Promise<CompactResult> {
+/** faithful-compaction: asks the live session, which holds the whole conversation in its cache, for the summary. */
+export type LiveSummarizer = (instructions: string) => Promise<string>;
+
+const LIVE_ASK = (instructions: string) => `<compaction_request>
+The conversation is about to be compacted: everything above will be replaced by a summary you write now, so the work can go on in a fresh session. Don't call any tools and don't continue the task; reply with the summary only.
+${instructions}
+</compaction_request>`;
+
+export async function compactTranscript(t: Transcript, cfg: Config, opts: {keepRecent?: number; focus?: string; model?: ModelRef; live?: LiveSummarizer} = {}): Promise<CompactResult> {
   const keep = opts.keepRecent ?? KEEP_RECENT;
   const from = t.summary?.coversUpTo ?? 0;
   const upTo = Math.max(from, t.messages.length - keep);
@@ -128,6 +136,16 @@ export async function compactTranscript(t: Transcript, cfg: Config, opts: {keepR
 
   let summary = t.summary?.text;
   let start = from;
+  // The model that did the work, with every tool result in full and its context cached, writes the
+  // summary in its own session: better than any excerpt, and about a tenth of the price.
+  if (faithful && opts.live) {
+    const instructions = `${SYSTEM}\n${FAITHFUL}${opts.focus?.trim() ? `\nFocus on: ${opts.focus.trim()}.` : ''}`;
+    const live = await opts.live(LIVE_ASK(instructions)).catch(() => '');
+    if (live.trim()) {
+      summary = live.trim();
+      start = upTo;
+    }
+  }
   while (start < upTo) {
     // Grow the chunk until it hits the token budget (always at least one message).
     let end = start + 1;

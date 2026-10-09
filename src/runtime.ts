@@ -72,7 +72,7 @@ export class Runtime {
   /** Last auto-routing decision, for the status line / debugging. */
   lastDecision: string | undefined;
   auto: AutoRouter = makeAutoRouter({config: () => this.config, onDecision: (d) => (this.lastDecision = d)});
-  compact = (t: Transcript, _reason: CompactReason, opts?: {keepRecent?: number; model?: ModelRef}): Promise<CompactResult> => {
+  compact = (t: Transcript, _reason: CompactReason, opts?: Parameters<typeof compactTranscript>[2]): Promise<CompactResult> => {
     // The summary may not keep subfolder instructions word for word: deliver them again as needed.
     this.tools.deliveredInstructions.clear();
     return compactTranscript(t, this.config, opts);

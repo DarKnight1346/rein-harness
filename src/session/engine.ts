@@ -6,7 +6,7 @@ import {refKey} from '../providers/types.js';
 import {BUSY_PENALTY, catalog, toRef} from '../router/catalog.js';
 import type {Config} from '../store/config.js';
 import {DANGER_HEADROOM, headroom, usageStore} from '../store/usage.js';
-import {compactableCount, compactTranscript, type CompactReason, type CompactResult} from './compactor.js';
+import {compactableCount, compactTranscript, type CompactReason, type CompactResult, type LiveSummarizer} from './compactor.js';
 import {systemPrompt} from './prompt.js';
 import {buildCarry, carryStart, estimateTokens, newTranscript, recordProgress, saveTranscript, scratchDir, truncateTranscript, type Message, type Transcript} from './transcript.js';
 import {CARRY_TOOL_BUDGET, carriedTools, selectCarriedTools, type CarrySelector} from './carry.js';
@@ -33,7 +33,7 @@ export type EngineDeps = {
   /** Pick a replacement model when every account for `failed` is unavailable. */
   alternative: (text: string, t: Transcript, failed: ModelRef, exclude: ReadonlySet<string>) => Promise<ModelRef | undefined>;
   /** Summarize older messages into `t.summary` (M6). */
-  compact: (t: Transcript, reason: CompactReason, opts?: {keepRecent?: number; model?: ModelRef}) => Promise<CompactResult>;
+  compact: (t: Transcript, reason: CompactReason, opts?: {keepRecent?: number; model?: ModelRef; live?: LiveSummarizer}) => Promise<CompactResult>;
   /** Rein's tools for chat sessions, plus their activity feed (tool lines in the transcript). */
   tools?: {binding: ToolBinding; forkBinding?: ToolBinding; onActivity(fn: (a: ToolActivity) => void): () => void};
   /** Picks which tool results a new session needs when the conversation moves (compaction model). */
@@ -190,7 +190,7 @@ export class Engine {
 
   /** `/compact`: summarize now; the next turn starts a fresh native session from the summary. */
   async compactNow(focus?: string): Promise<CompactResult> {
-    const res = await compactTranscript(this.transcript, this.deps.config(), {keepRecent: 2, focus});
+    const res = await compactTranscript(this.transcript, this.deps.config(), {keepRecent: 2, focus, model: this.active?.ref, live: this.liveSummarizer()});
     if (!('skipped' in res)) {
       this.closeActive();
       this.cacheBroken = true;
@@ -687,13 +687,30 @@ export class Engine {
     this.closeActive();
   }
 
+  /** The open session, asked one more turn for its own summary (faithful-compaction); its tokens count. */
+  private liveSummarizer(): LiveSummarizer | undefined {
+    const session = this.active?.session;
+    if (!session) return undefined;
+    return async (ask) => {
+      let text = '';
+      let used: TokenCount | undefined;
+      for await (const ev of session.send(ask)) {
+        if (ev.type === 'text') text += ev.delta;
+        else if (ev.type === 'tokens') used = ev.call;
+        else if (ev.type === 'error') throw new Error(ev.message);
+      }
+      if (used) this.addTokens(used);
+      return text;
+    };
+  }
+
   /** Run a compaction, surfacing start/end so the UI can animate it and show the result. */
   private async *compactWithEvents(reason: CompactReason, keepRecent?: number): AsyncGenerator<EngineEvent> {
     const messages = compactableCount(this.transcript, keepRecent);
     if (!messages) return;
     yield {type: 'compact', phase: 'start', reason, messages};
     try {
-      const result = await this.deps.compact(this.transcript, reason, {...(keepRecent === undefined ? {} : {keepRecent}), model: this.active?.ref});
+      const result = await this.deps.compact(this.transcript, reason, {...(keepRecent === undefined ? {} : {keepRecent}), model: this.active?.ref, live: this.liveSummarizer()});
       if (!('skipped' in result)) this.cacheBroken = true;
       yield {type: 'compact', phase: 'end', reason, result};
     } catch (err) {

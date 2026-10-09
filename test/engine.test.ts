@@ -238,6 +238,25 @@ describe('faithful-compaction', () => {
   });
 });
 
+describe('faithful-compaction, live', () => {
+  it('asks the open session for the summary instead of a separate model call, and counts its tokens', async () => {
+    await tempHome([acct('claude', 'c1')]);
+    const {adapter, log} = fakeAdapter('claude', CLAUDE_FAKE_MODELS, (p) => (p.includes('<compaction_request>') ? [{type: 'tokens', call: {input: 9_000, cached: 8_000, output: 300}}, ...reply('GOAL: from the session itself')] : reply('ok')), () => 'GOAL: separate call');
+    install('claude', adapter);
+    await catalog.refresh();
+    config = {...config, experiments: ['faithful-compaction']};
+    const e = engineWith();
+    for (const m of ['one', 'two', 'three']) await collect(e.send(m));
+    const before = e.transcript.tokens?.output ?? 0;
+    await e.compactNow();
+    expect(e.transcript.summary!.text).toBe('GOAL: from the session itself');
+    expect(log.oneShots).toHaveLength(0);
+    expect(log.prompts.at(-1)!.prompt).toContain('FAILED APPROACHES');
+    expect(e.transcript.summary!.map).toContain('--- request 1 ---\none');
+    expect(e.transcript.tokens!.output).toBeGreaterThan(before);
+  });
+});
+
 describe('compactor', () => {
   it('summarizes old messages, keeps recent ones, and drops native refs', async () => {
     await tempHome([acct('claude', 'c1')]);
