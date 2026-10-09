@@ -12,7 +12,9 @@ import {reinConfigDir} from './store/paths.js';
 import {affectedTool} from './build/tool.js';
 import {affected, changedFiles} from './build/affected.js';
 import {CiWatcher} from './build/ci.js';
+import {branchSize} from './pr/github.js';
 import {digestLog, formatDigest} from './tools/logDigest.js';
+import {isTestCommand} from './build/flaky.js';
 import {effectiveBudget, overBudget, type Spend} from './budget.js';
 import {catalog, toRef} from './router/catalog.js';
 import {mergeNote, Worktrees} from './agents/worktrees.js';
@@ -87,8 +89,9 @@ export class Runtime {
   workspace: Workspace | undefined;
   /** /ci watch: what to send the agent, refreshed by the UI on every render (it owns the chat). */
   ciSubmit: (task: string) => void = () => {};
-  ciLog: (text: string, kind?: 'info' | 'error') => void = () => {};
-  readonly ci = new CiWatcher({log: (t, k) => this.ciLog(t, k), submit: (t) => this.ciSubmit(t)});
+  /** A line for you (not the agent) in the conversation view, set by the UI. */
+  uiLog: (text: string, kind?: 'info' | 'error') => void = () => {};
+  readonly ci = new CiWatcher({log: (t, k) => this.uiLog(t, k), submit: (t) => this.ciSubmit(t)});
   /** OpenTelemetry export (config `otel`). */
   readonly telemetry = new Telemetry(() => this.config);
   /** The conversation's cost when the user's latest message arrived (for /cost's "this request"). */
@@ -99,6 +102,7 @@ export class Runtime {
   /** Whether sast and verify-affected have checked this request's changes. */
   private sastChecked = false;
   private affectedChecked = false;
+  private sizeChecked = false;
   /** The last budget stop (for rein -p's exit status), cleared by your next message. */
   budgetStop: string | undefined;
 
@@ -132,6 +136,25 @@ export class Runtime {
     const out = r.text.trim();
     const digest = formatDigest(digestLog(out), out.split('\n').length);
     return `The tests for what this request changed failed (${a.system}: ${a.targets.slice(0, 8).join(', ')}${a.targets.length > 8 ? ', …' : ''}; \`${a.test}\`):\n${digest ?? out.split('\n').slice(-60).join('\n')}\nFix them before you finish, or if a failure isn't caused by this change, say so.`;
+  }
+
+  /** /pr digest: a plain-language summary of the branch for reviewers (risks, test evidence), from the utility model. */
+  async prDigest(): Promise<string> {
+    const root = process.cwd();
+    const size = await branchSize(root);
+    const git = async (...a: string[]) => (await run('git', a, {cwd: root, timeoutMs: 30_000}).catch(() => undefined))?.stdout ?? '';
+    const diff = (await git('diff', '--no-color', size ? (await git('merge-base', 'HEAD', size.base)).trim() : 'HEAD')).slice(0, 80_000);
+    if (!diff.trim()) throw new Error('nothing changed on this branch');
+    const tests = (this.engine?.transcript.messages ?? [])
+      .flatMap((m) => m.tools ?? [])
+      .filter((t) => t.label === 'Shell' && isTestCommand(t.summary))
+      .slice(-3)
+      .map((t) => `${t.summary} → ${t.ok ? 'passed' : 'failed'}\n${t.result.split('\n').slice(-8).join('\n')}`);
+    const ref = resolveUtilityModel(this.config.compactionModel, this.config);
+    if (!ref) throw new Error('no model available for the digest');
+    const system = 'You write the description a human reviewer reads before a code review. Plain language, short. No marketing, no praise.';
+    const prompt = `The change (git diff against its base):\n${diff}\n\nTest runs in the conversation that made it:\n${tests.join('\n\n') || '(none)'}\n\nWrite: 1) What changed and why, in 2-4 sentences. 2) Where to look closely: the risky parts, with file names. 3) Test evidence: what was run and the result, or "no tests were run". Use these three headings: ## Summary, ## Look closely at, ## Tests.`;
+    return (await completeWith(ref, this.config, system, prompt, {timeoutMs: 180_000})).trim();
   }
 
   /** /cost's budget lines: each cap in force and how much of it is used. */
@@ -544,6 +567,7 @@ Drop superseded reads of the same file, routine listings, and output that no lon
       this.requestStartUsd = this.engine?.sessionTokens.usd ?? 0;
       this.sastChecked = false;
       this.affectedChecked = false;
+      this.sizeChecked = false;
       this.budgetStop = undefined;
       this.tools.watchdog.reset();
       this.escalation = undefined;
@@ -641,6 +665,13 @@ Drop superseded reads of the same file, routine listings, and output that no lon
         const found = await sastCheck(files.map((file) => ({file, before: this.checkpoints.before(since, file)})), process.cwd(), this.config.sastConfig || 'auto').catch(() => undefined);
         if (found) return {reason: found, kind: 'diagnostics'};
       }
+    }
+    // prMaxLines: the branch grew past the size reviewers can take; say so to you (not the agent), once per request.
+    if (!this.sizeChecked && (this.config.prMaxLines ?? 0) > 0 && this.engine && this.checkpoints.changedSince(this.currentTurn()).length) {
+      this.sizeChecked = true;
+      const size = await branchSize(process.cwd()).catch(() => undefined);
+      if (size && size.lines > this.config.prMaxLines)
+        this.uiLog(`This branch now changes ${size.lines.toLocaleString()} lines (+${size.added} −${size.removed} vs ${size.base}), over prMaxLines (${this.config.prMaxLines}). Smaller PRs get reviewed faster: /pr split asks the agent to split it into a stack.`);
     }
     // verify-affected: in an Nx/Turborepo/Bazel/Pants workspace, the tests for what this request changed, once.
     if (activeExperiments(this.config).includes('verify-affected') && !this.affectedChecked && this.engine && this.checkpoints.changedSince(this.currentTurn()).length) {

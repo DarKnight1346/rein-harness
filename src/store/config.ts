@@ -105,6 +105,8 @@ export type Config = {
   buildTimeWarnings: boolean;
   /** Commits and PRs the agent makes end with Rein-Session / Rein-Model / Rein-Goal trailers. */
   provenance: boolean;
+  /** Tell you when the branch changes more lines than this (reviews slow down past a few hundred). 0 = off. */
+  prMaxLines: number;
   /** Semgrep rules (--config): auto, a registry pack like p/owasp-top-ten, or a path. */
   sastConfig: string;
   /** OpenTelemetry export of turns, tool calls, tokens and cost (metadata only). Off unless set. */
@@ -179,6 +181,7 @@ export const DEFAULT_CONFIG: Config = {
   depCheck: 'off',
   buildTimeWarnings: true,
   provenance: false,
+  prMaxLines: 0,
   sastConfig: 'auto',
   steerShell: true,
   mcpSampling: 'ask',

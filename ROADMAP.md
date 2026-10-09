@@ -57,15 +57,15 @@ agent works by default ships as an experiment (`experiments` in config) until it
 | # | Feature | Spec | Docs | Status |
 |---|---|---|---|---|
 | 14 | Self-review before a PR | A last pass for bugs, security issues and contract breaks before the agent reports done. | features/pull-requests/#a-review-before-its-done | done |
-| 15 | Review digest | Plain-language summary of a change with risk areas and test evidence. |  | todo |
-| 16 | PR size governor | Above N changed lines, propose splitting the change. |  | todo |
+| 15 | Review digest | Plain-language summary of a change with risk areas and test evidence. | features/pull-requests/#a-digest-for-reviewers | done |
+| 16 | PR size governor | Above N changed lines, propose splitting the change. | features/pull-requests/#smaller-prs | done |
 | 17 | Provenance trailers | Commit trailers and PR labels with model, session and goal. | features/pull-requests/#provenance-on-agent-commits | done |
 | 25 | Shareable session export | Export a session as one self-contained HTML file (transcript plus diffs). |  | todo |
 | 39 | Linked-PR bundle | PRs for one task in several repos link to each other. Builds on #29. |  | todo |
-| 63 | Stacked PRs | Split a large change into a stack of dependent PRs. Builds on #16. |  | todo |
-| 64 | Answer review comments | Read reviewer comments, fix or reply, push again. |  | todo |
+| 63 | Stacked PRs | Split a large change into a stack of dependent PRs. Builds on #16. | features/pull-requests/#smaller-prs | done |
+| 64 | Answer review comments | Read reviewer comments, fix or reply, push again. | features/pull-requests/#review-comments | done |
 | 65 | PR reviewer in CI | A headless review mode for `rein -p` that comments on PRs. Builds on #23. |  | todo |
-| 66 | Merge-queue integration | Work with GitHub, GitLab, Graphite and Mergify merge queues. |  | todo |
+| 66 | Merge-queue integration | Work with GitHub, GitLab, Graphite and Mergify merge queues. | features/pull-requests/#merge-queues | done |
 
 ## Wave 5: Context at scale
 
