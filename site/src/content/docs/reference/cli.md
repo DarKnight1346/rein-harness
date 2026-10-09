@@ -8,6 +8,7 @@ rein [--continue|-c [id]] [--classic|--fullscreen] [--add-dir <path>]... [--scop
 rein -p "<prompt>" [--model m] [--effort e] [--output-format text|json|stream-json]
                    [--permission-mode ask|auto|bypass|plan] [--allowedTools …] [--disallowedTools …]
                    [-c [id]] [--verbose]
+rein schedule [list | run [--due | <job>] | install | uninstall]
 rein --update | --version | --help
 ```
 
@@ -106,6 +107,18 @@ rein -p "now add docs" -c --output-format stream-json --verbose
 :::note
 Headless mode needs at least one account: run `rein` once to import or add one.
 :::
+
+## Scheduled jobs: `rein schedule`
+
+| Command | What it does |
+| --- | --- |
+| `rein schedule` | Lists the jobs in `.rein/schedule.yaml` with their next run and how the last one went |
+| `rein schedule run <job>` | Runs one job now (all of them without a name) |
+| `rein schedule run --due` | Runs the jobs whose time has come, in every scheduled project. This is what the OS scheduler calls |
+| `rein schedule install` | Adds this project to the scheduled ones, and (once) a crontab entry, or a Task Scheduler task on Windows, that runs `rein schedule run --due` every 15 minutes |
+| `rein schedule uninstall` | Takes this project off; removes the OS entry when it was the last one |
+
+Exits `1` when a job fails or the file has errors. See [Scheduled jobs](../../features/headless/#scheduled-jobs).
 
 ## Environment variables
 

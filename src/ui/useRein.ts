@@ -69,6 +69,7 @@ import {formatChanges} from '../contracts/diff.js';
 import {branchMigrations, formatFindings} from '../contracts/migrations.js';
 import {collectStats, formatStats} from '../insight/stats.js';
 import {collectCache, formatCache} from '../insight/cache.js';
+import {describeJobs, loadJobs, scheduledProjects} from '../schedule/index.js';
 import {deadCodeTask, findDeadCode, findFlags, flagRemovalTask, formatFlags, isStale} from '../contracts/deadcode.js';
 import {checkoutState, describeCheckout, sparseAdd} from '../workspace/sparse.js';
 import {buildIndex, DEFAULT_MODEL as EMBED_MODEL, formatSemanticHits, loadIndex, semanticSearch} from '../context/semantic.js';
@@ -1264,6 +1265,12 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
           if (!files.length) return log('info', 'No changes (vs HEAD). /owners <path> looks up a file or folder.');
           log('info', `Owners of ${arg || `your ${files.length} changed file${files.length === 1 ? '' : 's'}`}:\n${formatOwners(await ownersOf(root, files))}`);
         });
+        break;
+      }
+      case 'schedule': {
+        const {jobs, errors} = loadJobs(process.cwd());
+        for (const e of errors) log('error', e);
+        log('info', jobs.length ? `Jobs in .rein/schedule.yaml:\n${describeJobs(jobs)}\n${scheduledProjects().includes(process.cwd()) ? 'They run on time (rein schedule uninstall stops that).' : 'Not installed yet: run rein schedule install in a terminal to run them on time.'}` : 'No scheduled jobs. Add them to .rein/schedule.yaml (a cron time and a prompt each); see the Scheduled jobs docs.');
         break;
       }
       case 'cache': {

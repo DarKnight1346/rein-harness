@@ -119,7 +119,7 @@ agent works by default ships as an experiment (`experiments` in config) until it
 | 73 | Prompt-cache analytics | Cache hit rates and what breaks the cache. | features/insight/#the-prompt-cache | done |
 | 74 | Benchmark on your own repos | `rein bench`: replay tasks from the repo's history to compare models and settings. |  | todo |
 | 75 | Onboarding tour | Generate a guided tour of a repo or service. | features/insight/#onboarding-tours | done |
-| 76 | Scheduled jobs | Recurring local runs (dependency bumps, flaky-test triage) on a cron-like schedule. |  | todo |
+| 76 | Scheduled jobs | Recurring local runs (dependency bumps, flaky-test triage) on a cron-like schedule. | features/headless/#scheduled-jobs | done |
 
 ## Wave 9: System-level understanding
 

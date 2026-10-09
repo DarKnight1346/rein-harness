@@ -265,6 +265,42 @@ jobs:
 
 With `--permission-mode ask` the reviewer can read the checkout, search it and run read-only commands such as `git log` and `git show`, but it can't change anything.
 
+## Scheduled jobs
+
+Some work should just happen every week: bump patch versions and open a PR if the tests pass, triage the flaky tests, refresh the docs index. Put the jobs in the project:
+
+```yaml title=".rein/schedule.yaml"
+jobs:
+  - name: deps
+    cron: "0 9 * * mon"          # minute hour day month weekday
+    prompt: Bump patch and minor versions, run the tests, and open a PR if they pass.
+  - name: flaky
+    cron: "@daily"               # also @hourly, @weekdays, @weekly, @monthly (at 9:00)
+    prompt: Look at the tests that failed on main this week and quarantine the flaky ones.
+    model: claude:sonnet
+    permissionMode: auto         # ask, auto (default) or bypass
+```
+
+Then, in a terminal in the project:
+
+```sh
+rein schedule            # the jobs, their next run, the last result
+rein schedule run deps   # run one now, to try it
+rein schedule install    # run them on time from now on
+```
+
+`rein schedule install` adds a crontab entry (a Task Scheduler task on Windows) that runs `rein schedule run --due` every 15 minutes. There's one entry for all your scheduled projects. Nothing is added to your system until you run it, and `rein schedule uninstall` takes it away again.
+
+Here's how a run goes:
+
+- **Each due job runs as its own `rein -p`** in its project, with the prompt and a note that nobody is watching.
+- **Permissions:** it uses the job's `permissionMode` (default `auto`, so the decision model approves changes that match the prompt) and its `model` if one is set.
+- **Logs:** the output goes to `~/.rein/schedule/logs/`.
+- **Missed runs:** a job runs at most once per scheduled time. If the machine was asleep at 9:00 it runs once at the next check, not once per missed time.
+- **New jobs** wait for their first scheduled time.
+
+Times are local. `/schedule` in Rein shows the same list. Scheduled jobs use your accounts like any other run, so keep the prompts to work you'd approve of unattended.
+
 ## Gotchas
 
 - **Flag values can't start with `-`.** `rein -p "-v is broken"` doesn't see a prompt. Pipe it in instead: `echo "-v is broken" | rein -p`.

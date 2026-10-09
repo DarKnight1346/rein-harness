@@ -17,6 +17,7 @@ const args = process.argv.slice(2);
 if (args.includes('--help') || args.includes('-h')) {
   console.log(`Usage: rein [--continue|-c] [--classic|--fullscreen]
        rein -p "<prompt>" [--model m] [--output-format text|json|stream-json]
+       rein schedule [list | run [--due | <job>] | install | uninstall]
        rein --update | --version
 
   -c, --continue [id]   pick a saved conversation from this project to continue (or continue <id>)
@@ -48,6 +49,37 @@ if (args.includes('--update')) {
     console.log(line.level ? color[line.level](text) : text);
   }
   process.exit(failed ? 1 : 0);
+}
+if (args[0] === 'schedule') {
+  // Scheduled jobs (.rein/schedule.yaml): list, run (due ones, or one by name), install / uninstall the OS entry.
+  const s = await import('./schedule/index.js');
+  const [, sub = 'list', name] = args;
+  const {jobs, errors} = s.loadJobs(process.cwd());
+  for (const e of errors) console.error(`rein: ${e}`);
+  if (sub === 'run') {
+    const picked = args.includes('--due') ? undefined : jobs.filter((j) => !name || j.name === name);
+    if (picked && name && !picked.length) {
+      console.error(`rein: no job "${name}" in .rein/schedule.yaml`);
+      process.exit(1);
+    }
+    const ran = picked ? await Promise.all(picked.map(async (j) => ({job: j, state: await s.runJob(j)}))) : await s.runDue(process.cwd());
+    for (const r of ran) console.log(`${r.job.name} (${r.job.project}): ${r.state.lastExit === 0 ? 'ok' : `exit ${r.state.lastExit}`} · log ${r.state.lastLog}`);
+    process.exit(ran.some((r) => r.state.lastExit !== 0) ? 1 : 0);
+  }
+  if (sub === 'install') {
+    if (!jobs.length) {
+      console.error('rein: no jobs in .rein/schedule.yaml to schedule');
+      process.exit(1);
+    }
+    console.log(await s.install(process.cwd()));
+    process.exit(0);
+  }
+  if (sub === 'uninstall') {
+    console.log(await s.uninstall(process.cwd()));
+    process.exit(0);
+  }
+  console.log(jobs.length ? `Jobs in .rein/schedule.yaml:\n${s.describeJobs(jobs)}${s.scheduledProjects().includes(process.cwd()) ? '' : '\nNot installed: rein schedule install runs them on time.'}` : 'No jobs in .rein/schedule.yaml.');
+  process.exit(errors.length ? 1 : 0);
 }
 if (args.includes('-p') || args.includes('--print')) {
   // Headless: one prompt, printed result, no UI (scripts/CI).
