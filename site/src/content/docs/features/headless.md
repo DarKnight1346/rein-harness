@@ -50,6 +50,7 @@ rein -p "now update the docs to match" -c
 | `-c`, `--continue [id]` | Continue the latest conversation in this project, or the one with that id. |
 | `--verbose` | Text mode: print tool calls and notices to stderr. |
 | `--add-dir <path>` | Also let the agent use this folder without asking, for this run. Repeatable; adds to `additionalDirectories`. |
+| `--scope <dir>` | Work in one package of a monorepo: `list`, `search` and `shell` start there, with its instructions. |
 
 `--model`, `--effort` and `--permission-mode` apply to this run only. They're never saved to `~/.rein/config.json`.
 

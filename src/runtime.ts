@@ -1,4 +1,4 @@
-import {readFileSync} from 'node:fs';
+import {existsSync, readFileSync, realpathSync, statSync} from 'node:fs';
 import {run} from './util/proc.js';
 import {EventEmitter} from 'node:events';
 import {adapters} from './providers/index.js';
@@ -48,7 +48,7 @@ import {isMilestoneCopy, todoTool} from './tools/todo.js';
 import {imageGenRef, imageTool} from './tools/image.js';
 import {newTranscript, saveTranscript} from './session/transcript.js';
 import {setPromptCacheTtl} from './providers/claude/session.js';
-import {setAttribution, setBriefFinal, setCheapExplore, setExtraWorkingDirs, setInScope, setLazyTools, setManyCalls, setNoTodo, setSelfTest, setVaultNames, systemPrompt} from './session/prompt.js';
+import {setAttribution, setBriefFinal, setCheapExplore, setExtraWorkingDirs, setInScope, setScopeDir, setLazyTools, setManyCalls, setNoTodo, setSelfTest, setVaultNames, systemPrompt} from './session/prompt.js';
 import {Vault} from './vault/vault.js';
 import {parseRef, refKey, type Account, type ModelRef, type TokenCount, type ToolBinding} from './providers/types.js';
 import {removeAccount} from './accounts/service.js';
@@ -74,6 +74,23 @@ export class Runtime {
   config: Config = DEFAULT_CONFIG;
   /** The workspace (rein.workspace.yaml) the launch folder belongs to, if any. */
   workspace: Workspace | undefined;
+  /** --scope / /scope: the package of a monorepo this session works in (absolute), if any. */
+  scope: string | undefined;
+
+  /** Set the scope (a folder inside the project; undefined or "off" clears it). Returns it, absolute. */
+  setScope(dir: string | undefined): string | undefined {
+    if (!dir || dir === 'off') {
+      this.scope = undefined;
+    } else {
+      const abs = path.resolve(process.cwd(), dir);
+      const rel = path.relative(process.cwd(), abs);
+      if (rel.startsWith('..') || path.isAbsolute(rel)) throw new Error(`--scope ${dir}: must be a folder inside the project`);
+      if (!existsSync(abs) || !statSync(abs).isDirectory()) throw new Error(`--scope ${dir}: not a folder`);
+      this.scope = rel ? realpathSync(abs) : undefined;
+    }
+    this.engine?.refreshTools(); // the system prompt names the scope and loads its instructions
+    return this.scope;
+  }
   engine!: Engine;
   /** Last auto-routing decision, for the status line / debugging. */
   lastDecision: string | undefined;
@@ -117,6 +134,7 @@ export class Runtime {
     judge: (req) => this.judgeChange(req),
     readOnlyJudge: (command) => this.judgeReadOnly(command),
     configDirs: () => [...(this.config?.additionalDirectories ?? []), ...workspaceDirs(this.workspace)],
+    scope: () => this.scope,
     checkpoint: (file) => this.checkpoints.snapshot(this.currentTurn(), file),
     experiments: () => activeExperiments(this.config),
     contextId: () => this.engine?.contextId(),
@@ -207,7 +225,7 @@ export class Runtime {
   }
 
   /** Built-in code intelligence: language servers Rein runs itself (lsp/manager.ts). */
-  readonly lsp = new LspManager({config: () => this.config});
+  readonly lsp = new LspManager({config: () => this.config, scope: () => this.scope});
 
   /** File checkpoints for /rewind, per conversation (Rein's own file changes, ignored files too). */
   readonly checkpoints = new Checkpoints(() => this.engine?.transcript.id ?? 'none');
@@ -778,6 +796,7 @@ Drop superseded reads of the same file, routine listings, and output that no lon
     void this.mcp.start().catch(() => {});
     this.stopUsageRefresh = startUsageRefresh({balancing: () => this.config.loadBalancing !== 'sticky', busy: (id) => catalog.busy.get(id) ?? 0});
     setExtraWorkingDirs(() => this.tools.extraWorkingDirs());
+    setScopeDir(() => this.scope);
     setAttribution(() => this.config.attribution !== false);
     setLazyTools(() => activeExperiments(this.config).includes('lazy-tools'));
     setCheapExplore(() => activeExperiments(this.config).includes('cheap-explore'));

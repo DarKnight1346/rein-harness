@@ -75,7 +75,7 @@ export class LspManager {
   private clients = new Map<string, LspClient>();
   private sweep: NodeJS.Timeout | undefined;
 
-  constructor(private readonly opts: {config: () => Config}) {}
+  constructor(private readonly opts: {config: () => Config; scope?: () => string | undefined}) {}
 
   private enabled() {
     return (this.opts.config().lsp ?? 'auto') !== 'off';
@@ -179,7 +179,10 @@ export class LspManager {
     const tracked = [...this.turn.values()];
     this.turn.clear();
     if (!tracked.length) return undefined;
-    const checks = tracked.map((t) => ({...t, c: this.client(t.file, t.root, false)})).filter((t) => t.c);
+    // With a scope (--scope), callers outside it aren't checked: in a big monorepo they're other teams' code.
+    const scope = this.opts.scope?.();
+    const inScope = (f: string) => !scope || f === scope || f.startsWith(scope + path.sep);
+    const checks = tracked.map((t) => ({...t, c: this.client(t.file, t.root, false)})).filter((t) => t.c && (!t.dependent || inScope(t.file)));
     for (const t of checks) t.c!.sync(t.file);
     await Promise.all([...new Set(checks.map((x) => x.c!))].filter((c) => !c.pull).map((c) => c.waitSettled(checks.filter((x) => x.c === c).map((x) => ({file: x.file, after: x.count})), REPORT_TIMEOUT_MS)));
     const reported: {root: string; file: string; keys: string[]}[] = [];

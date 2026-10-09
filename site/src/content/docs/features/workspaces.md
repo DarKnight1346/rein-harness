@@ -1,6 +1,6 @@
 ---
 title: Workspaces
-description: Work on several repos as one system. A rein.workspace.yaml lists them; every repo becomes a working directory, the agent knows what each one does, and one AGENTS.md applies to all of them.
+description: Work on several repos as one system, or on one package of a monorepo. A rein.workspace.yaml lists the repos; --scope focuses the agent on one package.
 sidebar:
   badge: New
 ---
@@ -66,6 +66,17 @@ Entries Rein can't use (no path or name, a name used twice, invalid YAML) are sk
 :::note
 Rewind's whole-project snapshots still cover only the repo you launched in. Edits in the other repos are restored from Rein's per-file checkpoints (see [Rewind](../rewind/)).
 :::
+
+## One package of a monorepo
+
+The opposite problem: one huge repo where you only work on one package. `rein --scope packages/api` (or `/scope packages/api` in a session) focuses the agent there:
+
+- `list` and `search` without a path, and `shell` without a `cwd`, start in the package instead of the repo root.
+- Instruction files load as if you had launched in the package: every `AGENTS.md` / `CLAUDE.md` from the git root down to it.
+- The system prompt names the scope and asks the agent to stay inside it, going outside only when the task needs it (a shared type, a caller it broke), and to say so.
+- The end-of-turn [code check](../code-intelligence/) skips callers outside the package that the agent didn't edit. Files it did edit are still checked wherever they are.
+
+It's a focus, not a fence: the agent can still read or edit outside the package with an explicit path. `/scope off` goes back to the whole repo. The scope must be a folder inside the project.
 
 ## Related
 

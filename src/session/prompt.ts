@@ -31,6 +31,12 @@ export function setExtraWorkingDirs(fn: () => string[]): void {
   extraDirs = fn;
 }
 
+/** --scope: the monorepo package this session works in (absolute), supplied by the runtime. */
+let scopeDir: () => string | undefined = () => undefined;
+export function setScopeDir(fn: () => string | undefined): void {
+  scopeDir = fn;
+}
+
 export const REIN_REPO = 'https://github.com/DarKnight1346/rein-harness';
 export const ATTRIBUTION_LINE = `Co-Authored by [Rein Harness](${REIN_REPO})`;
 /** Credit Rein in commits and pull requests (config `attribution`), supplied by the runtime. */
@@ -165,6 +171,11 @@ export async function systemPrompt(opts: {tools?: boolean; scratch?: string; pro
     sections.push(`Project root: ${process.cwd()}${extra.length ? `\nAlso working directories: ${extra.join(', ')}` : ''}`);
     const ws = findWorkspace();
     if (ws?.repos.length) sections.push(describeWorkspace(ws));
+    const scope = scopeDir();
+    if (scope)
+      sections.push(
+        `Scope: ${path.relative(process.cwd(), scope).split(path.sep).join('/')}/\nThe user is working on this package of the repo. list and search without a path, and shell without a cwd, start there. Keep your reading and changes inside it; go outside only when the task needs it (a shared type, a caller you broke) and say so.`,
+      );
     if (opts.scratch) {
       sections.push(
         `Scratchpad: ${opts.scratch}\nA private folder for this session only. Put temporary files, notes, drafts and experiments here (absolute paths) instead of the project; changes there never need approval. It persists if the session is resumed.`,
@@ -187,7 +198,7 @@ export async function systemPrompt(opts: {tools?: boolean; scratch?: string; pro
         : '# Project memory\nEmpty so far. When you learn something lasting about this project (commands, conventions, decisions, gotchas), save it with remember.',
     );
   }
-  for (const f of await agentsFiles()) {
+  for (const f of await agentsFiles(scopeDir() ?? process.cwd())) {
     sections.push(`# Project instructions (${f.path})\nFollow these instructions from ${path.basename(f.path)}:\n\n${f.text}`);
   }
   return sections.join('\n\n');

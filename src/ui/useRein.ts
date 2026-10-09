@@ -1211,6 +1211,20 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
         log('info', [`Workspace${ws.name ? ` ${ws.name}` : ''}: ${ws.file}`, ...rows, ...ws.errors.map((e) => `  ! ${e}`)].join('\n'));
         break;
       }
+      case 'scope': {
+        const arg = parsed.args.trim();
+        if (!arg) {
+          log('info', runtime.scope ? `Scope: ${nodePath.relative(process.cwd(), runtime.scope) || '.'}. /scope off clears it.` : 'No scope: the agent works across the whole project. /scope <dir> focuses it on one package.');
+          break;
+        }
+        try {
+          const s = runtime.setScope(arg);
+          log('info', s ? `Scope: ${nodePath.relative(process.cwd(), s)}. Search, list and shell start there, with its instructions.` : 'Scope cleared: the whole project again.');
+        } catch (err) {
+          log('error', (err as Error).message.replace(/^--scope /, ''));
+        }
+        break;
+      }
       case 'add-dir': {
         const arg = parsed.args.trim();
         if (!arg) {

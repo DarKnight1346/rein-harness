@@ -68,6 +68,8 @@ export type ToolHostOptions = {
   judge?: (req: ApprovalRequest) => Promise<{allow: boolean; note: string}>;
   /** Extra working directories from config (`additionalDirectories`). */
   configDirs?: () => string[];
+  /** --scope / /scope: list, search and shell default to this folder (absolute) instead of the project root. */
+  scope?: () => string | undefined;
   /** Extra rules for this run only (headless --allowedTools / --disallowedTools). */
   extraRules?: () => Rules;
   /** Plan mode: file changes and non-read-only commands are refused until the plan is approved. */
@@ -330,6 +332,7 @@ export class ToolHost extends EventEmitter {
     let args = rawArgs;
     const tool = this.find(name);
     if (!tool) return {ok: false, text: `unknown tool ${name}`};
+    args = this.scoped(tool.name, args);
     let todoNote: string | undefined;
     if (ToolHost.CARRY_TODOS.includes(tool.name) && Array.isArray((args as {todos?: unknown})?.todos)) {
       const {todos, ...rest} = args as {todos: unknown[]};
@@ -673,6 +676,16 @@ export class ToolHost extends EventEmitter {
       }
     }
     return added;
+  }
+
+  /** With a scope set, list and search without a path, and shell without a cwd, start in the scope. */
+  private scoped(name: string, args: unknown): unknown {
+    const scope = this.opts.scope?.();
+    if (!scope || (name !== 'list' && name !== 'search' && name !== 'shell')) return args;
+    const a = (args ?? {}) as Record<string, unknown>;
+    const key = name === 'shell' ? 'cwd' : 'path';
+    if (a[key] !== undefined && a[key] !== '') return args;
+    return {...a, [key]: toPosix(path.relative(this.opts.root, scope)) || '.'};
   }
 
   /** Directories the user added (config additionalDirectories + /add-dir / --add-dir), resolved. */
