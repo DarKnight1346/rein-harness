@@ -153,6 +153,7 @@ Added to the system prompt for every provider, up to 64 KB each, duplicates remo
 | `MCP_TOOL_TIMEOUT` | 24 h for Claude sessions with tools, so Rein's own shell cap is what applies |
 | `MAX_THINKING_TOKENS=0` | Fast Claude one-shots (decisions, carry selection, page reading) |
 | `CI=1`, `PAGER=cat`, `GIT_PAGER=cat`, `FORCE_COLOR=0` | The agent's shell commands |
+| `REIN_SESSION`, `REIN_MODEL`, `REIN_GOAL` | The agent's shell commands, with `provenance` on: the conversation id, the model working now, the active goal (see [Provenance](../../features/pull-requests/#provenance-on-agent-commits)) |
 | `REIN_PROJECT_DIR`, `CLAUDE_PROJECT_DIR` | Hook commands |
 
 ### Removed before launching a CLI

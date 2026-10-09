@@ -59,7 +59,7 @@ import {isMilestoneCopy, todoTool} from './tools/todo.js';
 import {imageGenRef, imageTool} from './tools/image.js';
 import {newTranscript, saveTranscript, setSaveFilter} from './session/transcript.js';
 import {setPromptCacheTtl} from './providers/claude/session.js';
-import {setAttribution, setBriefFinal, setCheapExplore, setExtraWorkingDirs, setInScope, setScopeDir, setLazyTools, setManyCalls, setNoTodo, setSelfTest, setVaultNames, systemPrompt} from './session/prompt.js';
+import {setAttribution, setBriefFinal, setCheapExplore, setExtraWorkingDirs, setInScope, setProvenance, setScopeDir, setLazyTools, setManyCalls, setNoTodo, setSelfTest, setVaultNames, systemPrompt} from './session/prompt.js';
 import {Vault} from './vault/vault.js';
 import {parseRef, refKey, type Account, type ModelRef, type TokenCount, type ToolBinding} from './providers/types.js';
 import {removeAccount} from './accounts/service.js';
@@ -795,6 +795,14 @@ Drop superseded reads of the same file, routine listings, and output that no lon
     this.workspace = findWorkspace();
     await this.vault.load();
     this.tools.shells.vault = this.vault;
+    // provenance: what the trailers say, current at the moment of each command.
+    this.tools.shells.extraEnv = (): Record<string, string> => {
+      if (!this.config.provenance) return {};
+      const ref = this.engine?.currentRef();
+      const goal = this.goals.goal?.status === 'active' ? this.goals.goal.text.replace(/\s+/g, ' ').slice(0, 120) : '';
+      return {REIN_SESSION: this.engine?.transcript.id ?? '', REIN_MODEL: ref ? `${ref.provider}:${ref.model}` : '', REIN_GOAL: goal};
+    };
+    setProvenance(() => this.config.provenance === true);
     setVaultNames(() => this.vault.names());
     this.vault.onChange(() => this.engine?.refreshTools()); // the system prompt lists the names
     this.tools.register(

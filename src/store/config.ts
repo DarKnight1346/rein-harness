@@ -103,6 +103,8 @@ export type Config = {
   depCheck: 'off' | 'warn' | 'block';
   /** Tell you when a build or test command takes much longer than its recent runs. */
   buildTimeWarnings: boolean;
+  /** Commits and PRs the agent makes end with Rein-Session / Rein-Model / Rein-Goal trailers. */
+  provenance: boolean;
   /** Semgrep rules (--config): auto, a registry pack like p/owasp-top-ten, or a path. */
   sastConfig: string;
   /** OpenTelemetry export of turns, tool calls, tokens and cost (metadata only). Off unless set. */
@@ -176,6 +178,7 @@ export const DEFAULT_CONFIG: Config = {
   mcpPinning: false,
   depCheck: 'off',
   buildTimeWarnings: true,
+  provenance: false,
   sastConfig: 'auto',
   steerShell: true,
   mcpSampling: 'ask',

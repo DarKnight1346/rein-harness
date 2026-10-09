@@ -66,6 +66,7 @@ export default defineConfig({
           {label: 'Editor integration', slug: 'features/ide'},
           {label: 'Code intelligence', slug: 'features/code-intelligence'},
           {label: 'Build & test', slug: 'features/build-and-test'},
+          {label: 'Pull requests', slug: 'features/pull-requests'},
           {label: 'Remote access', slug: 'features/remote'},
           {label: 'Issue trackers', slug: 'features/trackers'},
           {label: 'Secrets vault', slug: 'features/vault'},

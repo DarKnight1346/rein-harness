@@ -31,6 +31,12 @@ export function setExtraWorkingDirs(fn: () => string[]): void {
   extraDirs = fn;
 }
 
+/** Provenance trailers on commits and PRs (config provenance), supplied by the runtime. */
+let provenance: () => boolean = () => false;
+export function setProvenance(fn: () => boolean): void {
+  provenance = fn;
+}
+
 /** --scope: the monorepo package this session works in (absolute), supplied by the runtime. */
 let scopeDir: () => string | undefined = () => undefined;
 export function setScopeDir(fn: () => string | undefined): void {
@@ -166,6 +172,14 @@ export async function systemPrompt(opts: {tools?: boolean; scratch?: string; pro
           `For example: git commit -m "Fix the date parser" -m "${ATTRIBUTION_LINE}"`,
           'Every pull request (or merge request) you open or edit ends its description with the same line, after a blank line.',
           "Use only this attribution line (no extra trailers for yourself) unless the user or the project's instructions ask for something else.",
+        ].join('\n'),
+      );
+    if (provenance())
+      sections.push(
+        [
+          '# Provenance',
+          'End every git commit you make with these trailers, after a blank line, written exactly like this so the shell fills them in: -m "Rein-Session: $REIN_SESSION" -m "Rein-Model: $REIN_MODEL" and, when $REIN_GOAL is set, -m "Rein-Goal: $REIN_GOAL".',
+          'Pull requests you open end their description with the same three lines (their values: echo $REIN_SESSION $REIN_MODEL $REIN_GOAL).',
         ].join('\n'),
       );
     sections.push(`Project root: ${process.cwd()}${extra.length ? `\nAlso working directories: ${extra.join(', ')}` : ''}`);

@@ -59,7 +59,7 @@ agent works by default ships as an experiment (`experiments` in config) until it
 | 14 | Self-review before a PR | A last pass for bugs, security issues and contract breaks before the agent reports done. |  | todo |
 | 15 | Review digest | Plain-language summary of a change with risk areas and test evidence. |  | todo |
 | 16 | PR size governor | Above N changed lines, propose splitting the change. |  | todo |
-| 17 | Provenance trailers | Commit trailers and PR labels with model, session and goal. |  | todo |
+| 17 | Provenance trailers | Commit trailers and PR labels with model, session and goal. | features/pull-requests/#provenance-on-agent-commits | done |
 | 25 | Shareable session export | Export a session as one self-contained HTML file (transcript plus diffs). |  | todo |
 | 39 | Linked-PR bundle | PRs for one task in several repos link to each other. Builds on #29. |  | todo |
 | 63 | Stacked PRs | Split a large change into a stack of dependent PRs. Builds on #16. |  | todo |
