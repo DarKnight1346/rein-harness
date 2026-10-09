@@ -40,7 +40,10 @@ and a compaction model. No OAuth tokens are extracted: all traffic goes through 
   (`rein --background`), a dashboard of every running session (`rein sessions`), commands in the
   repo's dev container or Nix shell, `rein --acp` for Zed and other ACP editors, `/stats`, `/cache`,
   `rein bench` on your own history, onboarding tours and scheduled jobs.
-- **Coming next:** system-level understanding across repos.
+- **System-level understanding:** which service calls which (`/services`), symbols across repos from
+  SCIP indexes, `/refs POST /orders/{id}` from gateway to every caller, `/impact` of a branch,
+  coordinated change sets across repos, codemaps, a container sandbox per task, and `/stack up` for
+  the services a change needs.
 
 ## Install
 
