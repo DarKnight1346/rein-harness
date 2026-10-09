@@ -1,5 +1,5 @@
 import {describe, expect, it} from 'vitest';
-import {setSelfTest, systemPrompt} from '../src/session/prompt.js';
+import {setManyCalls, setSelfTest, systemPrompt} from '../src/session/prompt.js';
 
 describe('self-test', () => {
   it('asks the model to run the tests itself when listed', async () => {
@@ -12,5 +12,16 @@ describe('self-test', () => {
   it('is always on for Codex models, whose own instructions Rein replaces', async () => {
     expect(await systemPrompt({tools: true, provider: 'codex'})).toMatch(/run the project's tests/);
     expect(await systemPrompt({tools: true, provider: 'claude'})).not.toMatch(/run the project's tests/);
+  });
+});
+
+describe('many-calls', () => {
+  it('replaces the batching line with many calls per response, when listed', async () => {
+    expect(await systemPrompt({tools: true})).toMatch(/Every tool call is a round trip: batch them/);
+    setManyCalls(() => true);
+    const on = await systemPrompt({tools: true});
+    expect(on).toMatch(/MANY tool calls in each one/);
+    expect(on).not.toMatch(/Every tool call is a round trip: batch them/);
+    setManyCalls(() => false);
   });
 });

@@ -61,6 +61,16 @@ export function setSelfTest(fn: () => boolean): void {
 // a fifth as many commands as in Codex and handed work to subagents instead of checking it.
 const SELF_TEST_PROMPT = `- Before you finish a code change, run the project's tests (or build) yourself and fix what fails. Do the work and the checking yourself; a subagent's report is not a test run.`;
 
+/** many-calls is on (config `experiments`): many tool calls per response is the preferred way to work. */
+let manyCalls: () => boolean = () => false;
+export function setManyCalls(fn: () => boolean): void {
+  manyCalls = fn;
+}
+const BATCH_LINE = '- Every tool call is a round trip: batch them.';
+// Each round trip re-sends the whole conversation (cache reads were ~60% of a large task's cost), and
+// 83-87% of requests carried a single tool call even with the line above.
+const MANY_CALLS_PROMPT = `- Round trips are the main cost of a task: every response you send re-reads the whole conversation. Work in as few responses as you can by making MANY tool calls in each one. Plan the next several steps, then issue every call they need together: read all the files you'll need, run all the searches, make every edit you've decided on, and run independent commands (build, tests, greps, git) side by side. Five to ten calls in one response is normal and preferred. Calls in one response may run in any order, so wait for a result only when the next call depends on it (for example, run the tests after the response with the edits).`;
+
 /** no-todo is on (config `experiments`): no task list tool, so the prompt doesn't mention it. */
 let noTodo: () => boolean = () => false;
 export function setNoTodo(fn: () => boolean): void {
@@ -128,7 +138,8 @@ export async function systemPrompt(opts: {tools?: boolean; scratch?: string; pro
   const sections = [base];
   if (opts.tools) {
     const extra = extraDirs();
-    const tools = noTodo() ? TOOLS_PROMPT.split('\n').filter((l) => !l.includes('todo_write')).join('\n') : TOOLS_PROMPT;
+    let tools = noTodo() ? TOOLS_PROMPT.split('\n').filter((l) => !l.includes('todo_write')).join('\n') : TOOLS_PROMPT;
+    if (manyCalls()) tools = tools.split('\n').map((l) => (l.startsWith(BATCH_LINE) ? MANY_CALLS_PROMPT : l)).join('\n');
     sections.push([tools, lazyTools() && LAZY_PROMPT, inScope() && SCOPE_PROMPT, (selfTest() || opts.provider === 'codex') && SELF_TEST_PROMPT, briefFinal() && BRIEF_PROMPT].filter(Boolean).join('\n'));
     if (attribution())
       sections.push(
