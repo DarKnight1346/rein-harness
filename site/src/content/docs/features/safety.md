@@ -52,7 +52,7 @@ An MCP server can change after you've let it in: a new package version, or a ser
 On every later connection, and whenever the server announces a new tool list:
 
 - **Unchanged:** it connects as usual.
-- **Changed:** it still connects, but its tools are **held**: the agent doesn't see them. `/mcp` shows the server in red as `changed since you approved it (new tools: export_all; tool descriptions or schemas changed)`, and Rein says so when it starts. Review what changed, then press `Enter` on it in `/mcp` to accept the server as it is now; that becomes the new pin.
+- **Changed:** it still connects, but its tools are **held**: the agent doesn't see them. `/mcp` shows the server in red as `changed since you approved it (new tools: export_all; and possibly descriptions or schemas) — /mcp to review`, and Rein says so when it starts. Review what changed, then press `Enter` on it in `/mcp` to accept the server as it is now; that becomes the new pin.
 
 Pins are kept as hashes plus tool names in `~/.rein/state/mcp-pins.json`; delete the file to start over. Project servers are pinned per project.
 
