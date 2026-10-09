@@ -99,7 +99,7 @@ agent works by default ships as an experiment (`experiments` in config) until it
 
 | # | Feature | Spec | Docs | Status |
 |---|---|---|---|---|
-| 38 | Contract-change detector | Classify OpenAPI, protobuf, GraphQL and Avro diffs as breaking or safe. |  | todo |
+| 38 | Contract-change detector | Classify OpenAPI, protobuf, GraphQL and Avro diffs as breaking or safe. | features/contracts/#breaking-or-safe | done |
 | 40 | Expand/contract templates | Zero-downtime API and schema changes in safe, ordered steps. |  | todo |
 | 41 | Contract test generation | Consumer-driven contract tests (Pact) for service boundaries. |  | todo |
 | 42 | Schema migration safety | Flag lock-heavy migrations, missing backfills and irreversible steps. |  | todo |

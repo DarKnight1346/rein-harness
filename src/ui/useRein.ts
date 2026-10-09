@@ -64,6 +64,8 @@ import {adrDir, listAdrs, newAdr} from '../specs/adr.js';
 import {checkProject, loadArchitecture} from '../tools/architecture.js';
 import {formatRisk, planRisk} from '../plans/risk.js';
 import {detectTestCommand} from '../agents/bestOf.js';
+import {branchContracts} from '../contracts/changes.js';
+import {formatChanges} from '../contracts/diff.js';
 import {checkoutState, describeCheckout, sparseAdd} from '../workspace/sparse.js';
 import {buildIndex, DEFAULT_MODEL as EMBED_MODEL, formatSemanticHits, loadIndex, semanticSearch} from '../context/semantic.js';
 import {estimateGoalCost} from '../goals/estimate.js';
@@ -1257,6 +1259,14 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
         void (arg ? Promise.resolve([arg]) : changedFiles(root)).then(async (files) => {
           if (!files.length) return log('info', 'No changes (vs HEAD). /owners <path> looks up a file or folder.');
           log('info', `Owners of ${arg || `your ${files.length} changed file${files.length === 1 ? '' : 's'}`}:\n${formatOwners(await ownersOf(root, files))}`);
+        });
+        break;
+      }
+      case 'contracts': {
+        void branchContracts(process.cwd()).then(({base, files}) => {
+          if (!files.length) return log('info', `No API contracts (OpenAPI, protobuf, GraphQL, Avro) changed against ${base}.`);
+          const breaking = files.filter((f) => f.changes.some((c) => c.kind === 'breaking')).length;
+          log('info', [`Contract changes against ${base}: ${breaking ? `${breaking} file${breaking === 1 ? '' : 's'} with breaking changes` : 'nothing breaking'}`, ...files.map((f) => formatChanges(f.file, f.changes))].join('\n'));
         });
         break;
       }

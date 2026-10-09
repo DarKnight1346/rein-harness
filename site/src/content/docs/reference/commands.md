@@ -29,6 +29,7 @@ In fullscreen, commands that show information open a window over the conversatio
 |---|---|---|
 | `/clear` | — | Clears the conversation and stops every subagent. *Waits for idle.* |
 | `/compact` | `[what to keep]` | Summarizes the conversation with the compaction model and keeps the last two messages as-is. With text (`/compact keep the API design decisions`), the summary keeps that in full detail. The agent can bring summarized parts back with `recall`. *Waits for idle.* → [Compaction](../../internals/context/#compaction) |
+| `/contracts` | — | Lists the API contracts (OpenAPI, Swagger, protobuf, GraphQL, Avro) this branch changes against its base, each change marked breaking or safe. See [Contracts & migrations](../../features/contracts/#breaking-or-safe) |
 | `/context` | — | Shows what the context holds and how full it is, as a grid that refreshes every second while open, with the largest items (instruction files, tool results, the summary) listed below it. When viewing a subagent, shows the subagent's context. |
 | `/resume` | — | Picks a saved conversation from this project to continue. *Waits for idle.* |
 | `/rewind` | — | Restores files and/or the conversation to before one of your messages. Also **Esc Esc** with an empty input. |

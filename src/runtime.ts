@@ -7,6 +7,7 @@ import {formatUsd, setCacheWriteTtl, setPriceOverrides} from './providers/prices
 import {Telemetry} from './telemetry/otel.js';
 import {maskSecrets} from './tools/secrets.js';
 import {sastCheck} from './tools/sast.js';
+import {classify, contractNote} from './contracts/changes.js';
 import {loadPolicy, modelBlocked} from './policy.js';
 import {reinConfigDir} from './store/paths.js';
 import {affectedTool} from './build/tool.js';
@@ -109,6 +110,8 @@ export class Runtime {
 
   /** Whether sast and verify-affected have checked this request's changes. */
   private sastChecked = false;
+  /** contract-check ran for this request. */
+  private contractsChecked = false;
   private affectedChecked = false;
   private sizeChecked = false;
   /** The last budget stop (for rein -p's exit status), cleared by your next message. */
@@ -633,6 +636,7 @@ Drop superseded reads of the same file, routine listings, and output that no lon
     if (!/^<(code_check|stop_hook)>/.test(text)) {
       this.requestStartUsd = this.engine?.sessionTokens.usd ?? 0;
       this.sastChecked = false;
+      this.contractsChecked = false;
       this.affectedChecked = false;
       this.sizeChecked = false;
       this.budgetStop = undefined;
@@ -731,6 +735,22 @@ Drop superseded reads of the same file, routine listings, and output that no lon
         this.sastChecked = true;
         const found = await sastCheck(files.map((file) => ({file, before: this.checkpoints.before(since, file)})), process.cwd(), this.config.sastConfig || 'auto').catch(() => undefined);
         if (found) return {reason: found, kind: 'diagnostics'};
+      }
+    }
+    // contract-check: breaking changes this request made to API contracts, once per request.
+    if (activeExperiments(this.config).includes('contract-check') && !this.contractsChecked && this.engine) {
+      const since = this.currentTurn();
+      const files = this.checkpoints.changedSince(since);
+      const found = files
+        .map((f) => {
+          const before = this.checkpoints.before(since, f); // null: it didn't exist; undefined: not known
+          return before === undefined ? undefined : classify(path.relative(process.cwd(), f).split(path.sep).join('/'), before ?? undefined, existsSync(f) ? readFileSync(f, 'utf8') : undefined);
+        })
+        .filter((x): x is NonNullable<typeof x> => !!x);
+      if (found.length) {
+        this.contractsChecked = true;
+        const note = contractNote(found);
+        if (note) return {reason: note, kind: 'diagnostics'};
       }
     }
     // prMaxLines: the branch grew past the size reviewers can take; say so to you (not the agent), once per request.
