@@ -34,6 +34,38 @@ A **request** is one message from you and everything the agent did until your ne
 
 `/stats 90` looks back 90 days, and `/stats all` covers every project. These are your numbers on your code, so they show which model and settings work for you better than a public benchmark would.
 
+## The prompt cache
+
+Most of a turn's input is the same as the last turn's: the system prompt, the tools, the conversation so far. Providers cache that prefix, and a cached token costs a fraction of an uncached one and comes back faster. `/cache` shows how much of your input came from the cache and what made it miss:
+
+```text title="rein"
+> /cache
+  ⎿ Prompt cache, last 30 days (shop): 91% of 48.2M input tokens read from the cache, over 1,906 turns
+    By model:
+      claude:opus                  93% cached · 1,204 turns
+      codex:gpt-5.5                88% cached · 702 turns
+    What made it cold (turns, input tokens not cached):
+      compacted                                      31 turns    1.9M
+      idle (past the cache lifetime)                 22 turns    1.2M
+      switched account                               14 turns    610K
+      first message                                  41 turns    380K
+      new native session (context carried over)       6 turns    240K
+```
+
+For every reply, Rein records the turn's input tokens, how many were cached, and why the cache was cold when it knows:
+
+| Reason | What happened |
+| --- | --- |
+| first message | A new conversation |
+| compacted | `/compact` or auto-compaction replaced the history with a summary |
+| rewound | [`/rewind`](../rewind/) cut the history |
+| switched account / switched provider | [Load balancing or failover](../accounts/) moved the conversation |
+| model changed | Same session, different model (each model has its own cache) |
+| new native session (context carried over) | The CLI session couldn't be resumed, so the context was carried into a new one |
+| idle N min (past the cache lifetime) | Longer than the cache lasts since the account's last turn |
+
+A turn that read under half its input from the cache with none of these reasons shows as **unexplained**. That usually means the system prompt or tool list changed mid-conversation, or the provider evicted the cache early. The data is recorded from this version of Rein on, so older conversations don't count. `/cache 90` and `/cache all` work like `/stats`.
+
 ## Related
 
 - [Cost & budgets](../cost/): what a conversation costs, and caps

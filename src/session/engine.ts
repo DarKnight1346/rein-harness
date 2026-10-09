@@ -131,6 +131,11 @@ export class Engine {
   private readonly lastUsed = new Map<string, number>();
   /** Compaction replaced the history since the last turn: no cache left to protect. */
   private cacheBroken = false;
+  /** Why the next turn's prompt cache is cold, for prompt-cache analytics (/cache). */
+  private coldReason: string | undefined;
+  /** The native session key of the last turn, and the tokens when this turn started. */
+  private lastKey: string | undefined;
+  private turnStart: {uncached: number; cached: number} | undefined;
   /** Account that served the last turn (survives compaction, which drops the native sessions). */
   private lastAccountId: string | undefined;
 
@@ -203,6 +208,7 @@ export class Engine {
     if (!('skipped' in res)) {
       this.closeActive();
       this.cacheBroken = true;
+      this.coldReason = 'compacted';
     }
     return res;
   }
@@ -219,6 +225,7 @@ export class Engine {
     this.lastUsage = undefined;
     this.inFlight = undefined;
     this.cacheBroken = true;
+    this.coldReason = 'rewound';
     await truncateTranscript(t, index);
   }
 
@@ -458,6 +465,10 @@ export class Engine {
           }
           this.lastAccountId = account.id;
           this.cacheBroken = false;
+          const tok = this.sessionTokens;
+          const cache = this.turnStart && {input: tok.uncached - this.turnStart.uncached + tok.cached - this.turnStart.cached, cached: tok.cached - this.turnStart.cached, ...(this.coldReason ? {cold: this.coldReason} : {})};
+          this.coldReason = undefined;
+          this.lastKey = `${route.ref.provider}:${account.id}`;
           t.messages.push({
             role: 'assistant',
             text: reply,
@@ -466,6 +477,7 @@ export class Engine {
             accountId: account.id,
             interrupted: ev.interrupted || undefined,
             tools: replyTools.length ? replyTools : undefined,
+            ...(cache && cache.input > 0 ? {cache} : {}),
           });
           this.markCovered(account, session, t.messages.length);
           if (ev.tokens) this.lastUsage = {ref: route.ref, input: ev.tokens.input, output: ev.tokens.output, at: Date.now()};
@@ -636,6 +648,13 @@ export class Engine {
     const t = this.transcript;
     const key = `${ref.provider}:${account.id}`;
     const text = t.messages[userIndex]!.text;
+    this.turnStart = {uncached: this.sessionTokens.uncached, cached: this.sessionTokens.cached};
+    // Why this turn's cache may be cold (the first reason found wins).
+    const idle = Date.now() - (this.lastUsed.get(account.id) ?? 0);
+    if (!t.messages.some((m) => m.role === 'assistant')) this.coldReason ??= 'first message';
+    else if (this.lastKey && this.lastKey !== key) this.coldReason ??= this.lastKey.split(':')[0] !== ref.provider ? 'switched provider' : 'switched account';
+    else if (this.lastUsed.has(account.id) && idle >= (CACHE_WARM_MS[ref.provider] ?? 5 * 60_000)) this.coldReason ??= `idle ${Math.round(idle / 60_000)} min (past the cache lifetime)`;
+    else if (this.active && this.active.ref.model !== ref.model) this.coldReason ??= 'model changed';
     if (this.active && this.active.key !== key) this.closeActive();
     // A different effort: Codex changes it per turn; Claude's is per process — reopen (resumes).
     if (this.active && this.active.session.effort !== effort) {
@@ -646,6 +665,7 @@ export class Engine {
       const known = t.native[key];
       // Resume the native session only if it saw everything up to now; otherwise carry context.
       const resumeId = known && known.coversUpTo === userIndex ? known.nativeId : undefined;
+      if (!resumeId && t.messages.some((m) => m.role === 'assistant')) this.coldReason ??= 'new native session (context carried over)';
       const session = catalog.track(await adapters[ref.provider].openSession({account, model: ref.model, systemPrompt: await systemPrompt({tools: !!this.deps.tools, scratch: this.scratch, provider: ref.provider}), resumeId, tools: this.deps.tools?.binding, effort}));
       this.active = {session, key, ref};
       if (!resumeId) t.native[key] = {provider: ref.provider, accountId: account.id, nativeId: '', coversUpTo: 0};
@@ -769,7 +789,10 @@ export class Engine {
     yield {type: 'compact', phase: 'start', reason, messages};
     try {
       const result = await this.deps.compact(this.transcript, reason, {...(keepRecent === undefined ? {} : {keepRecent}), model: this.active?.ref, live: this.liveSummarizer()});
-      if (!('skipped' in result)) this.cacheBroken = true;
+      if (!('skipped' in result)) {
+        this.cacheBroken = true;
+        this.coldReason = 'compacted';
+      }
       yield {type: 'compact', phase: 'end', reason, result};
     } catch (err) {
       yield {type: 'notice', text: `Compaction failed: ${(err as Error).message}`};
