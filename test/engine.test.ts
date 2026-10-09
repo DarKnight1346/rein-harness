@@ -218,6 +218,26 @@ describe('context-cap', () => {
   });
 });
 
+describe('faithful-compaction', () => {
+  it("keeps the user's requests word for word, shows the summarizer real tool output, and uses the working model", async () => {
+    await tempHome([acct('claude', 'c1')]);
+    const {adapter, log} = fakeAdapter('claude', CLAUDE_FAKE_MODELS, () => reply('ok'), () => 'GOAL: test');
+    install('claude', adapter);
+    await catalog.refresh();
+    const e = engineWith();
+    const spec = 'Implement classes. Exact error: `SyntaxError: Unexpected token` at 3:7, and keep ASI working.';
+    await collect(e.send(spec));
+    e.transcript.messages.push({role: 'assistant', text: 'working', at: 0, tools: [{label: 'Shell', summary: '$ go test', ok: false, result: 'x'.repeat(1000) + 'FAIL TestClassFields: want 3 got 4'}]});
+    for (const m of ['two', 'three']) await collect(e.send(m));
+    const working = {provider: 'claude' as const, model: CLAUDE_FAKE_MODELS[1]!.id};
+    await compactTranscript(e.transcript, {...config, experiments: ['faithful-compaction']}, {keepRecent: 0, model: working});
+    expect(log.oneShots[0]!.model).toBe(working.model);
+    expect(log.oneShots[0]!.prompt).toContain('FAIL TestClassFields: want 3 got 4'); // past the old 300-char excerpt
+    expect(log.oneShots[0]!.system).toContain('FAILED APPROACHES');
+    expect(e.transcript.summary!.map).toContain(`--- request 1 ---\n${spec}`);
+  });
+});
+
 describe('compactor', () => {
   it('summarizes old messages, keeps recent ones, and drops native refs', async () => {
     await tempHome([acct('claude', 'c1')]);

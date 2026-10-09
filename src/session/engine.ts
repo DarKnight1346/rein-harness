@@ -33,7 +33,7 @@ export type EngineDeps = {
   /** Pick a replacement model when every account for `failed` is unavailable. */
   alternative: (text: string, t: Transcript, failed: ModelRef, exclude: ReadonlySet<string>) => Promise<ModelRef | undefined>;
   /** Summarize older messages into `t.summary` (M6). */
-  compact: (t: Transcript, reason: CompactReason, opts?: {keepRecent?: number}) => Promise<CompactResult>;
+  compact: (t: Transcript, reason: CompactReason, opts?: {keepRecent?: number; model?: ModelRef}) => Promise<CompactResult>;
   /** Rein's tools for chat sessions, plus their activity feed (tool lines in the transcript). */
   tools?: {binding: ToolBinding; forkBinding?: ToolBinding; onActivity(fn: (a: ToolActivity) => void): () => void};
   /** Picks which tool results a new session needs when the conversation moves (compaction model). */
@@ -693,7 +693,7 @@ export class Engine {
     if (!messages) return;
     yield {type: 'compact', phase: 'start', reason, messages};
     try {
-      const result = await this.deps.compact(this.transcript, reason, keepRecent === undefined ? undefined : {keepRecent});
+      const result = await this.deps.compact(this.transcript, reason, {...(keepRecent === undefined ? {} : {keepRecent}), model: this.active?.ref});
       if (!('skipped' in result)) this.cacheBroken = true;
       yield {type: 'compact', phase: 'end', reason, result};
     } catch (err) {
