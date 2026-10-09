@@ -125,7 +125,7 @@ agent works by default ships as an experiment (`experiments` in config) until it
 
 | # | Feature | Spec | Docs | Status |
 |---|---|---|---|---|
-| 105 | Service dependency graph | Which service calls which, from manifests, OpenAPI, protobuf and Kubernetes config. |  | todo |
+| 105 | Service dependency graph | Which service calls which, from manifests, OpenAPI, protobuf and Kubernetes config. | features/system/#which-service-calls-which | done |
 | 106 | Cross-repo symbol graph | Join language-server and SCIP indexes across repos. |  | todo |
 | 107 | API-aware find references | Follow a call from gateway to service to consumer across repos. Builds on #105, #106. |  | todo |
 | 108 | Consumer impact report | Every caller of an endpoint or type a change touches, in every repo. Builds on #107. |  | todo |

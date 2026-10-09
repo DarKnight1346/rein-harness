@@ -72,6 +72,8 @@ import {collectCache, formatCache} from '../insight/cache.js';
 import {describeJobs, loadJobs, scheduledProjects} from '../schedule/index.js';
 import {describeDevEnv, detectDevEnv} from '../env/devenv.js';
 import {describeLive, listLive, removeLive, sendTo, watchInbox, writeLive} from '../host/live.js';
+import {formatGraph, mermaid} from '../system/services.js';
+import {graphFor} from '../system/tools.js';
 import {deadCodeTask, findDeadCode, findFlags, flagRemovalTask, formatFlags, isStale} from '../contracts/deadcode.js';
 import {checkoutState, describeCheckout, sparseAdd} from '../workspace/sparse.js';
 import {buildIndex, DEFAULT_MODEL as EMBED_MODEL, formatSemanticHits, loadIndex, semanticSearch} from '../context/semantic.js';
@@ -1299,6 +1301,11 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
           if (!files.length) return log('info', 'No changes (vs HEAD). /owners <path> looks up a file or folder.');
           log('info', `Owners of ${arg || `your ${files.length} changed file${files.length === 1 ? '' : 's'}`}:\n${formatOwners(await ownersOf(root, files))}`);
         });
+        break;
+      }
+      case 'services': {
+        const asMermaid = parsed.args.trim() === 'mermaid';
+        void graphFor(process.cwd(), 0).then((g) => log('info', asMermaid ? mermaid(g) : formatGraph(g)));
         break;
       }
       case 'sessions': {

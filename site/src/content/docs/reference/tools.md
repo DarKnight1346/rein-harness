@@ -393,6 +393,16 @@ Label `SemanticSearch`. Approval: none (read-only). Only listed once `semanticIn
 
 The chunks (about 60 lines each) closest in meaning to the query, with `file:start-end`, a similarity score and their first lines. See [Search by meaning](../../features/large-codebases/#search-by-meaning).
 
+### `service_graph`
+
+Label `Services`. Approval: none (read-only). Only listed with the `system-graph` [experiment](../configuration/#experiments) on.
+
+| Parameter | Type | Notes |
+| --- | --- | --- |
+| `service` | string | A service (repo or folder) name. Omit for the whole graph |
+
+The service's callers and what it calls, each with the evidence (file and line). See [Which service calls which](../../features/system/#which-service-calls-which).
+
 ### `lsp_install`
 
 Label `InstallLanguageServer`. Approval: **always asks, even in bypass mode.**
