@@ -11,6 +11,7 @@ import {TOOLS, toolByName, type ToolDef} from './registry.js';
 import {addProjectRule, check, loadRules, ruleTool, suggestRule, type Rules, type Subject} from './permissions.js';
 import {hasHooks, runHooks} from '../hooks.js';
 import {renderScoped, scopedInstructions} from '../session/prompt.js';
+import {Watchdog} from './watchdog.js';
 import {readOnlyCommand} from './plan.js';
 import {steer} from './steer.js';
 import {ipcPath, isWindows} from '../util/platform.js';
@@ -470,7 +471,12 @@ export class ToolHost extends EventEmitter {
         const changes = this.opts.diagnostics && ['write', 'edit', 'delete'].includes(tool.name) ? this.filesOf(ctx, tool, args) : [];
         const snapshot = changes.length ? await this.opts.diagnostics!.before(changes, ctx.root).catch(() => undefined) : undefined;
         const repeat = tool.name === 'read' ? this.unchangedRead(ctx, args, origin) : undefined;
+        const watched = this.experiment('watchdog') && !origin ? this.filesOf(ctx, tool, args) : undefined;
+        const stop = watched && this.watchdog.before(tool.name, args, watched);
+        if (stop) throw new ToolError(stop);
         result = repeat ?? (await tool.run(ctx, args ?? {}));
+        const loop = watched && this.watchdog.after(tool.name, args, result.ok, watched);
+        if (loop) result = {...result, text: `${result.text}\n\n${loop}`};
         if (!repeat && tool.name === 'read') this.noteRead(ctx, args, result, origin);
         if (tool.name === 'shell') result = this.quietPassing(args, result);
         if (result.ok && snapshot) {
@@ -505,6 +511,9 @@ export class ToolHost extends EventEmitter {
     this.emit('activity', {phase: 'end', id, label: tool.label, summary, ok: result.ok, result: result.text, approvedBy, judge, origin, diff: result.diff} satisfies ToolActivity);
     return {ok: result.ok, text: result.text, ...(result.images?.length ? {images: result.images} : {})}; // the diff is for the user, not the model
   }
+
+  /** The `watchdog` experiment: the main agent repeating a failing command or undoing its own edits. */
+  readonly watchdog = new Watchdog();
 
   private experiment(name: string): boolean {
     return this.opts.experiments?.().includes(name) ?? false;

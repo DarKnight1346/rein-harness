@@ -506,6 +506,7 @@ Drop superseded reads of the same file, routine listings, and output that no lon
     if (!/^<(code_check|stop_hook)>/.test(text)) {
       this.requestStartUsd = this.engine?.sessionTokens.usd ?? 0;
       this.budgetStop = undefined;
+      this.tools.watchdog.reset();
       this.escalation = undefined;
       this.verifyPasses = 0;
       this.verifiedAt = undefined;
