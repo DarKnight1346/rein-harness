@@ -24,6 +24,8 @@ export type Account = {
   api?: 'console' | 'bedrock' | 'vertex' | 'openai';
   /** Non-secret settings for Bedrock / Vertex (credentials come from your AWS / Google setup). */
   apiConfig?: {region?: string; profile?: string; projectId?: string};
+  /** REIN_ENV_KEYS: a one-run account using the API key in the environment (never saved). */
+  envKey?: boolean;
 };
 
 export const isApiAccount = (a: Pick<Account, 'api'>) => !!a.api;

@@ -181,9 +181,59 @@ To fail a CI step on the *content* of the answer, check `result` yourself (see t
 
 Your [hooks](../hooks/) all run. `SessionStart` fires with `source: "resume"` when you use `-c`. A `Stop` hook can send the agent back to work up to 10 times. This also means a repository's own hooks run in CI.
 
+## The Rein GitHub Action
+
+The repo ships a composite action, so a workflow runs Rein in one step, on GitHub's hosted runners with an Anthropic API key or on a self-hosted runner where Rein is signed in:
+
+```yaml title=".github/workflows/rein-review.yml"
+name: Rein review
+on: pull_request
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: DarKnight1346/rein-harness@main   # pin a commit SHA in real workflows
+        id: rein
+        with:
+          prompt: Review the changes on this branch against origin/${{ github.base_ref }}. List real bugs and risky changes only, most severe first. End with VERDICT: OK or VERDICT: CHANGES.
+          anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
+          permission-mode: ask
+      - if: ${{ !contains(steps.rein.outputs.result, 'VERDICT: OK') }}
+        run: exit 1
+```
+
+| Input | Default | Meaning |
+|---|---|---|
+| `prompt` | (required) | What to ask. |
+| `anthropic-api-key` | `''` | An Anthropic API key from a secret. Empty on a self-hosted runner where Rein is signed in. |
+| `permission-mode` | `ask` | `ask` (read-only), `auto`, `bypass` or `plan`. |
+| `model` | `''` | A model ref or `auto`; empty for the default. |
+| `allowed-tools` | `''` | Rules that run without asking, like `shell(npm test:*),edit(src/**)`. |
+| `version` | `latest` | The `rein-harness` version to install. |
+| `working-directory` | `.` | Where to run. |
+
+Outputs: `result` (the final reply), `is-error`, and `cost-usd` (at API list prices). The reply is also written to the job summary. The action installs Node 22, `rein-harness` and Claude Code when they're missing, and fails the step when the run fails.
+
+With a key, the action sets `REIN_ENV_KEYS=1`: for that run only, Rein uses `ANTHROPIC_API_KEY` from the environment through the official `claude` CLI, in a fresh config folder, and never saves it. Codex can't use a key from the environment this way yet.
+
+## GitLab CI component
+
+`templates/rein.yml` is a [GitLab CI/CD component](https://docs.gitlab.com/ci/components/) with inputs `prompt`, `stage` (`test`), `permission-mode` (`ask`), `model`, `version` (`latest`) and `image` (`node:22`). Set `ANTHROPIC_API_KEY` as a masked CI/CD variable; the job runs `rein -p` with `REIN_ENV_KEYS=1` and keeps `rein-result.json` as an artifact.
+
+```yaml title=".gitlab-ci.yml"
+include:
+  - component: $CI_SERVER_FQDN/<group>/rein-harness/rein@<version>
+    inputs:
+      prompt: Review this merge request's changes and list real bugs only.
+```
+
 ## GitHub Actions example
 
-Rein drives your subscription CLIs, so the job needs a machine where Rein is installed and signed in, such as a self-hosted runner where you've run `rein` once.
+Without the action: Rein drives your subscription CLIs, so the job needs a machine where Rein is installed and signed in, such as a self-hosted runner where you've run `rein` once.
 
 ```yaml title=".github/workflows/rein-review.yml"
 name: Rein review

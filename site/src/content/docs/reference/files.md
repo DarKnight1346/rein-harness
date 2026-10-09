@@ -138,6 +138,7 @@ Added to the system prompt for every provider, up to 64 KB each, duplicates remo
 | `REIN_NO_AUTOUPDATE` | Any value turns off the launch-time auto-update |
 | `REIN_NO_BROWSER` | Don't open a browser for login URLs; Rein still shows the URL |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | The OTLP endpoint when `otel` is set in config without an `endpoint` (see [Observability](../../features/observability/)) |
+| `REIN_ENV_KEYS` | `1` (for CI, as the [GitHub Action](../../features/headless/#the-rein-github-action) sets it): a one-run Claude account that uses `ANTHROPIC_API_KEY` from the environment through the official `claude` CLI, in a fresh config folder; never saved. Otherwise Rein removes that variable so each account uses its own login |
 | `REIN_NO_USAGE_REFRESH` | Turn off background usage refresh (the occasional tiny Claude ping and Codex usage reads) |
 | `REIN_GIT_BASH_PATH`, `CLAUDE_CODE_GIT_BASH_PATH` | Windows: which `bash.exe` the shell tool and hooks use. Otherwise Rein looks in the standard Git for Windows locations, then next to `git` on `PATH`, then falls back to PowerShell |
 | `TYPESAFE_API_KEY` | Jev API key, which overrides the stored one |

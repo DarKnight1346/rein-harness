@@ -78,6 +78,10 @@ These are real, and you should know them:
 
 Optional guards vet new dependencies (`depCheck`, which looks packages up on their registries and OSV), catch instructions planted in web pages and MCP results (`injectionScan`) and make network calls your decision once private data and outside content are both in a conversation (`exfilGuard`). See [Safety guards](../../features/safety/).
 
+## API keys in CI
+
+Rein removes API keys from the environment it gives each CLI, so every account uses its own login. The one exception is `REIN_ENV_KEYS=1` (set by the GitHub Action and the GitLab component): a one-run account that uses `ANTHROPIC_API_KEY` from the environment through the official `claude` CLI, never saved to disk.
+
 ## Secret scanning
 
 With `secretScan` set to `warn` or `block`, Rein checks each change the agent makes for credentials it would add to a file, and masks them in saved conversations. See [Secret scanning](../../features/permissions/#secret-scanning).
