@@ -854,6 +854,7 @@ Drop superseded reads of the same file, routine listings, and output that no lon
         this.engine?.refreshTools();
       }
     });
+    this.mcp.pinning = () => this.config.mcpPinning === true;
     // MCP sampling: servers may ask for a completion, answered with the user's subscriptions.
     this.mcp.sampling = samplingHandler({
       config: () => this.config,

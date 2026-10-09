@@ -97,6 +97,8 @@ export type Config = {
   injectionScan: boolean;
   /** Once outside content and private data have both been in a conversation, network calls need your yes. */
   exfilGuard: boolean;
+  /** Pin each MCP server's config and tools when first approved; a changed server's tools wait for your review. */
+  mcpPinning: boolean;
   /** Semgrep rules (--config): auto, a registry pack like p/owasp-top-ten, or a path. */
   sastConfig: string;
   /** OpenTelemetry export of turns, tool calls, tokens and cost (metadata only). Off unless set. */
@@ -167,6 +169,7 @@ export const DEFAULT_CONFIG: Config = {
   sast: 'off',
   injectionScan: false,
   exfilGuard: false,
+  mcpPinning: false,
   sastConfig: 'auto',
   steerShell: true,
   mcpSampling: 'ask',

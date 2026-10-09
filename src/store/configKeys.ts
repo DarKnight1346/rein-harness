@@ -65,6 +65,7 @@ export const CONFIG_KEYS: KeyInfo[] = [
   k('lsp', 'Code intelligence through language servers: auto or off', oneOf('auto', 'off')),
   k('lspIdleMinutes', 'Stop a language server after this many idle minutes', num(1)),
   k('lspServers', 'Your own language servers: {"ruby": {"command": "solargraph", "args": ["stdio"]}}', json),
+  k('mcpPinning', "Pin each MCP server's launch config and tools when first used; if either changes, its tools are held until you review it in /mcp", bool),
   k('mcpSampling', 'When an MCP server asks for a completion: ask, allow or off', oneOf('ask', 'allow', 'off')),
   k('tui', 'Renderer: fullscreen or classic', oneOf('fullscreen', 'classic')),
   k('sidebar', 'Show the sidebar in fullscreen mode', bool),

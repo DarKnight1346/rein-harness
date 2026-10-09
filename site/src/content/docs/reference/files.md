@@ -34,6 +34,7 @@ An existing `~/.rein` keeps being used as it is, and so does `REIN_HOME`. To swi
 | `accounts/codex/<id>/` | `CODEX_HOME` for a Codex account you added (`codex-1`, …) |
 | `state/trackers.json` | Issues the [trackers](../../features/trackers/) have taken (so a restart doesn't redo them), with their status and branch |
 | `worktrees/<project>/rein-<issue>/` | The worktree an issue was worked on, on its `rein/<issue>` branch, kept for you to review. Remove it with `git worktree remove` when you're done |
+| `state/mcp-pins.json` | With `mcpPinning`: each MCP server's launch config and tool list as first approved (hashes and tool names). Delete it to start over |
 | `state/usage.json` | Last-known usage windows per account, plus limit cooldowns (account unusable until a time) |
 | `exports/<id>.md` | Conversations saved with `/export` (when no file is given) |
 | `mcp-auth/<host>_<path>.json` | OAuth tokens and client registration for each remote MCP server you signed in to (owner-only), e.g. `mcp.linear.app_mcp.json`. Delete one to sign out of that server |

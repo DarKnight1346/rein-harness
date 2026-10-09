@@ -171,6 +171,9 @@ The agent can manage servers itself, so "connect the Postgres MCP server" is a c
 
 ## The /mcp screen
 
+With [`mcpPinning`](../safety/#changed-mcp-servers-mcppinning) on, a server whose config or tools changed since you first used it shows as `changed`, with its tools held; `Enter` accepts it as it is now.
+
+
 `/mcp` lists every server with a status dot, its tool count or state, transport and source:
 
 ```text title="rein"
