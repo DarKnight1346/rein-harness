@@ -42,7 +42,7 @@ describe('multi-service local stack', () => {
     const stack = new LocalStack(root, exec, async () => {});
     const r = await stack.up(['orders']);
     expect(r).toMatchObject({ok: true, message: 'Up and healthy: orders, db.'});
-    expect(calls[1]).toBe('docker compose -f <root>/compose.yaml up -d --wait --wait-timeout 300 orders');
+    expect(calls[1]).toBe(`docker compose -f ${path.join('<root>', 'compose.yaml')} up -d --wait --wait-timeout 300 orders`);
     ps = [{...PS[0]!, Health: 'starting'}];
     expect((await stack.up(['orders'])).message).toBe('Not ready: orders (starting).');
   });
