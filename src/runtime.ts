@@ -8,6 +8,7 @@ import {Telemetry} from './telemetry/otel.js';
 import {maskSecrets} from './tools/secrets.js';
 import {sastCheck} from './tools/sast.js';
 import {classify, contractNote} from './contracts/changes.js';
+import {isMigration, lintMigration, migrationNote} from './contracts/migrations.js';
 import {loadPolicy, modelBlocked} from './policy.js';
 import {reinConfigDir} from './store/paths.js';
 import {affectedTool} from './build/tool.js';
@@ -112,6 +113,8 @@ export class Runtime {
   private sastChecked = false;
   /** contract-check ran for this request. */
   private contractsChecked = false;
+  /** migration-check ran for this request. */
+  private migrationsChecked = false;
   private affectedChecked = false;
   private sizeChecked = false;
   /** The last budget stop (for rein -p's exit status), cleared by your next message. */
@@ -637,6 +640,7 @@ Drop superseded reads of the same file, routine listings, and output that no lon
       this.requestStartUsd = this.engine?.sessionTokens.usd ?? 0;
       this.sastChecked = false;
       this.contractsChecked = false;
+      this.migrationsChecked = false;
       this.affectedChecked = false;
       this.sizeChecked = false;
       this.budgetStop = undefined;
@@ -750,6 +754,16 @@ Drop superseded reads of the same file, routine listings, and output that no lon
       if (found.length) {
         this.contractsChecked = true;
         const note = contractNote(found);
+        if (note) return {reason: note, kind: 'diagnostics'};
+      }
+    }
+    // migration-check: the request's migrations that lock, need a backfill, can't be undone or break running code.
+    if (activeExperiments(this.config).includes('migration-check') && !this.migrationsChecked && this.engine) {
+      const root = process.cwd();
+      const files = this.checkpoints.changedSince(this.currentTurn()).filter((f) => existsSync(f) && isMigration(path.relative(root, f)));
+      if (files.length) {
+        this.migrationsChecked = true;
+        const note = migrationNote(files.flatMap((f) => lintMigration(root, path.relative(root, f), readFileSync(f, 'utf8'))));
         if (note) return {reason: note, kind: 'diagnostics'};
       }
     }

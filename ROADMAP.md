@@ -102,7 +102,7 @@ agent works by default ships as an experiment (`experiments` in config) until it
 | 38 | Contract-change detector | Classify OpenAPI, protobuf, GraphQL and Avro diffs as breaking or safe. | features/contracts/#breaking-or-safe | done |
 | 40 | Expand/contract templates | Zero-downtime API and schema changes in safe, ordered steps. | features/contracts/#expand-and-contract | done |
 | 41 | Contract test generation | Consumer-driven contract tests (Pact) for service boundaries. | features/contracts/#contract-tests-between-services | done |
-| 42 | Schema migration safety | Flag lock-heavy migrations, missing backfills and irreversible steps. |  | todo |
+| 42 | Schema migration safety | Flag lock-heavy migrations, missing backfills and irreversible steps. | features/contracts/#migration-safety | done |
 | 43 | Codemod synthesis | For repetitive changes, write a deterministic script (jscodeshift, OpenRewrite, Comby) instead of hand edits. |  | todo |
 | 44 | Migration playbooks | Skills such as Java 8 to 21, Python 2 to 3, React classes to hooks. |  | todo |
 | 45 | Dead code and stale-flag campaigns | Find and remove unused code and fully rolled-out flags. |  | todo |

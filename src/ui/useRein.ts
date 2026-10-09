@@ -66,6 +66,7 @@ import {formatRisk, planRisk} from '../plans/risk.js';
 import {detectTestCommand} from '../agents/bestOf.js';
 import {branchContracts} from '../contracts/changes.js';
 import {formatChanges} from '../contracts/diff.js';
+import {branchMigrations, formatFindings} from '../contracts/migrations.js';
 import {checkoutState, describeCheckout, sparseAdd} from '../workspace/sparse.js';
 import {buildIndex, DEFAULT_MODEL as EMBED_MODEL, formatSemanticHits, loadIndex, semanticSearch} from '../context/semantic.js';
 import {estimateGoalCost} from '../goals/estimate.js';
@@ -1259,6 +1260,14 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
         void (arg ? Promise.resolve([arg]) : changedFiles(root)).then(async (files) => {
           if (!files.length) return log('info', 'No changes (vs HEAD). /owners <path> looks up a file or folder.');
           log('info', `Owners of ${arg || `your ${files.length} changed file${files.length === 1 ? '' : 's'}`}:\n${formatOwners(await ownersOf(root, files))}`);
+        });
+        break;
+      }
+      case 'migrations': {
+        void branchMigrations(process.cwd()).then(({base, findings, files}) => {
+          if (!files.length) return log('info', `No migration files added or changed against ${base}.`);
+          if (!findings.length) return log('info', `${files.length} migration file${files.length === 1 ? '' : 's'} against ${base}: nothing risky found.`);
+          log('info', `${findings.length} risk${findings.length === 1 ? '' : 's'} in ${files.length} migration file${files.length === 1 ? '' : 's'} (against ${base}):\n${formatFindings(findings)}`);
         });
         break;
       }

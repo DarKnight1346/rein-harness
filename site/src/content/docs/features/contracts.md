@@ -34,6 +34,32 @@ A change is breaking when a client written against the old contract can fail wit
 
 With the `contract-check` [experiment](../../reference/configuration/#experiments) on, the agent hears about it at the end of a request that broke a contract it changed. It's told to say so if the break is intended (and make it a versioned or [expand/contract](#expand-and-contract) change), or else to make the change backward compatible.
 
+## Migration safety
+
+A migration that's fine on your laptop can take production down. A table rewrite holds a lock for minutes, a `NOT NULL` column fails on the first existing row, and a rename breaks the old version of the app while the deploy is still rolling. `/migrations` reads the migration files this branch adds or changes and flags those steps, each with the safer way:
+
+```text title="rein"
+> /migrations
+  ⎿ 3 risks in 1 migration file (against origin/main):
+      db/migrations/0042_totals.sql:2  [needs a backfill] adds a NOT NULL column without a default: fails on a table that has rows
+          instead: add it nullable (or with a default), backfill in batches, then SET NOT NULL
+      db/migrations/0042_totals.sql:4  [locks] creates an index without CONCURRENTLY: writes to the table block until it is built
+          instead: CREATE INDEX CONCURRENTLY (outside a transaction); in MySQL, ALGORITHM=INPLACE, LOCK=NONE
+      db/migrations/0042_totals.sql:9  [breaks running code] renames a column or table: code still running from the previous deploy breaks at once
+          instead: add the new name, dual-write, move readers, then drop the old one (expand/contract), or use a view
+```
+
+| Risk | What's flagged |
+| --- | --- |
+| **Locks** | Indexes built without `CONCURRENTLY` (Rails `algorithm: :concurrently`, Django `AddIndexConcurrently`, Alembic `postgresql_concurrently=True`); column type changes; `SET NOT NULL`; foreign keys and checks without `NOT VALID`; volatile column defaults (`now()`, `gen_random_uuid()`…); `LOCK TABLE`, `VACUUM FULL`, `CLUSTER` |
+| **Needs a backfill** | A `NOT NULL` column (Rails `null: false`, Django without `null=True` or a default, Alembic `nullable=False` without `server_default`) with no default; `UPDATE` or `DELETE` of every row inside the migration |
+| **Irreversible** | `DROP COLUMN`, `DROP TABLE`, `TRUNCATE`, `remove_column`, `RemoveField`, `drop_column`; an `.up.sql` without its `.down.sql`, an empty goose/sql-migrate `Down`, `up()` without `down()`, an empty Alembic `downgrade()` |
+| **Breaks running code** | Renames of columns and tables (`RENAME`, `rename_column`, `RenameField`, `new_column_name=`) |
+
+Rein knows migrations by where they live: `migrations/`, `db/migrate/`, `alembic/versions/`, Flyway's `V1__name.sql`, `*.up.sql`. It reads plain SQL (Postgres first, with MySQL's online-DDL options), Rails, Django and Alembic migrations, plus the SQL inside `RunSQL`, `op.execute` and Knex or TypeORM `raw`/`query` calls. Down migrations aren't flagged for undoing things. Some findings depend on table size and database version; the agent and you decide which apply.
+
+With the `migration-check` [experiment](../../reference/configuration/#experiments) on, the agent hears about these at the end of a request that wrote migrations. It fixes the ones that apply, and says so when a step is deliberate.
+
 ## Expand and contract
 
 Renaming a column, changing a field's type or removing an endpoint breaks whatever still uses the old shape. That includes the old version of your own service, which keeps running during a deploy. The safe way is three phases, each deployed on its own:
