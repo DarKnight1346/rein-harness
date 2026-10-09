@@ -122,15 +122,18 @@ export async function startHost(cwd: string, args: string[], size = {cols: proce
   const id = randomBytes(4).toString('hex');
   const target = launch ?? {file: process.execPath, args: [...cli, ...args]};
   const child = spawn(process.execPath, [...cli, 'host', id, String(size.cols), String(size.rows), target.file, ...target.args], {cwd, detached: true, stdio: 'ignore', windowsHide: true});
+  let exited: number | null | undefined;
+  child.on('exit', (code) => (exited = code));
   child.unref();
-  for (let i = 0; i < 100; i++) {
+  // Up to 30 s on a busy machine; a host that dies on the way out says so at once.
+  for (let i = 0; i < 300 && exited === undefined; i++) {
     if (existsSync(infoFile(id))) {
       const h = listHosts().find((x) => x.id === id);
       if (h) return h;
     }
     await new Promise((r) => setTimeout(r, 100));
   }
-  throw new Error('the background session didn’t start (is node-pty installed? npm install -g rein-harness reinstalls it)');
+  throw new Error(exited !== undefined ? `the background session exited at once (code ${exited}); is node-pty installed? npm install -g rein-harness reinstalls it` : 'the background session didn’t start within 30 seconds');
 }
 
 /** Attach this terminal to a host: its screen here, keys there. Resolves 'detached' (Ctrl+\ or the host went away) or 'exited'. */

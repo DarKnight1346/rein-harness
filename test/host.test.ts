@@ -68,5 +68,5 @@ describe.runIf(process.platform !== 'win32')('rein --background', () => {
     expect(listHosts().map((x) => x.id)).toContain(h.id);
     killHost(h);
     expect(await until(() => !listHosts().some((x) => x.id === h.id))).toBe(true);
-  }, 30_000);
+  }, 60_000); // starting the CLI from TypeScript source is slow on a busy machine
 });
