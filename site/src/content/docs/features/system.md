@@ -112,6 +112,37 @@ It works in three steps:
 2. **Who calls it.** Endpoints and RPCs are followed like [`/refs`](#follow-a-call-across-repos). Symbols go through the repos' [SCIP indexes](#symbols-across-repos) when there are any, and otherwise a whole-word search in the other services.
 3. **The report.** Breaking changes come first, then the most-used.
 
+## One change, several repos
+
+Some tasks are one change in three places: the API, the client library and the app that uses it. A **change set** keeps them together:
+
+```text title="rein"
+> /changeset start split-users api web
+  ⎿ Change set split-users: branch split-users in api, web.
+
+> … the agent makes the change in both repos …
+
+> /changeset test
+  ⎿ api: npm test…
+    web: npm test…
+    All 2 repos pass, tested in dependency order:
+      ✓ api  npm test
+      ✓ web  npm test
+
+> /changeset pr yes
+  ⎿ Opened pull requests in api, web.
+    Linked api#41, web#118.
+```
+
+| Command | What it does |
+| --- | --- |
+| `/changeset start <name> [repo…]` | Creates (or switches to) the branch `<name>` in each repo you name, or every cloned repo of the [workspace](../workspaces/). Uncommitted changes come along. Saved in the workspace's `.rein/changesets/<name>.json` |
+| `/changeset status [name]` | Each repo: on the branch or not, commits ahead of its default branch, uncommitted files |
+| `/changeset test [name]` | Each repo's test command on its branch, in **dependency order**: repos that others call (by [`/services`](#which-service-calls-which)) before the ones that call them. A repo that's on another branch counts as failed, and one with no test command is skipped |
+| `/changeset pr [name]` | Says what it would do. `/changeset pr yes` pushes the branch in each repo, opens a pull request with `gh`, and [links them to each other](../workspaces/#pull-requests-across-repos) |
+
+Without a name, these work on the newest change set. Testing in dependency order means a failing API shows up before the app that depends on it. Wiring local versions of one repo into another (npm workspaces, `go work`, `replace` directives) is up to your project's setup.
+
 ## Related
 
 - [Workspaces](../workspaces/): several repos as one system

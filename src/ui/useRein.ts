@@ -78,6 +78,7 @@ import {findServices} from '../system/services.js';
 import {buildSymbolGraph, crossRepo, formatLookup, indexRepos, lookup} from '../system/scip.js';
 import {findApiRefs, formatRefs} from '../system/api.js';
 import {formatImpact, impactReport} from '../system/impact.js';
+import {changeSetState, formatState, formatTests, loadChangeSets, openPrs, startChangeSet, testChangeSet} from '../system/changeset.js';
 import {deadCodeTask, findDeadCode, findFlags, flagRemovalTask, formatFlags, isStale} from '../contracts/deadcode.js';
 import {checkoutState, describeCheckout, sparseAdd} from '../workspace/sparse.js';
 import {buildIndex, DEFAULT_MODEL as EMBED_MODEL, formatSemanticHits, loadIndex, semanticSearch} from '../context/semantic.js';
@@ -1305,6 +1306,41 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
           if (!files.length) return log('info', 'No changes (vs HEAD). /owners <path> looks up a file or folder.');
           log('info', `Owners of ${arg || `your ${files.length} changed file${files.length === 1 ? '' : 's'}`}:\n${formatOwners(await ownersOf(root, files))}`);
         });
+        break;
+      }
+      case 'changeset': {
+        const ws = findWorkspace();
+        if (!ws) {
+          log('error', 'Change sets span the repos of a workspace: put a rein.workspace.yaml above them first (see the Workspaces docs).');
+          break;
+        }
+        const [csSub = 'status', ...rest] = parsed.args.trim().split(/\s+/).filter(Boolean);
+        if (csSub === 'start') {
+          const [name, ...repos] = rest;
+          if (!name) {
+            log('error', 'Usage: /changeset start <name> [repo…] (all cloned repos when none are named)');
+            break;
+          }
+          void startChangeSet(ws, name, repos).then(({set, done, failed}) => {
+            log(failed.length ? 'error' : 'info', [`Change set ${set.name}: branch ${set.branch} in ${done.join(', ') || 'no repo'}.`, ...failed].join('\n'));
+            runtime.engine?.refreshTools();
+          });
+          break;
+        }
+        const sets = loadChangeSets(ws);
+        const yes = rest.includes('yes');
+        const named = rest.filter((x) => x !== 'yes')[0];
+        const set = named ? sets.find((s) => s.name === named) : sets[0];
+        if (!set) {
+          log('info', sets.length ? `No change set "${named}". Change sets: ${sets.map((s) => s.name).join(', ')}` : 'No change sets yet: /changeset start <name> makes one branch for the task in each repo.');
+          break;
+        }
+        if (csSub === 'status') void changeSetState(ws, set).then((s) => log('info', formatState(set, s)));
+        else if (csSub === 'test') void graphFor(process.cwd()).then(async (g) => log('info', formatTests(await testChangeSet(ws, set, g.edges, undefined, (l) => log('info', l)))));
+        else if (csSub === 'pr') {
+          if (!yes) log('info', `/changeset pr yes will push ${set.branch} in ${set.repos.join(', ')}, open a pull request in each (gh), and link them to each other.`);
+          else void openPrs(ws, set, set.name).then((r) => log(r.failed.length ? 'error' : 'info', [r.opened.length && `Opened pull requests in ${r.opened.join(', ')}.`, r.linked.length && `Linked ${r.linked.join(', ')}.`, ...r.failed].filter(Boolean).join('\n')));
+        } else log('error', 'Usage: /changeset [start <name> [repo…] | status | test | pr [yes]] [name]');
         break;
       }
       case 'impact': {
