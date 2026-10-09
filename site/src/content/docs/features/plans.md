@@ -164,6 +164,31 @@ Its critique goes to the agent, not to you. The agent checks each point against 
 
 The same review runs on a [spec's](../specs/) design stage. It's off by default because it costs one extra request per plan.
 
+## How risky is it
+
+The plan window ends with a **Risk** section, worked out from the files the plan names (the ones that exist in the project or a [workspace](../workspaces/) repo):
+
+```text
+Risk: high (6 files, 3 services, 3 owners)
+  contracts: api/openapi.yaml
+  migrations: db/migrations/0042_split_users.sql
+  owners: @acme/payments, @acme/ledger, @acme/platform
+  services: services/payments, services/ledger, api
+```
+
+It counts:
+
+- **Files** the plan names.
+- **Services**: folders like `services/payments`, `apps/web`, `packages/ui`, or else the top-level folder.
+- **Repos** of the workspace.
+- **Owners**, from CODEOWNERS or Backstage, as in [`/owners`](../large-codebases/#who-owns-what).
+- **Contracts**: OpenAPI, Swagger, AsyncAPI, `.proto`, GraphQL, Avro, Thrift and Prisma schemas.
+- **Migrations**: files under `migrations/`, `db/migrate/`, `alembic/`…
+
+Contracts, migrations and every extra service, repo or owner raise the score. A plan that names no files shows `Risk: unknown`.
+
+The agent doesn't see this; it's for you. `/risk` shows the same for the newest saved plan, `/risk <file>` for another one, and `/risk <spec>` for a [spec](../specs/).
+
 ## Plan files in `.rein/plans/`
 
 Every choice except *Keep planning* writes the plan to `.rein/plans/YYYY-MM-DD-<slug>.md` in your project. The slug

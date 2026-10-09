@@ -57,11 +57,12 @@ import nodePath from 'node:path';
 import {cloneMissing, findWorkspace} from '../workspace/index.js';
 import {CONFIG_KEYS, defaultValue, formatValue, keyInfo, parseValue} from '../store/configKeys.js';
 import {TAB_TITLES} from './ConfigureScreen.js';
-import {describeSpec, listSpecs, nextStage, readSpec, specSlug} from '../specs/store.js';
+import {describeSpec, listSpecs, nextStage, readSpec, readStage, specSlug, type Stage} from '../specs/store.js';
 import {nextSteps, specInstructions} from '../specs/tools.js';
 import {traceMarkdown} from '../specs/trace.js';
 import {adrDir, listAdrs, newAdr} from '../specs/adr.js';
 import {checkProject, loadArchitecture} from '../tools/architecture.js';
+import {formatRisk, planRisk} from '../plans/risk.js';
 import {checkoutState, describeCheckout, sparseAdd} from '../workspace/sparse.js';
 import {buildIndex, DEFAULT_MODEL as EMBED_MODEL, formatSemanticHits, loadIndex, semanticSearch} from '../context/semantic.js';
 import {estimateGoalCost} from '../goals/estimate.js';
@@ -1256,6 +1257,29 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
           if (!files.length) return log('info', 'No changes (vs HEAD). /owners <path> looks up a file or folder.');
           log('info', `Owners of ${arg || `your ${files.length} changed file${files.length === 1 ? '' : 's'}`}:\n${formatOwners(await ownersOf(root, files))}`);
         });
+        break;
+      }
+      case 'risk': {
+        const root = process.cwd();
+        const arg = parsed.args.trim();
+        const spec = arg ? readSpec(root, arg) : undefined;
+        const plan = spec ? undefined : arg ? nodePath.resolve(root, arg) : listPlans(root)[0]?.file;
+        const text = spec
+          ? ['requirements', 'design', 'tasks'].map((s) => readStage(root, spec.name, s as Stage)?.text ?? '').join('\n')
+          : plan
+            ? (() => {
+                try {
+                  return readFileSync(plan, 'utf8');
+                } catch {
+                  return undefined;
+                }
+              })()
+            : undefined;
+        if (text === undefined) {
+          log('error', arg ? `No plan file or spec named ${arg}.` : 'No saved plans yet: /risk <plan file or spec name>.');
+          break;
+        }
+        void planRisk(root, text).then((r) => log('info', `${spec ? `Spec ${spec.name}` : nodePath.relative(root, plan!)}\n${formatRisk(r)}`));
         break;
       }
       case 'arch': {

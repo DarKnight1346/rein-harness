@@ -2,6 +2,7 @@ import path from 'node:path';
 import {splitCommand} from './permissions.js';
 import {ToolError} from './fs.js';
 import {savePlan} from '../plans/store.js';
+import {formatRisk, planRisk} from '../plans/risk.js';
 import type {ToolDef} from './registry.js';
 
 /**
@@ -86,7 +87,8 @@ export function readOnlyCommand(command: string): boolean {
   });
 }
 
-export type PresentedPlan = {title: string; plan: string; milestones: string[]};
+/** `risk`: what the plan touches (files, services, owners, contracts), shown with it. */
+export type PresentedPlan = {title: string; plan: string; milestones: string[]; risk?: string};
 
 export function presentPlanTool(deps: {
   active(): boolean;
@@ -126,7 +128,8 @@ export function presentPlanTool(deps: {
       if (milestones.length > 12) throw new ToolError('at most 12 milestones — merge some');
       const critique = await deps.review?.({title, plan, milestones}).catch(() => undefined);
       if (critique) return {ok: true, text: critique};
-      const decision = await deps.present({title, plan, milestones});
+      const risk = await planRisk(deps.root(), plan).then(formatRisk, () => undefined);
+      const decision = await deps.present({title, plan, milestones, ...(risk ? {risk} : {})});
       if (decision === 'revise') return {ok: true, text: 'The user wants to refine the plan. Stop and wait for their feedback; stay in plan mode.'};
       const file = savePlan(deps.root(), {title, plan, milestones});
       if (!decision) return {ok: true, text: `Plan saved to ${file}. Nobody is here to approve it (headless run), so nothing will be changed — stop here.`};
