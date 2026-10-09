@@ -38,6 +38,37 @@ The community plugins that implement the Claude Code editor protocol work with R
 
 Start the plugin's server in the editor (claudecode.nvim does it on startup with `auto_start = true`, or `:ClaudeCodeStart`), then run `rein` in that project, in the editor's terminal or any other. Rein finds the editor through its lock file in `~/.claude/ide/`. `/ide` shows the connection. The plugins' own "launch Claude" commands start `claude`; to use Rein from them, point their terminal command at `rein` (claudecode.nvim: `terminal_cmd = "rein"`).
 
+
+## ACP editors (Zed, JetBrains…)
+
+Editors that speak the [Agent Client Protocol](https://agentclientprotocol.com) (ACP) can use Rein as their agent: its chat panel talks to Rein, and Rein does the work with all your accounts and its usual tools. Point the editor at `rein --acp`. In Zed's `settings.json`:
+
+```json title="settings.json (Zed)"
+{
+  "agent_servers": {
+    "Rein": {"command": "rein", "args": ["--acp"]}
+  }
+}
+```
+
+Other ACP editors take the same command and arguments; see their docs for where agents are configured.
+
+Here's how it maps:
+
+- **Prompts** are your messages. Files you attach or mention come along: embedded files with their content, links as `@path`. Images work too.
+- **Replies** stream into the panel. Each tool call shows as a step with its result.
+- **Changes ask the editor.** Where the terminal would ask you, the editor shows a permission prompt: *Allow*, *Allow for this session* or *Reject*.
+- **Modes** are Rein's approval modes, switchable from the editor: Ask, Auto, Bypass and Plan. In Plan mode the plan comes to the editor to approve: *Implement it now*, *Save it for later* or *Keep planning*.
+- **Stop** in the editor interrupts the turn.
+
+Here are the limits:
+
+- **One project per process.** The project is the folder of the editor's first session. A new session in that folder starts a new conversation, and a different folder needs another `rein --acp` (editors usually start one per project).
+- **No resuming.** Earlier conversations aren't loaded back into the editor.
+- **No questions.** Questions the agent would ask you (`ask_user`) aren't shown, so it states its assumptions and carries on, as in [headless runs](../headless/).
+
+Stdout carries the protocol; anything else Rein prints goes to stderr.
+
 ## Related
 
 - [Permissions](../permissions/): approvals, which the editor diff can answer

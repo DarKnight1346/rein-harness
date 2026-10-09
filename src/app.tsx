@@ -28,6 +28,7 @@ if (args.includes('--help') || args.includes('-h')) {
   --fullscreen     app-style renderer: top bar, sidebar, mouse clicks (default)
   --add-dir <path> also let the agent use this folder without asking (repeatable)
   --scope <dir>    work in one package of a monorepo: search, list and shell start there
+  --acp            run as an Agent Client Protocol agent on stdin/stdout (Zed, JetBrains…)
   --background     run the session in the background: closing the terminal (or Ctrl+\\) detaches,
                    rein attach [id] comes back from any terminal
   -p, --print      headless: run one prompt (or stdin) and print the result; also --model,
@@ -54,6 +55,11 @@ if (args.includes('--update')) {
     console.log(line.level ? color[line.level](text) : text);
   }
   process.exit(failed ? 1 : 0);
+}
+if (args.includes('--acp')) {
+  // An Agent Client Protocol agent on stdin/stdout, for Zed, JetBrains and other ACP editors.
+  const {runAcp} = await import('./acp/server.js');
+  process.exit(await runAcp());
 }
 if (args[0] === 'host') {
   // Internal: the detached process behind `rein --background` (see host/index.ts).

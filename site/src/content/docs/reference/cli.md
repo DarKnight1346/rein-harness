@@ -9,6 +9,7 @@ rein -p "<prompt>" [--model m] [--effort e] [--output-format text|json|stream-js
                    [--permission-mode ask|auto|bypass|plan] [--allowedTools …] [--disallowedTools …]
                    [-c [id]] [--verbose]
 rein schedule [list | run [--due | <job>] | install | uninstall]
+rein --acp
 rein attach [id]
 rein sessions
 rein bench [init [--count n] | run --model m [--model m2]… [--tasks n] [--test cmd]]
@@ -27,6 +28,7 @@ Run `rein` from the project folder you want to work in. That folder becomes the 
 | `--classic` | Inline renderer: native terminal scrollback, no mouse, no sidebar. |
 | `--fullscreen` | App-style renderer: top bar, sidebar, windows, mouse. This is the default. |
 | `--add-dir <path>` | Lets the agent also use this folder without asking, for this session. Repeatable. |
+| `--acp` | Runs Rein as an [Agent Client Protocol](https://agentclientprotocol.com) agent on stdin/stdout, for Zed, JetBrains and other ACP editors. See [ACP editors](../../features/ide/#acp-editors-zed-jetbrains). |
 | `--background` | Runs the session in a background host: closing the terminal (or `Ctrl+\`) only detaches, and `rein attach` comes back to it from any terminal. Combines with the other flags. See [Background sessions](../../features/sessions/). |
 | `--scope <dir>` | Works in one package of a monorepo: `list`, `search` and `shell` start there and its instructions are loaded. See [Workspaces](../../features/workspaces/#one-package-of-a-monorepo). |
 | `--update` | Updates Rein and the `claude` / `codex` CLIs, prints the steps, then exits (no TTY needed). Exits `1` if a step failed. |
