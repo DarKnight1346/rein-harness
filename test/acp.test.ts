@@ -1,4 +1,5 @@
 import * as acp from '@agentclientprotocol/sdk';
+import path from 'node:path';
 import {describe, expect, it} from 'vitest';
 import {buildAgent, promptText} from '../src/acp/server.js';
 
@@ -51,7 +52,7 @@ describe('ACP server mode', () => {
     expect(init.protocolVersion).toBe(acp.PROTOCOL_VERSION);
     expect(init.agentInfo.name).toBe('rein');
     const session: any = await conn.agent.request('session/new', {cwd: '/work/shop', mcpServers: []});
-    expect(loadedFor).toBe('/work/shop');
+    expect(loadedFor).toBe(path.resolve('/work/shop')); // C:\\work\\shop on Windows
     expect(session.sessionId).toBe('conv-1');
     expect(session.modes.availableModes.map((m: any) => m.id)).toEqual(['ask', 'auto', 'bypass', 'plan']);
     const res: any = await conn.agent.request('session/prompt', {sessionId: 'conv-1', prompt: [{type: 'text', text: 'fix the bug'}, {type: 'resource', resource: {uri: 'file:///work/shop/src/a.ts', text: 'const a = 1;'}}]});
@@ -69,7 +70,7 @@ describe('ACP server mode', () => {
     expect(asked.at(-1)).toMatchObject({toolCall: {title: 'Plan: Split users', kind: 'think'}, options: [{optionId: 'implement'}, {optionId: 'save'}, {optionId: 'revise'}]});
     await conn.agent.request('session/set_mode', {sessionId: 'conv-1', modeId: 'auto'});
     expect([r.planMode, r.config.toolApproval]).toEqual([false, 'auto']);
-    await expect(conn.agent.request('session/new', {cwd: '/work/other', mcpServers: []})).rejects.toThrow(/this Rein serves \/work\/shop/);
+    await expect(conn.agent.request('session/new', {cwd: '/work/other', mcpServers: []})).rejects.toThrow(/this Rein serves .*work[\\/]shop/);
     expect(((await conn.agent.request('session/new', {cwd: '/work/shop', mcpServers: []})) as any).sessionId).toBe('conv-2');
     conn.close();
   });
