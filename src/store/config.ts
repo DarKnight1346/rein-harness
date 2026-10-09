@@ -109,6 +109,8 @@ export type Config = {
   provenance: boolean;
   /** Tell you when the branch changes more lines than this (reviews slow down past a few hundred). 0 = off. */
   prMaxLines: number;
+  /** A second model critiques a plan (and a spec's design) before you see it: off, the other provider's model, or the advisor. */
+  planReview: 'off' | 'other' | 'advisor';
   /** Org-wide code search: {"type": "sourcegraph" | "zoekt", "url": "…"}; the agent gets org_search. */
   codeSearch?: CodeSearchConfig;
   /** Local semantic index through Ollama: {} for the defaults, or {"model", "url"}. /index builds it; the agent gets semantic_search. */
@@ -188,6 +190,7 @@ export const DEFAULT_CONFIG: Config = {
   buildTimeWarnings: true,
   provenance: false,
   prMaxLines: 0,
+  planReview: 'off',
   sastConfig: 'auto',
   steerShell: true,
   mcpSampling: 'ask',

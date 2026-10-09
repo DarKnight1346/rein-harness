@@ -14,7 +14,7 @@ A [plan](../plans/) is enough for most changes. For a feature that several peopl
 ## Three stages, each approved
 
 1. **Requirements** (`requirements.md`): the agent explores the code read-only, asks what it can't infer, and writes numbered requirements `R1`, `R2`… with testable acceptance criteria.
-2. **Design** (`design.md`): the approach, the components and files involved, interfaces and error handling, and which requirement each part meets.
+2. **Design** (`design.md`): the approach, the components and files involved, interfaces and error handling, and which requirement each part meets. With [`planReview`](../plans/#a-second-opinion-on-the-plan) on, a second model critiques it first.
 3. **Tasks** (`tasks.md`): a checklist that names the requirements each task meets and the tasks it comes after:
 
 ```markdown title=".rein/specs/retry/tasks.md"

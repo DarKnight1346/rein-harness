@@ -91,6 +91,7 @@ How these play together is covered in [load balancing](../../internals/load-bala
 | `attribution` | boolean | `true` | Commits and pull requests the agent writes end with the line `Co-Authored by [Rein Harness](https://github.com/DarKnight1346/rein-harness)` (Rein's system prompt asks for it). `false` drops the instruction. | `/settings` → General → Attribution |
 | `provenance` | boolean | `false` | Commits and PRs the agent makes end with `Rein-Session`, `Rein-Model` and `Rein-Goal` trailers, filled in by the shell. See [Provenance](../../features/pull-requests/#provenance-on-agent-commits). | `/settings provenance`, `/settings` → Advanced |
 | `prMaxLines` | number | `0` | Tell you (not the agent) when the branch changes more lines than this against its base. `0` = off. See [Smaller PRs](../../features/pull-requests/#smaller-prs). | `/settings prMaxLines`, `/settings` → Advanced |
+| `planReview` | `"off"` \| `"other"` \| `"advisor"` | `"off"` | A second model critiques each plan (and a spec's design) before you see it, once per planning session; the agent folds in what holds up and presents it again. `other`: the other provider's best available model. `advisor`: `advisorModel`. See [A second opinion on the plan](../../features/plans/#a-second-opinion-on-the-plan). | `/settings` → Agents → Plan review |
 | `codeSearch` | object | unset | Org-wide code search for the agent's `org_search` tool: `{"type": "sourcegraph", "url": "https://sourcegraph.example.com"}` or `"type": "zoekt"` with the Zoekt webserver's URL. Sourcegraph's token comes from `SRC_ACCESS_TOKEN`. See [Search the whole org](../../features/large-codebases/#search-the-whole-org). | `/settings codeSearch`, `/settings` → Advanced |
 | `semanticIndex` | object | unset | Local semantic search through Ollama. `{}` uses `nomic-embed-text` at `http://127.0.0.1:11434`; set `model` or `url` to change them. Once set and `/index` has run, the agent gets `semantic_search`. See [Search by meaning](../../features/large-codebases/#search-by-meaning). | `/settings semanticIndex`, `/settings` → Advanced |
 | `voiceModel` | string | `"base.en-q5_1"` | The whisper.cpp model for [voice input](../../features/voice/). English-only by default; `"base-q5_1"`, `"small-q5_1"` and so on understand other languages. Run `/voice setup` after changing it to download it. | `/settings <key>`, `/settings` → Advanced |
@@ -145,7 +146,7 @@ Valid `sidebarSections` ids: `agents`, `accounts`, `models` (chat model picker),
 | **Status line** | `statusLine`: toggle segments (click / `Space`), reorder (`▲▼`, `Shift+↑↓` or `[` `]`), `r` resets |
 | **Sidebar** | `sidebarSections`: same controls as Status line |
 | **General** | Approvals (`toolApproval`), Sandbox (`sandbox`), Shell (`shellMaxMinutes`), Notifications (`notifications`), Paste (`collapsePastes`), Attribution (`attribution`), Updates (`autoUpdate`), Privacy (`hidePersonalInfo`) |
-| **Agents** | Subagents (`subagentLimit`), Goals (`goalMaxRounds`), Worktrees (`worktrees`), Compaction (`autoCompactPct`) |
+| **Agents** | Subagents (`subagentLimit`), Goals (`goalMaxRounds`), Worktrees (`worktrees`), Compaction (`autoCompactPct`), Plan review (`planReview`) |
 | **Accounts** | Load balancing (`loadBalancing`), Limits (`waitForLimits`), API accounts (`apiAccounts`) |
 | **Safety** | Secrets (`secretScan`), Semgrep (`sast`), Planted instructions (`injectionScan`), Data leaving (`exfilGuard`), MCP pinning (`mcpPinning`), Dependencies (`depCheck`) |
 | **Advanced** | Every key in the file as a list: `Enter` cycles a choice or on/off, or opens an editor for text, numbers, lists (comma-separated) and JSON; `r` resets the key to its default |
@@ -166,6 +167,7 @@ In General, Agents, Accounts and Safety, `↑` `↓` pick a setting, and `Enter`
 | Goals | Unlimited *(default)* · 10 · 25 · 50 · 100 · 250 continuations |
 | Worktrees | Automatic *(default)* · Off |
 | Compaction | Off · 50 · 60 · 70 · 80% *(default)* · 90 · 95% |
+| Plan review | Off *(default)* · Other provider · Advisor |
 | Load balancing | Balanced *(default, cache-aware)* · Sticky |
 | Limits | Wait for the reset and continue *(default)* · Stop and tell me |
 | API accounts | Fallback *(default)* · Always |

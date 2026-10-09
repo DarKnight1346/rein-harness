@@ -93,6 +93,8 @@ export function presentPlanTool(deps: {
   /** Project root (plans are saved to <root>/.rein/plans/). */
   root(): string;
   present(plan: PresentedPlan): Promise<PlanDecision | undefined>;
+  /** planReview: a second model's critique, the first time a plan is presented in this planning session. */
+  review?(plan: PresentedPlan): Promise<string | undefined>;
   /** After a decision other than "revise": plan mode ends; "goal" starts a goal from the saved file. */
   done(decision: PlanDecision, file: string, title: string): void;
 }): ToolDef {
@@ -122,6 +124,8 @@ export function presentPlanTool(deps: {
       const milestones = (Array.isArray(args?.milestones) ? args.milestones : []).map((m: unknown) => String(m).trim()).filter(Boolean);
       if (milestones.length < 1) throw new ToolError('list the milestones: 2–10 concrete, checkable outcomes in order');
       if (milestones.length > 12) throw new ToolError('at most 12 milestones — merge some');
+      const critique = await deps.review?.({title, plan, milestones}).catch(() => undefined);
+      if (critique) return {ok: true, text: critique};
       const decision = await deps.present({title, plan, milestones});
       if (decision === 'revise') return {ok: true, text: 'The user wants to refine the plan. Stop and wait for their feedback; stay in plan mode.'};
       const file = savePlan(deps.root(), {title, plan, milestones});

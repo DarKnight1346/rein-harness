@@ -84,6 +84,7 @@ export const CONFIG_KEYS: KeyInfo[] = [
   k('autoUpdate', 'Install new Rein versions in the background', bool),
   k('attribution', 'Credit Rein in commits and pull requests', bool),
   k('provenance', 'Commits and PRs the agent makes end with Rein-Session, Rein-Model and Rein-Goal trailers', bool),
+  k('planReview', "A second model critiques each plan (and a spec's design) before you see it: other (the other provider's best model), advisor (advisorModel) or off", oneOf('off', 'other', 'advisor')),
   k('prMaxLines', 'Tell you when the branch changes more lines than this (0 = off); /pr split then offers to split it', num(0)),
   k('remoteHost', 'Address /remote listens on', str),
   k('remotePort', 'Port /remote listens on', num(1, 65535)),

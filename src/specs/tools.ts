@@ -27,6 +27,8 @@ type Deps = {
   active(): string | undefined;
   root(): string;
   ask(): ((qs: AskQuestion[]) => Promise<AskAnswer[] | undefined>) | undefined;
+  /** planReview: a second model's critique of the design, once per planning session. */
+  review?(design: string): Promise<string | undefined>;
   /** The tasks were approved: spec mode ends. */
   approved(name: string): void;
 };
@@ -84,6 +86,10 @@ export function specTools(deps: Deps): ToolDef[] {
           const reqs = new Set(readStage(root, name, 'requirements')?.text.match(/\bR\d+(?:\.\d+)?\b/g) ?? []);
           const unknown = [...new Set(tasks.flatMap((t) => t.reqs).filter((r) => !reqs.has(r)))];
           if (unknown.length) throw new ToolError(`tasks name requirements that don't exist: ${unknown.join(', ')}`);
+        }
+        if (stage === 'design') {
+          const critique = await deps.review?.(content).catch(() => undefined);
+          if (critique) return {ok: true, text: critique};
         }
         const file = writeStage(root, name, stage, content);
         const ask = deps.ask();

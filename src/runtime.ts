@@ -231,7 +231,16 @@ export class Runtime {
   }
 
   /** Plan mode (/plan, Shift+Tab, --permission-mode plan): read-only until a plan is approved. */
-  planMode = false;
+  private plan = false;
+  /** planReview already ran in this planning session (reset when plan mode turns on). */
+  private planReviewed = false;
+  get planMode(): boolean {
+    return this.plan;
+  }
+  set planMode(on: boolean) {
+    if (on && !this.plan) this.planReviewed = false;
+    this.plan = on;
+  }
   /** Spec mode (/spec): the spec being written; plan mode's blocking applies until its tasks are approved. */
   specMode: string | undefined;
   /** Set by the UI: shows a presented plan and resolves with the user's decision. */
@@ -748,6 +757,25 @@ Drop superseded reads of the same file, routine listings, and output that no lon
     return best ? toRef(best) : undefined;
   }
 
+  /**
+   * planReview: a second model (the other provider's, or the advisor) critiques a plan or a spec's
+   * design once per planning session, before the user sees it. Returns the message for the agent.
+   */
+  async reviewPlan(kind: 'plan' | 'design', text: string): Promise<string | undefined> {
+    const mode = this.config.planReview ?? 'off';
+    if (mode === 'off' || this.planReviewed || !this.engine) return undefined;
+    const cur = this.engine.currentRef();
+    const reviewer = mode === 'advisor' ? advisorRef(this.config) : cur && this.reviewerFor(cur);
+    if (!reviewer) return undefined;
+    this.planReviewed = true;
+    const request = [...this.engine.transcript.messages].reverse().find((m) => m.role === 'user' && !/^<(code_check|stop_hook)>/.test(m.text))?.text ?? '';
+    const system = `You review a software ${kind} before any code is written. Report only concrete problems: parts of the request it misses, steps that won't work or are in the wrong order, risks it doesn't handle, simpler approaches it overlooks, and verification that wouldn't prove it works. No praise, no rewriting it.`;
+    const prompt = `The request:\n${request.slice(0, 20_000)}\n\nThe ${kind}:\n${text.slice(0, 40_000)}\n\nList each problem on one line, most important first. If there are none, reply exactly NONE.`;
+    const reply = (await completeWith(reviewer, this.config, system, prompt, {timeoutMs: 240_000})).trim();
+    if (!reply || /^none\b/i.test(reply)) return undefined;
+    return `Before the user sees it, a second model (${reviewer.provider}:${reviewer.model}) reviewed your ${kind} and reported:\n${reply.slice(0, 6000)}\nCheck each point against the code. Fold in the ones that hold up, note in a line the ones that don't, then call ${kind === 'plan' ? 'present_plan' : 'present_spec'} again with the revised ${kind}.`;
+  }
+
   /** cross-review: the reviewer's findings as a message for the agent, or undefined when it found nothing. */
   private async crossReview(by?: ModelRef, who?: string): Promise<string | undefined> {
     const cur = this.engine?.currentRef();
@@ -880,6 +908,7 @@ Drop superseded reads of the same file, routine listings, and output that no lon
         active: () => this.planMode,
         root: () => process.cwd(),
         present: async (plan) => (this.planPresenter ? this.planPresenter(plan) : undefined),
+        review: (p) => this.reviewPlan('plan', `# ${p.title}\n\n${p.plan}\n\n## Milestones\n${p.milestones.map((m) => `- ${m}`).join('\n')}`),
         done: (decision, file, title) => {
           if (decision === 'revise') return;
           this.planMode = false;
@@ -892,6 +921,7 @@ Drop superseded reads of the same file, routine listings, and output that no lon
         active: () => (this.planMode ? this.specMode : undefined),
         root: () => process.cwd(),
         ask: () => this.askPresenter,
+        review: (text) => this.reviewPlan('design', text),
         approved: () => {
           this.planMode = false;
           this.specMode = undefined;
