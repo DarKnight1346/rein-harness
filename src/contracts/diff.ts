@@ -158,6 +158,30 @@ function stripComments(t: string): string {
   return t.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
 }
 
+/**
+ * A block's own statements: nested message and enum blocks dropped (they're parsed on their own),
+ * a oneof's fields kept (they belong to the message). Scanned by brace depth.
+ */
+function ownLines(body: string): string {
+  let out = '';
+  let i = 0;
+  const head = /\b(message|enum|oneof)\s+\w+\s*\{/y;
+  while (i < body.length) {
+    head.lastIndex = i;
+    const m = /\w/.test(body[i - 1] ?? '') ? null : head.exec(body);
+    if (!m) {
+      out += body[i++];
+      continue;
+    }
+    let depth = 1;
+    let j = head.lastIndex;
+    for (; j < body.length && depth; j++) depth += body[j] === '{' ? 1 : body[j] === '}' ? -1 : 0;
+    if (m[1] === 'oneof') out += body.slice(head.lastIndex, j - 1);
+    i = j;
+  }
+  return out;
+}
+
 /** Blocks `keyword Name { … }`, nested ones named Outer.Inner. */
 function blocks(text: string, prefix = ''): {kind: string; name: string; body: string}[] {
   const out: {kind: string; name: string; body: string}[] = [];
@@ -170,7 +194,7 @@ function blocks(text: string, prefix = ''): {kind: string; name: string; body: s
     const body = text.slice(re.lastIndex, i - 1);
     const name = `${prefix}${m[2]}`;
     // The block's own lines, without nested blocks.
-    const own = body.replace(/\b(?:message|enum|oneof)\s+\w+\s*\{(?:[^{}]|\{[^{}]*\})*\}/g, (blk) => (/^oneof/.test(blk) ? blk.slice(blk.indexOf('{') + 1, blk.lastIndexOf('}')) : '')); // a oneof's fields belong to the message
+    const own = ownLines(body);
     out.push({kind: m[1]!, name, body: own});
     if (m[1] === 'message') out.push(...blocks(body, `${name}.`));
     re.lastIndex = i;
