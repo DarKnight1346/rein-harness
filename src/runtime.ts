@@ -10,6 +10,8 @@ import {sastCheck} from './tools/sast.js';
 import {loadPolicy, modelBlocked} from './policy.js';
 import {reinConfigDir} from './store/paths.js';
 import {affectedTool} from './build/tool.js';
+import {affected, changedFiles} from './build/affected.js';
+import {digestLog, formatDigest} from './tools/logDigest.js';
 import {effectiveBudget, overBudget, type Spend} from './budget.js';
 import {catalog, toRef} from './router/catalog.js';
 import {mergeNote, Worktrees} from './agents/worktrees.js';
@@ -89,8 +91,9 @@ export class Runtime {
   /** --scope / /scope: the package of a monorepo this session works in (absolute), if any. */
   scope: string | undefined;
 
-  /** Whether sast has checked this request's changes. */
+  /** Whether sast and verify-affected have checked this request's changes. */
   private sastChecked = false;
+  private affectedChecked = false;
   /** The last budget stop (for rein -p's exit status), cleared by your next message. */
   budgetStop: string | undefined;
 
@@ -110,6 +113,20 @@ export class Runtime {
     this.budgetStop = msg;
     if (this.goals.goal?.status === 'active') this.goals.pause();
     return msg;
+  }
+
+  /** verify-affected: run the affected tests; a failure as the message for the agent (undefined: they passed or nothing to run). */
+  private async verifyAffected(): Promise<string | undefined> {
+    const root = process.cwd();
+    const files = await changedFiles(root);
+    const a = files.length ? await affected(root, files) : undefined;
+    if (!a?.test) return undefined;
+    // Through the shell tool, so the approval mode, permission rules and the sandbox apply as to the agent's own commands.
+    const r = await this.tools.call('shell', {command: a.test, timeout_ms: Math.min(60, this.config.shellMaxMinutes || 60) * 60_000});
+    if (r.ok) return undefined;
+    const out = r.text.trim();
+    const digest = formatDigest(digestLog(out), out.split('\n').length);
+    return `The tests for what this request changed failed (${a.system}: ${a.targets.slice(0, 8).join(', ')}${a.targets.length > 8 ? ', …' : ''}; \`${a.test}\`):\n${digest ?? out.split('\n').slice(-60).join('\n')}\nFix them before you finish, or if a failure isn't caused by this change, say so.`;
   }
 
   /** /cost's budget lines: each cap in force and how much of it is used. */
@@ -520,6 +537,7 @@ Drop superseded reads of the same file, routine listings, and output that no lon
     if (!/^<(code_check|stop_hook)>/.test(text)) {
       this.requestStartUsd = this.engine?.sessionTokens.usd ?? 0;
       this.sastChecked = false;
+      this.affectedChecked = false;
       this.budgetStop = undefined;
       this.tools.watchdog.reset();
       this.escalation = undefined;
@@ -610,6 +628,12 @@ Drop superseded reads of the same file, routine listings, and output that no lon
         const found = await sastCheck(files.map((file) => ({file, before: this.checkpoints.before(since, file)})), process.cwd(), this.config.sastConfig || 'auto').catch(() => undefined);
         if (found) return {reason: found, kind: 'diagnostics'};
       }
+    }
+    // verify-affected: in an Nx/Turborepo/Bazel/Pants workspace, the tests for what this request changed, once.
+    if (activeExperiments(this.config).includes('verify-affected') && !this.affectedChecked && this.engine && this.checkpoints.changedSince(this.currentTurn()).length) {
+      this.affectedChecked = true;
+      const failed = await this.verifyAffected().catch(() => undefined);
+      if (failed) return {reason: failed, kind: 'diagnostics'};
     }
     // keep-going: the agent ended its turn but its own reply says the work isn't done ("I've only
     // partly done this"), and it isn't waiting on the user: send it back, a few times per request.

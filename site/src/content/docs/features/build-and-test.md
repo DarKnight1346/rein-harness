@@ -29,6 +29,16 @@ In a monorepo with **Nx**, **Turborepo**, **Bazel** or **Pants**, the build syst
 
 With the `affected-tool` [experiment](../../reference/configuration/#experiments) on, the agent gets an [`affected`](../../reference/tools/#affected) tool that answers the same question, so it can run the tests that matter instead of the whole suite. The tool only appears in workspaces with one of these build systems.
 
+## Testing what a request changed
+
+With the `verify-affected` [experiment](../../reference/configuration/#experiments) on, in a Nx, Turborepo, Bazel or Pants workspace, Rein runs the tests for what a request changed once, at the end of its turn, after the [code check](../code-intelligence/):
+
+- it finds the affected projects or targets (above) and runs their test command;
+- it runs it as a normal `shell` call, so your approval mode, permission rules and the sandbox apply, and you see it as a tool line;
+- if the tests fail, the agent gets the result (with a [digest](#digests-of-failing-logs) when the log is long) and is asked to fix them, or to say which failures aren't caused by its change.
+
+It runs once per request, when the request changed files with Rein's file tools. Without a build system Rein can't tell which tests matter, so it does nothing.
+
 ## Digests of failing logs
 
 With the `log-digest` experiment on, a failing command with a long output (80 lines or more) starts with what to look at, before the full output:
