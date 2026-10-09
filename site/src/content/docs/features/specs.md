@@ -79,6 +79,47 @@ Architecture decision records (ADRs) are the "why" behind a codebase: one number
 
 With the `adr-check` [experiment](../../reference/configuration/#experiments) on, [plan mode](../plans/) and spec mode give the agent the decisions in force (accepted or proposed; not superseded, deprecated or rejected). The agent checks its plan against them. If the plan goes against one, it says so under Risks and proposes a new ADR that supersedes it, instead of quietly diverging.
 
+## Architecture guardrails
+
+The design says the UI goes through the runtime, never straight to the providers. To have that hold on every edit, write the rule down:
+
+```yaml title=".rein/architecture.yaml"
+mode: block            # or warn
+layers:
+  ui: "src/ui/**"
+  providers: "src/providers/**"
+  domain: ["src/domain/**"]
+rules:
+  - from: ui
+    deny: [providers]
+    reason: the UI reaches providers through the runtime
+  - from: domain
+    allow: ["src/shared/**"]          # only these (and itself)
+    packages: ["express", "@aws-sdk/*"]
+    reason: the domain stays free of frameworks
+```
+
+Rules work like this:
+
+- **Layers** are named globs.
+- **`from`** says which files a rule applies to: a layer name or a glob.
+- **`deny`** forbids imports from the listed layers.
+- **`allow`** permits imports only from the listed layers (and the rule's own). It applies to project files; packages are covered by **`packages`**, which forbids the listed ones (globs work).
+- **`reason`** is what the agent is told when it breaks the rule.
+
+Every `edit` and `write` is checked **for the imports it adds**. In `block` mode (the default) a change that adds a forbidden import is refused with the reason, and the agent has to find a way that keeps to the rules. In `warn` mode it goes through with a note. An import that was already there doesn't block an unrelated edit, so you can adopt rules in a codebase that doesn't follow them yet.
+
+`/arch` checks every file and lists the imports that break the rules today:
+
+```text title="rein"
+> /arch
+  ⎿ 2 imports break the architecture rules (existing ones don't block edits; only new ones do):
+      src/ui/settings.tsx → ../providers/claude/driver.js  (the UI reaches providers through the runtime)
+      src/domain/order.ts → express  (the domain stays free of frameworks)
+```
+
+Imports are read and resolved to project files for JavaScript and TypeScript (relative imports, `index` files, `.js` specifiers for `.ts` sources), Python (relative and absolute modules) and Go (packages under the module in `go.mod`). Files in other languages aren't checked. Without `.rein/architecture.yaml`, nothing runs.
+
 ## Related
 
 - [Plan mode](../plans/): a single plan with milestones, for smaller changes

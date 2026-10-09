@@ -61,6 +61,7 @@ import {describeSpec, listSpecs, nextStage, readSpec, specSlug} from '../specs/s
 import {nextSteps, specInstructions} from '../specs/tools.js';
 import {traceMarkdown} from '../specs/trace.js';
 import {adrDir, listAdrs, newAdr} from '../specs/adr.js';
+import {checkProject, loadArchitecture} from '../tools/architecture.js';
 import {checkoutState, describeCheckout, sparseAdd} from '../workspace/sparse.js';
 import {buildIndex, DEFAULT_MODEL as EMBED_MODEL, formatSemanticHits, loadIndex, semanticSearch} from '../context/semantic.js';
 import {estimateGoalCost} from '../goals/estimate.js';
@@ -1254,6 +1255,21 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
         void (arg ? Promise.resolve([arg]) : changedFiles(root)).then(async (files) => {
           if (!files.length) return log('info', 'No changes (vs HEAD). /owners <path> looks up a file or folder.');
           log('info', `Owners of ${arg || `your ${files.length} changed file${files.length === 1 ? '' : 's'}`}:\n${formatOwners(await ownersOf(root, files))}`);
+        });
+        break;
+      }
+      case 'arch': {
+        const root = process.cwd();
+        const arch = loadArchitecture(root);
+        if (!arch) {
+          log('info', 'No architecture rules here. Write .rein/architecture.yaml (layers and which may import which) and Rein checks every edit against it; see the Architecture guardrails docs.');
+          break;
+        }
+        for (const e of arch.errors) log('error', e);
+        void checkProject(root, arch).then(({violations, files}) => {
+          if (!violations.length) return log('info', `${files} files keep to the ${arch.rules.length} architecture rule${arch.rules.length === 1 ? '' : 's'} (${arch.mode}).`);
+          const lines = violations.slice(0, 50).map((v) => `  ${v.file} → ${v.import}${v.rule.reason ? `  (${v.rule.reason})` : ''}`);
+          log('info', [`${violations.length}${violations.length >= 200 ? '+' : ''} import${violations.length === 1 ? '' : 's'} break the architecture rules (existing ones don't block edits; only new ones do):`, ...lines, ...(violations.length > 50 ? [`  … ${violations.length - 50} more`] : [])].join('\n'));
         });
         break;
       }

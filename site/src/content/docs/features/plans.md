@@ -158,7 +158,7 @@ approval mode (Ask, Auto or Bypass) like any other change.
 
 ## A second opinion on the plan
 
-A plan is cheapest to fix before any code exists. With `planReview` on (`/settings` → Agents → Plan review), the first plan the agent presents in a planning session goes to a **second model** before you see it. That's the other provider's best available model (`other`: Codex reviews a Claude plan, and the other way round) or your [advisor](../subagents/) (`advisor`). It looks for parts of the request the plan misses, steps that won't work or are out of order, unhandled risks, simpler approaches, and verification that wouldn't prove anything.
+A plan is cheapest to fix before any code exists. With `planReview` on (`/settings` → Agents → Plan review), the first plan the agent presents in a planning session goes to a **second model** before you see it. That's the other provider's best available model (`other`: Codex reviews a Claude plan, and the other way round) or your [advisor](../routing/) (`advisor`). It looks for parts of the request the plan misses, steps that won't work or are out of order, unhandled risks, simpler approaches, and verification that wouldn't prove anything.
 
 Its critique goes to the agent, not to you. The agent checks each point against the code, folds in the ones that hold up, says in a line why it rejects the others, and presents the revised plan. That's the one you approve. Turning plan mode off and on again starts a new session, with a new review. If the reviewer finds nothing, or there's no model to review with, the plan comes straight to you.
 

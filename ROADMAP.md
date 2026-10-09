@@ -91,7 +91,7 @@ agent works by default ships as an experiment (`experiments` in config) until it
 | 53 | Spec mode | Requirements, then design, then tasks, each approved, building on `/plan`. | features/specs/#three-stages-each-approved | done |
 | 54 | Task graph | A plan as a dependency graph; independent tasks run in parallel subagents. | features/specs/#tasks-as-a-graph | done |
 | 55 | Spec-to-code traceability | Each changed hunk links back to its requirement. Builds on #53. | features/specs/#requirement-to-code | done |
-| 56 | Architecture guardrails | Layering and import rules enforced on every edit. |  | todo |
+| 56 | Architecture guardrails | Layering and import rules enforced on every edit. | features/specs/#architecture-guardrails | done |
 | 57 | Plan risk score | Files, services, owners and contracts a plan touches. Builds on #31. |  | todo |
 | 58 | Best-of-N across providers | Run a task on Claude and Codex at once; keep the result that passes the tests. |  | todo |
 

@@ -92,6 +92,8 @@ Label `Edit`. Approval: **mutating**.
 
 Replaces an exact string. `old_string` must match exactly (whitespace included, without the line-number prefixes from `read`) and be unique, unless `replace_all` is set. Files over 8 MB use a two-pass streaming replace into a temp file plus an atomic rename.
 
+With a `.rein/architecture.yaml`, an `edit` or `write` that adds an import the [architecture rules](../../features/specs/#architecture-guardrails) forbid is refused (or, in `warn` mode, goes through with a note).
+
 | Parameter | Type | Notes |
 | --- | --- | --- |
 | `path` | string | The file. With `edits`, the default for entries that don't name one |
