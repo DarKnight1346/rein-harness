@@ -99,6 +99,8 @@ export type Config = {
   exfilGuard: boolean;
   /** Pin each MCP server's config and tools when first approved; a changed server's tools wait for your review. */
   mcpPinning: boolean;
+  /** Vet packages a change adds (exists, typosquat, license, known vulnerabilities via OSV): warn, block or off. */
+  depCheck: 'off' | 'warn' | 'block';
   /** Semgrep rules (--config): auto, a registry pack like p/owasp-top-ten, or a path. */
   sastConfig: string;
   /** OpenTelemetry export of turns, tool calls, tokens and cost (metadata only). Off unless set. */
@@ -170,6 +172,7 @@ export const DEFAULT_CONFIG: Config = {
   injectionScan: false,
   exfilGuard: false,
   mcpPinning: false,
+  depCheck: 'off',
   sastConfig: 'auto',
   steerShell: true,
   mcpSampling: 'ask',

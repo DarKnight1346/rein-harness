@@ -196,6 +196,7 @@ export class Runtime {
     configDirs: () => [...(this.config?.additionalDirectories ?? []), ...workspaceDirs(this.workspace)],
     scope: () => this.scope,
     secretScan: () => this.config.secretScan ?? 'off',
+    depCheck: () => this.config.depCheck ?? 'off',
     injectionScan: () => this.config.injectionScan === true,
     exfilGuard: () => this.config.exfilGuard === true,
     checkpoint: (file) => this.checkpoints.snapshot(this.currentTurn(), file),

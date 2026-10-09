@@ -76,7 +76,7 @@ These are real, and you should know them:
 
 ## Planted instructions and data leaving the machine
 
-Optional guards catch instructions planted in web pages and MCP results (`injectionScan`) and make network calls your decision once private data and outside content are both in a conversation (`exfilGuard`). See [Safety guards](../../features/safety/).
+Optional guards vet new dependencies (`depCheck`, which looks packages up on their registries and OSV), catch instructions planted in web pages and MCP results (`injectionScan`) and make network calls your decision once private data and outside content are both in a conversation (`exfilGuard`). See [Safety guards](../../features/safety/).
 
 ## Secret scanning
 

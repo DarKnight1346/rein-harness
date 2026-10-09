@@ -14,6 +14,7 @@ import {renderScoped, scopedInstructions} from '../session/prompt.js';
 import {Watchdog} from './watchdog.js';
 import {addedText, findSecrets, secretMessage} from './secrets.js';
 import {injectionSigns, injectionWarning, networkCapable, untrustedSource} from './untrusted.js';
+import {addedDeps, afterEdit, checkDeps, commandDeps, depMessage} from './deps.js';
 import {readOnlyCommand} from './plan.js';
 import {steer} from './steer.js';
 import {ipcPath, isWindows} from '../util/platform.js';
@@ -77,6 +78,8 @@ export type ToolHostOptions = {
   injectionScan?: () => boolean;
   /** exfilGuard: network calls need a yes once untrusted content and private data are both in the conversation. */
   exfilGuard?: () => boolean;
+  /** depCheck: vet packages a change adds (exists, typosquat, license, known vulnerabilities). */
+  depCheck?: () => 'off' | 'warn' | 'block';
   /** secretScan: what to do when a write or edit adds something that looks like a credential. */
   secretScan?: () => 'off' | 'warn' | 'block';
   /** --scope / /scope: list, search and shell default to this folder (absolute) instead of the project root. */
@@ -498,8 +501,22 @@ export class ToolHost extends EventEmitter {
         const secrets = scan !== 'off' && (tool.name === 'write' || tool.name === 'edit') ? findSecrets(addedText(tool.name, args)) : [];
         const file = String((args as {path?: string})?.path ?? (args as {edits?: {path?: string}[]})?.edits?.[0]?.path ?? 'the file');
         if (secrets.length && scan === 'block') throw new ToolError(secretMessage(secrets, file, true));
+        // depCheck: packages this change adds (a manifest edit or an install command), vetted before it runs.
+        const depMode = this.opts.depCheck?.() ?? 'off';
+        let depProblems: string[] = [];
+        if (depMode !== 'off') {
+          const target = tool.name === 'write' || tool.name === 'edit' ? this.filesOf(ctx, tool, args)[0] : undefined;
+          const change = target ? afterEdit(target, args) : undefined;
+          const deps = tool.name === 'shell' ? commandDeps(String((args as {command?: string})?.command ?? '')) : target && change ? addedDeps(target, change.before, change.after) : [];
+          if (deps.length) depProblems = await checkDeps(deps);
+          if (depProblems.length && depMode === 'block') throw new ToolError(depMessage(depProblems, true));
+        }
         result = repeat ?? (await tool.run(ctx, args ?? {}));
         if (secrets.length && result.ok) result = {...result, text: `${result.text}\n\n${secretMessage(secrets, file, false)}`};
+        if (depProblems.length) {
+          result = {...result, text: `${result.text}\n\n${depMessage(depProblems, false)}`};
+          warning = `Dependency check: ${depProblems.join('; ')}`;
+        }
         const source = untrustedSource(tool.name);
         if (source && result.ok) {
           this.untrustedSeen ??= source;
