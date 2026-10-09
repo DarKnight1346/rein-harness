@@ -4,7 +4,7 @@ import {approveProjectServer} from '../mcp/config.js';
 import {runtime} from '../runtime.js';
 import {Clickable} from './terminal/clicks.js';
 
-const COLOR = {connected: 'green', connecting: 'yellow', failed: 'red', 'needs-approval': 'yellow', 'needs-auth': 'yellow'} as const;
+const COLOR = {connected: 'green', connecting: 'yellow', failed: 'red', 'needs-approval': 'yellow', 'needs-auth': 'yellow', changed: 'red'} as const;
 const SOURCE = {project: '.mcp.json', rein: '~/.rein/mcp.json', claude: '~/.claude.json', plugin: 'plugin'} as Record<string, string>;
 
 /** /mcp: servers with status and tool count; enter approves a project server or reconnects. */
@@ -24,7 +24,8 @@ export function McpScreen({onClose}: {onClose(): void}) {
     const s = servers[i];
     if (!s || busy) return;
     setBusy(s.name);
-    if (s.status === 'needs-approval') {
+    if (s.status === 'changed') runtime.mcp.acceptChange(s.name);
+    else if (s.status === 'needs-approval') {
       approveProjectServer(process.cwd(), s.name);
       await runtime.mcp.start();
     } else if (s.status === 'needs-auth') {
@@ -83,7 +84,7 @@ export function McpScreen({onClose}: {onClose(): void}) {
       )}
       <Box marginTop={1}>
         <Text dimColor>
-          enter: {servers[cursor]?.status === 'needs-approval' ? 'approve this project server (runs its command)' : servers[cursor]?.status === 'needs-auth' ? 'sign in (opens your browser)' : 'reconnect'} · esc close
+          enter: {servers[cursor]?.status === 'changed' ? 'accept the server as it is now (its tools come back)' : servers[cursor]?.status === 'needs-approval' ? 'approve this project server (runs its command)' : servers[cursor]?.status === 'needs-auth' ? 'sign in (opens your browser)' : 'reconnect'} · esc close
         </Text>
       </Box>
     </Box>

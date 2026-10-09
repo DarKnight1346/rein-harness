@@ -22,6 +22,8 @@ goal: continuing (round 2)
 accepted (0.93 via jev)
 ```
 
+Once a project has a few finished goals, `/goal` also says what goals there have typically cost, and can ask before starting an expensive one (see [Goal estimates](../cost/#goal-estimates)). A [`goalUsd` budget](../cost/#budgets) stops a goal that overruns.
+
 Between turns you'll see the working indicator read `Goal: checking progress` while Rein decides what to send next. The top bar shows `◎ goal · active` the whole time.
 
 ## Setting a goal

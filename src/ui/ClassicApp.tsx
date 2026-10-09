@@ -233,6 +233,7 @@ function EntryView({entry: raw}: {entry: Entry}) {
             {'  ⎿ '}
             {toolResultSummary(entry.label, entry.result)}
           </Text>
+          {entry.warning ? <Text color="yellow">{`  ⚠ ${entry.warning}`}</Text> : null}
           {entry.plan ? (
             <Text>{planPreviewLines(entry.plan, (process.stdout.columns ?? 100) - 2).join('\n')}</Text>
           ) : entry.diff?.length ? (

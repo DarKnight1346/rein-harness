@@ -29,7 +29,7 @@ In fullscreen, commands that show information open a window over the conversatio
 |---|---|---|
 | `/clear` | — | Clears the conversation and stops every subagent. *Waits for idle.* |
 | `/compact` | `[what to keep]` | Summarizes the conversation with the compaction model and keeps the last two messages as-is. With text (`/compact keep the API design decisions`), the summary keeps that in full detail. The agent can bring summarized parts back with `recall`. *Waits for idle.* → [Compaction](../../internals/context/#compaction) |
-| `/context` | — | Shows what the context holds and how full it is, as a grid that refreshes every second while open. When viewing a subagent, shows the subagent's context. |
+| `/context` | — | Shows what the context holds and how full it is, as a grid that refreshes every second while open, with the largest items (instruction files, tool results, the summary) listed below it. When viewing a subagent, shows the subagent's context. |
 | `/resume` | — | Picks a saved conversation from this project to continue. *Waits for idle.* |
 | `/rewind` | — | Restores files and/or the conversation to before one of your messages. Also **Esc Esc** with an empty input. |
 | `/btw` | `<question>` | Asks a side question. A fork of the agent answers without interrupting it, and the answer is not added to the conversation. Runs immediately, even mid-reply. |
@@ -79,6 +79,17 @@ See [Goals](../../features/goals/) and [Plan mode](../../features/plans/).
 
 | Command | Arguments | What it does |
 |---|---|---|
+| `/cost` | — | What the conversation, the latest request and the current goal cost at API list prices, with token totals. See [Cost & budgets](../../features/cost/). |
+| `/affected` | — | What your working tree's changes affect, from the monorepo's build graph (Nx, Turborepo, Bazel, Pants), and the command that tests just that. See [Build & test](../../features/build-and-test/#what-a-change-affects). |
+| `/coverage` | `[tests]` | Lines your changes add that no test ran, from the newest coverage report (lcov, Istanbul, Cobertura, Go). `tests` asks the agent to write tests for them. See [Tests for what you changed](../../features/build-and-test/#tests-for-what-you-changed). |
+| `/mutate` | `[tests]` | Mutation testing of your changed files (Stryker, mutmut, go-mutesting): which planted bugs the tests miss. `tests` asks the agent to tighten the tests. See [Do the tests catch bugs?](../../features/build-and-test/#do-the-tests-catch-bugs). |
+| `/pr` | `[digest [post] \| split \| comments \| queue [yes]]` | This branch's pull request (GitHub, through `gh`): status; a digest for reviewers (`post` adds it as a comment); `split` asks the agent to split the branch into stacked PRs; `comments` hands review comments to the agent; `queue` shows and `queue yes` runs the merge-queue command. See [Pull requests](../../features/pull-requests/#pr). |
+| `/ci` | `[watch \| stop]` | The checks on this branch's pull request (GitHub, through `gh`). `watch` checks every minute and hands failures, with their digested logs, to the agent to fix (3 rounds at most; it asks before pushing). See [Watching CI](../../features/build-and-test/#watching-ci). |
+| `/build` | — | The build system here (Nx, Turborepo, Bazel, Pants), the build caches it's set up with, and whether the sandbox lets agent builds use them. See [Build caches](../../features/build-and-test/#build-caches). |
+| `/flaky` | `[clear]` | The tests known to be flaky in this project (they failed and passed on the same code), recorded with the `flaky-quarantine` experiment. `clear` forgets them. See [Flaky tests](../../features/build-and-test/#flaky-tests). |
+| `/policy` | — | Shows the policy in force (`.rein/policy.yaml`, `~/.rein/policy.yaml`): its deny and ask rules, allowed and denied models, and mistakes in the files. See [Policy as code](../../features/safety/#policy-as-code-reinpolicyyaml). |
+| `/workspace` | `[clone \| prs \| link-prs [yes]]` | Lists the repos of this [workspace](../../features/workspaces/) (`rein.workspace.yaml`), which are cloned and what each does. `clone` clones the missing repos that have a `url`. `prs` lists the current branch's pull request in each repo; `link-prs yes` links them to each other (see [Pull requests across repos](../../features/workspaces/#pull-requests-across-repos)). |
+| `/scope` | `[<dir> \| off]` | Works in one package of a monorepo: `list`, `search` and `shell` start in `<dir>`, its `AGENTS.md` files load, and the code check skips callers outside it. `off` clears it; no argument shows it. Same as `rein --scope <dir>`. |
 | `/add-dir` | `<path>` | Adds a working directory the agent can use without asking, for this session. Another repo's own `AGENTS.md` / `CLAUDE.md` is delivered the first time the agent works in it. |
 | | *(none)* | Lists the current working directories. |
 | `/permissions` | — | Lists the allow/deny rules in effect, grouped by the settings file they come from. |
@@ -90,11 +101,13 @@ See [Goals](../../features/goals/) and [Plan mode](../../features/plans/).
 
 | Command | Arguments | What it does |
 |---|---|---|
-| `/settings` | — | Settings in tabs: Status line, Sidebar, Approvals, Sandbox, Shell, Subagents, Goals, Load balancing, Paste, Limits, Attribution, Worktrees, API accounts, Notifications, Updates, Privacy, Compaction. |
+| `/settings` | — | Settings in tabs: Status line, Sidebar, Approvals, Sandbox, Shell, Subagents, Goals, Load balancing, Paste, Limits, Attribution, Worktrees, API accounts, Notifications, Updates, Privacy, Compaction, and Advanced (every key in `~/.rein/config.json`, edited in place). |
+| `/settings` | `keys` · `<key> [<value> \| reset]` | Any setting in `~/.rein/config.json` from the prompt: `keys` lists them all, `<key>` explains one (meaning, choices, default), `<key> <value>` sets it (`true`/`false`, a number, a listed choice, a comma-separated list, or JSON), `<key> reset` restores the default. Applies live. See [Configuration](../configuration/). |
 | `/settings` | `export [file]` · `import <file>` | Settings in tabs: Status line, Sidebar, Approvals, Sandbox, Shell, Subagents, Goals, Load balancing, Paste, Attribution, Worktrees, API accounts, Notifications, Updates, Privacy, Compaction. |
 | `/tui` | `fullscreen` \| `classic` | Switches renderer and carries the conversation over. With no argument, shows which renderer is active. *Waits for idle.* |
 | `/update` | — | Updates the `claude` and `codex` CLIs, checks the Codex app-server protocol, then updates Rein. *Waits for idle.* |
 | `/export` | `[file]` | Saves the whole conversation as Markdown (every message, each reply's tool calls as a list) and copies it to the clipboard. Default file: `~/.rein/exports/<id>.md`; a path is relative to the project. |
+| `/export html` | `[file]` | The conversation as one self-contained HTML page (default `~/.rein/exports/<id>.html`) with its tool calls and their diffs, to attach to a PR or ticket. HTML in the conversation is shown as text, never run. See [Sharing a session](../../features/pull-requests/#sharing-a-session). |
 | `/help` | — | Commands and skills. |
 | `/exit` | — | Quits. Ctrl+C twice also exits. |
 

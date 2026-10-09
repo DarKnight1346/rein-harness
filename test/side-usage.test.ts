@@ -20,7 +20,7 @@ describe('one-off model calls', () => {
     const reply = await claudeOneShot({account: {id: 'claude-1', provider: 'claude', home: null, imported: true}, model: 'haiku', system: 's', prompt: 'p', timeoutMs: 10_000});
     stop();
     expect(reply).toBe('ok');
-    // Both API calls of the one-shot, input including cache reads.
-    expect(seen).toEqual([[{provider: 'claude', model: 'haiku'}, {input: 10_200, cached: 9_000, output: 80}]]);
+    // Both API calls of the one-shot, input including cache reads, priced at Haiku 5.5's rates.
+    expect(seen).toEqual([[{provider: 'claude', model: 'haiku'}, {input: 10_200, cached: 9_000, output: 80, written: 0, usd: expect.closeTo(0.00025, 8)}]]);
   });
 });

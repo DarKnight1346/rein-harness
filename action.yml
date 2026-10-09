@@ -1,0 +1,110 @@
+name: Rein
+description: Run a Rein agent task (rein -p) in a workflow, on Claude Code through your Anthropic API key or a signed-in runner.
+author: DarKnight1346
+branding:
+  icon: terminal
+  color: green
+
+inputs:
+  prompt:
+    description: What to ask Rein. Piped input isn't supported here; put the context in the prompt or let the agent read the checkout.
+    required: true
+  anthropic-api-key:
+    description: An Anthropic API key (from a secret). Leave empty on a self-hosted runner where rein is already signed in.
+    required: false
+    default: ''
+  permission-mode:
+    description: ask (read-only), auto, bypass or plan.
+    required: false
+    default: ask
+  model:
+    description: A model ref (claude:opus, claude:sonnet…) or auto. Empty for Rein's default.
+    required: false
+    default: ''
+  allowed-tools:
+    description: Rules that run without asking, e.g. "shell(npm test:*),edit(src/**)".
+    required: false
+    default: ''
+  version:
+    description: The rein-harness version to install from npm.
+    required: false
+    default: latest
+  working-directory:
+    description: Where to run.
+    required: false
+    default: '.'
+  post-comment:
+    description: On a pull request, post Rein's reply as a comment (needs pull-requests write permission).
+    required: false
+    default: 'false'
+
+outputs:
+  result:
+    description: Rein's final reply.
+    value: ${{ steps.rein.outputs.result }}
+  is-error:
+    description: true when the run failed (an error, a budget stop, a refused prompt).
+    value: ${{ steps.rein.outputs.is-error }}
+  cost-usd:
+    description: What the run cost at API list prices.
+    value: ${{ steps.rein.outputs.cost-usd }}
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      with:
+        node-version: 22
+
+    - name: Install Rein and Claude Code
+      shell: bash
+      run: |
+        command -v rein >/dev/null || npm install -g "rein-harness@${REIN_VERSION}"
+        command -v claude >/dev/null || npm install -g @anthropic-ai/claude-code
+      env:
+        REIN_VERSION: ${{ inputs.version }}
+
+    - name: Run Rein
+      id: rein
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      env:
+        PROMPT: ${{ inputs.prompt }}
+        MODE: ${{ inputs.permission-mode }}
+        MODEL: ${{ inputs.model }}
+        ALLOWED: ${{ inputs.allowed-tools }}
+        ANTHROPIC_API_KEY: ${{ inputs.anthropic-api-key }}
+        REIN_ENV_KEYS: ${{ inputs.anthropic-api-key != '' && '1' || '' }}
+        REIN_NO_AUTOUPDATE: '1'
+      run: |
+        args=(-p "$PROMPT" --output-format json --permission-mode "$MODE")
+        [ -n "$MODEL" ] && args+=(--model "$MODEL")
+        [ -n "$ALLOWED" ] && args+=(--allowedTools "$ALLOWED")
+        set +e
+        rein "${args[@]}" > "$RUNNER_TEMP/rein-result.json"
+        code=$?
+        set -e
+        node -e '
+          const fs = require("fs");
+          const r = JSON.parse(fs.readFileSync(process.env.RUNNER_TEMP + "/rein-result.json", "utf8") || "{}");
+          const out = fs.createWriteStream(process.env.GITHUB_OUTPUT, {flags: "a"});
+          const d = "REIN_" + Math.random().toString(36).slice(2);
+          out.write(`result<<${d}\n${r.result ?? r.error ?? ""}\n${d}\n`);
+          out.write(`is-error=${!!r.is_error}\ncost-usd=${r.cost_usd ?? ""}\n`);
+          fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, `### Rein\n\n${r.result ?? r.error ?? ""}\n`);
+        '
+        exit $code
+
+    - name: Comment on the pull request
+      if: ${{ inputs.post-comment == 'true' && github.event.pull_request.number }}
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+        PR: ${{ github.event.pull_request.number }}
+      run: |
+        node -e '
+          const fs = require("fs");
+          const r = JSON.parse(fs.readFileSync(process.env.RUNNER_TEMP + "/rein-result.json", "utf8") || "{}");
+          fs.writeFileSync(process.env.RUNNER_TEMP + "/rein-comment.md", `${r.result ?? r.error ?? ""}\n\n<sub>Reviewed by Rein${r.model ? ` (${r.model})` : ""}${r.cost_usd !== undefined ? ` · $${r.cost_usd} at API prices` : ""}</sub>\n`);
+        '
+        gh pr comment "$PR" --repo "$GITHUB_REPOSITORY" --body-file "$RUNNER_TEMP/rein-comment.md"

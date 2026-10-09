@@ -15,4 +15,21 @@ describe('/context during a long turn', () => {
     expect(r.measured).toBe(90_000);
     expect(r.used).toBe(90_000);
   });
+
+  it('lists the largest items, so you can tell what to drop', async () => {
+    const engine: any = {
+      transcript: {id: 't', messages: [{role: 'user', text: 'Fix the build', at: 0, tools: [
+        {label: 'Read', summary: 'src/huge.ts', ok: true, result: 'x'.repeat(40_000)},
+        {label: 'Shell', summary: '$ npm test', ok: true, result: 'y'.repeat(4000)},
+        {label: 'List', summary: '.', ok: true, result: 'a b'},
+      ]}]},
+      current: undefined,
+      lastUsage: undefined,
+      inFlight: undefined,
+    };
+    const r = await contextReport(engine, {chatModel: 'claude:x', autoCompactPct: 50} as any, []);
+    const tools = r.largest!.filter((i) => !i.what.startsWith('instructions '));
+    expect(tools.map((i) => i.what)).toEqual(['Read(src/huge.ts)', 'Shell($ npm test)']); // tiny results left out
+    expect(tools[0]!.tokens).toBeGreaterThan(tools[1]!.tokens);
+  });
 });

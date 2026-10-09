@@ -1,0 +1,37 @@
+# GitLab CI/CD component: include it with
+#   include:
+#     - component: $CI_SERVER_FQDN/<group>/rein-harness/rein@<version>
+#       inputs:
+#         prompt: "Review this merge request's changes"
+spec:
+  inputs:
+    prompt:
+      description: What to ask Rein.
+    stage:
+      default: test
+    permission-mode:
+      default: ask
+      options: [ask, auto, bypass, plan]
+    model:
+      default: ''
+    version:
+      default: latest
+    image:
+      default: node:22
+---
+rein:
+  stage: $[[ inputs.stage ]]
+  image: $[[ inputs.image ]]
+  variables:
+    REIN_ENV_KEYS: '1'
+    REIN_NO_AUTOUPDATE: '1'
+  script:
+    - npm install -g "rein-harness@$[[ inputs.version ]]" @anthropic-ai/claude-code
+    - |
+      [ -n "$[[ inputs.model ]]" ] && model="--model $[[ inputs.model ]]"
+      rein -p "$[[ inputs.prompt ]]" --output-format json --permission-mode "$[[ inputs.permission-mode ]]" $model > rein-result.json || code=$?
+      node -e 'const r=JSON.parse(require("fs").readFileSync("rein-result.json","utf8")||"{}");console.log(r.result??r.error??"")'
+      exit ${code:-0}
+  artifacts:
+    when: always
+    paths: [rein-result.json]

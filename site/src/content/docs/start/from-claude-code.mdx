@@ -139,12 +139,13 @@ Rein's approval prompt has four options: **1** allow once, **2** allow all chang
 | `/memory` | `/memory` | Shows Rein's project memory (`.rein/MEMORY.md`) |
 | `/agents` | `/agents` | Lists the subagents the agent has spawned in this session |
 | `/add-dir` | `/add-dir`, `rein --add-dir` | Extra working directories |
-| `/config` | `/settings` | Status line, sidebar, approvals, shell, subagents, goals, load balancing, updates, privacy, compaction |
+| `/config` | `/settings` | Status line, sidebar, approvals, shell, subagents, goals, load balancing, updates, privacy, compaction, and any key with `/settings <key> <value>` or the Advanced tab |
 | `/help` | `/help` | Commands and skills |
 | `/exit` | `/exit` | Or Ctrl+C twice |
 | *(usage is limited)* | `/usage` | Every account's 5h / weekly windows and reset times |
 | — | `/goal`, `/btw`, `/plan`, `/goal:plan`, `/shells`, `/agent`, `/update`, `/tui` | New in Rein |
-| `/init`, `/cost`, `/status`, `/doctor`, `/review` | — | No equivalent |
+| `/cost` | `/cost` | Cost of the conversation, latest request and goal at API list prices |
+| `/init`, `/status`, `/doctor`, `/review` | — | No equivalent |
 | `claude -p` | `rein -p` | `--output-format`, `--permission-mode`, `--allowedTools`, `--disallowedTools`, `--model`, `-c` |
 
 → Full list: [Slash commands](../../reference/commands/) · [CLI flags](../../reference/cli/)

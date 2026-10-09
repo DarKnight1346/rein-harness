@@ -49,6 +49,8 @@ rein -p "now update the docs to match" -c
 | `--disallowedTools "<rules>"` | Extra deny rules for this run. |
 | `-c`, `--continue [id]` | Continue the latest conversation in this project, or the one with that id. |
 | `--verbose` | Text mode: print tool calls and notices to stderr. |
+| `--add-dir <path>` | Also let the agent use this folder without asking, for this run. Repeatable; adds to `additionalDirectories`. |
+| `--scope <dir>` | Work in one package of a monorepo: `list`, `search` and `shell` start there, with its instructions. |
 
 `--model`, `--effort` and `--permission-mode` apply to this run only. They're never saved to `~/.rein/config.json`.
 
@@ -88,14 +90,15 @@ A single JSON object on stdout when the run ends:
     {"tool": "Search", "summary": "retry in src", "ok": true},
     {"tool": "Read", "summary": "src/webhooks/deliver.ts", "ok": true}
   ],
-  "tokens": {"uncached": 18342, "cached": 41210, "output": 612},
+  "tokens": {"uncached": 18342, "cached": 41210, "output": 612, "usd": 0.0561},
+  "cost_usd": 0.0561,
   "duration_ms": 14873
 }
 ```
 
 - `model` and `effort` come from the last routing decision. `effort` is left out when the model has none.
 - `tools` lists the main agent's tool calls (label, summary, success). Subagents' calls aren't included.
-- `tokens` are the conversation's running totals: `uncached` input, `cached` input and `output`. They include subagents and Rein's helper calls (compaction, the decision model, the advisor, `web_fetch`), not only the main model.
+- `tokens` are the conversation's running totals: `uncached` input, `cached` input and `output`, plus `usd` when the models have a price. `cost_usd` is that total, at API list prices (see [Cost & budgets](../cost/)). They include subagents and Rein's helper calls (compaction, the decision model, the advisor, `web_fetch`), not only the main model.
 - On an early failure (bad flag, no prompt, no accounts) you get `{"type": "result", "is_error": true, "error": "…"}` instead.
 - If the run hits an error partway through, `is_error` is `true`, `error` is set, and `result` holds whatever reply text arrived before it.
 
@@ -109,9 +112,9 @@ One JSON object per line as things happen, then the same `result` object as `jso
 {"type":"tool","phase":"end","tool":"Read","summary":"src/webhooks/deliver.ts","ok":true}
 {"type":"text","delta":"The retry logic lives in "}
 {"type":"text","delta":"src/webhooks/deliver.ts…"}
-{"type":"tokens","call":{"input":59552,"cached":41210,"output":612}}
+{"type":"tokens","call":{"input":59552,"cached":41210,"output":612,"written":18342,"usd":0.0561}}
 {"type":"done","interrupted":false}
-{"type":"result","is_error":false,"result":"…","session_id":"2026-10-03-14-22-07-9f3c2a1b","model":"claude:sonnet","effort":"medium","tools":[…],"tokens":{…},"duration_ms":14873}
+{"type":"result","is_error":false,"result":"…","session_id":"2026-10-03-14-22-07-9f3c2a1b","model":"claude:sonnet","effort":"medium","tools":[…],"tokens":{…},"cost_usd":0.0561,"duration_ms":14873}
 ```
 
 You may also see `notice` (`{"type":"notice","text":"…"}`), `compact` and `error` events. Tool events from subagents appear in the stream too.
@@ -166,7 +169,7 @@ In `text` mode the plan is printed after the agent's reply. In `json` mode it re
 | Code | When |
 |---|---|
 | `0` | The run completed. Denied tool calls don't count as failure. |
-| `1` | No prompt, no accounts, an invalid `--permission-mode`, or an error during the run (routing failed, every account unavailable, a `UserPromptSubmit` hook blocked the prompt, …). |
+| `1` | No prompt, no accounts, an invalid `--permission-mode`, or an error during the run (routing failed, every account unavailable, a `UserPromptSubmit` hook blocked the prompt, a [budget](../cost/#budgets) was reached, …). |
 
 To fail a CI step on the *content* of the answer, check `result` yourself (see the example below).
 
@@ -178,9 +181,62 @@ To fail a CI step on the *content* of the answer, check `result` yourself (see t
 
 Your [hooks](../hooks/) all run. `SessionStart` fires with `source: "resume"` when you use `-c`. A `Stop` hook can send the agent back to work up to 10 times. This also means a repository's own hooks run in CI.
 
+## The Rein GitHub Action
+
+The repo ships a composite action, so a workflow runs Rein in one step, on GitHub's hosted runners with an Anthropic API key or on a self-hosted runner where Rein is signed in:
+
+```yaml title=".github/workflows/rein-review.yml"
+name: Rein review
+on: pull_request
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: DarKnight1346/rein-harness@main   # pin a commit SHA in real workflows
+        id: rein
+        with:
+          prompt: Review the changes on this branch against origin/${{ github.base_ref }}. List real bugs and risky changes only, most severe first. End with VERDICT: OK or VERDICT: CHANGES.
+          anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
+          permission-mode: ask
+      - if: ${{ !contains(steps.rein.outputs.result, 'VERDICT: OK') }}
+        run: exit 1
+```
+
+| Input | Default | Meaning |
+|---|---|---|
+| `prompt` | (required) | What to ask. |
+| `anthropic-api-key` | `''` | An Anthropic API key from a secret. Empty on a self-hosted runner where Rein is signed in. |
+| `permission-mode` | `ask` | `ask` (read-only), `auto`, `bypass` or `plan`. |
+| `model` | `''` | A model ref or `auto`; empty for the default. |
+| `allowed-tools` | `''` | Rules that run without asking, like `shell(npm test:*),edit(src/**)`. |
+| `version` | `latest` | The `rein-harness` version to install. |
+| `working-directory` | `.` | Where to run. |
+| `post-comment` | `false` | On a pull request, post the reply as a PR comment (with the model and cost). The job needs `permissions: pull-requests: write`. |
+
+**A reviewer on every PR:** with `post-comment: true`, the prompt above and `permission-mode: ask` (read-only), the action leaves its review as a comment on each pull request. Give the job `permissions: {contents: read, pull-requests: write}`.
+
+Outputs: `result` (the final reply), `is-error`, and `cost-usd` (at API list prices). The reply is also written to the job summary. The action installs Node 22, `rein-harness` and Claude Code when they're missing, and fails the step when the run fails.
+
+With a key, the action sets `REIN_ENV_KEYS=1`: for that run only, Rein uses `ANTHROPIC_API_KEY` from the environment through the official `claude` CLI, in a fresh config folder, and never saves it. Codex can't use a key from the environment this way yet.
+
+## GitLab CI component
+
+`templates/rein.yml` is a [GitLab CI/CD component](https://docs.gitlab.com/ci/components/) with inputs `prompt`, `stage` (`test`), `permission-mode` (`ask`), `model`, `version` (`latest`) and `image` (`node:22`). Set `ANTHROPIC_API_KEY` as a masked CI/CD variable; the job runs `rein -p` with `REIN_ENV_KEYS=1` and keeps `rein-result.json` as an artifact.
+
+```yaml title=".gitlab-ci.yml"
+include:
+  - component: $CI_SERVER_FQDN/<group>/rein-harness/rein@<version>
+    inputs:
+      prompt: Review this merge request's changes and list real bugs only.
+```
+
 ## GitHub Actions example
 
-Rein drives your subscription CLIs, so the job needs a machine where Rein is installed and signed in, such as a self-hosted runner where you've run `rein` once.
+Without the action: Rein drives your subscription CLIs, so the job needs a machine where Rein is installed and signed in, such as a self-hosted runner where you've run `rein` once.
 
 ```yaml title=".github/workflows/rein-review.yml"
 name: Rein review
@@ -211,7 +267,6 @@ With `--permission-mode ask` the reviewer can read the checkout, search it and r
 
 ## Gotchas
 
-- **`--add-dir` is ignored with `-p`.** It's only handled for interactive sessions. Use `additionalDirectories` in `~/.rein/config.json`, which headless runs do respect.
 - **Flag values can't start with `-`.** `rein -p "-v is broken"` doesn't see a prompt. Pipe it in instead: `echo "-v is broken" | rein -p`.
 - **`-c` without an id** continues the newest conversation in the current folder, with no picker. If there isn't one, it starts fresh.
 - **MCP servers connect in the background**, so a very short run can finish before a slow server's tools show up. Project servers from `.mcp.json` only connect once approved (`enabledMcpjsonServers` in `.rein/settings.local.json`).

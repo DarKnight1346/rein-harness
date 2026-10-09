@@ -1,0 +1,49 @@
+---
+// The open-source roadmap, straight from ROADMAP.md at the repo root, so this page can't drift from it.
+import roadmap from '../../../ROADMAP.md?raw';
+
+type Row = {n: string; feature: string; docs: string; status: string};
+const waves: {title: string; rows: Row[]}[] = [];
+for (const line of roadmap.split('\n')) {
+  const h = line.match(/^## (Wave \d+: .*)$/);
+  if (h) waves.push({title: h[1]!, rows: []});
+  const r = line.match(/^\| (\d+) \| (.*?) \| .* \| (.*?) \| (todo|done|blocked.*?) \|$/);
+  if (r && waves.length) waves.at(-1)!.rows.push({n: r[1]!, feature: r[2]!, docs: r[3]!.trim(), status: r[4]!});
+}
+const all = waves.flatMap((w) => w.rows);
+const done = all.filter((r) => r.status === 'done').length;
+// `code` spans in feature names, escaped.
+const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+const html = (s: string) => esc(s).replace(/`([^`]+)`/g, '<code>$1</code>');
+// This page is two levels deep (start/whats-new/): links stay relative so the site works under a base path.
+const link = (docs: string) => `../../${docs}`;
+const label = (s: string) => (s === 'done' ? 'Shipped' : s === 'todo' ? 'Planned' : 'Blocked');
+---
+
+<p><strong>{done} of {all.length}</strong> open-source roadmap features have shipped.</p>
+
+{
+  waves.map((w) => (
+    <>
+      <h2>{w.title}</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Feature</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          {w.rows.map((r) => (
+            <tr>
+              <td>{r.n}</td>
+              <td>{r.docs ? <a href={link(r.docs)} set:html={html(r.feature)} /> : <span set:html={html(r.feature)} />}</td>
+              <td title={r.status}>{label(r.status)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </>
+  ))
+}

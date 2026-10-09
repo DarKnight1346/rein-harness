@@ -12,11 +12,12 @@ import {callbackServer, ReinOAuthProvider} from './oauth.js';
 import {ToolError, type ToolImage} from '../tools/fs.js';
 import type {ToolDef} from '../tools/registry.js';
 import {loadServers, type ServerConfig, type ServerEntry} from './config.js';
+import {checkPin, pin} from './pins.js';
 
 /** `needs-auth`: a remote server that wants an OAuth sign-in (/mcp → enter). */
-export type ServerStatus = 'connecting' | 'connected' | 'failed' | 'needs-approval' | 'needs-auth';
+export type ServerStatus = 'connecting' | 'connected' | 'failed' | 'needs-approval' | 'needs-auth' | 'changed';
 type McpTool = {name: string; description?: string; inputSchema: Record<string, unknown>; annotations?: {readOnlyHint?: boolean; title?: string}};
-type Server = ServerEntry & {status: ServerStatus; error?: string; client?: Client; tools: McpTool[]};
+type Server = ServerEntry & {status: ServerStatus; error?: string; client?: Client; tools: McpTool[]; held?: McpTool[]};
 
 const CONNECT_TIMEOUT_MS = 30_000;
 /** Tool names travel through two prefixes (Claude: mcp__rein__…); providers cap names at 64. */
@@ -45,8 +46,45 @@ export class McpManager extends EventEmitter {
   /** Answers servers' sampling requests (set by the runtime before servers connect). */
   sampling?: (server: string, params: SamplingParams) => Promise<import('@modelcontextprotocol/sdk/types.js').CreateMessageResult>;
 
+  /** mcpPinning: a server whose config or tools changed since you approved it waits for you again. */
+  pinning?: () => boolean;
+
   constructor(private readonly root: string) {
     super();
+  }
+
+  private pinKey(e: ServerEntry): string {
+    return e.source === 'project' ? `project:${this.root}:${e.name}` : `${e.source}:${e.name}`;
+  }
+
+  /** Expose the server's tools, unless pinning finds it changed since it was approved: then they're held. */
+  private admit(server: Server, tools: McpTool[]): void {
+    if (!this.pinning?.()) {
+      server.tools = tools;
+      return;
+    }
+    const check = checkPin(this.pinKey(server), server.config, tools);
+    if (check.kind === 'changed') {
+      server.status = 'changed';
+      server.error = `changed since you approved it (${check.what}) — /mcp to review`;
+      server.held = tools;
+      server.tools = [];
+      return;
+    }
+    if (check.kind === 'new') pin(this.pinKey(server), server.config, tools); // trust on first use
+    server.tools = tools;
+  }
+
+  /** /mcp on a changed server: accept what it is now and pin that. */
+  acceptChange(name: string): void {
+    const s = this.servers.get(name);
+    if (!s || s.status !== 'changed' || !s.held) return;
+    pin(this.pinKey(s), s.config, s.held);
+    s.tools = s.held;
+    s.held = undefined;
+    s.error = undefined;
+    s.status = s.client ? 'connected' : 'failed';
+    this.emit('change');
   }
 
   /** (Re)read the configs and connect to every approved server not yet connected. */
@@ -83,10 +121,11 @@ export class McpManager extends EventEmitter {
     try {
       await withTimeout(client.connect(transportFor(e.config, this.root, auth?.hasTokens ? auth : undefined)), CONNECT_TIMEOUT_MS, 'timed out connecting');
       server.client = client;
-      server.tools = await this.listTools(client);
       server.status = 'connected';
+      this.admit(server, await this.listTools(client));
       client.setNotificationHandler(ToolListChangedNotificationSchema, async () => {
-        server.tools = await this.listTools(client).catch(() => server.tools);
+        const tools = await this.listTools(client).catch(() => undefined);
+        if (tools && server.status !== 'changed') this.admit(server, tools);
         this.emit('change');
       });
       client.onclose = () => {

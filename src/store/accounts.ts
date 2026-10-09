@@ -1,4 +1,6 @@
+import {mkdtempSync} from 'node:fs';
 import {rm} from 'node:fs/promises';
+import os from 'node:os';
 import path from 'node:path';
 import type {Account, ProviderId} from '../providers/types.js';
 import {readJson, writeJson} from './json.js';
@@ -14,11 +16,23 @@ type AccountsFile = {
 const EMPTY: AccountsFile = {version: 1, importOffered: false, accounts: []};
 
 export async function loadAccounts(): Promise<AccountsFile> {
-  return readJson(paths.accounts(), EMPTY);
+  const file = await readJson(paths.accounts(), EMPTY);
+  return {...file, accounts: [...file.accounts, ...envAccounts()]};
 }
 
 export async function saveAccounts(file: AccountsFile): Promise<void> {
-  await writeJson(paths.accounts(), file);
+  await writeJson(paths.accounts(), {...file, accounts: file.accounts.filter((a) => !a.envKey)});
+}
+
+/**
+ * REIN_ENV_KEYS=1 (for CI): an account for this run only that uses ANTHROPIC_API_KEY from the
+ * environment through the official claude CLI, in a fresh config folder so no other login is used.
+ */
+let envHome: string | undefined;
+function envAccounts(): Account[] {
+  if (process.env.REIN_ENV_KEYS !== '1' || !process.env.ANTHROPIC_API_KEY) return [];
+  envHome ??= mkdtempSync(path.join(os.tmpdir(), 'rein-env-claude-'));
+  return [{id: 'env-claude', provider: 'claude', home: envHome, imported: false, api: 'console', label: 'ANTHROPIC_API_KEY (environment)', envKey: true}];
 }
 
 export async function upsertAccount(account: Account): Promise<void> {

@@ -1,8 +1,21 @@
-import {readFileSync} from 'node:fs';
+import {existsSync, readFileSync, realpathSync, statSync} from 'node:fs';
 import {run} from './util/proc.js';
 import {EventEmitter} from 'node:events';
 import {adapters} from './providers/index.js';
 import {onSideUsage} from './providers/usage.js';
+import {formatUsd, setCacheWriteTtl, setPriceOverrides} from './providers/prices.js';
+import {Telemetry} from './telemetry/otel.js';
+import {maskSecrets} from './tools/secrets.js';
+import {sastCheck} from './tools/sast.js';
+import {loadPolicy, modelBlocked} from './policy.js';
+import {reinConfigDir} from './store/paths.js';
+import {affectedTool} from './build/tool.js';
+import {affected, changedFiles} from './build/affected.js';
+import {CiWatcher} from './build/ci.js';
+import {branchSize} from './pr/github.js';
+import {digestLog, formatDigest} from './tools/logDigest.js';
+import {isTestCommand} from './build/flaky.js';
+import {effectiveBudget, overBudget, type Spend} from './budget.js';
 import {catalog, toRef} from './router/catalog.js';
 import {mergeNote, Worktrees} from './agents/worktrees.js';
 import type {Origin} from './tools/fs.js';
@@ -46,9 +59,9 @@ import {goalDoneTool, milestoneDoneTool} from './goals/tool.js';
 import {webTools} from './tools/web.js';
 import {isMilestoneCopy, todoTool} from './tools/todo.js';
 import {imageGenRef, imageTool} from './tools/image.js';
-import {newTranscript, saveTranscript} from './session/transcript.js';
+import {newTranscript, saveTranscript, setSaveFilter} from './session/transcript.js';
 import {setPromptCacheTtl} from './providers/claude/session.js';
-import {setAttribution, setBriefFinal, setCheapExplore, setExtraWorkingDirs, setInScope, setLazyTools, setManyCalls, setNoTodo, setSelfTest, setVaultNames, systemPrompt} from './session/prompt.js';
+import {setAttribution, setBriefFinal, setCheapExplore, setExtraWorkingDirs, setInScope, setProvenance, setScopeDir, setLazyTools, setManyCalls, setNoTodo, setSelfTest, setVaultNames, systemPrompt} from './session/prompt.js';
 import {Vault} from './vault/vault.js';
 import {parseRef, refKey, type Account, type ModelRef, type TokenCount, type ToolBinding} from './providers/types.js';
 import {removeAccount} from './accounts/service.js';
@@ -62,6 +75,7 @@ const AUTO_APPROVE_MIN = 0.85;
 /** Plan mode: how sure the decision model must be that an unlisted command only reads. */
 const READ_ONLY_MIN = 0.85;
 import {mcpProxyCommand, ToolHost, type ApprovalDecision, type ApprovalRequest, type ToolActivity} from './tools/host.js';
+import {findWorkspace, workspaceDirs, type Workspace} from './workspace/index.js';
 
 /** Process-wide state shared by the UI and commands. */
 /** keep-going: times per request the agent is sent back after stopping partway. */
@@ -71,6 +85,120 @@ const VERIFY_MAX = 2;
 
 export class Runtime {
   config: Config = DEFAULT_CONFIG;
+  /** The workspace (rein.workspace.yaml) the launch folder belongs to, if any. */
+  workspace: Workspace | undefined;
+  /** /ci watch: what to send the agent, refreshed by the UI on every render (it owns the chat). */
+  ciSubmit: (task: string) => void = () => {};
+  /** A line for you (not the agent) in the conversation view, set by the UI. */
+  uiLog: (text: string, kind?: 'info' | 'error') => void = () => {};
+  readonly ci = new CiWatcher({log: (t, k) => this.uiLog(t, k), submit: (t) => this.ciSubmit(t)});
+  /** OpenTelemetry export (config `otel`). */
+  readonly telemetry = new Telemetry(() => this.config);
+  /** The conversation's cost when the user's latest message arrived (for /cost's "this request"). */
+  requestStartUsd = 0;
+  /** --scope / /scope: the package of a monorepo this session works in (absolute), if any. */
+  scope: string | undefined;
+
+  /** Whether sast and verify-affected have checked this request's changes. */
+  private sastChecked = false;
+  private affectedChecked = false;
+  private sizeChecked = false;
+  /** The last budget stop (for rein -p's exit status), cleared by your next message. */
+  budgetStop: string | undefined;
+
+  /** What this conversation, the latest request and the goal have spent (USD), for budgets. */
+  private spend(): Spend | undefined {
+    const usd = this.engine?.sessionTokens.usd;
+    if (usd === undefined) return undefined;
+    const goal = this.goals.goal;
+    return {conversation: usd, request: usd - this.requestStartUsd, goal: goal?.status === 'active' && goal.startUsd !== undefined ? usd - goal.startUsd : undefined};
+  }
+
+  /** A cap reached: stop (the engine interrupts the turn), pausing the goal so it doesn't continue. */
+  private checkBudget(): string | undefined {
+    const spend = this.spend();
+    const msg = spend && overBudget(spend, effectiveBudget(this.config.budget));
+    if (!msg) return undefined;
+    this.budgetStop = msg;
+    if (this.goals.goal?.status === 'active') this.goals.pause();
+    return msg;
+  }
+
+  /** verify-affected: run the affected tests; a failure as the message for the agent (undefined: they passed or nothing to run). */
+  private async verifyAffected(): Promise<string | undefined> {
+    const root = process.cwd();
+    const files = await changedFiles(root);
+    const a = files.length ? await affected(root, files) : undefined;
+    if (!a?.test) return undefined;
+    // Through the shell tool, so the approval mode, permission rules and the sandbox apply as to the agent's own commands.
+    const r = await this.tools.call('shell', {command: a.test, timeout_ms: Math.min(60, this.config.shellMaxMinutes || 60) * 60_000});
+    if (r.ok) return undefined;
+    const out = r.text.trim();
+    const digest = formatDigest(digestLog(out), out.split('\n').length);
+    return `The tests for what this request changed failed (${a.system}: ${a.targets.slice(0, 8).join(', ')}${a.targets.length > 8 ? ', …' : ''}; \`${a.test}\`):\n${digest ?? out.split('\n').slice(-60).join('\n')}\nFix them before you finish, or if a failure isn't caused by this change, say so.`;
+  }
+
+  /** /pr digest: a plain-language summary of the branch for reviewers (risks, test evidence), from the utility model. */
+  async prDigest(): Promise<string> {
+    const root = process.cwd();
+    const size = await branchSize(root);
+    const git = async (...a: string[]) => (await run('git', a, {cwd: root, timeoutMs: 30_000}).catch(() => undefined))?.stdout ?? '';
+    const diff = (await git('diff', '--no-color', size ? (await git('merge-base', 'HEAD', size.base)).trim() : 'HEAD')).slice(0, 80_000);
+    if (!diff.trim()) throw new Error('nothing changed on this branch');
+    const tests = (this.engine?.transcript.messages ?? [])
+      .flatMap((m) => m.tools ?? [])
+      .filter((t) => t.label === 'Shell' && isTestCommand(t.summary))
+      .slice(-3)
+      .map((t) => `${t.summary} → ${t.ok ? 'passed' : 'failed'}\n${t.result.split('\n').slice(-8).join('\n')}`);
+    const ref = resolveUtilityModel(this.config.compactionModel, this.config);
+    if (!ref) throw new Error('no model available for the digest');
+    const system = 'You write the description a human reviewer reads before a code review. Plain language, short. No marketing, no praise.';
+    const prompt = `The change (git diff against its base):\n${diff}\n\nTest runs in the conversation that made it:\n${tests.join('\n\n') || '(none)'}\n\nWrite: 1) What changed and why, in 2-4 sentences. 2) Where to look closely: the risky parts, with file names. 3) Test evidence: what was run and the result, or "no tests were run". Use these three headings: ## Summary, ## Look closely at, ## Tests.`;
+    return (await completeWith(ref, this.config, system, prompt, {timeoutMs: 180_000})).trim();
+  }
+
+  /** /cost's budget lines: each cap in force and how much of it is used. */
+  private budgetLines(): string[] {
+    const b = effectiveBudget(this.config.budget);
+    const s = this.spend();
+    const line = (what: string, spent: number | undefined, cap: number | undefined) => (cap === undefined ? [] : [`  ${what.padEnd(18)} ${spent === undefined ? '—' : formatUsd(spent)} of ${formatUsd(cap)}`]);
+    const lines = [...line('request budget', s?.request, b.requestUsd), ...line('goal budget', s?.goal, b.goalUsd), ...line('conversation budget', s?.conversation, b.conversationUsd)];
+    return lines.length ? ['Budgets (config budget, or a lower one in .rein/settings.json):', ...lines] : [];
+  }
+
+  /** /cost: what this conversation, the latest request and the goal cost at API list prices. */
+  costReport(): string {
+    const t = this.engine?.sessionTokens ?? {uncached: 0, cached: 0, output: 0};
+    if (t.usd === undefined) {
+      const m = this.engine?.currentRef();
+      return `No price for ${m ? `${m.provider}:${m.model}` : 'this model'} yet, so only tokens are counted. Add one under "prices" in ~/.rein/config.json.`;
+    }
+    const k = (n: number) => (n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : n >= 1e3 ? `${Math.round(n / 1e3)}K` : String(n));
+    const goal = this.goals.goal;
+    return [
+      'At API list prices (a subscription isn\'t billed per token; this is what the same tokens would cost on the API):',
+      `  this conversation  ${formatUsd(t.usd)}  (uncached ${k(t.uncached)} · cached ${k(t.cached)} · received ${k(t.output)})`,
+      `  latest request     ${formatUsd(Math.max(0, t.usd - this.requestStartUsd))}`,
+      ...(goal?.startUsd !== undefined ? [`  goal so far        ${formatUsd(Math.max(0, t.usd - goal.startUsd))}  (${goal.status})`] : []),
+      'Includes subagents and helper calls (compaction, decisions, the advisor).',
+      ...this.budgetLines(),
+    ].join('\n');
+  }
+
+  /** Set the scope (a folder inside the project; undefined or "off" clears it). Returns it, absolute. */
+  setScope(dir: string | undefined): string | undefined {
+    if (!dir || dir === 'off') {
+      this.scope = undefined;
+    } else {
+      const abs = path.resolve(process.cwd(), dir);
+      const rel = path.relative(process.cwd(), abs);
+      if (rel.startsWith('..') || path.isAbsolute(rel)) throw new Error(`--scope ${dir}: must be a folder inside the project`);
+      if (!existsSync(abs) || !statSync(abs).isDirectory()) throw new Error(`--scope ${dir}: not a folder`);
+      this.scope = rel ? realpathSync(abs) : undefined;
+    }
+    this.engine?.refreshTools(); // the system prompt names the scope and loads its instructions
+    return this.scope;
+  }
   engine!: Engine;
   /** Last auto-routing decision, for the status line / debugging. */
   lastDecision: string | undefined;
@@ -113,7 +241,14 @@ export class Runtime {
     sessionId: () => this.engine?.transcript.id,
     judge: (req) => this.judgeChange(req),
     readOnlyJudge: (command) => this.judgeReadOnly(command),
-    configDirs: () => this.config?.additionalDirectories ?? [],
+    configDirs: () => [...(this.config?.additionalDirectories ?? []), ...workspaceDirs(this.workspace)],
+    scope: () => this.scope,
+    secretScan: () => this.config.secretScan ?? 'off',
+    depCheck: () => this.config.depCheck ?? 'off',
+    buildTimes: () => this.config.buildTimeWarnings !== false,
+    policy: () => loadPolicy(process.cwd(), reinConfigDir()),
+    injectionScan: () => this.config.injectionScan === true,
+    exfilGuard: () => this.config.exfilGuard === true,
     checkpoint: (file) => this.checkpoints.snapshot(this.currentTurn(), file),
     experiments: () => activeExperiments(this.config),
     contextId: () => this.engine?.contextId(),
@@ -204,7 +339,7 @@ export class Runtime {
   }
 
   /** Built-in code intelligence: language servers Rein runs itself (lsp/manager.ts). */
-  readonly lsp = new LspManager({config: () => this.config});
+  readonly lsp = new LspManager({config: () => this.config, scope: () => this.scope});
 
   /** File checkpoints for /rewind, per conversation (Rein's own file changes, ignored files too). */
   readonly checkpoints = new Checkpoints(() => this.engine?.transcript.id ?? 'none');
@@ -363,6 +498,8 @@ export class Runtime {
       ref = parseRef(agent.requested);
       if (!ref || !catalog.get(ref)) throw new Error(`model ${agent.requested} isn't available; use one from the tool description or "auto"`);
     }
+    const blocked = modelBlocked(loadPolicy(process.cwd(), reinConfigDir()), ref);
+    if (blocked) throw new Error(`${blocked}; give the subagent a model the policy allows`);
     const account = catalog.healthyAccounts(ref, this.config.maxUsedPct)[0];
     if (!account) throw new Error(`no healthy account for ${ref.model}`);
     const role = agent.definition ? `\n\n# Your role: ${agent.definition.name}\n${agent.definition.prompt}` : '';
@@ -427,6 +564,12 @@ Drop superseded reads of the same file, routine listings, and output that no lon
     const root = process.cwd();
     // A message from the user (not Rein's own follow-up) ends an escalation: routing is normal again.
     if (!/^<(code_check|stop_hook)>/.test(text)) {
+      this.requestStartUsd = this.engine?.sessionTokens.usd ?? 0;
+      this.sastChecked = false;
+      this.affectedChecked = false;
+      this.sizeChecked = false;
+      this.budgetStop = undefined;
+      this.tools.watchdog.reset();
       this.escalation = undefined;
       this.verifyPasses = 0;
       this.verifiedAt = undefined;
@@ -471,6 +614,13 @@ Drop superseded reads of the same file, routine listings, and output that no lon
       const findings = await this.crossReview().catch(() => undefined);
       if (findings) return {kind: 'hook', reason: findings};
     }
+    // self-review: the same model, in a fresh call without this conversation, reviews the change against the request.
+    if (!active && activeExperiments(this.config).includes('self-review') && !this.reviewed && this.engine && this.checkpoints.changedSince(this.currentTurn()).length) {
+      this.reviewed = true;
+      const self = this.engine.currentRef();
+      const findings = self ? await this.crossReview(self, 'A fresh review of your change (the same model, without this conversation)').catch(() => undefined) : undefined;
+      if (findings) return {kind: 'hook', reason: findings};
+    }
     // verify-requirements: once per request, before the agent stops after changing files, it runs its
     // change against every requirement in the request (hard tasks fail on the edge case it never tried).
     // Once more if that pass changed the code: its fixes were never run against the requirements.
@@ -506,6 +656,29 @@ Drop superseded reads of the same file, routine listings, and output that no lon
     }
     const problems = await this.lsp.turnEnd().catch(() => undefined);
     if (problems) return {reason: problems, kind: 'diagnostics'};
+    // sast: Semgrep on the files this request changed, once per request (findings on added lines only).
+    if (this.config.sast === 'semgrep' && !this.sastChecked && this.engine) {
+      const since = this.currentTurn();
+      const files = this.checkpoints.changedSince(since).filter((f) => existsSync(f));
+      if (files.length) {
+        this.sastChecked = true;
+        const found = await sastCheck(files.map((file) => ({file, before: this.checkpoints.before(since, file)})), process.cwd(), this.config.sastConfig || 'auto').catch(() => undefined);
+        if (found) return {reason: found, kind: 'diagnostics'};
+      }
+    }
+    // prMaxLines: the branch grew past the size reviewers can take; say so to you (not the agent), once per request.
+    if (!this.sizeChecked && (this.config.prMaxLines ?? 0) > 0 && this.engine && this.checkpoints.changedSince(this.currentTurn()).length) {
+      this.sizeChecked = true;
+      const size = await branchSize(process.cwd()).catch(() => undefined);
+      if (size && size.lines > this.config.prMaxLines)
+        this.uiLog(`This branch now changes ${size.lines.toLocaleString()} lines (+${size.added} −${size.removed} vs ${size.base}), over prMaxLines (${this.config.prMaxLines}). Smaller PRs get reviewed faster: /pr split asks the agent to split it into a stack.`);
+    }
+    // verify-affected: in an Nx/Turborepo/Bazel/Pants workspace, the tests for what this request changed, once.
+    if (activeExperiments(this.config).includes('verify-affected') && !this.affectedChecked && this.engine && this.checkpoints.changedSince(this.currentTurn()).length) {
+      this.affectedChecked = true;
+      const failed = await this.verifyAffected().catch(() => undefined);
+      if (failed) return {reason: failed, kind: 'diagnostics'};
+    }
     // keep-going: the agent ended its turn but its own reply says the work isn't done ("I've only
     // partly done this"), and it isn't waiting on the user: send it back, a few times per request.
     // Models stop like this on long tasks, more often right after a compaction.
@@ -562,9 +735,9 @@ Drop superseded reads of the same file, routine listings, and output that no lon
   }
 
   /** cross-review: the reviewer's findings as a message for the agent, or undefined when it found nothing. */
-  private async crossReview(): Promise<string | undefined> {
+  private async crossReview(by?: ModelRef, who?: string): Promise<string | undefined> {
     const cur = this.engine?.currentRef();
-    const reviewer = cur && this.reviewerFor(cur);
+    const reviewer = by ?? (cur && this.reviewerFor(cur));
     if (!reviewer || !this.engine) return undefined;
     const root = process.cwd();
     const git = async (...a: string[]) => (await run('git', a, {cwd: root, timeoutMs: 20_000})).stdout;
@@ -583,7 +756,7 @@ Drop superseded reads of the same file, routine listings, and output that no lon
     const prompt = `The request:\n${request.slice(0, 20_000)}\n\nThe change (git diff, then new files):\n${diff}\n${added}\n\nList each problem on one line: the file, what is wrong, and which part of the request it breaks. If there are none, reply exactly NONE.`;
     const reply = (await completeWith(reviewer, this.config, system, prompt, {timeoutMs: 240_000})).trim(); // its tokens count via onSideUsage
     if (!reply || /^none\b/i.test(reply)) return undefined;
-    return `A second model (${reviewer.provider}:${reviewer.model}) reviewed your change against the request and reported:\n${reply.slice(0, 6000)}\nCheck each point against the code. Fix the ones that are real; for any that are wrong, say so in a line. Don't redo work that is fine.`;
+    return `${who ?? `A second model (${reviewer.provider}:${reviewer.model})`} reviewed your change against the request and reported:\n${reply.slice(0, 6000)}\nCheck each point against the code. Fix the ones that are real; for any that are wrong, say so in a line. Don't redo work that is fine.`;
   }
 
   /** escalate: the model the task moves to (set by stopHook, cleared by the user's next message). */
@@ -636,7 +809,7 @@ Drop superseded reads of the same file, routine listings, and output that no lon
   /** Fold new subagent tokens into the conversation totals and save its record. */
   private subagentFinished(agent: Subagent): void {
     const prev = this.folded.get(agent.id) ?? {input: 0, cached: 0, output: 0};
-    this.engine.addTokens({input: agent.tokens.input - prev.input, cached: agent.tokens.cached - prev.cached, output: agent.tokens.output - prev.output});
+    this.engine.addTokens({input: agent.tokens.input - prev.input, cached: agent.tokens.cached - prev.cached, output: agent.tokens.output - prev.output, ...(agent.tokens.usd === undefined ? {} : {usd: agent.tokens.usd - (prev.usd ?? 0)})});
     this.folded.set(agent.id, {...agent.tokens});
     const t = this.engine.transcript;
     const record = {
@@ -657,8 +830,17 @@ Drop superseded reads of the same file, routine listings, and output that no lon
   }
 
   async init(opts: {resume: Resume}): Promise<{resumed?: Transcript}> {
+    this.workspace = findWorkspace();
     await this.vault.load();
     this.tools.shells.vault = this.vault;
+    // provenance: what the trailers say, current at the moment of each command.
+    this.tools.shells.extraEnv = (): Record<string, string> => {
+      if (!this.config.provenance) return {};
+      const ref = this.engine?.currentRef();
+      const goal = this.goals.goal?.status === 'active' ? this.goals.goal.text.replace(/\s+/g, ' ').slice(0, 120) : '';
+      return {REIN_SESSION: this.engine?.transcript.id ?? '', REIN_MODEL: ref ? `${ref.provider}:${ref.model}` : '', REIN_GOAL: goal};
+    };
+    setProvenance(() => this.config.provenance === true);
     setVaultNames(() => this.vault.names());
     this.vault.onChange(() => this.engine?.refreshTools()); // the system prompt lists the names
     this.tools.register(
@@ -673,6 +855,7 @@ Drop superseded reads of the same file, routine listings, and output that no lon
         void saveTranscript(t).catch(() => {});
       }),
       ...webTools(() => this.config),
+      affectedTool(() => activeExperiments(this.config), () => process.cwd()),
       skillTool(() => process.cwd(), () => (this.planMode = true)),
       ...memoryTools(() => process.cwd()),
       askUserTool(() => this.askPresenter),
@@ -755,6 +938,7 @@ Drop superseded reads of the same file, routine listings, and output that no lon
         this.engine?.refreshTools();
       }
     });
+    this.mcp.pinning = () => this.config.mcpPinning === true;
     // MCP sampling: servers may ask for a completion, answered with the user's subscriptions.
     this.mcp.sampling = samplingHandler({
       config: () => this.config,
@@ -774,6 +958,7 @@ Drop superseded reads of the same file, routine listings, and output that no lon
     void this.mcp.start().catch(() => {});
     this.stopUsageRefresh = startUsageRefresh({balancing: () => this.config.loadBalancing !== 'sticky', busy: (id) => catalog.busy.get(id) ?? 0});
     setExtraWorkingDirs(() => this.tools.extraWorkingDirs());
+    setScopeDir(() => this.scope);
     setAttribution(() => this.config.attribution !== false);
     setLazyTools(() => activeExperiments(this.config).includes('lazy-tools'));
     setCheapExplore(() => activeExperiments(this.config).includes('cheap-explore'));
@@ -782,22 +967,34 @@ Drop superseded reads of the same file, routine listings, and output that no lon
     setManyCalls(() => activeExperiments(this.config).includes('many-calls'));
     setSelfTest(() => activeExperiments(this.config).includes('self-test'));
     setPromptCacheTtl(() => (activeExperiments(this.config).includes('cache-5m') ? '5m' : undefined));
+    setCacheWriteTtl(() => (activeExperiments(this.config).includes('cache-5m') ? '5m' : '1h'));
+    setPriceOverrides(() => this.config.prices);
+    setSaveFilter((line) => (this.config.secretScan && this.config.secretScan !== 'off' ? maskSecrets(line) : line));
     setBriefFinal(() => activeExperiments(this.config).includes('brief-final'));
     await usageStore.load();
     const router = makeRouter(() => this.config, (...a) => this.auto(...a));
     const host = this.tools;
+    host.on('activity', (a: ToolActivity) => this.telemetry.activity(a));
     const resumed = typeof opts.resume === 'string' ? await loadTranscript(opts.resume) : undefined;
     this.engine = new Engine(
       {
         config: () => this.config,
-        route: (text, t, current) => (this.escalation ? Promise.resolve({ref: this.escalation, reason: 'escalated' as const}) : router.route(text, t, current)),
+        route: async (text, t, current) => {
+          const route = this.escalation ? {ref: this.escalation, reason: 'escalated' as const} : await router.route(text, t, current);
+          const blocked = modelBlocked(loadPolicy(process.cwd(), reinConfigDir()), route.ref);
+          if (blocked) throw new Error(`${blocked}. Pick a model it allows with /model.`);
+          return route;
+        },
         alternative: router.alternative,
         compact: (t, reason, opts) => this.compact(t, reason, opts),
         selectCarry: (input) => this.selectCarry(input),
         pickEffort: (text, levels) => this.pickEffort(text, levels),
         beforePrompt: (text) => this.beforePrompt(text),
+        overBudget: () => this.checkBudget(),
+        onTurnEnd: (turn) => this.telemetry.turnEnd({...turn, endedAt: Date.now(), sessionId: this.engine?.transcript.id}),
         onConversationChange: () => {
           this.tools.reads.clear();
+          this.tools.untrustedSeen = this.tools.privateSeen = undefined;
           this.tools.deliveredInstructions.clear();
         },
         tools: {
@@ -879,6 +1076,7 @@ Drop superseded reads of the same file, routine listings, and output that no lon
   }
 
   shutdown(): void {
+    this.ci.stop();
     void this.mcp.closeAll();
     void this.ide?.close();
     void this.lsp.closeAll();

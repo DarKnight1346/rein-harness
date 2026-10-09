@@ -1,8 +1,6 @@
 ---
 title: Remote access
 description: Watch a Rein session, send it messages and answer its approvals from your phone or another computer, through a page Rein serves itself.
-sidebar:
-  badge: New
 ---
 
 Start something in Rein, walk away, and keep an eye on it from your phone: read the conversation as it happens, send the agent a message, answer an approval, or stop it. The page is served by the Rein you're running, with no hosted service and no account.

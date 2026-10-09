@@ -8,7 +8,7 @@ import {activeExperiments, type Config} from '../store/config.js';
 import {DANGER_HEADROOM, headroom, usageStore} from '../store/usage.js';
 import {compactableCount, compactTranscript, type CompactReason, type CompactResult, type LiveSummarizer} from './compactor.js';
 import {systemPrompt} from './prompt.js';
-import {buildCarry, carryStart, estimateTokens, newTranscript, recordProgress, saveTranscript, scratchDir, truncateTranscript, type Message, type Transcript} from './transcript.js';
+import {buildCarry, carryStart, estimateTokens, newTranscript, recordProgress, resultTokens, saveTranscript, scratchDir, truncateTranscript, type Message, type Transcript} from './transcript.js';
 import {CARRY_TOOL_BUDGET, carriedTools, selectCarriedTools, type CarrySelector} from './carry.js';
 
 export type Route = {ref: ModelRef; reason: 'fixed' | 'auto' | 'sticky' | 'default' | 'failover' | 'escalated'; confidence?: number};
@@ -44,6 +44,10 @@ export type EngineDeps = {
   beforePrompt?: (text: string) => Promise<{block?: string; context?: string}>;
   /** Auto effort: the decision model picks a level for this message from `levels`. */
   pickEffort?: (text: string, levels: string[]) => Promise<string | undefined>;
+  /** A spending cap reached (budget): the message to show; the turn then stops. */
+  overBudget?: () => string | undefined;
+  /** A turn finished (telemetry): its model, timing and what it spent. */
+  onTurnEnd?: (turn: {ref: ModelRef; startedAt: number; interrupted: boolean; tokens: TokenCount}) => void;
 };
 
 /** Context carried into a fresh native session before compaction kicks in. */
@@ -76,6 +80,12 @@ The conversation was compacted in the middle of your work because the context wi
  * Owns the conversation. Rein's transcript is the source of truth; native sessions are caches
  * reused while provider+account stay the same.
  */
+/** Conversation totals plus one call's (or subagent's) tokens; `usd` stays unset until something has a price. */
+function plus(base: {uncached: number; cached: number; output: number; usd?: number}, t: TokenCount): {uncached: number; cached: number; output: number; usd?: number} {
+  const usd = base.usd === undefined && t.usd === undefined ? undefined : (base.usd ?? 0) + (t.usd ?? 0);
+  return {uncached: base.uncached + t.input - t.cached, cached: base.cached + t.cached, output: base.output + t.output, ...(usd === undefined ? {} : {usd})};
+}
+
 export class Engine {
   transcript: Transcript;
   private active: {session: ProviderSession; key: string; ref: ModelRef} | undefined;
@@ -101,10 +111,10 @@ export class Engine {
   callTokens: TokenCount | undefined;
 
   /** Conversation totals including the call in flight. */
-  get sessionTokens(): {uncached: number; cached: number; output: number} {
+  get sessionTokens(): {uncached: number; cached: number; output: number; usd?: number} {
     const base = this.transcript.tokens ?? {uncached: 0, cached: 0, output: 0};
     const c = this.callTokens;
-    return c ? {uncached: base.uncached + c.input - c.cached, cached: base.cached + c.cached, output: base.output + c.output} : base;
+    return c ? plus(base, c) : base;
   }
 
   private commitCallTokens(): void {
@@ -174,8 +184,7 @@ export class Engine {
 
   /** Add tokens spent outside the main turn (subagents) to the conversation totals. */
   addTokens(t: TokenCount): void {
-    const base = this.transcript.tokens ?? {uncached: 0, cached: 0, output: 0};
-    this.transcript.tokens = {uncached: base.uncached + t.input - t.cached, cached: base.cached + t.cached, output: base.output + t.output};
+    this.transcript.tokens = plus(this.transcript.tokens ?? {uncached: 0, cached: 0, output: 0}, t);
   }
 
   get isBusy(): boolean {
@@ -274,6 +283,8 @@ export class Engine {
 
   async *send(typed: string, attached: ImageInput[] = []): AsyncGenerator<EngineEvent> {
     const t = this.transcript;
+    const startedAt = Date.now();
+    const before = this.sessionTokens;
     const cfg = this.deps.config();
     let text = typed;
     const hook = await this.deps.beforePrompt?.(text).catch(() => undefined);
@@ -282,6 +293,12 @@ export class Engine {
       return;
     }
     if (hook?.context) text = `${text}\n\n<hook_context>\n${hook.context}\n</hook_context>`;
+    // The conversation (or the goal) is already at its cap: don't start another request.
+    const over = this.deps.overBudget?.();
+    if (over) {
+      yield {type: 'error', message: `${over} Raise the budget (/settings budget) or start a new conversation.`};
+      return;
+    }
     let images = attached;
     t.messages.push({role: 'user', text, at: Date.now(), ...(images.length ? {images} : {})});
     void saveTranscript(t); // on disk before the turn starts, so a crash mid-turn keeps the request
@@ -380,7 +397,7 @@ export class Engine {
           if (a.phase === 'start') toolsRunning++;
           else {
             toolsRunning = Math.max(0, toolsRunning - 1);
-            replyTools.push({label: a.label, summary: a.summary, ok: a.ok, result: clipResult(a.result), diff: a.diff});
+            replyTools.push({label: a.label, summary: a.summary, ok: a.ok, result: clipResult(a.result), size: a.result.length, diff: a.diff});
             fullResults.push(a.result);
             // Crash safety: each finished tool call (and the text before it) goes to the log now.
             void recordProgress(t, t.messages.length, {tool: replyTools.at(-1), text: reply.slice(savedText), model: route.ref, accountId: account.id});
@@ -392,6 +409,12 @@ export class Engine {
         }
         if (ev.type === 'tokens') {
           this.callTokens = ev.call;
+          // A spending cap (budget) reached: say so and stop the turn.
+          const over = this.interruptRequested ? undefined : this.deps.overBudget?.();
+          if (over) {
+            yield {type: 'notice', text: over};
+            this.interrupt();
+          }
           // Each jump in input is one request's full prompt: how full the context is right now.
           if (ev.call.input > seenInput) {
             // Not on a segment's first request: nothing has happened yet that a compaction would fold away.
@@ -448,7 +471,11 @@ export class Engine {
           if (ev.tokens) this.lastUsage = {ref: route.ref, input: ev.tokens.input, output: ev.tokens.output, at: Date.now()};
           if (ev.contextWindow) catalog.learnContextWindow(route.ref, ev.contextWindow);
           await saveTranscript(t).catch(() => {});
+          const now = this.sessionTokens;
+          const usd = now.usd === undefined ? undefined : now.usd - (before.usd ?? 0);
+          this.deps.onTurnEnd?.({ref: route.ref, startedAt, interrupted: ev.interrupted, tokens: {input: now.uncached - before.uncached + now.cached - before.cached, cached: now.cached - before.cached, output: now.output - before.output, ...(usd === undefined ? {} : {usd})}});
           yield {type: 'done', interrupted: ev.interrupted};
+          yield* this.contextWarning(route.ref, ev.tokens?.input);
           yield* this.maybeAutoCompact(route.ref, ev.tokens?.input);
           return;
         } else if (ev.type === 'error') {
@@ -675,6 +702,37 @@ export class Engine {
     t.messages.push({role: 'user', text: CONTINUE_AFTER_COMPACTION + recentResults(tools, fullResults), at: Date.now(), synthetic: true});
     await saveTranscript(t).catch(() => {});
     return t.messages.length - 1;
+  }
+
+  /** The fill level last warned about, and for which stretch of conversation (a compaction starts a new one). */
+  private warned = {segment: -1, level: 0};
+
+  /**
+   * Context-bloat warning (config contextWarnings): the first time the context passes 50%, 70% and 85%
+   * of the window, say how full it is and what's taking the space, so you can compact or steer it.
+   */
+  private *contextWarning(ref: ModelRef, input: number | undefined): Generator<EngineEvent> {
+    const window = catalog.get(ref)?.contextWindow;
+    if (this.deps.config().contextWarnings === false || !input || !window) return;
+    const limit = this.autoCompactLimit(ref);
+    if (limit && input >= limit) return; // compaction runs right after this anyway
+    const segment = this.transcript.summary?.coversUpTo ?? 0;
+    if (segment !== this.warned.segment) this.warned = {segment, level: 0};
+    const level = [0.85, 0.7, 0.5].find((l) => input / window >= l);
+    if (!level || level <= this.warned.level) return;
+    this.warned.level = level;
+    const k = (n: number) => (n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : `${Math.round(n / 1000)}K`);
+    const largest = this.transcript.messages
+      .slice(segment)
+      .flatMap((m) => m.tools ?? [])
+      .map((x) => ({what: `${x.label}(${x.summary.slice(0, 50)})`, tokens: resultTokens(x)}))
+      .filter((x) => x.tokens >= 1000)
+      .sort((a, b) => b.tokens - a.tokens)
+      .slice(0, 3);
+    yield {
+      type: 'notice',
+      text: `Context is ${Math.round((input / window) * 100)}% full (${k(input)} of ${k(window)} tokens).${largest.length ? ` Largest: ${largest.map((x) => `${x.what} ${k(x.tokens)}`).join(', ')}.` : ''} /compact summarizes it now (/compact keep <what> steers the summary); /context shows the rest.`,
+    };
   }
 
   private async *maybeAutoCompact(ref: ModelRef, inputTokens: number | undefined): AsyncGenerator<EngineEvent> {

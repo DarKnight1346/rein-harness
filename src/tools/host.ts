@@ -11,6 +11,14 @@ import {TOOLS, toolByName, type ToolDef} from './registry.js';
 import {addProjectRule, check, loadRules, ruleTool, suggestRule, type Rules, type Subject} from './permissions.js';
 import {hasHooks, runHooks} from '../hooks.js';
 import {renderScoped, scopedInstructions} from '../session/prompt.js';
+import {Watchdog} from './watchdog.js';
+import {addedText, findSecrets, secretMessage} from './secrets.js';
+import {injectionSigns, injectionWarning, networkCapable, untrustedSource} from './untrusted.js';
+import {addedDeps, afterEdit, checkDeps, commandDeps, depMessage} from './deps.js';
+import {checkPolicy, type Policy} from '../policy.js';
+import {digestLog, formatDigest} from './logDigest.js';
+import {fingerprint, flakyNote, isTestCommand, knownFlaky, parseOutcomes, recordRun} from '../build/flaky.js';
+import {isBuildCommand, recordBuildTime} from '../build/times.js';
 import {readOnlyCommand} from './plan.js';
 import {steer} from './steer.js';
 import {ipcPath, isWindows} from '../util/platform.js';
@@ -40,6 +48,8 @@ export type ApprovalRequest = {
   planMode?: boolean;
   /** What "allow for the session" covers, when it isn't changes and commands (an MCP server's sampling…). */
   sessionLabel?: string;
+  /** Why this needs your yes even in bypass (exfilGuard): only allow once or deny. */
+  reason?: string;
 };
 export type ApprovalDecision = 'once' | 'session' | 'always' | 'deny';
 export type ApprovalMode = 'ask' | 'auto' | 'bypass';
@@ -47,7 +57,7 @@ export type ApprovalMode = 'ask' | 'auto' | 'bypass';
 export type ApprovedBy = 'user' | 'session' | 'auto' | 'bypass' | 'scratchpad' | 'rule' | 'hook' | 'read-only';
 export type ToolActivity =
   | {phase: 'start'; id: number; label: string; summary: string; origin?: Origin}
-  | {phase: 'end'; id: number; label: string; summary: string; ok: boolean; result: string; approvedBy?: ApprovedBy; judge?: string; origin?: Origin; diff?: DiffLine[]};
+  | {phase: 'end'; id: number; label: string; summary: string; ok: boolean; result: string; approvedBy?: ApprovedBy; judge?: string; origin?: Origin; diff?: DiffLine[]; warning?: string};
 
 /** Tool definition as sent to a model. */
 export type ToolSpec = {name: string; description: string; inputSchema: Record<string, unknown>};
@@ -68,6 +78,20 @@ export type ToolHostOptions = {
   judge?: (req: ApprovalRequest) => Promise<{allow: boolean; note: string}>;
   /** Extra working directories from config (`additionalDirectories`). */
   configDirs?: () => string[];
+  /** injectionScan: flag instructions planted in web pages, search results and MCP results. */
+  injectionScan?: () => boolean;
+  /** exfilGuard: network calls need a yes once untrusted content and private data are both in the conversation. */
+  exfilGuard?: () => boolean;
+  /** buildTimeWarnings: warn you when a build or test command is much slower than usual. */
+  buildTimes?: () => boolean;
+  /** Policy as code (.rein/policy.yaml, ~/.rein/policy.yaml): deny or ask rules over tools, paths and commands. */
+  policy?: () => Policy;
+  /** depCheck: vet packages a change adds (exists, typosquat, license, known vulnerabilities). */
+  depCheck?: () => 'off' | 'warn' | 'block';
+  /** secretScan: what to do when a write or edit adds something that looks like a credential. */
+  secretScan?: () => 'off' | 'warn' | 'block';
+  /** --scope / /scope: list, search and shell default to this folder (absolute) instead of the project root. */
+  scope?: () => string | undefined;
   /** Extra rules for this run only (headless --allowedTools / --disallowedTools). */
   extraRules?: () => Rules;
   /** Plan mode: file changes and non-read-only commands are refused until the plan is approved. */
@@ -330,6 +354,7 @@ export class ToolHost extends EventEmitter {
     let args = rawArgs;
     const tool = this.find(name);
     if (!tool) return {ok: false, text: `unknown tool ${name}`};
+    args = this.scoped(tool.name, args);
     let todoNote: string | undefined;
     if (ToolHost.CARRY_TODOS.includes(tool.name) && Array.isArray((args as {todos?: unknown})?.todos)) {
       const {todos, ...rest} = args as {todos: unknown[]};
@@ -346,6 +371,7 @@ export class ToolHost extends EventEmitter {
     let result: ToolResult;
     let approvedBy: ApprovedBy | undefined;
     let judge: string | undefined;
+    let warning: string | undefined;
     try {
       const ctx: ToolContext = {...this.context(), origin};
       // A subagent working alongside others gets its own worktree on its first change (see
@@ -368,6 +394,10 @@ export class ToolHost extends EventEmitter {
       const extra = this.opts.extraRules?.() ?? {allow: [], deny: []};
       const verdict = check({allow: [...fileRules.allow, ...extra.allow], deny: [...fileRules.deny, ...extra.deny]}, subject, (p) => this.pathForms(p));
       if (verdict === 'deny') throw new ToolError(`blocked by a permission rule (deny) in the user's settings; ask the user instead of retrying`);
+      // Policy as code: deny refuses outright; ask needs the user's yes further down, in every mode.
+      const policy = this.opts.policy?.();
+      const rule = policy?.rules.length ? checkPolicy(policy, tool.name, args, (subject.paths ?? []).map((p) => this.ruleRel(p))) : undefined;
+      if (rule?.effect === 'deny') throw new ToolError(`blocked by the project's policy (${rule.source}): ${rule.reason}. Don't retry; find another way or ask the user.`);
       // PreToolUse hooks (Claude Code format) may block, approve, or force the prompt.
       const hookInput = {session_id: this.opts.sessionId?.(), tool: tool.name, tool_input: args ?? {}};
       const pre = hasHooks('PreToolUse', this.opts.root) ? await runHooks('PreToolUse', this.opts.root, hookInput) : undefined;
@@ -424,6 +454,19 @@ export class ToolHost extends EventEmitter {
         }
         ctx.outsideAllowed = outside;
       }
+      // exfilGuard: outside content and private data have both been in this conversation, so anything that
+      // can send data to another machine is your call, whatever the mode (only once or deny).
+      if (rule?.effect === 'ask') {
+        const decision = await this.opts.approve({tool, args, summary, preview: preview(tool, args), origin, reason: `Policy (${rule.source}): ${rule.reason}.`});
+        if (decision === 'deny') throw new ToolError(`the user declined this (policy ${rule.source}: ${rule.reason}); ask them how to proceed`);
+        approvedBy = 'user';
+      }
+      if (this.opts.exfilGuard?.() && this.untrustedSeen && this.privateSeen && networkCapable(tool.name, args)) {
+        const reason = `This conversation has seen outside content (${this.untrustedSeen}) and private data (${this.privateSeen}), and this call can send data to another machine.`;
+        const decision = await this.opts.approve({tool, args, summary, preview: preview(tool, args), origin, reason});
+        if (decision === 'deny') throw new ToolError("the user declined a network call (exfiltration guard: outside content and private data are both in this conversation); continue without it, or ask them");
+        approvedBy = 'user';
+      }
       if (tool.mutating && tool.name !== 'shell' && this.inScratch(ctx, tool, args)) approvedBy = 'scratchpad';
       // (After the outside-path check: a read-only command in an outside cwd still asks about access.)
       if (readOnly && !pre?.ask && !approvedBy) approvedBy = 'read-only';
@@ -467,9 +510,65 @@ export class ToolHost extends EventEmitter {
         const changes = this.opts.diagnostics && ['write', 'edit', 'delete'].includes(tool.name) ? this.filesOf(ctx, tool, args) : [];
         const snapshot = changes.length ? await this.opts.diagnostics!.before(changes, ctx.root).catch(() => undefined) : undefined;
         const repeat = tool.name === 'read' ? this.unchangedRead(ctx, args, origin) : undefined;
+        const started = Date.now();
+        const watched = this.experiment('watchdog') && !origin ? this.filesOf(ctx, tool, args) : undefined;
+        const stop = watched && this.watchdog.before(tool.name, args, watched);
+        if (stop) throw new ToolError(stop);
+        // secretScan: a credential the change would add, before it lands.
+        const scan = this.opts.secretScan?.() ?? 'off';
+        const secrets = scan !== 'off' && (tool.name === 'write' || tool.name === 'edit') ? findSecrets(addedText(tool.name, args)) : [];
+        const file = String((args as {path?: string})?.path ?? (args as {edits?: {path?: string}[]})?.edits?.[0]?.path ?? 'the file');
+        if (secrets.length && scan === 'block') throw new ToolError(secretMessage(secrets, file, true));
+        // depCheck: packages this change adds (a manifest edit or an install command), vetted before it runs.
+        const depMode = this.opts.depCheck?.() ?? 'off';
+        let depProblems: string[] = [];
+        if (depMode !== 'off') {
+          const target = tool.name === 'write' || tool.name === 'edit' ? this.filesOf(ctx, tool, args)[0] : undefined;
+          const change = target ? afterEdit(target, args) : undefined;
+          const deps = tool.name === 'shell' ? commandDeps(String((args as {command?: string})?.command ?? '')) : target && change ? addedDeps(target, change.before, change.after) : [];
+          if (deps.length) depProblems = await checkDeps(deps);
+          if (depProblems.length && depMode === 'block') throw new ToolError(depMessage(depProblems, true));
+        }
         result = repeat ?? (await tool.run(ctx, args ?? {}));
+        if (secrets.length && result.ok) result = {...result, text: `${result.text}\n\n${secretMessage(secrets, file, false)}`};
+        if (depProblems.length) {
+          result = {...result, text: `${result.text}\n\n${depMessage(depProblems, false)}`};
+          warning = `Dependency check: ${depProblems.join('; ')}`;
+        }
+        const source = untrustedSource(tool.name);
+        if (source && result.ok) {
+          this.untrustedSeen ??= source;
+          const signs = this.opts.injectionScan?.() ? injectionSigns(result.text) : [];
+          if (signs.length) {
+            result = {...result, text: `${injectionWarning(source, signs)}\n\n${result.text}`};
+            warning = `Content from ${source} looks like it tries to instruct the agent (${signs.join(', ')}); it was flagged to the agent as data.`;
+          }
+        }
+        if (!this.privateSeen && result.ok && (tool.name === 'read' || tool.name === 'shell' || tool.name === 'search')) {
+          const sensitive = this.filesOf(ctx, tool, args).find(isSensitivePath);
+          if (sensitive) this.privateSeen = `a sensitive file, ${path.basename(sensitive)}`;
+          else if (findSecrets(result.text).length) this.privateSeen = 'a credential in a tool result';
+        }
+        const loop = watched && this.watchdog.after(tool.name, args, result.ok, watched);
+        // buildTimeWarnings: a build or test much slower than usual is worth a look (for you, not the agent).
+        const command = tool.name === 'shell' && !(args as {background?: boolean})?.background ? String((args as {command?: string})?.command ?? '') : '';
+        if (result.ok && command && this.opts.buildTimes?.() !== false && isBuildCommand(command)) {
+          const slow = recordBuildTime(ctx.root, command, Date.now() - started);
+          if (slow) warning = slow;
+        }
+        if (loop) result = {...result, text: `${result.text}\n\n${loop}`};
         if (!repeat && tool.name === 'read') this.noteRead(ctx, args, result, origin);
         if (tool.name === 'shell') result = this.quietPassing(args, result);
+        if (tool.name === 'shell' && !result.ok && this.experiment('log-digest')) result = withDigest(result);
+        // flaky-quarantine: record each test's outcome on this code; known flakes in a failing run are called out.
+        if (tool.name === 'shell' && this.experiment('flaky-quarantine') && isTestCommand(String((args as {command?: string})?.command ?? ''))) {
+          const outcomes = parseOutcomes(result.text);
+          if (outcomes.passed.length || outcomes.failed.length) {
+            recordRun(ctx.root, await fingerprint(ctx.root), outcomes);
+            const note = !result.ok ? flakyNote(outcomes.failed, knownFlaky(ctx.root)) : undefined;
+            if (note) result = {...result, text: `${result.text}\n\n${note}`};
+          }
+        }
         if (result.ok && snapshot) {
           const note = await this.opts.diagnostics!.after(snapshot).catch(() => undefined);
           if (note) result = {...result, text: `${result.text}\n\n${note}`};
@@ -499,9 +598,16 @@ export class ToolHost extends EventEmitter {
       const scoped = this.scopedFor(name, args);
       if (scoped) result = {...result, text: `${result.text}\n\n${scoped}`};
     }
-    this.emit('activity', {phase: 'end', id, label: tool.label, summary, ok: result.ok, result: result.text, approvedBy, judge, origin, diff: result.diff} satisfies ToolActivity);
+    this.emit('activity', {phase: 'end', id, label: tool.label, summary, ok: result.ok, result: result.text, approvedBy, judge, origin, diff: result.diff, ...(warning ? {warning} : {})} satisfies ToolActivity);
     return {ok: result.ok, text: result.text, ...(result.images?.length ? {images: result.images} : {})}; // the diff is for the user, not the model
   }
+
+  /** exfilGuard: what outside content and what private data this conversation has seen (cleared by /clear). */
+  untrustedSeen: string | undefined;
+  privateSeen: string | undefined;
+
+  /** The `watchdog` experiment: the main agent repeating a failing command or undoing its own edits. */
+  readonly watchdog = new Watchdog();
 
   private experiment(name: string): boolean {
     return this.opts.experiments?.().includes(name) ?? false;
@@ -673,6 +779,16 @@ export class ToolHost extends EventEmitter {
       }
     }
     return added;
+  }
+
+  /** With a scope set, list and search without a path, and shell without a cwd, start in the scope. */
+  private scoped(name: string, args: unknown): unknown {
+    const scope = this.opts.scope?.();
+    if (!scope || (name !== 'list' && name !== 'search' && name !== 'shell')) return args;
+    const a = (args ?? {}) as Record<string, unknown>;
+    const key = name === 'shell' ? 'cwd' : 'path';
+    if (a[key] !== undefined && a[key] !== '') return args;
+    return {...a, [key]: toPosix(path.relative(this.opts.root, scope)) || '.'};
   }
 
   /** Directories the user added (config additionalDirectories + /add-dir / --add-dir), resolved. */
@@ -881,5 +997,15 @@ export function isSensitivePath(real: string): boolean {
   // Rein's own secrets folder (the vault, the Jev key), wherever the data folder is (REIN_HOME, XDG).
   const secrets = secretsDir();
   if ([...SENSITIVE, secrets].some((p) => real === p || real.startsWith(p + path.sep))) return true;
-  return /(^|\/)\.env(\.[\w.-]+)?$/.test(real) || /\.(pem|key|p12|pfx|keychain)$/i.test(real);
+  // Either separator: on Windows the path has backslashes (C:\app\.env).
+  return /(^|[\\/])\.env(\.[\w.-]+)?$/.test(real) || /\.(pem|key|p12|pfx|keychain)$/i.test(real);
+}
+
+/** log-digest: a failing command's long output gets a digest in front (failing step, first errors, file:line). */
+const DIGEST_MIN_LINES = 80;
+function withDigest(result: ToolResult): ToolResult {
+  const lines = result.text.split('\n').length;
+  if (lines < DIGEST_MIN_LINES) return result;
+  const d = formatDigest(digestLog(result.text), lines);
+  return d ? {...result, text: `${d}\n\n${result.text}`} : result;
 }

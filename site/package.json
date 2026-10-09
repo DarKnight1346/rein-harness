@@ -10,7 +10,8 @@
   "dependencies": {
     "@astrojs/starlight": "^0.42.5",
     "astro": "^7.3.5",
-    "sharp": "^0.35.5"
+    "sharp": "^0.35.5",
+    "three": "^0.186.0"
   },
   "overrides": {
     "http-cache-semantics": "^4.3.0"

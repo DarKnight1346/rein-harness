@@ -39,7 +39,8 @@ node scripts/check-docs.mjs   # docs drift check, also runs in CI
 | `src/providers/{claude,codex}/` | CLI drivers: Claude stream-json, Codex app-server JSON-RPC |
 | `src/router/`, `src/decider/` | Model catalog, auto routing, decision model (Jev or a cheap LLM) |
 | `src/accounts/`, `src/store/` | Account registry, usage refresh, config, secrets, `~/.rein` paths |
-| `src/tools/` | Tool host (approvals and permissions) and the tools every model gets |
+| `src/tools/` | Tool host (approvals and permissions), the tools every model gets, and the safety guards |
+| `src/build/`, `src/workspace/`, `src/policy.ts` | Monorepo build systems (affected targets), workspaces, policy as code |
 | `src/agents/`, `src/goals/`, `src/plans/` | Subagents and advisor, `/goal`, saved plans |
 | `src/mcp/`, `src/hooks.ts`, `src/skills/` | MCP client, Claude Code-compatible hooks, skills |
 | `src/ide/` | Editor integration over the Claude Code IDE extension protocol (selection, diffs, diagnostics) |
@@ -57,6 +58,8 @@ node scripts/check-docs.mjs   # docs drift check, also runs in CI
 - Add or update tests for behaviour changes. Use the fake CLIs; never call real accounts from tests.
 - Branch from `main` and open a PR. Every merge to `main` publishes the next patch to npm automatically
   (`.github/workflows/publish.yml`), so `main` must always be releasable.
+- Every config key must be changeable inside Rein, not only in the file: add it to `CONFIG_KEYS` in
+  `src/store/configKeys.ts` (`/settings <key> <value>` and `/settings` → Advanced read it; a test fails on a missing key).
 - Pin GitHub Actions to full commit SHAs with a version comment. The repo is scored by OpenSSF Scorecard.
 - Using a new part of Codex's app-server protocol (a method, notification or field)? Add it to `REQUIRED` in
   `src/providers/codex/compat.ts`, so Rein switches Codex off cleanly on a release that lacks it instead of
@@ -92,8 +95,8 @@ Pages live in `site/src/content/docs/<section>/<page>.md(x)`. A new page also ne
 
 ### Additions, deprecations, removals
 
-- **Added:** document it where users will look (feature page + reference table). For a headline feature,
-  consider `sidebar: {badge: New}` in the page frontmatter, and remove the badge a few releases later.
+- **Added:** document it where users will look (feature page + reference table). Don't add `New` badges to
+  the sidebar; roadmap features show up on the What's new page (built from `ROADMAP.md`).
 - **Deprecated:** keep the docs, add `:::caution[Deprecated]` saying what to use instead and since which
   version, and mark the reference row *(deprecated)*.
 - **Removed:** delete it from every page and reference table. If a whole page goes, remove its sidebar

@@ -13,6 +13,23 @@ and a compaction model. No OAuth tokens are extracted: all traffic goes through 
 
 **📖 Full documentation: [rein-harness.github.io](https://rein-harness.github.io/)** · [Contributing](CONTRIBUTING.md)
 
+**Built for big systems.** Open-source features for very large, multi-repo codebases, shipping in waves
+([what's new](https://rein-harness.github.io/start/whats-new/), [roadmap](ROADMAP.md)):
+
+- **Multi-repo workspaces:** a `rein.workspace.yaml` makes every repo a working directory, with one
+  AGENTS.md for all; `--scope` focuses on one package of a monorepo.
+- **Cost and budgets:** dollars per request, conversation and goal (`/cost`), caps that stop runaway
+  work, goal estimates, OpenTelemetry export.
+- **Safety guards:** secret scanning, Semgrep on changes, planted-instruction and exfiltration guards,
+  pinned MCP servers, a dependency check and policy as code (`.rein/policy.yaml`).
+- **Build, test and CI:** affected targets from Nx/Turborepo/Bazel/Pants (`/affected`), a CI watcher
+  that fixes failing checks (`/ci watch`), coverage and mutation testing of your changes, flaky-test
+  quarantine, a [GitHub Action](action.yml) and a GitLab CI component.
+- **Pull requests:** `/pr` digests for reviewers, split into stacked PRs, review comments to the
+  agent, merge queues; linked PRs across repos; provenance trailers; a reviewer in CI.
+- **Coming next:** context at scale, specs, contracts and migrations, and system-level understanding
+  across repos.
+
 ## Install
 
 **Requirements**

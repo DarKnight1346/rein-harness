@@ -17,6 +17,8 @@ import {redact} from './ui/privacy.js';
  *   --allowedTools "shell(npm test:*),edit(src/**)"   --disallowedTools "…"
  *   -c, --continue [id]            continue the latest (or a given) conversation in this project
  *   --verbose                      tool calls on stderr (text mode)
+ *   --add-dir <path>               another working directory for this run (repeatable)
+ *   --scope <dir>                  work in one package of a monorepo
  */
 export async function runHeadless(argv: string[]): Promise<number> {
   const opt = (name: string, short?: string) => {
@@ -59,7 +61,16 @@ export async function runHeadless(argv: string[]): Promise<number> {
   onUntrustedHooks((p) => process.stderr.write(`rein: skipping ${p.commands.length} project hook${p.commands.length === 1 ? '' : 's'} (not trusted yet). Run \`rein\` in this folder once to review and trust them.\n`));
   // The settings measured on one-off runs (see HEADLESS_EXPERIMENTS).
   addDefaultExperiments(HEADLESS_EXPERIMENTS);
+  // --add-dir <path> (repeatable): extra working directories for this run, as in interactive Rein.
+  const dirs = argv.flatMap((a, i) => (a === '--add-dir' && argv[i + 1] ? [argv[i + 1]!] : []));
+  try {
+    if (dirs.length) runtime.tools.addDirs(dirs);
+    if (opt('--scope')) runtime.setScope(opt('--scope'));
+  } catch (err) {
+    return fail((err as Error).message);
+  }
   await runtime.init({resume: resumeId ?? false});
+  for (const e of runtime.workspace?.errors ?? []) process.stderr.write(`rein: workspace: ${e}\n`);
   await runtime.refreshCatalog();
   const {catalog} = await import('./router/catalog.js');
   if (catalog.codexCompat?.ok === false) {
@@ -113,7 +124,7 @@ export async function runHeadless(argv: string[]): Promise<number> {
   try {
     await turn(prompt);
     // Stop hooks may send the agent back to work (bounded, as in the UI).
-    for (let depth = 0; !error && depth < 10; depth++) {
+    for (let depth = 0; !error && !runtime.budgetStop && depth < 10; depth++) {
       const stop = await runtime.stopHook(depth > 0).catch(() => undefined);
       if (!stop) break;
       reply += '\n\n';
@@ -122,6 +133,7 @@ export async function runHeadless(argv: string[]): Promise<number> {
   } catch (err) {
     error = (err as Error).message;
   }
+  if (runtime.budgetStop && !error) error = runtime.budgetStop; // a budget stop is a failed run
   if (presented) reply = presented; // plan mode: the plan is the answer
   if (format === 'text' && presented) write(`\n${presented}\n`);
   if (format === 'text' && reply && !reply.endsWith('\n')) write('\n');
@@ -139,11 +151,13 @@ export async function runHeadless(argv: string[]): Promise<number> {
           effort: route?.effort,
           tools,
           tokens: t,
+          ...(t.usd === undefined ? {} : {cost_usd: Math.round(t.usd * 1e4) / 1e4}),
           duration_ms: Date.now() - started,
         }),
       ) + '\n',
     );
   } else if (error) process.stderr.write(`rein: ${redact(error)}\n`);
+  await runtime.telemetry.flush();
   runtime.shutdown();
   return error ? 1 : 0;
 }

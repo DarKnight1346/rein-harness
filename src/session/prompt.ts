@@ -5,6 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import {reinConfigDir} from '../store/paths.js';
 import {memoryFacts} from '../tools/memory.js';
+import {describeWorkspace, findWorkspace} from '../workspace/index.js';
 
 const BASE_PROMPT = `You are Rein, a coding assistant working in the user's project from a terminal chat.
 - Be direct and concise. Lead with the answer.
@@ -28,6 +29,18 @@ const MAX_AGENTS_BYTES = 64 * 1024;
 let extraDirs: () => string[] = () => [];
 export function setExtraWorkingDirs(fn: () => string[]): void {
   extraDirs = fn;
+}
+
+/** Provenance trailers on commits and PRs (config provenance), supplied by the runtime. */
+let provenance: () => boolean = () => false;
+export function setProvenance(fn: () => boolean): void {
+  provenance = fn;
+}
+
+/** --scope: the monorepo package this session works in (absolute), supplied by the runtime. */
+let scopeDir: () => string | undefined = () => undefined;
+export function setScopeDir(fn: () => string | undefined): void {
+  scopeDir = fn;
 }
 
 export const REIN_REPO = 'https://github.com/DarKnight1346/rein-harness';
@@ -120,7 +133,10 @@ export async function agentsFiles(cwd = process.cwd()): Promise<{path: string; t
     if (parent === dir) break;
     dir = parent;
   }
-  const candidates = [path.join(reinConfigDir(), 'AGENTS.md'), claudeGlobal(), ...dirs.flatMap((d) => PROJECT_FILES.map((f) => path.join(d, f)))];
+  // A workspace's own instructions (next to rein.workspace.yaml) sit above every repo's.
+  const ws = findWorkspace(cwd);
+  const wsDirs = ws && !dirs.includes(ws.root) ? [ws.root] : [];
+  const candidates = [path.join(reinConfigDir(), 'AGENTS.md'), claudeGlobal(), ...[...wsDirs, ...dirs].flatMap((d) => PROJECT_FILES.map((f) => path.join(d, f)))];
   const out: {path: string; text: string}[] = [];
   const seen = new Set<string>();
   for (const file of [...new Set(candidates)]) {
@@ -158,7 +174,22 @@ export async function systemPrompt(opts: {tools?: boolean; scratch?: string; pro
           "Use only this attribution line (no extra trailers for yourself) unless the user or the project's instructions ask for something else.",
         ].join('\n'),
       );
+    if (provenance())
+      sections.push(
+        [
+          '# Provenance',
+          'End every git commit you make with these trailers, after a blank line, written exactly like this so the shell fills them in: -m "Rein-Session: $REIN_SESSION" -m "Rein-Model: $REIN_MODEL" and, when $REIN_GOAL is set, -m "Rein-Goal: $REIN_GOAL".',
+          'Pull requests you open end their description with the same three lines (their values: echo $REIN_SESSION $REIN_MODEL $REIN_GOAL).',
+        ].join('\n'),
+      );
     sections.push(`Project root: ${process.cwd()}${extra.length ? `\nAlso working directories: ${extra.join(', ')}` : ''}`);
+    const ws = findWorkspace();
+    if (ws?.repos.length) sections.push(describeWorkspace(ws));
+    const scope = scopeDir();
+    if (scope)
+      sections.push(
+        `Scope: ${path.relative(process.cwd(), scope).split(path.sep).join('/')}/\nThe user is working on this package of the repo. list and search without a path, and shell without a cwd, start there. Keep your reading and changes inside it; go outside only when the task needs it (a shared type, a caller you broke) and say so.`,
+      );
     if (opts.scratch) {
       sections.push(
         `Scratchpad: ${opts.scratch}\nA private folder for this session only. Put temporary files, notes, drafts and experiments here (absolute paths) instead of the project; changes there never need approval. It persists if the session is resumed.`,
@@ -181,7 +212,7 @@ export async function systemPrompt(opts: {tools?: boolean; scratch?: string; pro
         : '# Project memory\nEmpty so far. When you learn something lasting about this project (commands, conventions, decisions, gotchas), save it with remember.',
     );
   }
-  for (const f of await agentsFiles()) {
+  for (const f of await agentsFiles(scopeDir() ?? process.cwd())) {
     sections.push(`# Project instructions (${f.path})\nFollow these instructions from ${path.basename(f.path)}:\n\n${f.text}`);
   }
   return sections.join('\n\n');

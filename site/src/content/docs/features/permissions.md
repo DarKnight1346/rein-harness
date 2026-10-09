@@ -46,6 +46,9 @@ When a command fails because of the sandbox (`Operation not permitted`, or a net
 
 macOS uses `sandbox-exec` (Seatbelt), as Claude Code and Codex do. Linux uses bubblewrap (install the `bubblewrap` package); without it, and on Windows, commands run unsandboxed and Rein says so at startup. Only the agent's commands are sandboxed: your own [`!` commands](../../reference/commands/#shell-commands-with-), hooks and MCP servers aren't.
 
+
+On macOS it also allows Bazel's output folder (`/private/var/tmp/_bazel_<you>`) when it exists, so sandboxed Bazel builds work. See [Build caches](../build-and-test/#build-caches).
+
 ## Approval modes
 
 Pick a mode in `/settings` → **Approvals** (saved as `toolApproval` in `~/.rein/config.json`). The mode only decides what happens to mutating calls that nothing else (a rule, a hook, the scratchpad, the read-only list) has already settled.
@@ -94,6 +97,9 @@ Option 3 only appears when Rein can suggest a sensible rule. It suggests:
 
 Subagents share the same prompt. Their requests are labelled `Subagent <name> wants to …`. When several agents ask at once, requests queue and show one at a time (`Approve command (1 of 3) · subagent reviewer`). Choosing option 2 also approves **every request already waiting in the queue**, whatever it is, so check the count before pressing it.
 
+
+When the [exfiltration guard](../safety/#data-leaving-the-machine-exfilguard) asks about a network call, the prompt says why in red and offers only *allow once* or *deny*.
+
 ## Working directories
 
 The tools work freely in:
@@ -103,6 +109,7 @@ The tools work freely in:
 - your global skills folder (`~/.rein/skills`), so `/skill:create` can write there,
 - anything in `additionalDirectories` in `~/.rein/config.json`,
 - folders added with `/add-dir <path>` or `rein --add-dir <path>` (session only),
+- the cloned repos of a [workspace](../workspaces/) (`rein.workspace.yaml`),
 - folders you allowed with option 2 of an outside-path prompt (session only).
 
 `/add-dir` with no argument lists them all. Symlinks are resolved before the check, so a link inside the project pointing at `/etc` counts as `/etc`.
@@ -159,6 +166,20 @@ The sensitive check runs **only for file-tool paths outside the working director
 
 If you run bypass mode, treat the sensitive list as a seatbelt for the file tools, not a sandbox.
 :::
+
+## Secret scanning
+
+With `secretScan` on, every `write` and `edit` is checked for credentials it would **add** to a file: private keys, AWS, GitHub, GitLab, Slack, Stripe, Anthropic, OpenAI, Google and npm keys, JSON web tokens, and long random values assigned to names like `password`, `apiKey` or `client_secret`. Placeholders (`your-password-here`, `xxxx`, `${process.env.TOKEN}`) and plain words aren't flagged, and moving a line that was already there isn't a new one.
+
+| `secretScan` | What happens |
+|---|---|
+| `off` *(default)* | Nothing. |
+| `warn` | The change goes through, and the agent is told it added what looks like a credential and to move it to an environment variable (or say it's a fake for tests). |
+| `block` | The change is refused with the reason, and the agent is told to read the value from the environment or ask you to add it. |
+
+While it's on, credentials are also masked in saved conversations (`~/.rein/sessions/`), keeping the first four characters (`AKIA…[secret: AWS access key]`). Set it with `/settings secretScan warn`. For secrets the agent needs to *use*, see the [vault](../vault/): it runs commands with them without ever seeing them.
+
+For rules that hold in every mode, bypass included, with reasons the agent sees (and limits on which models may work in a repo), see [Policy as code](../safety/#policy-as-code-reinpolicyyaml).
 
 ## Saved rules
 

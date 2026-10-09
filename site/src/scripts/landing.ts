@@ -1,4 +1,4 @@
-// Landing page behaviour: copy-to-clipboard buttons, tile spotlight, and the scripted terminal demo.
+// Landing page behaviour: copy-to-clipboard buttons, scroll reveals, card tilt, and the scripted terminal demo.
 // The demo replays a realistic Rein session using the real UI strings (route line, tool lines,
 // load-balancing notice, goal verification). It's illustrative: timings are sped up.
 
@@ -14,12 +14,53 @@ for (const btn of document.querySelectorAll<HTMLButtonElement>('[data-copy]')) {
   });
 }
 
-for (const tile of document.querySelectorAll<HTMLElement>('.tile')) {
-  tile.addEventListener('pointermove', (e) => {
-    const r = tile.getBoundingClientRect();
-    tile.style.setProperty('--mx', `${e.clientX - r.left}px`);
-    tile.style.setProperty('--my', `${e.clientY - r.top}px`);
-  });
+// Sections fade up as they scroll into view.
+const io = new IntersectionObserver(
+  (entries) => {
+    for (const e of entries) if (e.isIntersecting) (e.target.classList.add('in'), io.unobserve(e.target));
+  },
+  {threshold: 0.15},
+);
+for (const el of document.querySelectorAll('.reveal')) io.observe(el);
+
+// Each row's mini terminal plays its lines in when it scrolls into view.
+const play = new IntersectionObserver(
+  (entries) => {
+    for (const e of entries) {
+      if (!e.isIntersecting) continue;
+      play.unobserve(e.target);
+      const pre = e.target as HTMLElement;
+      const lines = (pre.dataset.html ?? '').split('\n');
+      pre.innerHTML = '';
+      lines.forEach((html, i) =>
+        setTimeout(() => {
+          pre.querySelector('.cur')?.remove();
+          pre.insertAdjacentHTML('beforeend', `<span class="ln-in">${html || ' '}${i === lines.length - 1 ? '<span class="cur"></span>' : ''}</span>`);
+        }, 250 + i * 380),
+      );
+    }
+  },
+  {threshold: 0.4},
+);
+if (!matchMedia('(prefers-reduced-motion: reduce)').matches) {
+  for (const pre of document.querySelectorAll<HTMLElement>('.row-code')) {
+    pre.dataset.html = pre.innerHTML;
+    pre.innerHTML = '';
+    play.observe(pre);
+  }
+}
+
+// Cards tilt toward the pointer, a few degrees.
+if (!matchMedia('(prefers-reduced-motion: reduce)').matches && matchMedia('(hover: hover)').matches) {
+  for (const el of document.querySelectorAll<HTMLElement>('.tilt')) {
+    el.addEventListener('pointermove', (e) => {
+      const r = el.getBoundingClientRect();
+      const x = (e.clientX - r.left) / r.width - 0.5;
+      const y = (e.clientY - r.top) / r.height - 0.5;
+      el.style.transform = `perspective(900px) rotateY(${x * 6}deg) rotateX(${-y * 6}deg) translateZ(0)`;
+    });
+    el.addEventListener('pointerleave', () => (el.style.transform = ''));
+  }
 }
 
 const $ = (id: string) => document.getElementById(id)!;

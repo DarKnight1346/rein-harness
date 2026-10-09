@@ -78,5 +78,5 @@ describe('pasted images', () => {
       spy.mockRestore();
       delete process.env.REIN_GRAPHICS;
     }
-  });
+  }, 15_000); // renders the whole fullscreen app: ~2.5 s alone, more under a parallel run
 });

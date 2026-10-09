@@ -34,6 +34,9 @@ An existing `~/.rein` keeps being used as it is, and so does `REIN_HOME`. To swi
 | `accounts/codex/<id>/` | `CODEX_HOME` for a Codex account you added (`codex-1`, …) |
 | `state/trackers.json` | Issues the [trackers](../../features/trackers/) have taken (so a restart doesn't redo them), with their status and branch |
 | `worktrees/<project>/rein-<issue>/` | The worktree an issue was worked on, on its `rein/<issue>` branch, kept for you to review. Remove it with `git worktree remove` when you're done |
+| `state/build-times/` | Per project, the last 10 durations of each build or test command (for `buildTimeWarnings`) |
+| `state/flaky/` | With `flaky-quarantine`: per project, recent test outcomes by code fingerprint and the tests found flaky. `/flaky clear` empties a project's file |
+| `state/mcp-pins.json` | With `mcpPinning`: each MCP server's launch config and tool list as first approved (hashes and tool names). Delete it to start over |
 | `state/usage.json` | Last-known usage windows per account, plus limit cooldowns (account unusable until a time) |
 | `exports/<id>.md` | Conversations saved with `/export` (when no file is given) |
 | `mcp-auth/<host>_<path>.json` | OAuth tokens and client registration for each remote MCP server you signed in to (owner-only), e.g. `mcp.linear.app_mcp.json`. Delete one to sign out of that server |
@@ -81,7 +84,7 @@ When Rein imports your existing `claude` and `codex` logins on first run, it reg
 
 ## Files Rein reads
 
-### Settings (permission rules and hooks)
+### Settings (permission rules, hooks and budgets)
 
 All six files are merged, global first. Deny rules win wherever they appear. Hooks come from the same files and are re-read live.
 
@@ -92,11 +95,21 @@ All six files are merged, global first. Deny rules win wherever they appear. Hoo
 5. `<project>/.rein/settings.json`
 6. `<project>/.rein/settings.local.json`
 
+A project's `.rein/settings.json` (or `settings.local.json`) can also set a `budget` with lower spending caps than yours; see [Cost & budgets](../../features/cost/#budgets).
+
 Existing Claude Code rules and hooks keep working: `Bash(npm test:*)`, `Edit(src/**)` and matchers like `Bash` all map onto Rein's tools. See [permissions](../../features/permissions/) and [hooks](../../features/hooks/).
 
 ### MCP servers
 
 Earlier sources win on a name clash: `<project>/.mcp.json`, then `~/.rein/mcp.json`, then `~/.claude.json` (servers added with `claude mcp add`). `${VAR}` and `${VAR:-default}` are expanded from your environment. See [MCP](../../features/mcp/).
+
+### Policy
+
+`<project>/.rein/policy.yaml` and `~/.rein/policy.yaml`: deny and ask rules over tools, paths and commands, and which models may work here. Both apply. See [Policy as code](../../features/safety/#policy-as-code-reinpolicyyaml).
+
+### Workspace manifest
+
+`rein.workspace.yaml` (or `.yml`), the nearest one at or above the launch folder: the repos of a [workspace](../../features/workspaces/). They become working directories and are listed in the system prompt.
 
 ### Instruction files
 
@@ -104,7 +117,8 @@ Added to the system prompt for every provider, up to 64 KB each, duplicates remo
 
 1. `~/.rein/AGENTS.md`
 2. `~/.claude/CLAUDE.md`
-3. From the git root down to the current folder: `AGENTS.md`, `CLAUDE.md`, `.claude/CLAUDE.md` in each folder
+3. In a [workspace](../../features/workspaces/), the same files next to `rein.workspace.yaml` (when that folder is above the git root)
+4. From the git root down to the current folder: `AGENTS.md`, `CLAUDE.md`, `.claude/CLAUDE.md` in each folder
 
 `AGENTS.md` / `CLAUDE.md` files in subfolders are delivered with the first tool result that touches that folder, once per conversation (again after a compaction). Codex's own project-doc loading is switched off (`project_doc_max_bytes=0`) so nothing is injected twice.
 
@@ -123,6 +137,8 @@ Added to the system prompt for every provider, up to 64 KB each, duplicates remo
 | `XDG_CONFIG_HOME`, `XDG_DATA_HOME`, `XDG_STATE_HOME` | Where a new install keeps its config, data and state on Linux (see above) |
 | `REIN_NO_AUTOUPDATE` | Any value turns off the launch-time auto-update |
 | `REIN_NO_BROWSER` | Don't open a browser for login URLs; Rein still shows the URL |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | The OTLP endpoint when `otel` is set in config without an `endpoint` (see [Observability](../../features/observability/)) |
+| `REIN_ENV_KEYS` | `1` (for CI, as the [GitHub Action](../../features/headless/#the-rein-github-action) sets it): a one-run Claude account that uses `ANTHROPIC_API_KEY` from the environment through the official `claude` CLI, in a fresh config folder; never saved. Otherwise Rein removes that variable so each account uses its own login |
 | `REIN_NO_USAGE_REFRESH` | Turn off background usage refresh (the occasional tiny Claude ping and Codex usage reads) |
 | `REIN_GIT_BASH_PATH`, `CLAUDE_CODE_GIT_BASH_PATH` | Windows: which `bash.exe` the shell tool and hooks use. Otherwise Rein looks in the standard Git for Windows locations, then next to `git` on `PATH`, then falls back to PowerShell |
 | `TYPESAFE_API_KEY` | Jev API key, which overrides the stored one |
@@ -137,6 +153,7 @@ Added to the system prompt for every provider, up to 64 KB each, duplicates remo
 | `MCP_TOOL_TIMEOUT` | 24 h for Claude sessions with tools, so Rein's own shell cap is what applies |
 | `MAX_THINKING_TOKENS=0` | Fast Claude one-shots (decisions, carry selection, page reading) |
 | `CI=1`, `PAGER=cat`, `GIT_PAGER=cat`, `FORCE_COLOR=0` | The agent's shell commands |
+| `REIN_SESSION`, `REIN_MODEL`, `REIN_GOAL` | The agent's shell commands, with `provenance` on: the conversation id, the model working now, the active goal (see [Provenance](../../features/pull-requests/#provenance-on-agent-commits)) |
 | `REIN_PROJECT_DIR`, `CLAUDE_PROJECT_DIR` | Hook commands |
 
 ### Removed before launching a CLI

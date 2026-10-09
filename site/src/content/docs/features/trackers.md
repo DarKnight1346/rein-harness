@@ -1,8 +1,6 @@
 ---
 title: Issue trackers
 description: Hand an issue to Rein by labelling it. Rein works on it on its own branch and posts its report on the issue. GitHub, Linear, GitLab, Azure DevOps and Jira.
-sidebar:
-  badge: New
 ---
 
 Label an issue `rein` and assign it to yourself. The Rein you have running picks it up within a couple of minutes, works on it **on a new branch in its own copy of the project**, and comments on the issue with its report. Nothing is merged, pushed or deployed: you review the branch.

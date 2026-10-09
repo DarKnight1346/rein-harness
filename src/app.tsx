@@ -23,6 +23,7 @@ if (args.includes('--help') || args.includes('-h')) {
   --classic        inline renderer (native scrollback, no mouse)
   --fullscreen     app-style renderer: top bar, sidebar, mouse clicks (default)
   --add-dir <path> also let the agent use this folder without asking (repeatable)
+  --scope <dir>    work in one package of a monorepo: search, list and shell start there
   -p, --print      headless: run one prompt (or stdin) and print the result; also --model,
                    --effort, --output-format, --permission-mode ask|auto|bypass,
                    --allowedTools "shell(npm test:*),edit(src/**)", --disallowedTools, --verbose
@@ -78,6 +79,19 @@ let renderer: Renderer = args.includes('--classic') ? 'classic' : args.includes(
     const {runtime} = await import('./runtime.js');
     try {
       runtime.tools.addDirs(dirs);
+    } catch (err) {
+      console.error(`rein: ${(err as Error).message}`);
+      process.exit(1);
+    }
+  }
+}
+// --scope <dir>: work in one package of a monorepo (search, list, shell and instructions start there).
+{
+  const i = args.indexOf('--scope');
+  if (i >= 0 && args[i + 1]) {
+    const {runtime} = await import('./runtime.js');
+    try {
+      runtime.setScope(args[i + 1]);
     } catch (err) {
       console.error(`rein: ${(err as Error).message}`);
       process.exit(1);

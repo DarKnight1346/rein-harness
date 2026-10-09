@@ -4,8 +4,8 @@ import {catalog} from '../router/catalog.js';
 import {defaultRef} from '../router/index.js';
 import type {Config} from '../store/config.js';
 import type {Engine} from './engine.js';
-import {systemPrompt} from './prompt.js';
-import {estimateTokens, renderMessages, summaryForModel} from './transcript.js';
+import {agentsFiles, systemPrompt} from './prompt.js';
+import {estimateTokens, renderMessages, resultTokens, summaryForModel} from './transcript.js';
 import type {ToolSpec} from '../tools/host.js';
 import {SUBAGENT_PROMPT, type Subagent} from '../agents/manager.js';
 
@@ -22,6 +22,8 @@ export type ContextReport = {
   messageCount: number;
   summarizedCount: number;
   autoCompactAt: number;
+  /** The biggest single items in context (instruction files, tool results, the summary), largest first. */
+  largest?: {what: string; tokens: number}[];
 };
 
 /**
@@ -52,6 +54,12 @@ export async function contextReport(engine: Engine, cfg: Config, toolSpecs: Tool
   const estimated = categories.reduce((n, c) => n + c.tokens, 0);
   if (measured !== undefined && measured > estimated) categories.push({key: 'other', label: 'Other (provider overhead, full tool output)', tokens: measured - estimated});
   const used = Math.max(estimated, measured ?? 0);
+  // What's taking the space, so you know what to drop or compact: each instruction file, each tool result.
+  const items = [
+    ...(await agentsFiles()).map((f) => ({what: `instructions ${f.path}`, tokens: estimateTokens(f.text)})),
+    ...(t.summary ? [{what: 'compaction summary', tokens: estimateTokens(summaryForModel(t.summary))}] : []),
+    ...recent.flatMap((m) => m.tools ?? []).map((x) => ({what: `${x.label}(${x.summary.slice(0, 60)})`, tokens: resultTokens(x)})),
+  ];
   return {
     model,
     modelLabel: info?.label ?? model?.model ?? 'no model',
@@ -62,6 +70,7 @@ export async function contextReport(engine: Engine, cfg: Config, toolSpecs: Tool
     messageCount: t.messages.length,
     summarizedCount: from,
     autoCompactAt: cfg.autoCompactPct ? Math.round(window * (cfg.autoCompactPct / 100)) : 0,
+    largest: items.filter((i) => i.tokens >= 200).sort((a, b) => b.tokens - a.tokens).slice(0, 8),
   };
 }
 

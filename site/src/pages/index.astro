@@ -1,71 +1,39 @@
 ---
 import '../styles/landing.css';
+import roadmap from '../../../ROADMAP.md?raw';
 
 const base = import.meta.env.BASE_URL.replace(/\/?$/, '/');
 const docs = (p: string) => `${base}${p}/`;
 const repo = 'https://github.com/DarKnight1346/rein-harness';
-const title = 'Rein — every AI subscription, one terminal';
+const title = 'Rein — the agent harness for your whole system';
 const description =
-  'Rein drives the official Claude Code and Codex CLIs across all your accounts — usage-aware failover, auto model routing, evidence-checked goals, plan mode, /btw, rewind and one shared tool set.';
+  'Rein drives the official Claude Code and Codex CLIs across every account you have and every repo in your system: failover, auto routing, verified goals, workspaces, costs and one shared tool set.';
 
-const features = [
-  {
-    tag: 'failover',
-    title: 'Never stranded on a rate limit',
-    body: 'Rein spreads work across every Claude and ChatGPT account you sign in, moves before a limit rejects you, and carries the conversation across providers mid-task.',
-    href: 'features/accounts',
-    span: 'wide',
-    viz: 'bars',
-  },
-  {
-    tag: 'auto',
-    title: 'The right model per task',
-    body: 'A cheap decision model picks the cheapest model that will answer well — and never sees your transcript.',
-    href: 'features/routing',
-    viz: 'route',
-  },
-  {
-    tag: '/goal',
-    title: 'Done means proven',
-    body: 'The agent keeps going until a reviewer accepts evidence — passing tests, verified output. "Impossible" escalates instead of ending.',
-    href: 'features/goals',
-    viz: 'goal',
-  },
-  {
-    tag: '/plan',
-    title: 'Plan before you touch a file',
-    body: 'Read-only exploration, multiple-choice questions, then a milestone plan saved to .rein/plans/ that can run as a verified goal.',
-    href: 'features/plans',
-    viz: 'plan',
-  },
-  {
-    tag: '/btw',
-    title: 'Ask without interrupting',
-    body: 'A side question forks the live session — full history, read-only tools — while the main agent keeps working.',
-    href: 'features/btw',
-    viz: 'btw',
-  },
-  {
-    tag: '/rewind',
-    title: 'Undo anything. Even shell commands.',
-    body: 'Whole-project snapshots before every message, in a private git store that never touches your repo.',
-    href: 'features/rewind',
-    viz: 'rewind',
-  },
-  {
-    tag: 'agents',
-    title: 'Subagents on any model',
-    body: 'Fork the conversation or spin up a fresh session on any signed-in model. Click into one and keep talking.',
-    href: 'features/subagents',
-    viz: 'agents',
-    span: 'wide',
-  },
-];
+// The open-source roadmap (ROADMAP.md), for the progress shown on this page.
+const status = new Map([...roadmap.matchAll(/^\| (\d+) \| .* \| (todo|done|blocked[^|]*) \|$/gm)].map((m) => [Number(m[1]), m[2]]));
+const big = [
+  {title: 'Multi-repo workspaces', body: 'Every repo in one session, with roles the agent understands and one AGENTS.md for all.', href: 'features/workspaces', ids: [1, 2, 3, 29, 9, 30, 31, 32, 33, 34, 35, 36, 37]},
+  {title: 'Cost and budgets', body: 'Dollars per request, conversation and goal, and caps that stop runaway work.', href: 'features/cost', ids: [4, 7, 72, 5, 6, 8, 24, 73]},
+  {title: 'Safety guards', body: 'Secret scanning, SAST, prompt-injection and exfiltration guards, policy as code.', ids: [10, 18, 19, 67, 68, 69, 70, 71]},
+  {title: 'CI and PR automation', body: 'Affected tests only, a CI watcher that fixes failures, self-review, stacked PRs.', ids: [11, 12, 13, 23, 46, 47, 48, 49, 50, 51, 52, 14, 15, 16, 17, 25, 39, 63, 64, 65, 66]},
+  {title: 'Specs', body: 'Requirements, design and tasks approved in turn, with traceability to the code.', ids: [20, 21, 22, 53, 54, 55, 56, 57, 58]},
+  {title: 'Contracts and migrations', body: 'Breaking-change detection, safe schema changes, codemods and playbooks.', ids: [38, 40, 41, 42, 43, 44, 45]},
+  {title: 'System-level understanding', body: 'Service and symbol graphs across repos, impact reports, coordinated changes.', ids: [105, 106, 107, 108, 109, 110, 111, 112]},
+].map((b) => {
+  const shipped = b.ids.filter((id) => status.get(id) === 'done').length;
+  return {...b, href: b.href ?? 'start/whats-new', shipped, total: b.ids.length};
+});
+const shippedAll = [...status.values()].filter((s) => s === 'done').length;
 
-const chips = [
-  'Claude Code', 'Codex', 'multi-account', 'cache-aware failover', 'auto routing', 'Jev', 'effort auto', '/goal', '/plan', '/btw',
-  '/rewind', 'subagents', 'advisor', 'MCP', 'hooks', 'skills', 'AGENTS.md', 'CLAUDE.md', 'web_search', 'image_generate', 'rein -p',
-  'Windows', 'privacy mode', 'mouse', 'markdown', 'diffs',
+// Six things Rein does, each with the real UI line it shows you.
+const rows = [
+  {k: 'Failover', h: 'Never stranded on a rate limit.', p: 'Work spreads across every Claude and ChatGPT account you sign in. Rein moves before a limit rejects you and carries the conversation across providers mid-task.', code: '<span class="t-yellow">Load balancing:</span> Claude Account 1 is near its limit — switching to Claude Account 2 before it\'s rejected', href: 'features/accounts'},
+  {k: 'Routing', h: 'The right model for each message.', p: 'A cheap decision model picks the cheapest model that will answer well, and never sees your transcript.', code: '<span class="t-dim">› design the cache layer</span>\n<span class="t-dim">→</span> <span class="t-cyan">Opus · effort high</span> <span class="t-dim">(auto · 0.91)</span>', href: 'features/routing'},
+  {k: 'Goals', h: 'Done means proven.', p: 'The agent keeps going until a reviewer accepts the evidence: passing tests, verified output. "Impossible" escalates instead of ending.', code: '<span class="t-green">⏺</span> <b>Shell</b><span class="t-dim">(npm test)</span>  <span class="t-green">✓ 48 passed</span>\n<span class="t-green">◎ Goal achieved and verified</span>', href: 'features/goals'},
+  {k: 'Workspaces', h: 'Your whole system in one session.', p: 'A rein.workspace.yaml makes every repo a working directory, tells the agent what each one does, and applies one AGENTS.md to all.', code: '<span class="t-dim">›</span> /workspace\n  <span class="t-green">✓</span> api   <span class="t-dim">orders API (provider)</span>\n  <span class="t-green">✓</span> web   <span class="t-dim">storefront, calls the orders API</span>', href: 'features/workspaces'},
+  {k: 'Cost', h: 'Every request priced. Every budget kept.', p: 'Dollars per request, conversation and goal at API list prices, with caps that stop the agent before it overruns them.', code: '<span class="t-dim">›</span> /cost\n  this conversation  <b>$4.12</b>\n  goal so far        <b>$3.10</b>\n  goal budget        <b>$3.10</b> <span class="t-dim">of $20.00</span>', href: 'features/cost'},
+  {k: 'Safety', h: 'Guards that hold in every mode.', p: 'Secret scanning, planted-instruction and exfiltration guards, pinned MCP servers, a dependency check, and a policy file that even bypass mode obeys.', code: '<span class="t-dim"># .rein/policy.yaml</span>\n- ask: [edit, write]\n  paths: ["migrations/**"]\n  reason: Migrations need a human look', href: 'features/safety'},
+  {k: 'Rewind', h: 'Undo anything. Even shell commands.', p: 'Whole-project snapshots before every message, in a private git store that never touches your repo.', code: '<span class="t-cyan">❯ Restore code and conversation</span>\n<span class="t-dim">  Restore conversation only</span>\n<span class="t-dim">  Restore code only</span>', href: 'features/rewind'},
 ];
 ---
 
@@ -79,65 +47,55 @@ const chips = [
     <meta property="og:title" content={title} />
     <meta property="og:description" content={description} />
     <meta property="og:type" content="website" />
-    <meta name="theme-color" content="#09090c" />
+    <meta name="theme-color" content="#07080a" />
     <link rel="icon" href={`${base}favicon.svg`} type="image/svg+xml" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      rel="stylesheet"
-      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;700&display=swap"
-    />
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700&family=Geist+Mono:wght@400;500&display=swap" />
   </head>
   <body>
-    <div class="aurora" aria-hidden="true"><i></i><i></i><i></i></div>
-    <div class="grid-bg" aria-hidden="true"></div>
-
     <header class="nav">
       <a class="brand" href={base}>
-        <span class="bars sm" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span>
-        <span>rein</span>
+        <span class="mark" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
+        rein
       </a>
       <nav>
         <a href={docs('start/introduction')}>Docs</a>
-        <a href={docs('features/accounts')}>Features</a>
+        <a href={docs('start/whats-new')}>What's new</a>
         <a href={docs('internals/architecture')}>How it works</a>
-        <a href={docs('project/contributing')}>Contribute</a>
-        <a class="gh" href={repo} aria-label="GitHub">
-          <svg viewBox="0 0 16 16" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
-          <span>GitHub</span>
-        </a>
+        <a class="gh" href={repo}>GitHub <span aria-hidden="true">↗</span></a>
       </nav>
     </header>
 
     <main>
-      <!-- HERO -->
+      <!-- HERO: the 3D scene fills it; the copy sits on top -->
       <section class="hero">
-        <div class="eyebrow">
-          <span class="dot"></span> <span class="hide-xs">Open source · MIT · </span>drives the official <b>claude</b> &amp; <b>codex</b> CLIs
+        <canvas id="hero3d" aria-hidden="true"></canvas>
+        <div class="orb-labels" id="orb-labels" aria-hidden="true"></div>
+        <div class="hero-copy">
+          <p class="eyebrow reveal">Open source · MIT · runs the official <code>claude</code> &amp; <code>codex</code> CLIs</p>
+          <h1 class="reveal">The agent harness<br />for your <em>whole&nbsp;system</em>.</h1>
+          <p class="lede reveal">
+            Every account you have. Every model. Every repo. Rein drives Claude Code and Codex as one pool, routes each task to the right model, and keeps
+            working until the evidence says it's done.
+          </p>
+          <div class="cta reveal">
+            <button class="install" data-copy="npm install -g rein-harness" aria-label="Copy install command">
+              <span class="prompt">$</span> npm install -g rein-harness
+              <span class="copied">Copied</span>
+            </button>
+            <a class="btn" href={docs('start/introduction')}>Read the docs <span aria-hidden="true">→</span></a>
+          </div>
+          <p class="hint reveal">Drag to turn · Node 22+ · macOS, Linux &amp; Windows</p>
         </div>
-        <div class="bars xl" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
-        <h1>
-          Every AI subscription.<br />
-          <span class="rainbow-text">One terminal.</span>
-        </h1>
-        <p class="lede">
-          Rein drives the official <code>claude</code> and <code>codex</code> CLIs across <em>all</em> your accounts. It routes each task to
-          the right model, fails over before a limit hits, and gives every model the same tools, goals, plans and undo.
-        </p>
-        <div class="cta">
-          <button class="install" data-copy="npm install -g rein-harness" aria-label="Copy install command">
-            <span class="prompt">$</span> npm install -g rein-harness
-            <span class="copy" aria-hidden="true">
-              <svg viewBox="0 0 24 24" width="16" height="16"><path fill="none" stroke="currentColor" stroke-width="2" d="M9 9h10v10H9zM5 15V5h10"/></svg>
-            </span>
-            <span class="copied">copied!</span>
-          </button>
-          <a class="btn primary" href={docs('start/introduction')}>Read the docs <span aria-hidden="true">→</span></a>
-          <a class="btn ghost" href={repo}>★ Star on GitHub</a>
-        </div>
-        <p class="sub-cta">Or try it now: <code>npx rein-harness</code> · Node 22+ · macOS, Linux &amp; Windows</p>
+      </section>
 
-        <!-- LIVE TERMINAL -->
+      <!-- DEMO -->
+      <section class="demo" id="see-it">
+        <div class="head reveal">
+          <p class="kicker">A real session, sped up</p>
+          <h2>Watch it fail over, fork a question, and prove the fix.</h2>
+        </div>
         <div class="term-wrap">
           <div class="glow" aria-hidden="true"></div>
           <div class="term" id="demo" aria-label="Animated demo of the Rein terminal UI">
@@ -190,187 +148,103 @@ const chips = [
             <div class="input"><span class="t-cyan">›</span> <span id="typed"></span><span class="caret"></span></div>
           </div>
         </div>
+
       </section>
 
-      <!-- MARQUEE -->
-      <section class="marquee" aria-label="Feature keywords">
-        <div class="track">
-          {[...chips, ...chips].map((c) => <span class="chip">{c}</span>)}
-        </div>
+      <!-- WHAT IT DOES -->
+      <section class="rows" id="features">
+        {
+          rows.map((r, i) => (
+            <a class="row reveal" href={docs(r.href)}>
+              <div class="row-txt">
+                <span class="num">{String(i + 1).padStart(2, '0')} · {r.k}</span>
+                <h3>{r.h}</h3>
+                <p>{r.p}</p>
+              </div>
+              <div class="mini tilt">
+                <div class="mini-bar" aria-hidden="true"><i /><i /><i /><span>rein</span></div>
+                <pre class="row-code" set:html={r.code} />
+              </div>
+            </a>
+          ))
+        }
       </section>
 
-      <!-- PITCH -->
-      <section class="pitch">
-        <div class="pitch-card">
-          <div class="kicker">The problem</div>
-          <h2>You pay for Claude <em>and</em> ChatGPT.<br />You still hit the wall.</h2>
-          <p>
-            Each CLI only knows its own account. Hit the 5-hour limit and you wait. Switch tools and you lose your context, your
-            permissions, your hooks, your flow.
-          </p>
+      <!-- BIG SYSTEMS -->
+      <section class="systems" id="big-systems">
+        <div class="head reveal">
+          <p class="kicker">Built for big systems · {shippedAll} of {status.size} shipped</p>
+          <h2>From one repo to the whole platform.</h2>
+          <p>Open-source features for very large, multi-repo codebases, shipping in waves. <a href={docs('start/whats-new')}>See what's new →</a></p>
         </div>
-        <div class="pitch-arrow" aria-hidden="true">→</div>
-        <div class="pitch-card fix">
-          <div class="kicker">The fix</div>
-          <h2>One harness that treats your subscriptions as <span class="rainbow-text">one pool</span>.</h2>
-          <p>
-            Rein keeps its own transcript as the source of truth and treats each CLI session as a disposable cache. When it switches account
-            or provider, the conversation comes with it.
-          </p>
-        </div>
-      </section>
-
-      <!-- BENTO -->
-      <section class="features">
-        <div class="section-head">
-          <div class="kicker">What you get</div>
-          <h2>Built like a power tool.</h2>
-          <p>Every feature below works the same on every model, Claude or Codex.</p>
-        </div>
-        <div class="bento">
+        <div class="caps">
           {
-            features.map((f) => (
-              <a class={`tile ${f.span ?? ''}`} href={docs(f.href)}>
-                <div class={`viz viz-${f.viz}`} aria-hidden="true">
-                  {f.viz === 'bars' && (
-                    <div class="v-bars">
-                      <div><span>Claude Account 1</span><b style="--w:96%" class="hot" /></div>
-                      <div><span>Claude Account 2</span><b style="--w:31%" /></div>
-                      <div><span>Codex Account 1</span><b style="--w:18%" /></div>
-                      <p class="t-yellow">Load balancing: Claude Account 1 is near its limit — switching to Claude Account 2 before it's rejected</p>
-                    </div>
-                  )}
-                  {f.viz === 'route' && (
-                    <pre><span class="t-dim">› rename this variable</span>{'\n'}<span class="t-dim">→ Haiku · Claude Account 2 (auto · 0.97)</span>{'\n'}<span class="t-dim">› design the cache layer</span>{'\n'}<span class="t-dim">→ </span><span class="t-cyan">Opus · effort high</span><span class="t-dim"> (auto · 0.91)</span></pre>
-                  )}
-                  {f.viz === 'goal' && (
-                    <pre><span class="t-green">⏺</span> <b>Shell</b><span class="t-dim">(npm test)</span>{'\n'}  <span class="t-green">✓ 48 passed</span>{'\n'}<span class="t-green">◎ Goal achieved and verified</span>{'\n'}  <span class="t-dim">accepted (0.96 via jev)</span></pre>
-                  )}
-                  {f.viz === 'plan' && (
-                    <pre><span class="t-yellow">⏸ plan mode</span>{'\n'}<span class="t-dim">## Milestones</span>{'\n'}- [x] Map the auth flow{'\n'}- [x] Add refresh tokens{'\n'}- [ ] Migrate sessions</pre>
-                  )}
-                  {f.viz === 'btw' && (
-                    <div class="v-btw">
-                      <div class="v-main"><span class="t-dim">main</span> ▇▅▃▁ Responding…</div>
-                      <div class="v-fork"><span class="t-cyan">btw ·</span> what's left?<br /><span class="t-dim">forked agent · not added</span></div>
-                    </div>
-                  )}
-                  {f.viz === 'rewind' && (
-                    <pre><span class="t-cyan">Restore code and conversation</span>{'\n'}<span class="t-dim">Restore conversation only</span>{'\n'}<span class="t-dim">Restore code only</span>{'\n'}<span class="t-dim">esc esc · 4 files</span></pre>
-                  )}
-                  {f.viz === 'agents' && (
-                    <div class="v-agents">
-                      <span class="node main">main · Opus</span>
-                      <span class="edge" />
-                      <span class="node">reviewer · fork</span>
-                      <span class="node">tests · Haiku</span>
-                      <span class="node">docs · Codex</span>
-                    </div>
-                  )}
+            big.map((b) => (
+              <a class="cap reveal tilt" href={docs(b.href)} style={`--p:${b.shipped / b.total}`}>
+                <div class="cap-top">
+                  <b>{b.title}</b>
+                  <span class="count">{b.shipped === b.total ? 'Shipped' : b.shipped ? `${b.shipped}/${b.total}` : 'Next'}</span>
                 </div>
-                <div class="tile-txt">
-                  <span class="tag">{f.tag}</span>
-                  <h3>{f.title}</h3>
-                  <p>{f.body}</p>
-                </div>
+                <p>{b.body}</p>
+                <div class="bar"><span /></div>
               </a>
             ))
           }
         </div>
-
-        <div class="mini-grid">
-          <a href={docs('features/tools')}><b>One tool set, every model</b><span>read · write · edit · search · shell · web · images · memory</span></a>
-          <a href={docs('start/from-claude-code')}><b>Claude Code compatible</b><span>.claude/settings.json rules &amp; hooks, CLAUDE.md, .mcp.json</span></a>
-          <a href={docs('features/permissions')}><b>Approvals that learn</b><span>ask · auto via decision model · bypass · saved rules</span></a>
-          <a href={docs('features/mcp')}><b>MCP, managed by the agent</b><span>"add the GitHub MCP server" — it asks, then does it</span></a>
-          <a href={docs('features/skills')}><b>Skills</b><span>folders with SKILL.md — /skill:create writes them for you</span></a>
-          <a href={docs('features/headless')}><b>Headless &amp; CI</b><span>rein -p "…" --output-format json</span></a>
-        </div>
       </section>
 
       <!-- HOW -->
-      <section class="how">
-        <div class="section-head">
-          <div class="kicker">How it works</div>
+      <section class="how" id="how">
+        <div class="head reveal">
+          <p class="kicker">How it works</p>
           <h2>No tokens extracted. Ever.</h2>
-          <p>All model traffic goes through the official binaries, signed in the normal way. Rein only orchestrates.</p>
+          <p>All model traffic goes through the official binaries, signed in the normal way. Rein orchestrates: one transcript, one tool set, every model.</p>
         </div>
-        <div class="flow">
-          <div class="node-card">
-            <div class="n-h">You</div>
-            <div class="n-b">fullscreen TUI · <code>rein -p</code></div>
-          </div>
-          <div class="pipe"><span></span></div>
-          <div class="node-card hl">
-            <div class="n-h"><span class="t-rainbow">Rein</span></div>
-            <div class="n-b">transcript · router · decision model · account pool · tool host · approvals</div>
-          </div>
-          <div class="pipe split"><span></span></div>
-          <div class="node-stack">
-            <div class="node-card"><div class="n-h">claude</div><div class="n-b">stream-json · MCP proxy</div></div>
-            <div class="node-card"><div class="n-h">codex</div><div class="n-b">app-server · dynamic tools</div></div>
+        <div class="flow reveal">
+          <div class="node">You<span>terminal UI · <code>rein -p</code></span></div>
+          <div class="wire" aria-hidden="true"><i></i></div>
+          <div class="node core">Rein<span>transcript · router · accounts · tools · approvals</span></div>
+          <div class="wire" aria-hidden="true"><i></i></div>
+          <div class="stack">
+            <div class="node">claude<span>stream-json</span></div>
+            <div class="node">codex<span>app-server</span></div>
           </div>
         </div>
-        <div class="stats">
+        <div class="stats reveal">
           <div><b>0</b><span>OAuth tokens touched</span></div>
-          <div><b>60&nbsp;min</b><span>prompt-cache window Rein protects before switching</span></div>
-          <div><b>3</b><span>OSes in CI on every PR</span></div>
-          <div><b>∞</b><span>accounts in the pool</span></div>
-        </div>
-        <div class="center"><a class="btn ghost" href={docs('internals/architecture')}>Read the architecture →</a></div>
-      </section>
-
-      <!-- CONTRIBUTE -->
-      <section class="contribute">
-        <div class="contrib-card">
-          <div class="kicker">Build it with us</div>
-          <h2>Rein is young, fast-moving, and <span class="rainbow-text">wide open</span>.</h2>
-          <p>
-            TypeScript, Ink and React. Tests run against fake <code>claude</code> and <code>codex</code> binaries, so you don't need a
-            subscription to hack on it. Every merged PR ships to npm automatically.
-          </p>
-          <div class="ideas">
-            <div><b>New providers</b><span>The adapter interface was designed for more CLIs than two.</span></div>
-            <div><b>New tools</b><span>One implementation reaches every model.</span></div>
-            <div><b>Skills &amp; recipes</b><span>Share the workflows that make you fast.</span></div>
-            <div><b>Docs</b><span>This site is in the repo — fix a page in one PR.</span></div>
-          </div>
-          <div class="cta left">
-            <a class="btn primary" href={docs('project/contributing')}>Start contributing →</a>
-            <a class="btn ghost" href={`${repo}/issues`}>Browse issues</a>
-          </div>
-          <pre class="clone"><span class="t-dim">$</span> git clone {repo}.git
-<span class="t-dim">$</span> cd rein-harness &amp;&amp; npm install &amp;&amp; npm test
-<span class="t-dim">$</span> npm run dev</pre>
+          <div><b>2</b><span>official CLIs, one tool set</span></div>
+          <div><b>3</b><span>OSes tested on every PR</span></div>
+          <div><b>MIT</b><span>licensed, open source</span></div>
         </div>
       </section>
 
       <!-- FINAL -->
-      <section class="final">
-        <div class="bars xl" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
-        <h2>One CLI, Every Workflow.</h2>
+      <section class="final reveal">
+        <h2>Start in one command.</h2>
         <button class="install big" data-copy="npm install -g rein-harness">
           <span class="prompt">$</span> npm install -g rein-harness
-          <span class="copied">copied!</span>
+          <span class="copied">Copied</span>
         </button>
-        <p class="sub-cta">then <code>cd</code> into a project and run <code>rein</code></p>
+        <p>then <code>cd</code> into a project and run <code>rein</code> · <a href={docs('project/contributing')}>contribute on GitHub</a></p>
       </section>
     </main>
 
     <footer class="foot">
+      <span>Rein · MIT licensed</span>
       <div>
-        <span class="bars sm" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span>
-        Rein · MIT licensed
-      </div>
-      <div class="links">
         <a href={docs('start/introduction')}>Docs</a>
         <a href={docs('project/security')}>Security</a>
         <a href={repo}>GitHub</a>
         <a href="https://www.npmjs.com/package/rein-harness">npm</a>
       </div>
-      <p class="fine">Rein is an independent project. It is not affiliated with Anthropic or OpenAI. It drives their official CLIs with your own accounts.</p>
     </footer>
 
-    <script>import "../scripts/landing.ts";</script>
+    <script>
+      import '../scripts/landing.ts';
+      import {startHero} from '../scripts/hero3d.ts';
+      const canvas = document.getElementById('hero3d') as HTMLCanvasElement | null;
+      const labels = document.getElementById('orb-labels');
+      if (canvas && labels) startHero(canvas, labels);
+    </script>
   </body>
 </html>

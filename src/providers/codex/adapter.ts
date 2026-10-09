@@ -2,6 +2,7 @@ import {usageStore} from '../../store/usage.js';
 import {EventQueue, run} from '../../util/proc.js';
 import {streamCommand} from '../claude/adapter.js';
 import {accountEnv} from '../env.js';
+import {addTokens, priced} from '../prices.js';
 import {reportSideUsage} from '../usage.js';
 import type {
   Account,
@@ -267,7 +268,7 @@ class CodexSession implements ProviderSession {
       const last = p.tokenUsage?.last;
       if (last) {
         const t = this.turn;
-        t.call = {input: t.call.input + (last.inputTokens ?? 0), cached: t.call.cached + (last.cachedInputTokens ?? 0), output: t.call.output + (last.outputTokens ?? 0)};
+        t.call = addTokens(t.call, priced({provider: 'codex', model: this.model}, {input: last.inputTokens ?? 0, cached: last.cachedInputTokens ?? 0, output: last.outputTokens ?? 0}));
         t.tokens = {input: last.inputTokens ?? 0, output: last.outputTokens ?? 0};
         t.queue.push({type: 'tokens', call: t.call});
       }

@@ -20,7 +20,8 @@ export type Message = {
   /** Rebuilt after Rein stopped mid-turn (crash, killed terminal): the reply and tool calls so far. */
   cutOff?: boolean;
   /** Tool calls made while producing this reply (kept for the record and for session search). */
-  tools?: {label: string; summary: string; ok: boolean; result: string; diff?: DiffLine[]}[];
+  /** `result` is clipped to 4,000 characters; `size` is the full result's length (what the model saw). */
+  tools?: {label: string; summary: string; ok: boolean; result: string; size?: number; diff?: DiffLine[]}[];
   /** Images attached to a user message (files in the session's scratch folder). */
   images?: import('../providers/types.js').ImageInput[];
 };
@@ -60,7 +61,7 @@ export type Transcript = {
     tools: {label: string; summary: string; ok?: boolean}[];
   }[];
   /** Token totals for this conversation (all calls, all providers). */
-  tokens?: {uncached: number; cached: number; output: number};
+  tokens?: {uncached: number; cached: number; output: number; usd?: number};
 };
 
 export function newTranscript(): Transcript {
@@ -114,6 +115,12 @@ function indexOf(t: Transcript): SessionInfo {
   };
 }
 
+/** Applied to every line written to a conversation's log (secretScan masks credentials), supplied by the runtime. */
+let saveFilter: (line: string) => string = (line) => line;
+export function setSaveFilter(fn: (line: string) => string): void {
+  saveFilter = fn;
+}
+
 export function saveTranscript(t: Transcript): Promise<void> {
   if (!t.messages.length) return Promise.resolve();
   const prev = writing.get(t.id) ?? Promise.resolve();
@@ -126,7 +133,7 @@ async function appendNew(t: Transcript): Promise<void> {
   await mkdir(paths.sessions(), {recursive: true, mode: 0o700});
   const state = persisted.get(t) ?? {count: 0, meta: ''};
   const lines: string[] = [];
-  for (let i = state.count; i < t.messages.length; i++) lines.push(JSON.stringify({t: 'msg', i, ...t.messages[i]}));
+  for (let i = state.count; i < t.messages.length; i++) lines.push(saveFilter(JSON.stringify({t: 'msg', i, ...t.messages[i]})));
   const meta = JSON.stringify(metaOf(t));
   if (meta !== state.meta) lines.push(JSON.stringify({t: 'meta', ...metaOf(t)}));
   if (!lines.length) return;
@@ -146,7 +153,7 @@ export function recordProgress(t: Transcript, index: number, p: Progress): Promi
   const prev = writing.get(t.id) ?? Promise.resolve();
   const next = prev
     .then(() => appendNew(t)) // the user message first, so the log reads in order
-    .then(() => appendFile(jsonlFile(t.id), JSON.stringify({t: 'progress', i: index, ...p}) + '\n', {mode: 0o600}))
+    .then(() => appendFile(jsonlFile(t.id), saveFilter(JSON.stringify({t: 'progress', i: index, ...p})) + '\n', {mode: 0o600}))
     .catch(() => {});
   writing.set(t.id, next);
   return next;
@@ -333,3 +340,6 @@ export function buildCarry(t: Transcript, coversUpTo: number, upTo: number, budg
   const text = [...head, missing.length ? renderWithTools(missing, from, keep) : '', '</earlier_conversation>'].filter(Boolean).join('\n\n') + '\n\n';
   return {text, overBudget: estimateTokens(textOnly) > budgetTokens};
 }
+
+/** A stored tool result's size in tokens: the full result's (it's stored clipped), estimated. */
+export const resultTokens = (x: {result: string; size?: number}) => (x.size !== undefined ? Math.ceil(x.size / 4) : estimateTokens(x.result));

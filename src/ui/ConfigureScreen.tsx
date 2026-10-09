@@ -4,6 +4,8 @@ import {TabBar} from './TabBar.js';
 import {runtime} from '../runtime.js';
 import {DEFAULT_SIDEBAR, DEFAULT_STATUS, enabledItems, SIDEBAR_ITEMS, STATUS_ITEMS, type LayoutItem} from './layout.js';
 import {Clickable} from './terminal/clicks.js';
+import {TextInput} from './TextInput.js';
+import {CONFIG_KEYS, defaultValue, formatValue, parseValue, type KeyInfo} from '../store/configKeys.js';
 
 type Tab = {id: 'status' | 'sidebar'; title: string; items: LayoutItem[]; defaults: string[]; key: 'statusLine' | 'sidebarSections'};
 const TABS: Tab[] = [
@@ -146,7 +148,7 @@ const CHOICE_TABS: ChoiceTabDef[] = [
     })),
   },
 ];
-const TAB_TITLES = [...TABS.map((t) => t.title), ...CHOICE_TABS.map((t) => t.title)];
+const TAB_TITLES = [...TABS.map((t) => t.title), ...CHOICE_TABS.map((t) => t.title), 'Advanced'];
 
 /**
  * `/settings`: choose and order what the status line and sidebar show. Changes save immediately
@@ -161,6 +163,7 @@ export function ConfigureScreen({onClose, onChange, bare}: {onClose(): void; onC
   };
   const tabs = <TabBar titles={TAB_TITLES} active={tabIndex} onSelect={switchTab} />;
   const frame = bare ? {} : {borderStyle: 'round' as const, borderColor: 'cyan', paddingX: 1};
+  if (tabIndex === TAB_TITLES.length - 1) return <AdvancedTab tabs={tabs} frame={frame} onClose={onClose} onChange={onChange} switchTab={(d) => switchTab(tabIndex + d)} />;
   if (tabIndex >= TABS.length) {
     const def = CHOICE_TABS[tabIndex - TABS.length]!;
     return <ChoiceTab key={def.key} def={def} tabs={tabs} frame={frame} onClose={onClose} onChange={onChange} switchTab={(d) => switchTab(tabIndex + d)} />;
@@ -282,6 +285,84 @@ function LayoutTab({tab, tabs, frame, cursor, setCursor, onClose, onChange, swit
         })}
       </Box>
       <Text dimColor>click/space toggle · ▲▼ or shift+↑↓ / [ ] reorder · r reset · ←→ tab · esc close</Text>
+    </Box>
+  );
+}
+
+const ROWS = 14;
+
+/**
+ * Every setting in ~/.rein/config.json, so none is file-only: choices and on/off cycle with enter;
+ * text, numbers, lists (comma-separated) and JSON values are edited in place.
+ */
+function AdvancedTab({tabs, frame, onClose, onChange, switchTab}: TabProps) {
+  const [cursor, setCursor] = useState(0);
+  const [editing, setEditing] = useState<string | undefined>();
+  const [error, setError] = useState<string | undefined>();
+  const info = CONFIG_KEYS[cursor]!;
+  const value = (i: KeyInfo) => (runtime.config as Record<string, unknown>)[i.key];
+  const save = (i: KeyInfo, v: unknown) =>
+    void runtime.setConfig({[i.key]: v}).then(() => {
+      setError(undefined);
+      onChange();
+    });
+  const activate = () => {
+    if (info.kind === 'boolean') return save(info, !value(info));
+    if (info.kind === 'enum') return save(info, info.choices[(info.choices.indexOf(String(value(info))) + 1) % info.choices.length]);
+    setEditing(value(info) === undefined ? '' : formatValue(info, value(info)));
+  };
+  useInput(
+    (input, key) => {
+      if (key.escape || input === 'q') onClose();
+      else if (key.tab || key.rightArrow) switchTab(1);
+      else if (key.leftArrow) switchTab(-1);
+      else if (key.upArrow) setCursor((c) => Math.max(0, c - 1));
+      else if (key.downArrow) setCursor((c) => Math.min(CONFIG_KEYS.length - 1, c + 1));
+      else if (key.return || input === ' ') activate();
+      else if (input === 'r') save(info, defaultValue(info.key));
+    },
+    {isActive: editing === undefined},
+  );
+  const first = Math.min(Math.max(0, cursor - Math.floor(ROWS / 2)), CONFIG_KEYS.length - ROWS);
+  return (
+    <Box flexDirection="column" {...frame}>
+      {tabs}
+      <Text dimColor>Every setting in ~/.rein/config.json. Same as /settings &lt;key&gt; &lt;value&gt;.</Text>
+      <Box flexDirection="column" marginY={1}>
+        {CONFIG_KEYS.slice(first, first + ROWS).map((i, n) => {
+          const at = first + n;
+          return (
+            <Clickable key={i.key} onHover={() => editing === undefined && setCursor(at)} onClick={() => (setCursor(at), activate())}>
+              <Text color={at === cursor ? 'cyan' : undefined} wrap="truncate">
+                {at === cursor ? '❯ ' : '  '}
+                {i.key.padEnd(24)}
+                <Text dimColor={at !== cursor}>{formatValue(i, value(i))}</Text>
+              </Text>
+            </Clickable>
+          );
+        })}
+      </Box>
+      <Text wrap="wrap">{info.description}{info.kind === 'enum' ? ` (${info.choices.join(' · ')})` : ''}</Text>
+      {editing !== undefined ? (
+        <Box>
+          <Text color="cyan">{info.key}: </Text>
+          <TextInput
+            value={editing}
+            onChange={setEditing}
+            onSubmit={(text) => {
+              try {
+                save(info, parseValue(info, text));
+                setEditing(undefined);
+              } catch (err) {
+                setError((err as Error).message);
+              }
+            }}
+            onCancel={() => (setEditing(undefined), setError(undefined))}
+          />
+        </Box>
+      ) : null}
+      {error ? <Text color="red">{error}</Text> : null}
+      <Text dimColor>{editing !== undefined ? 'enter save · esc cancel' : 'enter edit or cycle · r reset to default · ↑↓ move · ←→ tab · esc close'}</Text>
     </Box>
   );
 }

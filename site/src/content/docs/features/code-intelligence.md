@@ -1,8 +1,6 @@
 ---
 title: Code intelligence
 description: Rein runs language servers itself, so every model sees type errors right after an edit and can check a file's problems, with or without an editor.
-sidebar:
-  badge: New
 ---
 
 Rein runs language servers for your project itself, so the agent gets real compiler feedback, on any model, without an editor open. When the agent finishes a turn, Rein checks the files it changed (and the files that import them). If the turn left problems the code didn't have before, the agent is told and keeps working.
@@ -19,7 +17,7 @@ Rein runs language servers for your project itself, so the agent gets real compi
   </code_check>
   ```
 
-  This happens once per turn: if the agent decides a problem should stay (and says why), it isn't asked again. Problems that were already there aren't counted, so a legacy codebase full of warnings doesn't trigger it. If the server hadn't reported on a file yet when the turn first touched it (a large file's first parse can take longer than Rein waits), there's nothing to compare with, so that file isn't reported on; a file the turn created is, since everything in it is new. This matters for projects the server can't fully configure, such as a kernel tree without its build: every file has hundreds of errors, all of them already there. Errors and warnings count in the files the agent changed; hints don't. At most 10 are listed. Importing files are found with `git grep` for the file's name: up to 10, and only files git tracks, so a caller created moments ago and not yet added isn't checked. Vendored and generated trees (`vendor/`, `node_modules/`, `third_party/`, virtualenvs, `dist/`, `build/`) are never searched. In an importing file the agent didn't change, only errors count: a broken call is an error, while a warning there usually just means the server finished a slower analysis during the turn. The check waits at most about 1.5 seconds for the servers; the first edit in a session can take a few seconds while a server starts.
+  This happens once per turn: if the agent decides a problem should stay (and says why), it isn't asked again. Problems that were already there aren't counted, so a legacy codebase full of warnings doesn't trigger it. If the server hadn't reported on a file yet when the turn first touched it (a large file's first parse can take longer than Rein waits), there's nothing to compare with, so that file isn't reported on; a file the turn created is, since everything in it is new. This matters for projects the server can't fully configure, such as a kernel tree without its build: every file has hundreds of errors, all of them already there. Errors and warnings count in the files the agent changed; hints don't. At most 10 are listed. Importing files are found with `git grep` for the file's name: up to 10, and only files git tracks, so a caller created moments ago and not yet added isn't checked. Vendored and generated trees (`vendor/`, `node_modules/`, `third_party/`, virtualenvs, `dist/`, `build/`) are never searched. With a [scope](../workspaces/#one-package-of-a-monorepo) set, importing files outside it aren't checked. In an importing file the agent didn't change, only errors count: a broken call is an error, while a warning there usually just means the server finished a slower analysis during the turn. The check waits at most about 1.5 seconds for the servers; the first edit in a session can take a few seconds while a server starts.
 
   It runs after [`Stop` hooks](../hooks/): when one sends the agent back to work, the code check waits for the next time it finishes.
 - **A `diagnostics` tool.** The agent checks one file (`path`) or every file it has open, for example before it starts. With an [editor connected](../ide/), the editor's diagnostics are used instead, and the result says which source answered. The end-of-turn check always uses Rein's own servers, so with an editor open you have two language servers running for the project (the editor's and Rein's).
@@ -118,6 +116,23 @@ To turn the feature off, set `"lsp": "off"` in `config.json`.
 :::note
 The server only sees what Rein tells it: the files the agent opens, reads or changes, as they are on disk. After a foreground shell command, Rein resends any open file that changed (a formatter, `sed`, `git checkout`).
 :::
+
+
+## Static analysis with Semgrep
+
+With `sast` set to `semgrep` and [Semgrep](https://semgrep.dev) installed, Rein runs it on the files a request changed, at the end of the turn, after the language-server check. Only findings on lines that request **added** go back to the agent, so a file's old problems don't come up every time:
+
+```text
+Semgrep found 1 problem in lines this turn added:
+app.py:12: [warning] Detected the use of eval() (eval-detected)
+Fix it, or if one is a false positive, say why in your reply.
+```
+
+- It runs once per request, on files changed with Rein's file tools (`write`, `edit`, `delete`), not files changed only by shell commands.
+- `sastConfig` picks the rules: `auto` (the default, Semgrep's recommended rules for the languages it finds), a registry pack such as `p/owasp-top-ten`, or a path to your own rules. Registry rules need network access; a local path doesn't.
+- Rein runs Semgrep with `--metrics=off`. Without Semgrep installed, `sast` does nothing.
+
+Turn it on with `/settings sast semgrep`.
 
 ## Related
 

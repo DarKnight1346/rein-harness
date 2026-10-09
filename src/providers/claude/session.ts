@@ -6,6 +6,7 @@ import {usageStore} from '../../store/usage.js';
 import {EventQueue} from '../../util/proc.js';
 import {accountEnv} from '../env.js';
 import type {Account, ChatEvent, ImageInput, OneShotOpts, ProviderSession, TokenCount} from '../types.js';
+import {addTokens, priced} from '../prices.js';
 import {reportSideUsage} from '../usage.js';
 import {classifyError, parseRateLimitEvent, parseResetTime} from './stream.js';
 
@@ -77,6 +78,9 @@ export class ClaudeSession implements ProviderSession {
   model: string;
   private proc: ChildProcessWithoutNullStreams;
   private sessionId: string | undefined;
+  private get ref() {
+    return {provider: 'claude' as const, model: this.model};
+  }
   private turn: {queue: EventQueue<ChatEvent>; interrupted: boolean; text: boolean; done: TokenCount; msg: TokenCount} | undefined;
   private controls = new Map<string, (ok: boolean, err?: string) => void>();
   private nextControl = 1;
@@ -194,14 +198,16 @@ export class ClaudeSession implements ProviderSession {
           if (u) {
             const t = this.turn;
             if (e.type === 'message_start') {
-              t.done = {input: t.done.input + t.msg.input, cached: t.done.cached + t.msg.cached, output: t.done.output + t.msg.output};
+              t.done = addTokens(t.done, priced(this.ref, t.msg));
               t.msg = {input: 0, cached: 0, output: 0};
             }
             const cached = u.cache_read_input_tokens ?? 0;
             if (u.input_tokens !== undefined) t.msg.input = (u.input_tokens ?? 0) + (u.cache_creation_input_tokens ?? 0) + cached;
+            if (u.cache_creation_input_tokens !== undefined) t.msg.written = u.cache_creation_input_tokens;
             if (u.cache_read_input_tokens !== undefined) t.msg.cached = cached;
             if (u.output_tokens !== undefined) t.msg.output = u.output_tokens;
-            t.queue.push({type: 'tokens', call: {input: t.done.input + t.msg.input, cached: t.done.cached + t.msg.cached, output: t.done.output + t.msg.output}});
+            // Priced per request: Haiku 5.5's price depends on each request's prompt size.
+            t.queue.push({type: 'tokens', call: addTokens(t.done, priced(this.ref, t.msg))});
           }
         }
         // Only text deltas are reply text; thinking deltas are dropped.

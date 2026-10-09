@@ -98,7 +98,7 @@ The sidebar is 32 columns wide on the right. `Ctrl+B` or the `[≡]` button togg
 | **Agents** (default) | `main` plus running subagents (and the one you're viewing). Click one to switch the main pane to its conversation and message it. |
 | **Accounts** (default) | Every account with a usage bar per window (`5h`, `weekly`, `30-day`). Bars turn yellow at 70% and red at 90%. Click to open `/usage`. With no accounts you get `+ add an account`. |
 | **Chat model** (default) | `auto` and every model you can use. Click one to switch. |
-| **Session** (default) | Message count, uncached, cached and received token totals, and `↻ compact`, `⚙ accounts` and `☰ configure` shortcuts. The totals include everything the conversation spent: subagents and Rein's own helper calls (compaction summaries, the decision model, the advisor, `web_fetch` summaries, reviews). |
+| **Session** (default) | Message count, uncached, cached and received token totals, the [cost](../cost/) at API prices (`cost ≈$4.12`, click for `/cost`), and `↻ compact`, `⚙ accounts` and `☰ configure` shortcuts. The totals include everything the conversation spent: subagents and Rein's own helper calls (compaction summaries, the decision model, the advisor, `web_fetch` summaries, reviews). |
 | Context | A fill bar for the active model (or the subagent you're viewing). |
 | Auto routing | The decision model and the last routing decision. |
 | Shortcuts | A key and mouse cheatsheet. |

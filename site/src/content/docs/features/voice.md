@@ -1,8 +1,6 @@
 ---
 title: Voice input
 description: Talk instead of typing. Speech is turned into text on your machine with whisper.cpp; nothing is uploaded.
-sidebar:
-  badge: New
 ---
 
 **Hold Ctrl+Space**, say what you want, and **let go**. Rein turns your speech into text **on your machine** with [whisper.cpp](https://github.com/ggml-org/whisper.cpp) and adds it to the input. It's never sent on its own: read it, fix it, press Enter.

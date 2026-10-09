@@ -37,7 +37,7 @@ const HOME_VAR: Record<Account['provider'], string> = {
  */
 export function accountEnv(account: Account, base: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
   const env = {...base};
-  for (const key of STRIP[account.provider]) delete env[key];
+  for (const key of STRIP[account.provider]) if (!(account.envKey && key === 'ANTHROPIC_API_KEY')) delete env[key];
   if (account.home !== null) env[HOME_VAR[account.provider]] = account.home;
   return {...env, ...backendEnv(account)};
 }

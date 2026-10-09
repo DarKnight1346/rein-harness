@@ -4,7 +4,7 @@ description: Every flag the rein command accepts, including headless mode for sc
 ---
 
 ```sh
-rein [--continue|-c [id]] [--classic|--fullscreen] [--add-dir <path>]...
+rein [--continue|-c [id]] [--classic|--fullscreen] [--add-dir <path>]... [--scope <dir>]
 rein -p "<prompt>" [--model m] [--effort e] [--output-format text|json|stream-json]
                    [--permission-mode ask|auto|bypass|plan] [--allowedTools …] [--disallowedTools …]
                    [-c [id]] [--verbose]
@@ -23,6 +23,7 @@ Run `rein` from the project folder you want to work in. That folder becomes the 
 | `--classic` | Inline renderer: native terminal scrollback, no mouse, no sidebar. |
 | `--fullscreen` | App-style renderer: top bar, sidebar, windows, mouse. This is the default. |
 | `--add-dir <path>` | Lets the agent also use this folder without asking, for this session. Repeatable. |
+| `--scope <dir>` | Works in one package of a monorepo: `list`, `search` and `shell` start there and its instructions are loaded. See [Workspaces](../../features/workspaces/#one-package-of-a-monorepo). |
 | `--update` | Updates Rein and the `claude` / `codex` CLIs, prints the steps, then exits (no TTY needed). Exits `1` if a step failed. |
 | `-v`, `--version` | Prints Rein's version. |
 | `-h`, `--help` | Prints usage. |
@@ -56,6 +57,8 @@ Interactive Rein needs a terminal. Run without one (in a pipe or CI) and it exit
 | `--disallowedTools` | comma-separated rules | Extra deny rules for this run. Deny wins. |
 | `-c`, `--continue` | `[id]` | Continues the **latest** conversation in this project, or the given one. No picker. |
 | `--verbose` | — | Text mode: prints tool calls (`⏺ Edit(src/a.ts) ✓`) and notices to stderr. |
+| `--add-dir` | `<path>` | Lets the agent also use this folder without asking, for this run. Repeatable; adds to `additionalDirectories`. |
+| `--scope` | `<dir>` | Works in one package of a monorepo, as in interactive Rein. |
 
 Settings passed on the command line apply to this run only. They're never saved to `config.json`.
 
@@ -101,7 +104,7 @@ rein -p "now add docs" -c --output-format stream-json --verbose
 ```
 
 :::note
-`--add-dir` has no effect with `-p`. Headless runs use only the current folder plus `additionalDirectories` from `~/.rein/config.json`. Headless mode also needs at least one account: run `rein` once to import or add one.
+Headless mode needs at least one account: run `rein` once to import or add one.
 :::
 
 ## Environment variables

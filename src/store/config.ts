@@ -1,5 +1,8 @@
 import {readJson, writeJson} from './json.js';
 import {paths} from './paths.js';
+import type {Price} from '../providers/prices.js';
+import type {OtelConfig} from '../telemetry/otel.js';
+import type {Budget} from '../budget.js';
 
 export type Config = {
   version: 1;
@@ -78,6 +81,36 @@ export type Config = {
   lspServers?: Record<string, {command: string; args?: string[]}>;
   /** Every account at its limit: wait for the reset (up to 12 hours) and continue, instead of stopping. */
   waitForLimits: boolean;
+  /** USD per million tokens for models Rein has no price for, or to override one: {"codex:my-model": {input, output, cached}}. */
+  prices?: Record<string, Price>;
+  /** Spending caps in USD at API list prices: {requestUsd, goalUsd, conversationUsd}. A repo's .rein/settings.json can set lower ones. */
+  budget?: Budget;
+  /** /goal asks before starting when goals here typically cost more than this (USD, API prices). 0 = never asks. */
+  goalConfirmUsd: number;
+  /** Say when the context passes 50%, 70% and 85% full, and what's taking the space. */
+  contextWarnings: boolean;
+  /** A write or edit that adds something like a credential: tell the agent (warn), refuse it (block), or nothing (off). */
+  secretScan: 'off' | 'warn' | 'block';
+  /** Static analysis of each request's changes at the end of the turn: semgrep (when installed) or off. */
+  sast: 'off' | 'semgrep';
+  /** Flag instructions planted in web pages, search results and MCP results (the agent is told they're data). */
+  injectionScan: boolean;
+  /** Once outside content and private data have both been in a conversation, network calls need your yes. */
+  exfilGuard: boolean;
+  /** Pin each MCP server's config and tools when first approved; a changed server's tools wait for your review. */
+  mcpPinning: boolean;
+  /** Vet packages a change adds (exists, typosquat, license, known vulnerabilities via OSV): warn, block or off. */
+  depCheck: 'off' | 'warn' | 'block';
+  /** Tell you when a build or test command takes much longer than its recent runs. */
+  buildTimeWarnings: boolean;
+  /** Commits and PRs the agent makes end with Rein-Session / Rein-Model / Rein-Goal trailers. */
+  provenance: boolean;
+  /** Tell you when the branch changes more lines than this (reviews slow down past a few hundred). 0 = off. */
+  prMaxLines: number;
+  /** Semgrep rules (--config): auto, a registry pack like p/owasp-top-ten, or a path. */
+  sastConfig: string;
+  /** OpenTelemetry export of turns, tool calls, tokens and cost (metadata only). Off unless set. */
+  otel?: OtelConfig;
   /** Efficiency experiments to turn on, by name (see the configuration reference): measured before they become defaults. */
   experiments: string[];
   /** Run simple shell reads and searches the agent writes (cat, head, grep -rn, sed -n, ls, find -name) as the built-in tools. */
@@ -138,6 +171,18 @@ export const DEFAULT_CONFIG: Config = {
   collapsePastes: true,
   attribution: true,
   waitForLimits: true,
+  goalConfirmUsd: 0,
+  contextWarnings: true,
+  secretScan: 'off',
+  sast: 'off',
+  injectionScan: false,
+  exfilGuard: false,
+  mcpPinning: false,
+  depCheck: 'off',
+  buildTimeWarnings: true,
+  provenance: false,
+  prMaxLines: 0,
+  sastConfig: 'auto',
   steerShell: true,
   mcpSampling: 'ask',
   inlineImages: 'auto',

@@ -153,6 +153,16 @@ While it runs you see `Compacting N messages…`, then a rule:
   Auto-compacted at 80% of the context window · change it in /settings → Compaction
 ```
 
+## Context warnings
+
+The first time the context passes **50%**, **70%** and **85%** of the model's window, Rein says so after the turn, with the biggest tool results in it:
+
+```text
+Context is 72% full (144K of 200K tokens). Largest: Read(src/huge.ts) 40K, Shell($ npm test) 12K. /compact summarizes it now (/compact keep <what> steers the summary); /context shows the rest.
+```
+
+Each level warns once per stretch of conversation; after a compaction they start over. There's no warning when auto-compaction is about to run anyway. Sizes are of the full tool results (what the model received), not the 4,000 characters Rein stores. Turn the warnings off with `/settings contextWarnings false`.
+
 ## `/context`
 
 `/context` opens a live grid (`src/ui/ContextView.tsx`, data from `src/session/context.ts`): 20 × 8 cells, filled in proportion to the model's window, with a legend.
@@ -167,6 +177,8 @@ While it runs you see `Compacting N messages…`, then a rule:
 | Other (provider overhead, full tool output) | Measured input minus Rein's estimate |
 
 Rein's own numbers are estimates (~4 chars/token). When the provider measured the last request on the same model, the header says `measured` and the difference shows as **Other**. That covers CLI overhead and full tool outputs Rein only keeps 4,000 characters of. Claude's figure is the **last API call's** input, not the turn's sum across tool calls, so it reflects what the context holds right now. The footer shows message count, how many were folded into the summary, and where auto-compaction will trigger.
+
+Below the grid, **Largest items** lists the 8 biggest single things in the main conversation's context, largest first: each instruction file (`instructions /path/AGENTS.md`), the compaction summary, and each tool result (`Read(src/huge.ts)`, `Shell($ npm test)`). Sizes are of the full results the model received. Items under about 200 tokens are left out. It shows what to drop: a huge file read whole, a test log, an instruction file that's grown too big.
 
 When you're viewing a subagent, `/context` shows that subagent's context instead. For a fork, the parent's inherited history appears under "Inherited from the parent + provider overhead".
 
