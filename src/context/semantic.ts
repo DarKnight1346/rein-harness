@@ -1,5 +1,5 @@
 import {createHash} from 'node:crypto';
-import {existsSync, mkdirSync, readFileSync, statSync, writeFileSync} from 'node:fs';
+import {closeSync, existsSync, fstatSync, mkdirSync, openSync, readFileSync, statSync, writeFileSync} from 'node:fs';
 import path from 'node:path';
 import type {Config} from '../store/config.js';
 import {reinHome} from '../store/paths.js';
@@ -14,7 +14,8 @@ import {SKIP, SOURCE} from './repoMap.js';
  * working tree, its content hash) changes, and files git ignores are never read. Nothing leaves the
  * machine. Without Ollama it says so and does nothing.
  */
-export type SemanticConfig = {model?: string; url?: string};
+/** `remote: true` allows an Ollama that isn't on this machine (your code is sent to it to embed). */
+export type SemanticConfig = {model?: string; url?: string; remote?: boolean};
 type Chunk = {start: number; end: number; v: string}; // v: base64 Float32Array
 type FileEntry = {key: string; chunks: Chunk[]};
 type Index = {model: string; built: string; files: Record<string, FileEntry>};
@@ -38,8 +39,19 @@ export function setEmbedFetch(fn: typeof fetch): void {
 const opts = (c?: SemanticConfig) => ({model: c?.model || DEFAULT_MODEL, url: (c?.url || DEFAULT_URL).replace(/\/+$/, '')});
 export const indexFile = (root: string) => path.join(reinHome(), 'index', `${createHash('sha1').update(path.resolve(root)).digest('hex').slice(0, 16)}.json`);
 
+/** Only an Ollama on this machine, unless the config says otherwise: what's embedded is your code. */
+export function localUrl(url: string): boolean {
+  try {
+    const h = new URL(url).hostname.replace(/^\[|\]$/g, '');
+    return h === 'localhost' || h === '::1' || /^127\./.test(h) || h.endsWith('.localhost');
+  } catch {
+    return false;
+  }
+}
+
 async function embed(c: SemanticConfig | undefined, input: string[]): Promise<Float32Array[]> {
   const {model, url} = opts(c);
+  if (!localUrl(url) && !c?.remote) throw new Error(`${url} isn't on this machine, and embedding sends it your code: set "remote": true in semanticIndex to allow it`);
   let r: Response;
   try {
     r = await fetcher(`${url}/api/embed`, {method: 'POST', headers: {'content-type': 'application/json'}, body: JSON.stringify({model, input})});
@@ -70,15 +82,20 @@ const cache = new Map<string, {mtime: number; index: Index}>();
 /** The project's index, parsed once per change of the file. */
 export function loadIndex(root: string): Index | undefined {
   const f = indexFile(root);
+  let fd: number | undefined;
   try {
-    const mtime = statSync(f).mtimeMs;
+    // One handle for the check and the read, so the file can't change in between.
+    fd = openSync(f, 'r');
+    const mtime = fstatSync(fd).mtimeMs;
     const hit = cache.get(f);
     if (hit?.mtime === mtime) return hit.index;
-    const index = JSON.parse(readFileSync(f, 'utf8')) as Index;
+    const index = JSON.parse(readFileSync(fd, 'utf8')) as Index;
     cache.set(f, {mtime, index});
     return index;
   } catch {
     return undefined;
+  } finally {
+    if (fd !== undefined) closeSync(fd);
   }
 }
 

@@ -85,7 +85,7 @@ Rein looks in order:
 Set it up once:
 
 1. Install Ollama, then `ollama pull nomic-embed-text`.
-2. `/settings semanticIndex {}` (or `{"model": "mxbai-embed-large"}`, or a `url` for an Ollama elsewhere).
+2. `/settings semanticIndex {}` (or `{"model": "mxbai-embed-large"}`). An Ollama on another machine (`"url": "http://gpu-box:11434"`) also needs `"remote": true`, since what's embedded is your code.
 3. `/index`. Run it again after big changes: it's incremental. A file is embedded again only when its git blob changes (or its content, if it's changed but not committed), and deleted files are dropped. Files git ignores are never read.
 
 With the setting on and an index built, the agent gets a [`semantic_search`](../../reference/tools/#semantic_search) tool. `/index <query>` searches it yourself, and `/index status` shows its size, model and age. Indexes live in `~/.rein/index/`, one per project. Changing the model means running `/index` again.

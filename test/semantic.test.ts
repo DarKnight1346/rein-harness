@@ -69,7 +69,10 @@ describe('local semantic index', () => {
     setEmbedFetch((async () => new Response('', {status: 404})) as unknown as typeof fetch);
     await expect(buildIndex(root, {model: 'mxbai-embed-large'})).rejects.toThrow(/ollama pull mxbai-embed-large/);
 
+    const other = repo(); // an Ollama elsewhere gets your code: only with remote: true
+    await expect(buildIndex(other, {url: 'http://gpu-box.internal:11434'})).rejects.toThrow(/isn't on this machine.*"remote": true/);
     setEmbedFetch(fakeOllama);
+    expect((await buildIndex(other, {url: 'http://gpu-box.internal:11434', remote: true})).files).toBe(2);
     let cfg: any = {semanticIndex: {}};
     const tool = semanticSearchTool(() => cfg, () => root);
     expect(tool.enabled!()).toBe(false);
