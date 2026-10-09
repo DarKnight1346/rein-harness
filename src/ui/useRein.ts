@@ -28,7 +28,7 @@ import type {EngineEvent} from '../session/engine.js';
 import {NAME_RE} from '../vault/vault.js';
 import {installable, installedVersion, resolveServer, SERVERS} from '../lsp/servers.js';
 import {loadPlugins} from '../plugins/index.js';
-import {conversationMarkdown, writeExport} from '../session/export.js';
+import {conversationHtml, conversationMarkdown, writeExport} from '../session/export.js';
 import {copyToClipboard} from './terminal/clipboard.js';
 import {editExternally} from './terminal/editor.js';
 import {addHistory, HistoryCursor, loadHistory} from '../store/history.js';
@@ -1162,6 +1162,17 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
         const t = viewing ? undefined : runtime.engine.transcript;
         if (!t?.messages.length) {
           log('info', viewing ? '/export works on the main conversation.' : 'Nothing to export yet.');
+          return;
+        }
+        // /export html [path]: one page with the tool calls and diffs, to share.
+        const [kind, ...rest] = parsed.args.trim().split(/\s+/);
+        if (kind === 'html') {
+          try {
+            const file = writeExport(t, conversationHtml(t, {redact}), rest.join(' ') || undefined, 'html');
+            log('info', `Exported ${t.messages.length} messages, with tool calls and diffs, to ${redact(file)}. Open it in a browser or attach it to a PR or ticket.`);
+          } catch (err) {
+            log('error', `Couldn't export: ${(err as Error).message}`);
+          }
           return;
         }
         const md = conversationMarkdown(t, {redact});

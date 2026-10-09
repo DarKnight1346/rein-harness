@@ -62,6 +62,10 @@ Big PRs wait longest for review. Set `prMaxLines` (`/settings prMaxLines 400`; `
 | GitLab (the `origin` remote is on GitLab) | `glab mr merge --auto-merge` |
 | Otherwise | `gh pr merge --auto --squash`: GitHub auto-merge, through the merge queue when the base branch has one |
 
+## Sharing a session
+
+`/export html [file]` saves the conversation as one self-contained page (default `~/.rein/exports/<id>.html`): your messages, the agent's replies, each tool call with ✓ or ✗, and the diff of every edit. Attach it to a PR or a ticket to show how a change was made. Privacy mode applies, as on screen, and any HTML in the conversation is shown as text, never run. `/export` without `html` saves Markdown without the diffs.
+
 ## Related
 
 - [Headless & CI](../headless/): the GitHub Action and GitLab component

@@ -107,6 +107,7 @@ See [Goals](../../features/goals/) and [Plan mode](../../features/plans/).
 | `/tui` | `fullscreen` \| `classic` | Switches renderer and carries the conversation over. With no argument, shows which renderer is active. *Waits for idle.* |
 | `/update` | — | Updates the `claude` and `codex` CLIs, checks the Codex app-server protocol, then updates Rein. *Waits for idle.* |
 | `/export` | `[file]` | Saves the whole conversation as Markdown (every message, each reply's tool calls as a list) and copies it to the clipboard. Default file: `~/.rein/exports/<id>.md`; a path is relative to the project. |
+| `/export html` | `[file]` | The conversation as one self-contained HTML page (default `~/.rein/exports/<id>.html`) with its tool calls and their diffs, to attach to a PR or ticket. HTML in the conversation is shown as text, never run. See [Sharing a session](../../features/pull-requests/#sharing-a-session). |
 | `/help` | — | Commands and skills. |
 | `/exit` | — | Quits. Ctrl+C twice also exits. |
 

@@ -9,7 +9,7 @@ export const COMMANDS: {name: CommandName; description: string}[] = [
   {name: 'vault', description: 'Secrets the agent can use in shell commands as $NAME without seeing them: list, /vault set NAME, /vault rm NAME'},
   {name: 'lsp', description: "Built-in code intelligence: the language servers Rein runs, their memory, what's installed (/lsp stop stops them)"},
   {name: 'plugins', description: 'Installed Claude Code and Codex plugins Rein loaded: their commands, skills, agents, hooks and MCP servers'},
-  {name: 'export', description: 'Save the conversation as Markdown and copy it to the clipboard: /export [file] (default ~/.rein/exports/<id>.md)'},
+  {name: 'export', description: 'Save the conversation as Markdown and copy it to the clipboard: /export [file] (default ~/.rein/exports/<id>.md); /export html [file] for a page with tool calls and diffs'},
   {name: 'ide', description: 'Editor integration (VS Code, Cursor, Windsurf, JetBrains with the Claude Code extension): connect, or show the connection'},
   {name: 'memory', description: "This project's memory (.rein/MEMORY.md) — what Rein has learned here"},
   {name: 'mcp', description: 'MCP servers: status and tools; approve project servers, reconnect'},
