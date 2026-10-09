@@ -1,5 +1,6 @@
 ---
 import '../styles/landing.css';
+import roadmap from '../../../ROADMAP.md?raw';
 
 const base = import.meta.env.BASE_URL.replace(/\/?$/, '/');
 const docs = (p: string) => `${base}${p}/`;
@@ -62,10 +63,25 @@ const features = [
   },
 ];
 
+// Built for big systems: the headline capabilities of the open-source roadmap (ROADMAP.md), with live progress.
+const status = new Map([...roadmap.matchAll(/^\| (\d+) \| .* \| (todo|done|blocked[^|]*) \|$/gm)].map((m) => [Number(m[1]), m[2]]));
+const big = [
+  {title: 'Multi-repo workspaces', body: 'One rein.workspace.yaml: every repo writable, roles the agent understands, one AGENTS.md for all. Or --scope one package of a monorepo.', href: 'features/workspaces', ids: [1, 2, 3, 29, 9, 30, 31, 32, 33, 34, 35, 36, 37]},
+  {title: 'Cost and budgets', body: 'Dollars per request, conversation and goal at API prices, then estimates and hard stops before work runs away.', href: 'features/cost', ids: [4, 7, 72, 5, 6, 8, 24, 73]},
+  {title: 'Safety guards', body: 'Secret scanning, SAST, prompt-injection and exfiltration guards, pinned MCP servers and policy as code.', ids: [10, 18, 19, 67, 68, 69, 70, 71]},
+  {title: 'CI and PR automation', body: 'Affected tests only, flaky-test quarantine, a CI watcher that fixes failures, self-review, stacked and linked PRs.', ids: [11, 12, 13, 23, 46, 47, 48, 49, 50, 51, 52, 14, 15, 16, 17, 25, 39, 63, 64, 65, 66]},
+  {title: 'Specs', body: 'Requirements, design and tasks approved in turn, committed specs and ADRs, traceability from hunk to requirement.', ids: [20, 21, 22, 53, 54, 55, 56, 57, 58]},
+  {title: 'Contracts and migrations', body: 'Breaking-change detection for OpenAPI, protobuf and GraphQL, safe schema migrations, codemods and playbooks.', ids: [38, 40, 41, 42, 43, 44, 45]},
+  {title: 'System-level understanding', body: 'Service and symbol graphs across repos, API-aware references, impact reports and coordinated change sets.', ids: [105, 106, 107, 108, 109, 110, 111, 112]},
+].map((b) => {
+  const shipped = b.ids.filter((id) => status.get(id) === 'done').length;
+  return {...b, href: b.href ?? 'start/whats-new', progress: shipped === b.ids.length ? 'Shipped' : shipped ? `${shipped} of ${b.ids.length} shipped` : 'Coming next'};
+});
+
 const chips = [
   'Claude Code', 'Codex', 'multi-account', 'cache-aware failover', 'auto routing', 'Jev', 'effort auto', '/goal', '/plan', '/btw',
   '/rewind', 'subagents', 'advisor', 'MCP', 'hooks', 'skills', 'AGENTS.md', 'CLAUDE.md', 'web_search', 'image_generate', 'rein -p',
-  'Windows', 'privacy mode', 'mouse', 'markdown', 'diffs',
+  'Windows', 'privacy mode', 'mouse', 'markdown', 'diffs', 'workspaces', '--scope', '/cost', 'OpenTelemetry',
 ];
 ---
 
@@ -285,6 +301,20 @@ const chips = [
           <a href={docs('features/mcp')}><b>MCP, managed by the agent</b><span>"add the GitHub MCP server" — it asks, then does it</span></a>
           <a href={docs('features/skills')}><b>Skills</b><span>folders with SKILL.md — /skill:create writes them for you</span></a>
           <a href={docs('features/headless')}><b>Headless &amp; CI</b><span>rein -p "…" --output-format json</span></a>
+        </div>
+      </section>
+
+      <!-- BIG SYSTEMS -->
+      <section class="features">
+        <div class="section-head">
+          <div class="kicker">Built for big systems</div>
+          <h2>From one repo to the whole platform.</h2>
+          <p>Open-source features for very large, multi-repo codebases, shipping wave by wave. <a href={docs('start/whats-new')}>See what's new</a>.</p>
+        </div>
+        <div class="mini-grid">
+          {big.map((b) => (
+            <a href={docs(b.href)}><b>{b.title}</b><span>{b.body}</span><span class="t-dim">{b.progress}</span></a>
+          ))}
         </div>
       </section>
 

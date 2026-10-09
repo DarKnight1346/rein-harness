@@ -13,6 +13,15 @@ and a compaction model. No OAuth tokens are extracted: all traffic goes through 
 
 **📖 Full documentation: [rein-harness.github.io](https://rein-harness.github.io/)** · [Contributing](CONTRIBUTING.md)
 
+**Built for big systems.** Open-source features for very large, multi-repo codebases, shipping in waves
+([what's new](https://rein-harness.github.io/start/whats-new/), [roadmap](ROADMAP.md)):
+
+- **Multi-repo workspaces:** a `rein.workspace.yaml` makes every repo a working directory, with one
+  AGENTS.md for all; `--scope` focuses on one package of a monorepo.
+- **Cost and budgets:** dollars per request, conversation and goal (`/cost`), OpenTelemetry export.
+- **Coming next:** safety guards, CI and PR automation, specs, contracts and migrations, and
+  system-level understanding across repos.
+
 ## Install
 
 **Requirements**
