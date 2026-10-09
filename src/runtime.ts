@@ -5,6 +5,7 @@ import {adapters} from './providers/index.js';
 import {onSideUsage} from './providers/usage.js';
 import {formatUsd, setCacheWriteTtl, setPriceOverrides} from './providers/prices.js';
 import {Telemetry} from './telemetry/otel.js';
+import {maskSecrets} from './tools/secrets.js';
 import {effectiveBudget, overBudget, type Spend} from './budget.js';
 import {catalog, toRef} from './router/catalog.js';
 import {mergeNote, Worktrees} from './agents/worktrees.js';
@@ -49,7 +50,7 @@ import {goalDoneTool, milestoneDoneTool} from './goals/tool.js';
 import {webTools} from './tools/web.js';
 import {isMilestoneCopy, todoTool} from './tools/todo.js';
 import {imageGenRef, imageTool} from './tools/image.js';
-import {newTranscript, saveTranscript} from './session/transcript.js';
+import {newTranscript, saveTranscript, setSaveFilter} from './session/transcript.js';
 import {setPromptCacheTtl} from './providers/claude/session.js';
 import {setAttribution, setBriefFinal, setCheapExplore, setExtraWorkingDirs, setInScope, setScopeDir, setLazyTools, setManyCalls, setNoTodo, setSelfTest, setVaultNames, systemPrompt} from './session/prompt.js';
 import {Vault} from './vault/vault.js';
@@ -191,6 +192,7 @@ export class Runtime {
     readOnlyJudge: (command) => this.judgeReadOnly(command),
     configDirs: () => [...(this.config?.additionalDirectories ?? []), ...workspaceDirs(this.workspace)],
     scope: () => this.scope,
+    secretScan: () => this.config.secretScan ?? 'off',
     checkpoint: (file) => this.checkpoints.snapshot(this.currentTurn(), file),
     experiments: () => activeExperiments(this.config),
     contextId: () => this.engine?.contextId(),
@@ -866,6 +868,7 @@ Drop superseded reads of the same file, routine listings, and output that no lon
     setPromptCacheTtl(() => (activeExperiments(this.config).includes('cache-5m') ? '5m' : undefined));
     setCacheWriteTtl(() => (activeExperiments(this.config).includes('cache-5m') ? '5m' : '1h'));
     setPriceOverrides(() => this.config.prices);
+    setSaveFilter((line) => (this.config.secretScan && this.config.secretScan !== 'off' ? maskSecrets(line) : line));
     setBriefFinal(() => activeExperiments(this.config).includes('brief-final'));
     await usageStore.load();
     const router = makeRouter(() => this.config, (...a) => this.auto(...a));

@@ -115,6 +115,12 @@ function indexOf(t: Transcript): SessionInfo {
   };
 }
 
+/** Applied to every line written to a conversation's log (secretScan masks credentials), supplied by the runtime. */
+let saveFilter: (line: string) => string = (line) => line;
+export function setSaveFilter(fn: (line: string) => string): void {
+  saveFilter = fn;
+}
+
 export function saveTranscript(t: Transcript): Promise<void> {
   if (!t.messages.length) return Promise.resolve();
   const prev = writing.get(t.id) ?? Promise.resolve();
@@ -127,7 +133,7 @@ async function appendNew(t: Transcript): Promise<void> {
   await mkdir(paths.sessions(), {recursive: true, mode: 0o700});
   const state = persisted.get(t) ?? {count: 0, meta: ''};
   const lines: string[] = [];
-  for (let i = state.count; i < t.messages.length; i++) lines.push(JSON.stringify({t: 'msg', i, ...t.messages[i]}));
+  for (let i = state.count; i < t.messages.length; i++) lines.push(saveFilter(JSON.stringify({t: 'msg', i, ...t.messages[i]})));
   const meta = JSON.stringify(metaOf(t));
   if (meta !== state.meta) lines.push(JSON.stringify({t: 'meta', ...metaOf(t)}));
   if (!lines.length) return;
@@ -147,7 +153,7 @@ export function recordProgress(t: Transcript, index: number, p: Progress): Promi
   const prev = writing.get(t.id) ?? Promise.resolve();
   const next = prev
     .then(() => appendNew(t)) // the user message first, so the log reads in order
-    .then(() => appendFile(jsonlFile(t.id), JSON.stringify({t: 'progress', i: index, ...p}) + '\n', {mode: 0o600}))
+    .then(() => appendFile(jsonlFile(t.id), saveFilter(JSON.stringify({t: 'progress', i: index, ...p})) + '\n', {mode: 0o600}))
     .catch(() => {});
   writing.set(t.id, next);
   return next;

@@ -28,7 +28,7 @@ agent works by default ships as an experiment (`experiments` in config) until it
 | 6 | Budgets with a hard stop | Per-task, per-goal and per-repo caps (tokens or dollars) that pause the agent and say why. | features/cost/#budgets | done |
 | 8 | Context-bloat warnings | Flag oversized tool results and stale reads; suggest what to compact or drop. | internals/context/#context-warnings | done |
 | 10 | Stuck-loop watchdog | Detect repeated edits or the same failing command with no progress; stop or escalate. | reference/configuration/#experiments | done |
-| 18 | Secret scanning on every diff | Block secrets in agent edits and redact them from saved transcripts. |  | todo |
+| 18 | Secret scanning on every diff | Block secrets in agent edits and redact them from saved transcripts. | features/permissions/#secret-scanning | done |
 | 19 | SAST on changed code | Run Semgrep or CodeQL (when installed) on files a turn changed; findings go back like the code check. |  | todo |
 | 67 | Prompt-injection scanner | Screen issue text, PR text, fetched pages and MCP results for injected instructions; warn the agent and the user. |  | todo |
 | 68 | Exfiltration guard | When private data and untrusted input are both in context, network-capable tools need approval. |  | todo |

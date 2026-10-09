@@ -161,6 +161,18 @@ The sensitive check runs **only for file-tool paths outside the working director
 If you run bypass mode, treat the sensitive list as a seatbelt for the file tools, not a sandbox.
 :::
 
+## Secret scanning
+
+With `secretScan` on, every `write` and `edit` is checked for credentials it would **add** to a file: private keys, AWS, GitHub, GitLab, Slack, Stripe, Anthropic, OpenAI, Google and npm keys, JSON web tokens, and long random values assigned to names like `password`, `apiKey` or `client_secret`. Placeholders (`your-password-here`, `xxxx`, `${process.env.TOKEN}`) and plain words aren't flagged, and moving a line that was already there isn't a new one.
+
+| `secretScan` | What happens |
+|---|---|
+| `off` *(default)* | Nothing. |
+| `warn` | The change goes through, and the agent is told it added what looks like a credential and to move it to an environment variable (or say it's a fake for tests). |
+| `block` | The change is refused with the reason, and the agent is told to read the value from the environment or ask you to add it. |
+
+While it's on, credentials are also masked in saved conversations (`~/.rein/sessions/`), keeping the first four characters (`AKIA…[secret: AWS access key]`). Set it with `/settings secretScan warn`. For secrets the agent needs to *use*, see the [vault](../vault/): it runs commands with them without ever seeing them.
+
 ## Saved rules
 
 Rules use Claude Code's format: a tool name, optionally with a specifier in parentheses, in `allow` or `deny` lists under `permissions`.

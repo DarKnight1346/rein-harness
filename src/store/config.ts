@@ -89,6 +89,8 @@ export type Config = {
   goalConfirmUsd: number;
   /** Say when the context passes 50%, 70% and 85% full, and what's taking the space. */
   contextWarnings: boolean;
+  /** A write or edit that adds something like a credential: tell the agent (warn), refuse it (block), or nothing (off). */
+  secretScan: 'off' | 'warn' | 'block';
   /** OpenTelemetry export of turns, tool calls, tokens and cost (metadata only). Off unless set. */
   otel?: OtelConfig;
   /** Efficiency experiments to turn on, by name (see the configuration reference): measured before they become defaults. */
@@ -153,6 +155,7 @@ export const DEFAULT_CONFIG: Config = {
   waitForLimits: true,
   goalConfirmUsd: 0,
   contextWarnings: true,
+  secretScan: 'off',
   steerShell: true,
   mcpSampling: 'ask',
   inlineImages: 'auto',

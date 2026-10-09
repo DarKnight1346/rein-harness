@@ -12,6 +12,7 @@ import {addProjectRule, check, loadRules, ruleTool, suggestRule, type Rules, typ
 import {hasHooks, runHooks} from '../hooks.js';
 import {renderScoped, scopedInstructions} from '../session/prompt.js';
 import {Watchdog} from './watchdog.js';
+import {addedText, findSecrets, secretMessage} from './secrets.js';
 import {readOnlyCommand} from './plan.js';
 import {steer} from './steer.js';
 import {ipcPath, isWindows} from '../util/platform.js';
@@ -69,6 +70,8 @@ export type ToolHostOptions = {
   judge?: (req: ApprovalRequest) => Promise<{allow: boolean; note: string}>;
   /** Extra working directories from config (`additionalDirectories`). */
   configDirs?: () => string[];
+  /** secretScan: what to do when a write or edit adds something that looks like a credential. */
+  secretScan?: () => 'off' | 'warn' | 'block';
   /** --scope / /scope: list, search and shell default to this folder (absolute) instead of the project root. */
   scope?: () => string | undefined;
   /** Extra rules for this run only (headless --allowedTools / --disallowedTools). */
@@ -474,7 +477,13 @@ export class ToolHost extends EventEmitter {
         const watched = this.experiment('watchdog') && !origin ? this.filesOf(ctx, tool, args) : undefined;
         const stop = watched && this.watchdog.before(tool.name, args, watched);
         if (stop) throw new ToolError(stop);
+        // secretScan: a credential the change would add, before it lands.
+        const scan = this.opts.secretScan?.() ?? 'off';
+        const secrets = scan !== 'off' && (tool.name === 'write' || tool.name === 'edit') ? findSecrets(addedText(tool.name, args)) : [];
+        const file = String((args as {path?: string})?.path ?? (args as {edits?: {path?: string}[]})?.edits?.[0]?.path ?? 'the file');
+        if (secrets.length && scan === 'block') throw new ToolError(secretMessage(secrets, file, true));
         result = repeat ?? (await tool.run(ctx, args ?? {}));
+        if (secrets.length && result.ok) result = {...result, text: `${result.text}\n\n${secretMessage(secrets, file, false)}`};
         const loop = watched && this.watchdog.after(tool.name, args, result.ok, watched);
         if (loop) result = {...result, text: `${result.text}\n\n${loop}`};
         if (!repeat && tool.name === 'read') this.noteRead(ctx, args, result, origin);

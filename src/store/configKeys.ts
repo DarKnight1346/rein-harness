@@ -46,6 +46,7 @@ export const CONFIG_KEYS: KeyInfo[] = [
   k('toolApproval', 'Approval mode for file changes: ask, auto or bypass', oneOf('ask', 'auto', 'bypass')),
   k('sandbox', 'Command sandbox: write (default), strict (no network) or off', oneOf('write', 'strict', 'off')),
   k('shellMaxMinutes', 'Longest a foreground shell command may run, in minutes (0 = no limit)', num(0)),
+  k('secretScan', 'A write or edit that adds something like a credential: warn the agent, block the change, or off. On, credentials are also masked in saved conversations', oneOf('off', 'warn', 'block')),
   k('steerShell', 'Run simple shell reads and searches (cat, grep -rn, sed -n…) as the built-in tools', bool),
   k('goalMaxRounds', 'Most automatic continuations per goal (0 = no limit)', num(0)),
   k('subagentLimit', 'Most subagents running at once', num(1)),

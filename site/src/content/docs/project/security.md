@@ -74,6 +74,10 @@ These are real, and you should know them:
 - **Transcripts are plaintext.** `~/.rein/sessions/` holds your messages and tool-result excerpts, written `0600` in a `0700` folder.
 - **MCP servers are your code.** A stdio server runs with your environment, and an HTTP one sees what you send it. Adding one always asks, but a malicious server is out of scope.
 
+## Secret scanning
+
+With `secretScan` set to `warn` or `block`, Rein checks each change the agent makes for credentials it would add to a file, and masks them in saved conversations. See [Secret scanning](../../features/permissions/#secret-scanning).
+
 ## Telemetry
 
 Rein sends no telemetry of its own. If you turn on [OpenTelemetry export](../../features/observability/), it goes only to the endpoint you set, and carries metadata (model and tool names, timings, outcomes, token counts, cost), never prompts, code, file names or commands.
