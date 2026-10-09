@@ -98,6 +98,27 @@ Steps that have to wait, for old clients or for a backfill to finish, are separa
 3. **Consumer tests.** It writes one interaction per behaviour the code depends on, including the errors it handles. Each has a provider state ("order 42 exists"), uses loose matchers, and includes only the fields the code reads. The service's real client calls the Pact mock server.
 4. **Provider verification.** When the provider is in your workspace, it adds a verification test there with state handlers and runs it. A failure is reported as a real incompatibility, never loosened away.
 
+## Codemods for repetitive changes
+
+Renaming a function used in 300 files, moving every call site to a new API, swapping a library: an agent editing those one by one is slow, uneven, and leaves a diff nobody wants to review. A **codemod** is a script that makes the change everywhere the same way.
+
+`/codemod <change>` has the agent write one:
+
+1. **The change.** It finds every place it applies, across the [workspace](../workspaces/) or the org if needed, notes the variations (aliased imports, odd argument shapes, generated files), and writes the rule with real before/after examples. For under about five simple places it just edits them.
+2. **The tool.** It picks what fits the language and what the project already uses:
+   - **jscodeshift** or **ts-morph** for JS/TS.
+   - **OpenRewrite** for Java and Kotlin.
+   - **LibCST** for Python.
+   - `gofmt -r` or `go/ast` for Go.
+   - **Comby** for any language.
+   - `sed` only when the pattern can't be ambiguous.
+
+   Installing a tool goes through the usual approval.
+3. **Small, then everywhere.** It writes the script to be idempotent and to skip (and list) what it can't handle cleanly. It tries it on two or three files and reads the diff, then runs it on all of them. Last come the formatter, the build or type checker, and the tests.
+4. **Report.** It tells you the files changed, the rule, the command to run the codemod again on branches that land later, and what was skipped.
+
+With the `codemod-nudge` [experiment](../../reference/configuration/#experiments) on, Rein notices when the agent makes the **same hand edit in four files** within a request. It tells the agent to write a codemod for the rest. That happens once per change.
+
 ## Related
 
 - [Specs](../specs/): requirements and design before the change
