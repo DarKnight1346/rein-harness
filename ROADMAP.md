@@ -41,7 +41,7 @@ agent works by default ships as an experiment (`experiments` in config) until it
 | # | Feature | Spec | Docs | Status |
 |---|---|---|---|---|
 | 11 | Touched-targets verify | Typecheck, lint and test only what the turn changed, extending the end-of-turn code check. |  | todo |
-| 12 | CI log digest | Turn a long CI or build log into the failing step, root cause and file:line. |  | todo |
+| 12 | CI log digest | Turn a long CI or build log into the failing step, root cause and file:line. | reference/configuration/#experiments | done |
 | 13 | Build-time budget | Warn when a change makes the build or tests noticeably slower than the last recorded run. |  | todo |
 | 23 | Official GitHub Action and GitLab component | Published, versioned wrappers for `rein -p` (repo `action.yml`, GitLab CI component). |  | todo |
 | 46 | Affected-target analysis | Use Nx, Turborepo, Bazel or Pants (when present) to know what a change affects. |  | todo |

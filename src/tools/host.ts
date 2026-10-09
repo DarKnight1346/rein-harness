@@ -16,6 +16,7 @@ import {addedText, findSecrets, secretMessage} from './secrets.js';
 import {injectionSigns, injectionWarning, networkCapable, untrustedSource} from './untrusted.js';
 import {addedDeps, afterEdit, checkDeps, commandDeps, depMessage} from './deps.js';
 import {checkPolicy, type Policy} from '../policy.js';
+import {digestLog, formatDigest} from './logDigest.js';
 import {readOnlyCommand} from './plan.js';
 import {steer} from './steer.js';
 import {ipcPath, isWindows} from '../util/platform.js';
@@ -547,6 +548,7 @@ export class ToolHost extends EventEmitter {
         if (loop) result = {...result, text: `${result.text}\n\n${loop}`};
         if (!repeat && tool.name === 'read') this.noteRead(ctx, args, result, origin);
         if (tool.name === 'shell') result = this.quietPassing(args, result);
+        if (tool.name === 'shell' && !result.ok && this.experiment('log-digest')) result = withDigest(result);
         if (result.ok && snapshot) {
           const note = await this.opts.diagnostics!.after(snapshot).catch(() => undefined);
           if (note) result = {...result, text: `${result.text}\n\n${note}`};
@@ -976,4 +978,13 @@ export function isSensitivePath(real: string): boolean {
   const secrets = secretsDir();
   if ([...SENSITIVE, secrets].some((p) => real === p || real.startsWith(p + path.sep))) return true;
   return /(^|\/)\.env(\.[\w.-]+)?$/.test(real) || /\.(pem|key|p12|pfx|keychain)$/i.test(real);
+}
+
+/** log-digest: a failing command's long output gets a digest in front (failing step, first errors, file:line). */
+const DIGEST_MIN_LINES = 80;
+function withDigest(result: ToolResult): ToolResult {
+  const lines = result.text.split('\n').length;
+  if (lines < DIGEST_MIN_LINES) return result;
+  const d = formatDigest(digestLog(result.text), lines);
+  return d ? {...result, text: `${d}\n\n${result.text}`} : result;
 }
