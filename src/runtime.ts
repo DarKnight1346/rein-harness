@@ -4,6 +4,7 @@ import {EventEmitter} from 'node:events';
 import {adapters} from './providers/index.js';
 import {onSideUsage} from './providers/usage.js';
 import {formatUsd, setCacheWriteTtl, setPriceOverrides} from './providers/prices.js';
+import {Telemetry} from './telemetry/otel.js';
 import {catalog, toRef} from './router/catalog.js';
 import {mergeNote, Worktrees} from './agents/worktrees.js';
 import type {Origin} from './tools/fs.js';
@@ -75,6 +76,8 @@ export class Runtime {
   config: Config = DEFAULT_CONFIG;
   /** The workspace (rein.workspace.yaml) the launch folder belongs to, if any. */
   workspace: Workspace | undefined;
+  /** OpenTelemetry export (config `otel`). */
+  readonly telemetry = new Telemetry(() => this.config);
   /** The conversation's cost when the user's latest message arrived (for /cost's "this request"). */
   requestStartUsd = 0;
   /** --scope / /scope: the package of a monorepo this session works in (absolute), if any. */
@@ -833,6 +836,7 @@ Drop superseded reads of the same file, routine listings, and output that no lon
     await usageStore.load();
     const router = makeRouter(() => this.config, (...a) => this.auto(...a));
     const host = this.tools;
+    host.on('activity', (a: ToolActivity) => this.telemetry.activity(a));
     const resumed = typeof opts.resume === 'string' ? await loadTranscript(opts.resume) : undefined;
     this.engine = new Engine(
       {
@@ -843,6 +847,7 @@ Drop superseded reads of the same file, routine listings, and output that no lon
         selectCarry: (input) => this.selectCarry(input),
         pickEffort: (text, levels) => this.pickEffort(text, levels),
         beforePrompt: (text) => this.beforePrompt(text),
+        onTurnEnd: (turn) => this.telemetry.turnEnd({...turn, endedAt: Date.now(), sessionId: this.engine?.transcript.id}),
         onConversationChange: () => {
           this.tools.reads.clear();
           this.tools.deliveredInstructions.clear();

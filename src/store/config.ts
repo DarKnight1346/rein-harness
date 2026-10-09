@@ -1,6 +1,7 @@
 import {readJson, writeJson} from './json.js';
 import {paths} from './paths.js';
 import type {Price} from '../providers/prices.js';
+import type {OtelConfig} from '../telemetry/otel.js';
 
 export type Config = {
   version: 1;
@@ -81,6 +82,8 @@ export type Config = {
   waitForLimits: boolean;
   /** USD per million tokens for models Rein has no price for, or to override one: {"codex:my-model": {input, output, cached}}. */
   prices?: Record<string, Price>;
+  /** OpenTelemetry export of turns, tool calls, tokens and cost (metadata only). Off unless set. */
+  otel?: OtelConfig;
   /** Efficiency experiments to turn on, by name (see the configuration reference): measured before they become defaults. */
   experiments: string[];
   /** Run simple shell reads and searches the agent writes (cat, head, grep -rn, sed -n, ls, find -name) as the built-in tools. */

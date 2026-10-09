@@ -44,6 +44,8 @@ export type EngineDeps = {
   beforePrompt?: (text: string) => Promise<{block?: string; context?: string}>;
   /** Auto effort: the decision model picks a level for this message from `levels`. */
   pickEffort?: (text: string, levels: string[]) => Promise<string | undefined>;
+  /** A turn finished (telemetry): its model, timing and what it spent. */
+  onTurnEnd?: (turn: {ref: ModelRef; startedAt: number; interrupted: boolean; tokens: TokenCount}) => void;
 };
 
 /** Context carried into a fresh native session before compaction kicks in. */
@@ -279,6 +281,8 @@ export class Engine {
 
   async *send(typed: string, attached: ImageInput[] = []): AsyncGenerator<EngineEvent> {
     const t = this.transcript;
+    const startedAt = Date.now();
+    const before = this.sessionTokens;
     const cfg = this.deps.config();
     let text = typed;
     const hook = await this.deps.beforePrompt?.(text).catch(() => undefined);
@@ -453,6 +457,9 @@ export class Engine {
           if (ev.tokens) this.lastUsage = {ref: route.ref, input: ev.tokens.input, output: ev.tokens.output, at: Date.now()};
           if (ev.contextWindow) catalog.learnContextWindow(route.ref, ev.contextWindow);
           await saveTranscript(t).catch(() => {});
+          const now = this.sessionTokens;
+          const usd = now.usd === undefined ? undefined : now.usd - (before.usd ?? 0);
+          this.deps.onTurnEnd?.({ref: route.ref, startedAt, interrupted: ev.interrupted, tokens: {input: now.uncached - before.uncached + now.cached - before.cached, cached: now.cached - before.cached, output: now.output - before.output, ...(usd === undefined ? {} : {usd})}});
           yield {type: 'done', interrupted: ev.interrupted};
           yield* this.maybeAutoCompact(route.ref, ev.tokens?.input);
           return;

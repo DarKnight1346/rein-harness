@@ -46,6 +46,7 @@ export default defineConfig({
           {label: 'Workspaces', slug: 'features/workspaces'},
           {label: 'Model routing', slug: 'features/routing'},
           {label: 'Cost & budgets', slug: 'features/cost'},
+          {label: 'Observability', slug: 'features/observability'},
           {label: 'Goals', slug: 'features/goals'},
           {label: 'Plan mode', slug: 'features/plans'},
           {label: '/btw side questions', slug: 'features/btw'},

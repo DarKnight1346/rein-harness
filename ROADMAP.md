@@ -18,7 +18,7 @@ agent works by default ships as an experiment (`experiments` in config) until it
 | 3 | Monorepo scope flag | `--scope <dir>` (and `/scope`) limits search, list, instructions and code checks to one package. | done |
 | 4 | Dollar cost per turn, session and goal | Price the token totals Rein already counts (built-in price table, overridable in config); show in the sidebar, `/usage`, `rein -p` JSON. | done |
 | 7 | Context budget view | Extend `/context`: what is in context and why (instructions, files read, tool results, summary), with sizes. | done |
-| 72 | OpenTelemetry export | Sessions, turns, tool calls and token/cost metrics as OTel traces and metrics (OTLP endpoint in config, off by default). | todo |
+| 72 | OpenTelemetry export | Sessions, turns, tool calls and token/cost metrics as OTel traces and metrics (OTLP endpoint in config, off by default). | done |
 
 ## Wave 2: Spend control and safety
 

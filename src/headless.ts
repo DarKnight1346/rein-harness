@@ -156,6 +156,7 @@ export async function runHeadless(argv: string[]): Promise<number> {
       ) + '\n',
     );
   } else if (error) process.stderr.write(`rein: ${redact(error)}\n`);
+  await runtime.telemetry.flush();
   runtime.shutdown();
   return error ? 1 : 0;
 }

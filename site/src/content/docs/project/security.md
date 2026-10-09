@@ -74,6 +74,10 @@ These are real, and you should know them:
 - **Transcripts are plaintext.** `~/.rein/sessions/` holds your messages and tool-result excerpts, written `0600` in a `0700` folder.
 - **MCP servers are your code.** A stdio server runs with your environment, and an HTTP one sees what you send it. Adding one always asks, but a malicious server is out of scope.
 
+## Telemetry
+
+Rein sends no telemetry of its own. If you turn on [OpenTelemetry export](../../features/observability/), it goes only to the endpoint you set, and carries metadata (model and tool names, timings, outcomes, token counts, cost), never prompts, code, file names or commands.
+
 ## Remote access
 
 The [remote page](../../features/remote/) (`/remote`) lets a paired device do what the keyboard can: message the agent and answer its approvals.
