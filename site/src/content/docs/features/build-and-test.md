@@ -113,6 +113,27 @@ It recognizes GitHub Actions and GitLab CI sections and Gradle tasks as steps, t
 
 It reads `coverage/lcov.info` (or `lcov.info`), Istanbul's `coverage-final.json`, Cobertura `coverage.xml` (Python's coverage.py, Java, .NET), and Go cover profiles (`coverage.out`, `cover.out`). Report paths can be absolute, relative or Go import paths. Rein doesn't run your tests: run them with coverage first, so the report reflects your changes. Only lines the report instruments count (a blank line or a comment is never "uncovered").
 
+## Do the tests catch bugs?
+
+Agent-written tests can pass without testing much. `/mutate` plants small bugs in the files you changed (a `>` turned into `>=`, a `+` into `-`, a condition forced true) and runs the tests against each. A bug the tests don't notice survived, and that's a gap:
+
+```text title="rein"
+> /mutate
+  ⎿ stryker: 2 mutants survived (the tests still pass with these bugs planted):
+      src/price.ts:12 EqualityOperator → total >= limit
+      src/price.ts:20 ArithmeticOperator → a - b
+```
+
+`/mutate tests` gives the survivors to the agent, to tighten the tests (not the code) until they catch them.
+
+| Language | Tool | What you get |
+|---|---|---|
+| JavaScript, TypeScript | [Stryker](https://stryker-mutator.io), installed in the project | Each surviving or uncovered mutant, from its JSON report. Test files themselves aren't mutated |
+| Python | [mutmut](https://github.com/boxed/mutmut) | mutmut's own summary |
+| Go | [go-mutesting](https://github.com/avito-tech/go-mutesting) | go-mutesting's own summary |
+
+The tool runs on your machine as if you'd started it (not in the agent's sandbox), on the files your working tree changed against `HEAD`. Mutation testing is slow: it runs the tests once per mutant.
+
 ## Flaky tests
 
 A flaky test sends an agent chasing a bug that isn't there. With the `flaky-quarantine` [experiment](../../reference/configuration/#experiments) on, Rein records the outcome of every test the agent runs (vitest, jest, mocha, pytest, `go test`, `cargo test`/`nextest`, and `npm`/`pnpm`/`yarn`/`bun test`) together with a fingerprint of the code it ran on: `HEAD` plus the uncommitted diff.

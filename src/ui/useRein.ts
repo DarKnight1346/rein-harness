@@ -64,6 +64,7 @@ import {clearFlaky, knownFlaky} from '../build/flaky.js';
 import {detectCaches} from '../build/caches.js';
 import {failed as failedChecks, MAX_FIX_ROUNDS, prChecks, summary as ciSummary} from '../build/ci.js';
 import {addedLinesByFile, findReport, parseCoverage, ranges, uncoveredChanges} from '../build/coverage.js';
+import {detectMutator, formatMutation, mutate} from '../build/mutate.js';
 import {activeExperiments} from '../store/config.js';
 import {formatUsd} from '../providers/prices.js';
 
@@ -1218,6 +1219,23 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
           if (!files.length) return log('info', 'No changes (vs HEAD) to analyze.');
           const a = await affected(root, files);
           log(a?.note && !a.targets.length ? 'error' : 'info', a ? `${files.length} changed file${files.length === 1 ? '' : 's'}. ${formatAffected(a)}` : 'No build system answered.');
+        });
+        break;
+      }
+      case 'mutate': {
+        const root = process.cwd();
+        const wantTests = parsed.args.trim() === 'tests';
+        void changedFiles(root).then(async (files) => {
+          if (!files.length) return log('info', 'No changes (vs HEAD) to mutation-test.');
+          const m = await detectMutator(root, files);
+          if (!m) return log('info', 'No mutation tool for these files: install Stryker (npm i -D @stryker-mutator/core), mutmut (Python) or go-mutesting (Go).');
+          log('info', `Running ${m.tool} on ${files.length} changed file${files.length === 1 ? '' : 's'} (this can take a while)…`);
+          const r = await mutate(root, files, m);
+          const text = formatMutation(r);
+          if (!wantTests || !(r.survivors?.length || r.summary)) return log(r.error ? 'error' : 'info', text);
+          const task = `${text}\n\nStrengthen the tests so they catch these: each surviving mutant is a bug the tests would miss. Add or tighten assertions (don't change the code under test to suit them), then run the tests.`;
+          if (chat.busy) setQueued((q) => [...q, task]);
+          else void chat.send(task).then(bump);
         });
         break;
       }
