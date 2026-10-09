@@ -217,6 +217,7 @@ export class Runtime {
     scope: () => this.scope,
     secretScan: () => this.config.secretScan ?? 'off',
     depCheck: () => this.config.depCheck ?? 'off',
+    buildTimes: () => this.config.buildTimeWarnings !== false,
     policy: () => loadPolicy(process.cwd(), reinConfigDir()),
     injectionScan: () => this.config.injectionScan === true,
     exfilGuard: () => this.config.exfilGuard === true,

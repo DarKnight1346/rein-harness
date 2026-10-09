@@ -52,6 +52,7 @@ export const CONFIG_KEYS: KeyInfo[] = [
   k('injectionScan', "Flag instructions planted in web pages, search results and MCP results, and tell the agent they're data", bool),
   k('exfilGuard', 'Once outside content and private data have both been in a conversation, network calls (web_fetch, MCP, curl, git push…) need your yes', bool),
   k('depCheck', 'Vet packages a change adds (does it exist, typosquat, license, known vulnerabilities): warn, block or off. Looks them up on the registries and OSV', oneOf('off', 'warn', 'block')),
+  k('buildTimeWarnings', 'Tell you when a build or test command takes much longer than its recent runs (1.5× and 30 s more)', bool),
   k('steerShell', 'Run simple shell reads and searches (cat, grep -rn, sed -n…) as the built-in tools', bool),
   k('goalMaxRounds', 'Most automatic continuations per goal (0 = no limit)', num(0)),
   k('subagentLimit', 'Most subagents running at once', num(1)),

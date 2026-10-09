@@ -65,6 +65,18 @@ A flaky test sends an agent chasing a bug that isn't there. With the `flaky-quar
 
 `/flaky` lists the known flaky tests in this project; `/flaky clear` forgets them. They're kept per project in `~/.rein/state/flaky/`.
 
+## Slower builds
+
+Rein times every successful build or test command the agent runs (`tsc`, `make`, Gradle, Maven, `bazel build`/`test`, `cargo build`, `go build`/`test`, webpack, Vite, Next, Nx, Turborepo, `npm run build`, test runners…) and keeps the last 10 runs of each, per project. When a run takes **1.5× its usual time and at least 30 seconds more** (the usual being the median of the last 5, once there are 3), you see a warning under that tool call:
+
+```text
+⏺ Shell(npm test)
+  ⎿ 1,204 passed
+  ⚠ This took 2.5 min, 2.5× its usual 1.0 min (median of the last 4 runs). Something in this change may have slowed the build or tests.
+```
+
+The agent isn't told; it's for you to decide whether to look. It's on by default; turn it off with `/settings buildTimeWarnings false`. Times are kept in `~/.rein/state/build-times/`.
+
 ## Related
 
 - [Code intelligence](../code-intelligence/): the end-of-turn code check and Semgrep

@@ -42,7 +42,7 @@ agent works by default ships as an experiment (`experiments` in config) until it
 |---|---|---|---|---|
 | 11 | Touched-targets verify | Typecheck, lint and test only what the turn changed, extending the end-of-turn code check. | features/build-and-test/#testing-what-a-request-changed | done |
 | 12 | CI log digest | Turn a long CI or build log into the failing step, root cause and file:line. | features/build-and-test/#digests-of-failing-logs | done |
-| 13 | Build-time budget | Warn when a change makes the build or tests noticeably slower than the last recorded run. |  | todo |
+| 13 | Build-time budget | Warn when a change makes the build or tests noticeably slower than the last recorded run. | features/build-and-test/#slower-builds | done |
 | 23 | Official GitHub Action and GitLab component | Published, versioned wrappers for `rein -p` (repo `action.yml`, GitLab CI component). |  | todo |
 | 46 | Affected-target analysis | Use Nx, Turborepo, Bazel or Pants (when present) to know what a change affects. | features/build-and-test/#what-a-change-affects | done |
 | 47 | Affected-test selection | Run only the tests the dependency graph says can break. Builds on #46. | features/build-and-test/#what-a-change-affects | done |

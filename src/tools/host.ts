@@ -18,6 +18,7 @@ import {addedDeps, afterEdit, checkDeps, commandDeps, depMessage} from './deps.j
 import {checkPolicy, type Policy} from '../policy.js';
 import {digestLog, formatDigest} from './logDigest.js';
 import {fingerprint, flakyNote, isTestCommand, knownFlaky, parseOutcomes, recordRun} from '../build/flaky.js';
+import {isBuildCommand, recordBuildTime} from '../build/times.js';
 import {readOnlyCommand} from './plan.js';
 import {steer} from './steer.js';
 import {ipcPath, isWindows} from '../util/platform.js';
@@ -81,6 +82,8 @@ export type ToolHostOptions = {
   injectionScan?: () => boolean;
   /** exfilGuard: network calls need a yes once untrusted content and private data are both in the conversation. */
   exfilGuard?: () => boolean;
+  /** buildTimeWarnings: warn you when a build or test command is much slower than usual. */
+  buildTimes?: () => boolean;
   /** Policy as code (.rein/policy.yaml, ~/.rein/policy.yaml): deny or ask rules over tools, paths and commands. */
   policy?: () => Policy;
   /** depCheck: vet packages a change adds (exists, typosquat, license, known vulnerabilities). */
@@ -507,6 +510,7 @@ export class ToolHost extends EventEmitter {
         const changes = this.opts.diagnostics && ['write', 'edit', 'delete'].includes(tool.name) ? this.filesOf(ctx, tool, args) : [];
         const snapshot = changes.length ? await this.opts.diagnostics!.before(changes, ctx.root).catch(() => undefined) : undefined;
         const repeat = tool.name === 'read' ? this.unchangedRead(ctx, args, origin) : undefined;
+        const started = Date.now();
         const watched = this.experiment('watchdog') && !origin ? this.filesOf(ctx, tool, args) : undefined;
         const stop = watched && this.watchdog.before(tool.name, args, watched);
         if (stop) throw new ToolError(stop);
@@ -546,6 +550,12 @@ export class ToolHost extends EventEmitter {
           else if (findSecrets(result.text).length) this.privateSeen = 'a credential in a tool result';
         }
         const loop = watched && this.watchdog.after(tool.name, args, result.ok, watched);
+        // buildTimeWarnings: a build or test much slower than usual is worth a look (for you, not the agent).
+        const command = tool.name === 'shell' && !(args as {background?: boolean})?.background ? String((args as {command?: string})?.command ?? '') : '';
+        if (result.ok && command && this.opts.buildTimes?.() !== false && isBuildCommand(command)) {
+          const slow = recordBuildTime(ctx.root, command, Date.now() - started);
+          if (slow) warning = slow;
+        }
         if (loop) result = {...result, text: `${result.text}\n\n${loop}`};
         if (!repeat && tool.name === 'read') this.noteRead(ctx, args, result, origin);
         if (tool.name === 'shell') result = this.quietPassing(args, result);

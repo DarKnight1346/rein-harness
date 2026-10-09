@@ -101,6 +101,8 @@ export type Config = {
   mcpPinning: boolean;
   /** Vet packages a change adds (exists, typosquat, license, known vulnerabilities via OSV): warn, block or off. */
   depCheck: 'off' | 'warn' | 'block';
+  /** Tell you when a build or test command takes much longer than its recent runs. */
+  buildTimeWarnings: boolean;
   /** Semgrep rules (--config): auto, a registry pack like p/owasp-top-ten, or a path. */
   sastConfig: string;
   /** OpenTelemetry export of turns, tool calls, tokens and cost (metadata only). Off unless set. */
@@ -173,6 +175,7 @@ export const DEFAULT_CONFIG: Config = {
   exfilGuard: false,
   mcpPinning: false,
   depCheck: 'off',
+  buildTimeWarnings: true,
   sastConfig: 'auto',
   steerShell: true,
   mcpSampling: 'ask',
