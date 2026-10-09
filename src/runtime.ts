@@ -66,6 +66,8 @@ import {mcpProxyCommand, ToolHost, type ApprovalDecision, type ApprovalRequest, 
 /** Process-wide state shared by the UI and commands. */
 /** keep-going: times per request the agent is sent back after stopping partway. */
 const KEEP_GOING_MAX = 3;
+/** verify-requirements: checks per request (the second only when the first one changed the code). */
+const VERIFY_MAX = 2;
 
 export class Runtime {
   config: Config = DEFAULT_CONFIG;
@@ -426,7 +428,8 @@ Drop superseded reads of the same file, routine listings, and output that no lon
     // A message from the user (not Rein's own follow-up) ends an escalation: routing is normal again.
     if (!/^<(code_check|stop_hook)>/.test(text)) {
       this.escalation = undefined;
-      this.verified = false;
+      this.verifyPasses = 0;
+      this.verifiedAt = undefined;
       this.reviewed = false;
       this.keptGoing = 0;
     }
@@ -470,13 +473,23 @@ Drop superseded reads of the same file, routine listings, and output that no lon
     }
     // verify-requirements: once per request, before the agent stops after changing files, it runs its
     // change against every requirement in the request (hard tasks fail on the edge case it never tried).
-    if (!active && (this.config.experiments ?? []).includes('verify-requirements') && !this.verified && this.engine && this.checkpoints.changedSince(this.currentTurn()).length) {
-      this.verified = true;
-      return {
-        kind: 'hook',
-        reason:
-          "Before you finish, check your change against the user's request line by line. For every concrete requirement (each behaviour, error case and its message, edge case, name, value and attribute), run it: one quick script or test that exercises several requirements at once is fine, rereading the code is not. Fix whatever fails or is missing, then run the project's tests. If everything already passes, reply with a short confirmation and stop: don't redo work.",
-      };
+    // Once more if that pass changed the code: its fixes were never run against the requirements.
+    if ((this.config.experiments ?? []).includes('verify-requirements') && this.engine) {
+      const again = active && this.verifiedAt !== undefined && this.verifyPasses < VERIFY_MAX;
+      if ((!active && !this.verifyPasses) || again) {
+        const since = again ? this.verifiedAt! : this.currentTurn();
+        if (await this.changedSince(since)) {
+          this.verifyPasses++;
+          this.verifiedAt = this.engine.transcript.messages.length; // the index the hook's message gets
+          return {
+            kind: 'hook',
+            reason: again
+              ? "You changed the code while checking it. Run your requirement checks again against the final code (the same quick scripts or tests), fix whatever fails, then run the project's tests. If everything passes, reply with a short confirmation and stop."
+              : "Before you finish, check your change against the user's request line by line. For every concrete requirement (each behaviour, error case and its message, edge case, name, value and attribute), run it: one quick script or test that exercises several requirements at once is fine, rereading the code is not. Fix whatever fails or is missing, then run the project's tests. If everything already passes, reply with a short confirmation and stop: don't redo work.",
+          };
+        }
+        this.verifiedAt = undefined;
+      }
     }
     // escalate: the check already reported these and the agent's follow-up turn left them: a stronger
     // model takes the task over (for the rest of it; the next message from the user routes normally).
@@ -529,8 +542,15 @@ Drop superseded reads of the same file, routine listings, and output that no lon
     return a?.type === 'noul' ? a.noul >= 0.5 : false;
   }
 
-  /** verify-requirements: the check already ran for the current request. */
-  private verified = false;
+  /** verify-requirements: checks sent for the current request, and the message index of the last one. */
+  private verifyPasses = 0;
+  private verifiedAt: number | undefined;
+
+  /** Did files change since the message at `turn`: Rein's own edits, or anything else (shell) per the tree snapshot. */
+  private async changedSince(turn: number): Promise<boolean> {
+    if (this.checkpoints.changedSince(turn).length) return true;
+    return (await this.snapshots.changedSince(turn).catch(() => [])).length > 0;
+  }
   /** cross-review: the review already ran for the current request. */
   private reviewed = false;
 
