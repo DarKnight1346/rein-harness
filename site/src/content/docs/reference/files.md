@@ -50,6 +50,7 @@ An existing `~/.rein` keeps being used as it is, and so does `REIN_HOME`. To swi
 | `sessions/<id>.meta.json` | Small index entry per conversation, used for listing and `/resume` |
 | `scratch/<id>/` | The session's scratchpad. The agent can write here without approval. Pasted and dropped images are copied to `scratch/<id>/images/` |
 | `checkpoints/<id>/` | [`/rewind`](../../features/rewind/) data: `tree.git` (a private git store of whole-project snapshots, never your project's `.git`), `trees.json`, and per-file checkpoints (`index.jsonl` + content-addressed `blobs/`, ≤ 10 MB per file); in a workspace, `repos/<repo>-<hash>/` holds the same snapshot store for each other repo |
+| `checkpoints/spec-trace/` | The tree recorded when a spec task starts, so `spec_task done` can trace the lines it changed (a private store like `/rewind`'s) |
 | `index/<hash>.json` | [Semantic indexes](../../features/large-codebases/#search-by-meaning), one per project: each file's change key and its chunks' vectors. `/index` rebuilds it |
 | `skills/` | Global skills, one folder each with a `SKILL.md` |
 | `mcp.json` | User-scope MCP servers (`mcp_add` with `scope: "user"`) |
@@ -81,6 +82,7 @@ When Rein imports your existing `claude` and `codex` logins on first run, it reg
 | `.rein/MEMORY.md` | [Project memory](../../features/memory/): facts the agent saved with `remember`, loaded into every session here. Edit it freely | Usually |
 | `.rein/MEMORY.md` in a workspace folder | [Workspace memory](../../features/workspaces/#workspace-memory): facts shared by every repo of the workspace (`remember` with `scope: "workspace"`) | Usually |
 | `.rein/plans/` | Saved plans, `YYYY-MM-DD-<slug>.md`, with `## Milestones` checkboxes | Yes |
+| `.rein/specs/<name>/` | [Specs](../../features/specs/): `requirements.md`, `design.md`, `tasks.md` (an approved stage starts with `<!-- approved YYYY-MM-DD -->`), and `trace.json` / `trace.md` linking requirements to code | Yes |
 | `.rein/skills/` | Project skills | Yes |
 | `.mcp.json` *(project root)* | Project MCP servers (`mcp_add` default scope). Each one needs your one-time approval before it runs | Yes |
 

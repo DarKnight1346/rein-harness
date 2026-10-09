@@ -264,6 +264,29 @@ The task list shown in the sidebar's TASKS section. Each call replaces the whole
 | `todos[].status` **(required)** | `pending` \| `in_progress` \| `completed` | Keep exactly one `in_progress` |
 | `todos[].activeForm` | string | Shown while in progress: "Running the tests" |
 
+### `present_spec`
+
+Label `Spec`. Approval: none. **Main agent only.** Errors unless [spec mode](../../features/specs/) is on (`/spec`).
+
+Saves one stage of the spec to `.rein/specs/<name>/<stage>.md` and asks you to approve it (*Approve* or *Revise*). Stages go in order, each needing the one before approved. Requirements must be numbered `R1`, `R2`…; tasks must parse as a checklist, with no cycles, no dependencies on missing tasks, and no requirements that don't exist. Approving the tasks ends spec mode.
+
+| Parameter | Type | Notes |
+| --- | --- | --- |
+| `stage` **(required)** | `requirements` \| `design` \| `tasks` | Which stage this is |
+| `content` **(required)** | string | The stage, in markdown |
+
+### `spec_task`
+
+Label `SpecTask`. Approval: none. Errors until the spec's tasks are approved.
+
+`start` records the tree before a task (refused while a task it comes after isn't done); `done` ticks its box in `tasks.md`, records the lines changed since `start` against the task's requirements (`trace.md`), and says which tasks are ready next. Subagents call it too.
+
+| Parameter | Type | Notes |
+| --- | --- | --- |
+| `spec` **(required)** | string | The spec's folder name in `.rein/specs/` |
+| `task` **(required)** | string | The task id, e.g. `T3` |
+| `action` **(required)** | `start` \| `done` | |
+
 ### `present_plan`
 
 Label `Plan`. Approval: none. **Main agent only.** Errors unless [plan mode](../../features/plans/) is on.

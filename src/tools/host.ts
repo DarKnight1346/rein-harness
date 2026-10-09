@@ -422,7 +422,7 @@ export class ToolHost extends EventEmitter {
         }
       }
       if (planAsk && this.modeFor(origin) === 'bypass')
-        throw new ToolError('plan mode is on — this command may change things, so it waits for the plan\'s approval. Use plain read-only commands (one per call, no loops or substitutions) to explore, then call present_plan.');
+        throw new ToolError('plan mode is on — this command may change things, so it waits for the plan\'s approval. Use plain read-only commands (one per call, no loops or substitutions) to explore, then call present_plan (present_spec in spec mode).');
       if (pre?.allow && !pre.ask) approvedBy = 'hook';
       const suggestion = suggestRule(subject, (p) => this.ruleRel(p));
       const remember = (decision: ApprovalDecision) => {
@@ -490,7 +490,7 @@ export class ToolHost extends EventEmitter {
         }
         if (!approvedBy) {
           const decision = await this.opts.approve(req);
-          if (decision === 'deny' && planAsk) throw new ToolError('plan mode is on and the user declined this command (it may change things). Stick to read-only exploration, then call present_plan.');
+          if (decision === 'deny' && planAsk) throw new ToolError('plan mode is on and the user declined this command (it may change things). Stick to read-only exploration, then call present_plan (present_spec in spec mode).');
           if (decision === 'deny' && tool.askEvenInBypass) throw new ToolError("not approved (the user declined, or nobody is here to approve it, as in a headless run). Don't retry: tell the user what it would do so they can run it themselves.");
           if (decision === 'deny') throw new ToolError('the user denied this action; ask them how to proceed instead of retrying');
           if (decision === 'session' && !planAsk) this.sessionAllowed = true;
@@ -714,7 +714,7 @@ export class ToolHost extends EventEmitter {
   /** Plan mode: throws for file changes; returns true when a shell command needs the user's OK. */
   private checkPlanMode(ctx: ToolContext, tool: ToolDef, args: any, readOnly: boolean): boolean {
     if (tool.name === 'shell') return !readOnly && !readOnlyCommand(String(args?.command ?? ''));
-    if (tool.mutating && !this.inScratch(ctx, tool, args)) throw new ToolError('plan mode is on — nothing can be changed until the user approves your plan. Keep exploring read-only, then call present_plan.');
+    if (tool.mutating && !this.inScratch(ctx, tool, args)) throw new ToolError('plan mode is on — nothing can be changed until the user approves your plan. Keep exploring read-only, then call present_plan (present_spec in spec mode).');
     return false;
   }
 

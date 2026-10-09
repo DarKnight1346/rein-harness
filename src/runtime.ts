@@ -47,6 +47,8 @@ import {advisorRef, advisorTool} from './agents/advisor.js';
 import {GoalManager} from './goals/manager.js';
 import {Checkpoints} from './session/checkpoints.js';
 import {WorkspaceSnapshots} from './session/snapshots.js';
+import {SPEC_MODE_CONTEXT, specTools} from './specs/tools.js';
+import {specSection} from './specs/pr.js';
 import {McpManager} from './mcp/manager.js';
 import {mcpTools} from './mcp/tools.js';
 import {skillTool} from './skills/tool.js';
@@ -157,7 +159,12 @@ export class Runtime {
     if (!ref) throw new Error('no model available for the digest');
     const system = 'You write the description a human reviewer reads before a code review. Plain language, short. No marketing, no praise.';
     const prompt = `The change (git diff against its base):\n${diff}\n\nTest runs in the conversation that made it:\n${tests.join('\n\n') || '(none)'}\n\nWrite: 1) What changed and why, in 2-4 sentences. 2) Where to look closely: the risky parts, with file names. 3) Test evidence: what was run and the result, or "no tests were run". Use these three headings: ## Summary, ## Look closely at, ## Tests.`;
-    return (await completeWith(ref, this.config, system, prompt, {timeoutMs: 180_000})).trim();
+    const digest = (await completeWith(ref, this.config, system, prompt, {timeoutMs: 180_000})).trim();
+    // Specs and plans committed with the change: the reviewer reads them next to the code.
+    const docs = (await git('diff', '--name-only', size ? (await git('merge-base', 'HEAD', size.base)).trim() : 'HEAD'))
+      .split('\n')
+      .filter((f) => /^\.rein\/(specs|plans)\//.test(f));
+    return docs.length ? `${digest}\n\n${specSection(docs)}` : digest;
   }
 
   /** /cost's budget lines: each cap in force and how much of it is used. */
@@ -224,6 +231,8 @@ export class Runtime {
 
   /** Plan mode (/plan, Shift+Tab, --permission-mode plan): read-only until a plan is approved. */
   planMode = false;
+  /** Spec mode (/spec): the spec being written; plan mode's blocking applies until its tasks are approved. */
+  specMode: string | undefined;
   /** Set by the UI: shows a presented plan and resolves with the user's decision. */
   planPresenter: ((plan: PresentedPlan) => Promise<PlanDecision | undefined>) | undefined;
   /** Set by the UI: shows the agent's questions and resolves with the answers (undefined = dismissed). */
@@ -590,7 +599,7 @@ Drop superseded reads of the same file, routine listings, and output that no lon
       ? `<ide_selection file="${path.relative(root, sel.filePath) || sel.filePath}" lines="${sel.startLine}-${sel.endLine}">\n${sel.text.slice(0, 20_000)}\n</ide_selection>\nThe user has this selected in their editor; it may or may not be what the message is about.`
       : undefined;
     const shells = this.userShells.length ? `${this.userShells.join('\n')}\nThe user ran ${this.userShells.length > 1 ? 'these commands' : 'this command'} themselves (with !) before this message.` : undefined;
-    const context = [this.sessionContext, out.context, shells, selection, this.planMode ? PLAN_MODE_CONTEXT : undefined].filter(Boolean).join('\n');
+    const context = [this.sessionContext, out.context, shells, selection, this.planMode ? (this.specMode ? SPEC_MODE_CONTEXT(this.specMode) : PLAN_MODE_CONTEXT) : undefined].filter(Boolean).join('\n');
     if (!out.block) this.userShells = [];
     if (!out.block) this.sessionContext = undefined;
     return {block: out.block, context: context || undefined};
@@ -876,6 +885,15 @@ Drop superseded reads of the same file, routine listings, and output that no lon
           if (decision === 'goal') {
             this.goals.set(`Carry out the plan "${title}"`, file);
           }
+        },
+      }),
+      ...specTools({
+        active: () => (this.planMode ? this.specMode : undefined),
+        root: () => process.cwd(),
+        ask: () => this.askPresenter,
+        approved: () => {
+          this.planMode = false;
+          this.specMode = undefined;
         },
       }),
       decideTool(() => this.config),

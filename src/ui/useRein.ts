@@ -57,6 +57,9 @@ import nodePath from 'node:path';
 import {cloneMissing, findWorkspace} from '../workspace/index.js';
 import {CONFIG_KEYS, defaultValue, formatValue, keyInfo, parseValue} from '../store/configKeys.js';
 import {TAB_TITLES} from './ConfigureScreen.js';
+import {describeSpec, listSpecs, nextStage, readSpec, specSlug} from '../specs/store.js';
+import {nextSteps, specInstructions} from '../specs/tools.js';
+import {traceMarkdown} from '../specs/trace.js';
 import {checkoutState, describeCheckout, sparseAdd} from '../workspace/sparse.js';
 import {buildIndex, DEFAULT_MODEL as EMBED_MODEL, formatSemanticHits, loadIndex, semanticSearch} from '../context/semantic.js';
 import {estimateGoalCost} from '../goals/estimate.js';
@@ -420,6 +423,7 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
 
   const togglePlanMode = () => {
     runtime.planMode = !runtime.planMode;
+    runtime.specMode = undefined;
     log('info', runtime.planMode ? 'Plan mode on — the agent explores read-only and presents a plan for your approval before changing anything. shift+tab to turn it off.' : 'Plan mode off.');
     bump();
   };
@@ -1250,6 +1254,44 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
           if (!files.length) return log('info', 'No changes (vs HEAD). /owners <path> looks up a file or folder.');
           log('info', `Owners of ${arg || `your ${files.length} changed file${files.length === 1 ? '' : 's'}`}:\n${formatOwners(await ownersOf(root, files))}`);
         });
+        break;
+      }
+      case 'spec': {
+        const root = process.cwd();
+        const arg = parsed.args.trim();
+        const [specSub, specName = ''] = arg.split(/\s+/);
+        const send = (msg: string) => (chat.busy ? setQueued((q) => [...q, msg]) : void chat.send(msg).then(bump));
+        if (!arg) {
+          const specs = listSpecs(root);
+          log('info', specs.length ? ['Specs in .rein/specs/:', ...specs.map((s) => `  ${describeSpec(s).replace('\n', '\n  ')}`), '/spec resume <name> picks one up.'].join('\n') : 'No specs yet. /spec <what to build> writes one: requirements, design, then tasks, each approved by you.');
+          break;
+        }
+        if (specSub === 'trace') {
+          if (!readSpec(root, specName)) log('error', `No spec "${specName}" in .rein/specs/.`);
+          else log('info', traceMarkdown(root, specName));
+          break;
+        }
+        if (specSub === 'resume') {
+          const s = readSpec(root, specName);
+          if (!s) {
+            log('error', `No spec "${specName}" in .rein/specs/.`);
+            break;
+          }
+          const stage = nextStage(root, specName);
+          if (stage) {
+            runtime.planMode = true;
+            runtime.specMode = specName;
+            log('info', `Spec mode on for ${specName}: next is the ${stage}. Nothing changes until the tasks are approved (shift+tab turns it off).`);
+            send(`Continue spec "${specName}" (.rein/specs/${specName}/): read what's there, then write the ${stage} and present it with present_spec.`);
+          } else send(`Carry out spec "${specName}" (.rein/specs/${specName}/tasks.md).\n${nextSteps(specName, s.tasks)}`);
+          break;
+        }
+        let name = specSlug(arg.split(/\s+/).slice(0, 6).join(' '));
+        for (let n = 2; readSpec(root, name); n++) name = `${specSlug(arg.split(/\s+/).slice(0, 6).join(' '))}-${n}`;
+        runtime.planMode = true;
+        runtime.specMode = name;
+        log('info', `Spec mode on: ${name} (.rein/specs/${name}/). You'll approve the requirements, the design and the tasks in turn; nothing changes until then (shift+tab turns it off).`);
+        send(specInstructions(name, attachments.current.expand(arg).text));
         break;
       }
       case 'index': {
