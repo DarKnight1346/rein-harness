@@ -22,8 +22,11 @@ and a compaction model. No OAuth tokens are extracted: all traffic goes through 
   work, goal estimates, OpenTelemetry export.
 - **Safety guards:** secret scanning, Semgrep on changes, planted-instruction and exfiltration guards,
   pinned MCP servers, a dependency check and policy as code (`.rein/policy.yaml`).
-- **Coming next:** CI and PR automation, specs, contracts and migrations, and system-level
-  understanding across repos.
+- **Build, test and CI:** affected targets from Nx/Turborepo/Bazel/Pants (`/affected`), a CI watcher
+  that fixes failing checks (`/ci watch`), coverage and mutation testing of your changes, flaky-test
+  quarantine, a [GitHub Action](action.yml) and a GitLab CI component.
+- **Coming next:** PR review flow, specs, contracts and migrations, and system-level understanding
+  across repos.
 
 ## Install
 
