@@ -85,6 +85,8 @@ export type Config = {
   prices?: Record<string, Price>;
   /** Spending caps in USD at API list prices: {requestUsd, goalUsd, conversationUsd}. A repo's .rein/settings.json can set lower ones. */
   budget?: Budget;
+  /** /goal asks before starting when goals here typically cost more than this (USD, API prices). 0 = never asks. */
+  goalConfirmUsd: number;
   /** OpenTelemetry export of turns, tool calls, tokens and cost (metadata only). Off unless set. */
   otel?: OtelConfig;
   /** Efficiency experiments to turn on, by name (see the configuration reference): measured before they become defaults. */
@@ -147,6 +149,7 @@ export const DEFAULT_CONFIG: Config = {
   collapsePastes: true,
   attribution: true,
   waitForLimits: true,
+  goalConfirmUsd: 0,
   steerShell: true,
   mcpSampling: 'ask',
   inlineImages: 'auto',

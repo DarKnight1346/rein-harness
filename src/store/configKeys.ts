@@ -54,6 +54,7 @@ export const CONFIG_KEYS: KeyInfo[] = [
   k('experiments', 'Efficiency experiments to turn on, or -name to turn a default one off', list),
   k('prices', 'USD per million tokens for models without a built-in price: {"codex:my-model": {"input": 1.5, "cached": 0.15, "output": 6}}', json),
   k('budget', 'Spending caps in USD at API prices: {"requestUsd": 2, "goalUsd": 20, "conversationUsd": 50}', json),
+  k('goalConfirmUsd', '/goal asks before starting when goals here typically cost more than this many USD (0 = never asks)', num(0)),
   k('otel', 'OpenTelemetry export: {"endpoint": "http://localhost:4318", "headers": {}, "serviceName": "rein"}', json),
   k('lsp', 'Code intelligence through language servers: auto or off', oneOf('auto', 'off')),
   k('lspIdleMinutes', 'Stop a language server after this many idle minutes', num(1)),

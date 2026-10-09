@@ -56,6 +56,11 @@ import {accountName, hidingIdentity, redact} from './privacy.js';
 import nodePath from 'node:path';
 import {cloneMissing, findWorkspace} from '../workspace/index.js';
 import {CONFIG_KEYS, defaultValue, formatValue, keyInfo, parseValue} from '../store/configKeys.js';
+import {estimateGoalCost} from '../goals/estimate.js';
+import {formatUsd} from '../providers/prices.js';
+
+/** /goal waiting for its confirmation (its estimate was above goalConfirmUsd). */
+let pendingGoal: string | undefined;
 
 export const VERSION = reinVersion();
 
@@ -1277,11 +1282,22 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
           bump();
           break;
         }
-        const goal = runtime.goals.set(arg);
-        log('info', `◎ Goal set: ${arg}\nThe agent keeps working until the decision model verifies it's done (evidence required). /goal pause · resume · clear`);
-        const kick = runtime.goals.kickoff(goal);
-        if (chat.busy) setQueued((q) => [...q, kick]);
-        else void chat.send(kick).then(bump);
+        // What goals here have cost before, and a confirmation when that's above goalConfirmUsd.
+        void estimateGoalCost().then((est) => {
+          const typical = est && `Goals here have cost ${formatUsd(est.median)} (median of the last ${est.n}; ${formatUsd(est.low)}–${formatUsd(est.high)}, API prices).`;
+          const cap = runtime.config.goalConfirmUsd;
+          if (est && cap > 0 && est.median > cap && pendingGoal !== arg) {
+            pendingGoal = arg;
+            log('info', `${typical} That's above goalConfirmUsd (${formatUsd(cap)}). Send the same /goal again to start it.`);
+            return;
+          }
+          pendingGoal = undefined;
+          const goal = runtime.goals.set(arg);
+          log('info', `◎ Goal set: ${arg}\nThe agent keeps working until the decision model verifies it's done (evidence required). /goal pause · resume · clear${typical ? `\n${typical}` : ''}`);
+          const kick = runtime.goals.kickoff(goal);
+          if (chat.busy) setQueued((q) => [...q, kick]);
+          else void chat.send(kick).then(bump);
+        });
         break;
       }
       case 'btw': {

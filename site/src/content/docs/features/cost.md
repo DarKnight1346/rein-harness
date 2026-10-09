@@ -47,6 +47,21 @@ On a Claude or ChatGPT subscription nothing is billed per token. The figure is w
 
 Conversations from before this feature have no saved cost: their total counts from the first request priced after you resume them.
 
+## Goal estimates
+
+Rein records what each [goal](../goals/) cost when it's done. Once a project has at least 3 finished goals in its recent conversations (the last 50), `/goal` shows what goals there have cost:
+
+```text title="rein"
+> /goal migrate the billing service to the new queue
+  ⎿ ◎ Goal set: migrate the billing service to the new queue
+    …
+    Goals here have cost $3.40 (median of the last 7; $0.90–$12.10, API prices).
+```
+
+With `goalConfirmUsd` set (USD, `0` = off, the default), a goal whose typical cost is above it isn't started right away: Rein shows the estimate and asks you to send the same `/goal` again to start it. Set it with `/settings goalConfirmUsd 5`.
+
+It's a median of past goals in the same project, not a prediction for this one: a bigger goal can cost more.
+
 ## Budgets
 
 Set spending caps, in USD at the same API list prices, and Rein stops the agent when one is reached:
