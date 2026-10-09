@@ -1,4 +1,4 @@
-import {appendFileSync, closeSync, mkdirSync, openSync, readdirSync, readFileSync, readSync, rmSync, statSync, unwatchFile, watchFile, writeFileSync} from 'node:fs';
+import {appendFileSync, closeSync, fstatSync, mkdirSync, openSync, readdirSync, readFileSync, readSync, rmSync, writeFileSync} from 'node:fs';
 import path from 'node:path';
 import {reinHome} from '../store/paths.js';
 import {alive} from './index.js';
@@ -61,30 +61,34 @@ export function watchInbox(onMessage: (text: string) => void, pid = process.pid,
   let offset = 0;
   let partial = '';
   const read = () => {
-    let size = 0;
+    let fd: number | undefined;
     try {
-      size = statSync(f).size;
+      // One handle for the size and the read, so they describe the same file.
+      fd = openSync(f, 'r');
+      const size = fstatSync(fd).size;
+      if (size <= offset) return;
+      const buf = Buffer.alloc(size - offset);
+      readSync(fd, buf, 0, buf.length, offset);
+      offset = size;
+      const lines = (partial + buf.toString()).split('\n');
+      partial = lines.pop() ?? '';
+      for (const l of lines) {
+        try {
+          const m = JSON.parse(l) as {text?: string};
+          if (m.text?.trim()) onMessage(m.text);
+        } catch {}
+      }
     } catch {
-      return;
-    }
-    if (size <= offset) return;
-    const fd = openSync(f, 'r');
-    const buf = Buffer.alloc(size - offset);
-    readSync(fd, buf, 0, buf.length, offset);
-    closeSync(fd);
-    offset = size;
-    const lines = (partial + buf.toString()).split('\n');
-    partial = lines.pop() ?? '';
-    for (const l of lines) {
-      try {
-        const m = JSON.parse(l) as {text?: string};
-        if (m.text?.trim()) onMessage(m.text);
-      } catch {}
+      // gone or unreadable for now: the next tick tries again
+    } finally {
+      if (fd !== undefined) closeSync(fd);
     }
   };
-  // Polling, not fs.watch: it behaves the same on every platform and filesystem.
-  watchFile(f, {interval: intervalMs}, read);
-  return () => unwatchFile(f, read);
+  // A timer, not fs.watch / watchFile: the same on every platform and filesystem, and it can't miss
+  // a message written before the first look.
+  const timer = setInterval(read, intervalMs);
+  timer.unref();
+  return () => clearInterval(timer);
 }
 
 const ago = (t: number) => {
