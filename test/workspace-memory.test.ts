@@ -32,7 +32,7 @@ describe('workspace memory', () => {
     const {api} = workspace();
     process.chdir(api);
     await memoryTools(() => api)[0]!.run({} as any, {fact: 'all repos use pnpm', scope: 'workspace'});
-    expect(await systemPrompt({tools: true})).toMatch(/# Workspace memory \(.*\.rein\/MEMORY\.md\)\nShared by every repo in this workspace.*\n- all repos use pnpm/);
+    expect(await systemPrompt({tools: true})).toMatch(/# Workspace memory \(.*\.rein[\\/]MEMORY\.md\)\nShared by every repo in this workspace.*\n- all repos use pnpm/);
     const lone = realpathSync(mkdtempSync(path.join(os.tmpdir(), 'rein-lone-')));
     await expect(memoryTools(() => lone)[0]!.run({} as any, {fact: 'x y z', scope: 'workspace'})).rejects.toThrow(/isn't in a workspace/);
   });
