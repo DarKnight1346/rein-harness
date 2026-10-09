@@ -18,6 +18,8 @@ export type Shell = {
   lines: string[];
   /** Lines dropped from the front when the buffer was capped. */
   dropped: number;
+  /** The first lines, kept even when the buffer drops them: a build's first errors are there. */
+  head?: string[];
   /** Subagent that started it (its foreground output shows in the subagent window, not a popup). */
   origin?: {agentId: number; name: string};
   /** Ran inside the OS sandbox (see sandbox.ts). */
@@ -63,6 +65,7 @@ export function waitingForInput(lastLine: string, partial: string, alt: boolean)
 }
 
 const MAX_LINES = 5000;
+const HEAD_LINES = 200;
 const MAX_LINE_CHARS = 2000;
 /**
  * An unfinished line longer than this is cut: output that never sends a newline (a UEFI firmware
@@ -334,6 +337,13 @@ export class ShellManager extends EventEmitter {
   }
 
   /** Last `n` lines as text (for the model). */
+  /** Everything still held: the first lines, then (after any gap) the last ones. */
+  saved(shell: Shell): string {
+    const gap = shell.dropped - (shell.head?.length ?? 0);
+    if (!shell.dropped || !shell.head?.length) return shell.lines.join('\n');
+    return `${shell.head.join('\n')}\n${gap > 0 ? `[… ${gap} lines not kept]\n` : ''}${shell.lines.slice(Math.max(0, -gap)).join('\n')}`;
+  }
+
   tail(shell: Shell, n = 200): string {
     const lines = shell.lines.slice(-n);
     const skipped = shell.dropped + shell.lines.length - lines.length;
@@ -386,7 +396,9 @@ export class ShellManager extends EventEmitter {
     // Progress bars redraw with \r: keep only the final state of the line.
     const shown = raw.includes('\r') ? raw.split('\r').filter(Boolean).at(-1) ?? '' : raw;
     const line = this.vault ? this.vault.mask(shown) : shown; // stored lines never hold a secret
-    shell.lines.push(own(line.length > MAX_LINE_CHARS ? line.slice(0, MAX_LINE_CHARS) + '…' : line));
+    const kept = own(line.length > MAX_LINE_CHARS ? line.slice(0, MAX_LINE_CHARS) + '…' : line);
+    shell.lines.push(kept);
+    if ((shell.head ??= []).length < HEAD_LINES) shell.head.push(kept);
     if (shell.lines.length > MAX_LINES) {
       const drop = shell.lines.length - MAX_LINES;
       shell.lines.splice(0, drop);

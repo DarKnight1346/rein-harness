@@ -1,4 +1,4 @@
-import {mkdtempSync, realpathSync} from 'node:fs';
+import {mkdtempSync, readFileSync, realpathSync} from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
@@ -39,5 +39,19 @@ describe('calls from one response', () => {
     for (let i = 0; i < 20; i++) if ((await h.callInOrder('list', {path: '.'})).text.includes('single tool call')) nudged.push(i);
     expect(nudged).toEqual([4, 12]); // the 5th call, after 4 single-call responses; then after 8 more
     expect((await host().callInOrder('list', {path: '.'})).text).not.toMatch(/single tool call/);
+  });
+});
+
+describe('shell-cap', () => {
+  it('keeps the head and tail of a long output and saves the rest to the scratchpad', async () => {
+    const scratch = path.join(root, '.scratch');
+    const h = new ToolHost({root, mode: () => 'bypass', approve: async () => 'once', experiments: () => ['shell-cap'], scratch: () => scratch});
+    const r = await h.call('shell', {command: 'seq 1 20000'});
+    expect(r.text.length).toBeLessThan(8_000);
+    expect(r.text).toMatch(/\n1\n2\n/);
+    expect(r.text).toMatch(/\n20000/);
+    const file = /The output is saved in (\S+):/.exec(r.text)?.[1];
+    expect(readFileSync(file!, 'utf8')).toMatch(/\n150\n[\s\S]*\n19000\n/); // its first lines and its last ones
+    expect((await h.call('shell', {command: 'seq 1 10'})).text).not.toMatch(/left out/);
   });
 });

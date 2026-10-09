@@ -724,6 +724,7 @@ export class ToolHost extends EventEmitter {
       reads: this.reads,
       compactLines: this.experiment('compact-read'),
       outlineReads: this.experiment('outline-reads'),
+      shellCap: this.experiment('shell-cap'),
       extraRoots: [...(scratch ? [scratch] : []), globalSkills, ...config, ...this.addedDirs],
       shells: this.shells,
       shellMaxMs: this.opts.shellMaxMs?.(),

@@ -1,3 +1,4 @@
+import {writeFileSync} from 'node:fs';
 import path from 'node:path';
 import {deleteTool, editTool, listTool, readManyTool, readTool, resolveInRoot, searchTool, ToolError, writeTool, type ToolContext, type ToolResult} from './fs.js';
 import {DEFAULT_TIMEOUT_MS, shellStatusText} from './shells.js';
@@ -238,6 +239,30 @@ TOOLS.push(
 );
 
 const MAX_SHELL_OUTPUT = 30_000;
+/** shell-cap: output longer than this keeps its first and last lines in the result. */
+const SHELL_CAP = 8_000;
+const SHELL_CAP_HEAD = 2_000;
+const SHELL_CAP_TAIL = 5_000;
+
+/**
+ * shell-cap: everything a command printed stays in the conversation for every later request, and a
+ * long output is mostly noise. Keep the start (the command's first errors) and the end (the summary),
+ * and save the whole output to the scratchpad, where the model can read or search any part of it.
+ */
+function capOutput(ctx: ToolContext, id: number, out: string): string {
+  if (out.length <= SHELL_CAP || !ctx.scratch) return out;
+  const file = path.join(ctx.scratch, `shell-${id}.log`);
+  try {
+    writeFileSync(file, out);
+  } catch {
+    return out;
+  }
+  const head = out.slice(0, out.lastIndexOf('\n', SHELL_CAP_HEAD) + 1 || SHELL_CAP_HEAD);
+  const tailStart = out.indexOf('\n', out.length - SHELL_CAP_TAIL);
+  const tail = out.slice(tailStart < 0 ? out.length - SHELL_CAP_TAIL : tailStart + 1);
+  const left = out.slice(head.length, out.length - tail.length);
+  return `${head}[… ${left.split('\n').length} lines (${Math.round(left.length / 1000)}K chars) left out here. The output is saved in ${file}: search or read it for anything else.]\n${tail}`;
+}
 
 /** Output of a command that failed for want of a terminal. */
 export const needsTerminal = (out: string) => /not a tty|not a terminal|inappropriate ioctl|must be run (from|in) a terminal|requires a tty|no tty present|input device is not a TTY|interactive mode requires|cannot prompt|unable to prompt|stdin is not interactive/i.test(out);
@@ -255,7 +280,8 @@ async function shellTool(ctx: ToolContext, args: {command: string; background?: 
   }
   const s = await done;
   let out = ctx.shells.tail(s, 2000);
-  if (out.length > MAX_SHELL_OUTPUT) out = '[… output truncated]\n' + out.slice(-MAX_SHELL_OUTPUT);
+  if (ctx.shellCap) out = capOutput(ctx, shell.id, ctx.shells.saved(s));
+  else if (out.length > MAX_SHELL_OUTPUT) out = '[… output truncated]\n' + out.slice(-MAX_SHELL_OUTPUT);
   const ok = s.status === 'exited' && s.exitCode === 0;
   const status = s.status === 'killed' ? (s.noUser ? `stopped after ${Math.round(((s.endedAt ?? Date.now()) - s.startedAt) / 1000)}s: waiting for input nobody can give` : 'killed (interrupted by the user)') : shellStatusText(s);
   const note = !ok && sandbox && s.sandboxed ? denialNote(out, sandbox) : undefined;

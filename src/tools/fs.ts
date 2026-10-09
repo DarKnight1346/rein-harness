@@ -32,6 +32,8 @@ export type ToolContext = {
   origin?: Origin;
   /** compact-read experiment: line numbers without padding (`12\t` instead of `    12\t`), a token a line less. */
   compactLines?: boolean;
+  /** shell-cap experiment: long command output keeps its head and tail; the whole of it goes to a file. */
+  shellCap?: boolean;
   /** outline-reads experiment: a long file read without a range comes back as an outline. */
   outlineReads?: boolean;
 };
