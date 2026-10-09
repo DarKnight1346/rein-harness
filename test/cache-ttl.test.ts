@@ -1,6 +1,6 @@
 import {afterEach, describe, expect, it} from 'vitest';
 import path from 'node:path';
-import {fileURLToPath} from 'node:url';
+import {fileURLToPath, pathToFileURL} from 'node:url';
 import {mkdtempSync, readFileSync, writeFileSync, chmodSync} from 'node:fs';
 import os from 'node:os';
 import {claudeOneShot, setPromptCacheTtl} from '../src/providers/claude/session.js';
@@ -18,7 +18,7 @@ function fakeRecordingTtl(): string {
   const out = path.join(dir, 'ttl.txt');
   const here = path.dirname(fileURLToPath(import.meta.url));
   const bin = path.join(dir, 'claude.mjs');
-  writeFileSync(bin, `#!/usr/bin/env node\nimport {writeFileSync} from 'node:fs';\nwriteFileSync(${JSON.stringify(out)}, process.env.CLAUDE_CODE_PROMPT_CACHE_TTL ?? 'unset');\nawait import(${JSON.stringify(path.join(here, 'fixtures', 'fake-claude-stream.mjs'))});\n`);
+  writeFileSync(bin, `#!/usr/bin/env node\nimport {writeFileSync} from 'node:fs';\nwriteFileSync(${JSON.stringify(out)}, process.env.CLAUDE_CODE_PROMPT_CACHE_TTL ?? 'unset');\nawait import(${JSON.stringify(pathToFileURL(path.join(here, 'fixtures', 'fake-claude-stream.mjs')).href)});\n`);
   chmodSync(bin, 0o755);
   process.env.REIN_CLAUDE_BIN = bin;
   return out;

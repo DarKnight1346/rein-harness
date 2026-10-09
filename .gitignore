@@ -1,4 +1,4 @@
-node_modules/
+/node_modules
 dist/
 spikes/ink/node_modules/
 # raw spike captures (trace logs may contain auth headers)
