@@ -65,6 +65,20 @@ Entries Rein can't use (no path or name, a name used twice, invalid YAML) are sk
 Rewind's whole-project snapshots still cover only the repo you launched in. Edits in the other repos are restored from Rein's per-file checkpoints (see [Rewind](../rewind/)).
 :::
 
+## One tree for every repo
+
+The repos stay separate on disk, but the agent can treat them as one tree. `search` and `list` with `workspace: true` run over every cloned repo in one call (a `path` is taken inside each), and group what they find by repo:
+
+```text
+## web (.)
+src/cart.ts:12:  await fetch("/orders")
+
+## api (../api)
+../api/src/orders.ts:40:router.post("/orders", createOrder)
+```
+
+Paths are relative to the repo you launched in, so `read` and `edit` take them as they are. The system prompt tells the agent this option exists when you're in a workspace.
+
 ## Workspace memory
 
 Some things are true of the system, not of one repo: "api releases before web", "every service reads its config from Vault". The agent saves those with `remember` and `scope: "workspace"`, in the workspace's own `.rein/MEMORY.md` (next to `rein.workspace.yaml`). Every repo of the workspace sees them, in a **Workspace memory** section of the system prompt next to its own project memory. `forget` removes matching facts from both. Like project memory, it's a plain file you can edit or commit.

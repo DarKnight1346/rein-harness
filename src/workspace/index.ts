@@ -107,7 +107,7 @@ export function describeWorkspace(ws: Workspace, cwd = process.cwd()): string {
   });
   return [
     `# Workspace${ws.name ? ` "${ws.name}"` : ''} (${ws.file})`,
-    'These repos are worked on together as one system. All of them are working directories. A change that crosses repos (an API and its callers, a shared library and its users) should be made in every repo it affects, keeping each repo\'s own conventions.',
+    'These repos are worked on together as one system. All of them are working directories. A change that crosses repos (an API and its callers, a shared library and its users) should be made in every repo it affects, keeping each repo\'s own conventions. search and list with workspace: true cover every repo in one call.',
     ...lines,
   ].join('\n');
 }

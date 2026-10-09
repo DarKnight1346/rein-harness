@@ -58,6 +58,7 @@ A directory tree: folders first, files with sizes. Hidden entries and `.git`, `n
 | `path` | string | Directory, default the project root |
 | `depth` | integer | Levels to descend, 1–5, default 1 |
 | `all` | boolean | Include hidden entries and heavy folders |
+| `workspace` | boolean | In a [workspace](../../features/workspaces/#one-tree-for-every-repo): list every repo (`path` inside each), as one tree |
 
 ### `search`
 
@@ -72,6 +73,7 @@ Regex search over file contents, returning `path:line:text`, or over file paths 
 | `glob` | string | Only files matching, for example `"*.ts"` or `"src/**/*.tsx"` |
 | `files_only` | boolean | Match file paths instead of contents |
 | `case_insensitive` | boolean | |
+| `workspace` | boolean | In a [workspace](../../features/workspaces/#one-tree-for-every-repo): search every repo (`path` inside each), grouped by repo |
 
 ### `write`
 

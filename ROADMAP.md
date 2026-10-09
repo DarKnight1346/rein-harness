@@ -77,7 +77,7 @@ agent works by default ships as an experiment (`experiments` in config) until it
 | 32 | Workspace memory | Decisions and gotchas remembered per workspace. Builds on #29. | features/workspaces/#workspace-memory | done |
 | 33 | Org code search connector | Sourcegraph or Zoekt as a search backend. | features/large-codebases/#search-the-whole-org | done |
 | 34 | Local semantic index | Incremental, git-aware embeddings for search by meaning. | features/large-codebases/#search-by-meaning | done |
-| 35 | Synthetic monorepo view | One file tree and search across the workspace's repos. Builds on #29. |  | todo |
+| 35 | Synthetic monorepo view | One file tree and search across the workspace's repos. Builds on #29. | features/workspaces/#one-tree-for-every-repo | done |
 | 36 | Sparse and partial clones | Open huge monorepos without checking out everything. |  | todo |
 | 37 | Cross-repo rewind | One checkpoint across every repo in the workspace. |  | todo |
 

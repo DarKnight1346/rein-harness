@@ -245,6 +245,7 @@ export class Runtime {
     judge: (req) => this.judgeChange(req),
     readOnlyJudge: (command) => this.judgeReadOnly(command),
     configDirs: () => [...(this.config?.additionalDirectories ?? []), ...workspaceDirs(this.workspace)],
+    workspaceRepos: () => (this.workspace?.repos ?? []).filter((r) => r.present).map((r) => ({name: r.name, path: r.path})),
     scope: () => this.scope,
     secretScan: () => this.config.secretScan ?? 'off',
     depCheck: () => this.config.depCheck ?? 'off',
