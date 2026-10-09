@@ -1189,6 +1189,10 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
         log('info', lines.length ? `Permission rules (deny wins):\n${lines.join('\n')}` : 'No permission rules yet. Choose "3 Always allow" in an approval prompt, or add "permissions": {"allow": [...], "deny": [...]} to .rein/settings.json (Claude Code format; .claude/settings.json rules apply too).');
         break;
       }
+      case 'cost': {
+        log('info', runtime.costReport());
+        break;
+      }
       case 'workspace': {
         const ws = (runtime.workspace = findWorkspace());
         if (!ws) {

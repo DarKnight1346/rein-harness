@@ -4,6 +4,7 @@ import {voiceNote} from '../useRein.js';
 import React, {useEffect, useMemo, useRef, useState, type ReactNode} from 'react';
 import {Box, Text, useBoxMetrics, useInput, useWindowSize} from 'ink';
 import {PROVIDERS, parseRef, refKey} from '../../providers/types.js';
+import {formatUsd} from '../../providers/prices.js';
 import {runtime, type Resume} from '../../runtime.js';
 import {catalog, toRef} from '../../router/catalog.js';
 import {defaultRef} from '../../router/index.js';
@@ -1025,6 +1026,13 @@ function SessionSection({run}: {run(cmd: string): void}) {
       {row('uncached', t.uncached)}
       {row('cached', t.cached)}
       {row('received', t.output)}
+      {t.usd !== undefined && (
+        <Clickable onClick={() => run('/cost')}>
+          <Text wrap="truncate">
+            <Text dimColor>{'cost'.padEnd(10)}</Text>≈{formatUsd(t.usd)}
+          </Text>
+        </Clickable>
+      )}
       <Clickable onClick={() => run('/compact')}>
         <Text color="gray">↻ compact</Text>
       </Clickable>

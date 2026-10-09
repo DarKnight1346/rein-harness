@@ -150,6 +150,7 @@ export async function runHeadless(argv: string[]): Promise<number> {
           effort: route?.effort,
           tools,
           tokens: t,
+          ...(t.usd === undefined ? {} : {cost_usd: Math.round(t.usd * 1e4) / 1e4}),
           duration_ms: Date.now() - started,
         }),
       ) + '\n',

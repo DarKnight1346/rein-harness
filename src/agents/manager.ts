@@ -2,6 +2,7 @@ import {EventEmitter} from 'node:events';
 import type {ModelRef, ProviderSession, TokenCount, ToolBinding} from '../providers/types.js';
 import type {Origin} from '../tools/fs.js';
 import type {DiffLine} from '../tools/diff.js';
+import {addTokens} from '../providers/prices.js';
 
 export type SubagentMode = 'new' | 'fork';
 export type SubagentStatus = 'starting' | 'running' | 'checking' | 'done' | 'failed' | 'cancelled';
@@ -308,7 +309,7 @@ export class SubagentManager extends EventEmitter {
         else agent.events.push({kind: 'text', text: ev.delta});
         this.changed();
       } else if (ev.type === 'tokens') {
-        agent.tokens = {input: base.input + ev.call.input, cached: base.cached + ev.call.cached, output: base.output + ev.call.output};
+        agent.tokens = addTokens(base, ev.call);
         // Each jump in input is one request's full prompt: how full the context is right now.
         if (ev.call.input > seenInput) {
           agent.lastInput = ev.call.input - seenInput;

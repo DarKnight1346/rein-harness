@@ -45,6 +45,7 @@ export default defineConfig({
           {label: 'Accounts & failover', slug: 'features/accounts'},
           {label: 'Workspaces', slug: 'features/workspaces'},
           {label: 'Model routing', slug: 'features/routing'},
+          {label: 'Cost & budgets', slug: 'features/cost'},
           {label: 'Goals', slug: 'features/goals'},
           {label: 'Plan mode', slug: 'features/plans'},
           {label: '/btw side questions', slug: 'features/btw'},

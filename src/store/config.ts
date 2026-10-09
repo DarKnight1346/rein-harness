@@ -1,5 +1,6 @@
 import {readJson, writeJson} from './json.js';
 import {paths} from './paths.js';
+import type {Price} from '../providers/prices.js';
 
 export type Config = {
   version: 1;
@@ -78,6 +79,8 @@ export type Config = {
   lspServers?: Record<string, {command: string; args?: string[]}>;
   /** Every account at its limit: wait for the reset (up to 12 hours) and continue, instead of stopping. */
   waitForLimits: boolean;
+  /** USD per million tokens for models Rein has no price for, or to override one: {"codex:my-model": {input, output, cached}}. */
+  prices?: Record<string, Price>;
   /** Efficiency experiments to turn on, by name (see the configuration reference): measured before they become defaults. */
   experiments: string[];
   /** Run simple shell reads and searches the agent writes (cat, head, grep -rn, sed -n, ls, find -name) as the built-in tools. */

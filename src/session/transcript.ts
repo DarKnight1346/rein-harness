@@ -60,7 +60,7 @@ export type Transcript = {
     tools: {label: string; summary: string; ok?: boolean}[];
   }[];
   /** Token totals for this conversation (all calls, all providers). */
-  tokens?: {uncached: number; cached: number; output: number};
+  tokens?: {uncached: number; cached: number; output: number; usd?: number};
 };
 
 export function newTranscript(): Transcript {

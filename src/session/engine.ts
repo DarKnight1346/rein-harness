@@ -76,6 +76,12 @@ The conversation was compacted in the middle of your work because the context wi
  * Owns the conversation. Rein's transcript is the source of truth; native sessions are caches
  * reused while provider+account stay the same.
  */
+/** Conversation totals plus one call's (or subagent's) tokens; `usd` stays unset until something has a price. */
+function plus(base: {uncached: number; cached: number; output: number; usd?: number}, t: TokenCount): {uncached: number; cached: number; output: number; usd?: number} {
+  const usd = base.usd === undefined && t.usd === undefined ? undefined : (base.usd ?? 0) + (t.usd ?? 0);
+  return {uncached: base.uncached + t.input - t.cached, cached: base.cached + t.cached, output: base.output + t.output, ...(usd === undefined ? {} : {usd})};
+}
+
 export class Engine {
   transcript: Transcript;
   private active: {session: ProviderSession; key: string; ref: ModelRef} | undefined;
@@ -101,10 +107,10 @@ export class Engine {
   callTokens: TokenCount | undefined;
 
   /** Conversation totals including the call in flight. */
-  get sessionTokens(): {uncached: number; cached: number; output: number} {
+  get sessionTokens(): {uncached: number; cached: number; output: number; usd?: number} {
     const base = this.transcript.tokens ?? {uncached: 0, cached: 0, output: 0};
     const c = this.callTokens;
-    return c ? {uncached: base.uncached + c.input - c.cached, cached: base.cached + c.cached, output: base.output + c.output} : base;
+    return c ? plus(base, c) : base;
   }
 
   private commitCallTokens(): void {
@@ -174,8 +180,7 @@ export class Engine {
 
   /** Add tokens spent outside the main turn (subagents) to the conversation totals. */
   addTokens(t: TokenCount): void {
-    const base = this.transcript.tokens ?? {uncached: 0, cached: 0, output: 0};
-    this.transcript.tokens = {uncached: base.uncached + t.input - t.cached, cached: base.cached + t.cached, output: base.output + t.output};
+    this.transcript.tokens = plus(this.transcript.tokens ?? {uncached: 0, cached: 0, output: 0}, t);
   }
 
   get isBusy(): boolean {

@@ -98,7 +98,8 @@ export type UsageSnapshot = {
 export type ChatErrorKind = 'limit' | 'auth' | 'context' | 'overloaded' | 'other';
 
 /** Tokens for the current call so far: `input` = all input incl. cached, `cached` = cache reads. */
-export type TokenCount = {input: number; cached: number; output: number};
+/** `input` includes cache hits (`cached`) and cache writes (`written`, when known); `usd` at API list prices. */
+export type TokenCount = {input: number; cached: number; output: number; written?: number; usd?: number};
 
 export type ChatEvent =
   | {type: 'text'; delta: string}

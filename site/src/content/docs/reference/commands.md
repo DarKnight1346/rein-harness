@@ -79,6 +79,7 @@ See [Goals](../../features/goals/) and [Plan mode](../../features/plans/).
 
 | Command | Arguments | What it does |
 |---|---|---|
+| `/cost` | — | What the conversation, the latest request and the current goal cost at API list prices, with token totals. See [Cost & budgets](../../features/cost/). |
 | `/workspace` | `[clone]` | Lists the repos of this [workspace](../../features/workspaces/) (`rein.workspace.yaml`), which are cloned and what each does. `clone` clones the missing repos that have a `url`. |
 | `/scope` | `[<dir> \| off]` | Works in one package of a monorepo: `list`, `search` and `shell` start in `<dir>`, its `AGENTS.md` files load, and the code check skips callers outside it. `off` clears it; no argument shows it. Same as `rein --scope <dir>`. |
 | `/add-dir` | `<path>` | Adds a working directory the agent can use without asking, for this session. Another repo's own `AGENTS.md` / `CLAUDE.md` is delivered the first time the agent works in it. |

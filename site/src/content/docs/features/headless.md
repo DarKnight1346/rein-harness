@@ -90,14 +90,15 @@ A single JSON object on stdout when the run ends:
     {"tool": "Search", "summary": "retry in src", "ok": true},
     {"tool": "Read", "summary": "src/webhooks/deliver.ts", "ok": true}
   ],
-  "tokens": {"uncached": 18342, "cached": 41210, "output": 612},
+  "tokens": {"uncached": 18342, "cached": 41210, "output": 612, "usd": 0.0561},
+  "cost_usd": 0.0561,
   "duration_ms": 14873
 }
 ```
 
 - `model` and `effort` come from the last routing decision. `effort` is left out when the model has none.
 - `tools` lists the main agent's tool calls (label, summary, success). Subagents' calls aren't included.
-- `tokens` are the conversation's running totals: `uncached` input, `cached` input and `output`. They include subagents and Rein's helper calls (compaction, the decision model, the advisor, `web_fetch`), not only the main model.
+- `tokens` are the conversation's running totals: `uncached` input, `cached` input and `output`, plus `usd` when the models have a price. `cost_usd` is that total, at API list prices (see [Cost & budgets](../cost/)). They include subagents and Rein's helper calls (compaction, the decision model, the advisor, `web_fetch`), not only the main model.
 - On an early failure (bad flag, no prompt, no accounts) you get `{"type": "result", "is_error": true, "error": "…"}` instead.
 - If the run hits an error partway through, `is_error` is `true`, `error` is set, and `result` holds whatever reply text arrived before it.
 
@@ -111,9 +112,9 @@ One JSON object per line as things happen, then the same `result` object as `jso
 {"type":"tool","phase":"end","tool":"Read","summary":"src/webhooks/deliver.ts","ok":true}
 {"type":"text","delta":"The retry logic lives in "}
 {"type":"text","delta":"src/webhooks/deliver.ts…"}
-{"type":"tokens","call":{"input":59552,"cached":41210,"output":612}}
+{"type":"tokens","call":{"input":59552,"cached":41210,"output":612,"written":18342,"usd":0.0561}}
 {"type":"done","interrupted":false}
-{"type":"result","is_error":false,"result":"…","session_id":"2026-10-03-14-22-07-9f3c2a1b","model":"claude:sonnet","effort":"medium","tools":[…],"tokens":{…},"duration_ms":14873}
+{"type":"result","is_error":false,"result":"…","session_id":"2026-10-03-14-22-07-9f3c2a1b","model":"claude:sonnet","effort":"medium","tools":[…],"tokens":{…},"cost_usd":0.0561,"duration_ms":14873}
 ```
 
 You may also see `notice` (`{"type":"notice","text":"…"}`), `compact` and `error` events. Tool events from subagents appear in the stream too.

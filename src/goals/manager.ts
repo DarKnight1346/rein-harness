@@ -21,6 +21,8 @@ export type Goal = {
   doneAt?: number;
   /** Saved plan this goal carries out (.rein/plans/…md); its milestones track progress. */
   plan?: string;
+  /** The conversation's cost (USD, API prices) when the goal was set, so /cost can show what it took. */
+  startUsd?: number;
 };
 
 
@@ -68,7 +70,7 @@ export class GoalManager extends EventEmitter {
 
   set(text: string, plan?: string): Goal {
     const t = this.t();
-    t.goal = {text, status: 'active', createdAt: Date.now(), since: t.messages.length, rounds: 0, escalations: 0, checks: [], ...(plan ? {plan} : {})};
+    t.goal = {text, status: 'active', createdAt: Date.now(), since: t.messages.length, rounds: 0, escalations: 0, checks: [], startUsd: t.tokens?.usd ?? 0, ...(plan ? {plan} : {})};
     this.persist();
     return t.goal;
   }

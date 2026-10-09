@@ -3,6 +3,7 @@ import {run} from './util/proc.js';
 import {EventEmitter} from 'node:events';
 import {adapters} from './providers/index.js';
 import {onSideUsage} from './providers/usage.js';
+import {formatUsd, setCacheWriteTtl, setPriceOverrides} from './providers/prices.js';
 import {catalog, toRef} from './router/catalog.js';
 import {mergeNote, Worktrees} from './agents/worktrees.js';
 import type {Origin} from './tools/fs.js';
@@ -74,8 +75,28 @@ export class Runtime {
   config: Config = DEFAULT_CONFIG;
   /** The workspace (rein.workspace.yaml) the launch folder belongs to, if any. */
   workspace: Workspace | undefined;
+  /** The conversation's cost when the user's latest message arrived (for /cost's "this request"). */
+  requestStartUsd = 0;
   /** --scope / /scope: the package of a monorepo this session works in (absolute), if any. */
   scope: string | undefined;
+
+  /** /cost: what this conversation, the latest request and the goal cost at API list prices. */
+  costReport(): string {
+    const t = this.engine?.sessionTokens ?? {uncached: 0, cached: 0, output: 0};
+    if (t.usd === undefined) {
+      const m = this.engine?.currentRef();
+      return `No price for ${m ? `${m.provider}:${m.model}` : 'this model'} yet, so only tokens are counted. Add one under "prices" in ~/.rein/config.json.`;
+    }
+    const k = (n: number) => (n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : n >= 1e3 ? `${Math.round(n / 1e3)}K` : String(n));
+    const goal = this.goals.goal;
+    return [
+      'At API list prices (a subscription isn\'t billed per token; this is what the same tokens would cost on the API):',
+      `  this conversation  ${formatUsd(t.usd)}  (uncached ${k(t.uncached)} · cached ${k(t.cached)} · received ${k(t.output)})`,
+      `  latest request     ${formatUsd(Math.max(0, t.usd - this.requestStartUsd))}`,
+      ...(goal?.startUsd !== undefined ? [`  goal so far        ${formatUsd(Math.max(0, t.usd - goal.startUsd))}  (${goal.status})`] : []),
+      'Includes subagents and helper calls (compaction, decisions, the advisor).',
+    ].join('\n');
+  }
 
   /** Set the scope (a folder inside the project; undefined or "off" clears it). Returns it, absolute. */
   setScope(dir: string | undefined): string | undefined {
@@ -448,6 +469,7 @@ Drop superseded reads of the same file, routine listings, and output that no lon
     const root = process.cwd();
     // A message from the user (not Rein's own follow-up) ends an escalation: routing is normal again.
     if (!/^<(code_check|stop_hook)>/.test(text)) {
+      this.requestStartUsd = this.engine?.sessionTokens.usd ?? 0;
       this.escalation = undefined;
       this.verifyPasses = 0;
       this.verifiedAt = undefined;
@@ -657,7 +679,7 @@ Drop superseded reads of the same file, routine listings, and output that no lon
   /** Fold new subagent tokens into the conversation totals and save its record. */
   private subagentFinished(agent: Subagent): void {
     const prev = this.folded.get(agent.id) ?? {input: 0, cached: 0, output: 0};
-    this.engine.addTokens({input: agent.tokens.input - prev.input, cached: agent.tokens.cached - prev.cached, output: agent.tokens.output - prev.output});
+    this.engine.addTokens({input: agent.tokens.input - prev.input, cached: agent.tokens.cached - prev.cached, output: agent.tokens.output - prev.output, ...(agent.tokens.usd === undefined ? {} : {usd: agent.tokens.usd - (prev.usd ?? 0)})});
     this.folded.set(agent.id, {...agent.tokens});
     const t = this.engine.transcript;
     const record = {
@@ -805,6 +827,8 @@ Drop superseded reads of the same file, routine listings, and output that no lon
     setManyCalls(() => activeExperiments(this.config).includes('many-calls'));
     setSelfTest(() => activeExperiments(this.config).includes('self-test'));
     setPromptCacheTtl(() => (activeExperiments(this.config).includes('cache-5m') ? '5m' : undefined));
+    setCacheWriteTtl(() => (activeExperiments(this.config).includes('cache-5m') ? '5m' : '1h'));
+    setPriceOverrides(() => this.config.prices);
     setBriefFinal(() => activeExperiments(this.config).includes('brief-final'));
     await usageStore.load();
     const router = makeRouter(() => this.config, (...a) => this.auto(...a));
