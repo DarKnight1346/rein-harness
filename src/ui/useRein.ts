@@ -71,6 +71,7 @@ import {collectStats, formatStats} from '../insight/stats.js';
 import {collectCache, formatCache} from '../insight/cache.js';
 import {describeJobs, loadJobs, scheduledProjects} from '../schedule/index.js';
 import {describeDevEnv, detectDevEnv} from '../env/devenv.js';
+import {describeLive, listLive, removeLive, sendTo, watchInbox, writeLive} from '../host/live.js';
 import {deadCodeTask, findDeadCode, findFlags, flagRemovalTask, formatFlags, isStale} from '../contracts/deadcode.js';
 import {checkoutState, describeCheckout, sparseAdd} from '../workspace/sparse.js';
 import {buildIndex, DEFAULT_MODEL as EMBED_MODEL, formatSemanticHits, loadIndex, semanticSearch} from '../context/semantic.js';
@@ -432,6 +433,38 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
     },
     {isActive: overlay.name === 'none' && !viewing && !chat.busy && !draft},
   );
+
+  // Multi-session dashboard (rein sessions): this session's status, and messages sent from there.
+  const sendFromInbox = useRef<(text: string) => void>(() => {});
+  sendFromInbox.current = (text) => {
+    log('info', `From rein sessions: ${text.length > 80 ? `${text.slice(0, 80)}…` : text}`);
+    if (chat.busy) setQueued((q) => [...q, text]);
+    else void chat.send(text).then(bump);
+  };
+  useEffect(() => {
+    const stop = watchInbox((text) => sendFromInbox.current(text));
+    const bye = () => removeLive();
+    process.on('exit', bye);
+    return () => {
+      stop();
+      bye();
+      process.off('exit', bye);
+    };
+  }, []);
+  useEffect(() => {
+    const t = runtime.engine?.transcript;
+    const first = t?.messages.find((m) => m.role === 'user' && !m.synthetic)?.text ?? '';
+    const ref = runtime.engine?.currentRef();
+    const goal = runtime.goals.goal?.status === 'active' ? runtime.goals.goal.text : undefined;
+    writeLive({
+      cwd: process.cwd(),
+      title: first.replace(/<skill[^>]*>[\s\S]*?<\/skill>\s*/g, '').replace(/\s+/g, ' ').trim().slice(0, 120) || '(new conversation)',
+      state: ['approval', 'ask', 'plan', 'trust'].includes(overlay.name) ? 'waiting' : chat.busy ? 'working' : 'idle',
+      ...(goal ? {goal} : {}),
+      ...(process.env.REIN_HOST ? {host: process.env.REIN_HOST} : {}),
+      ...(ref ? {model: `${ref.provider}:${ref.model}`} : {}),
+    });
+  }, [chat.busy, overlay.name, statusTick]);
 
   const togglePlanMode = () => {
     runtime.planMode = !runtime.planMode;
@@ -1266,6 +1299,21 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
           if (!files.length) return log('info', 'No changes (vs HEAD). /owners <path> looks up a file or folder.');
           log('info', `Owners of ${arg || `your ${files.length} changed file${files.length === 1 ? '' : 's'}`}:\n${formatOwners(await ownersOf(root, files))}`);
         });
+        break;
+      }
+      case 'sessions': {
+        const m = parsed.args.trim().match(/^send\s+(\d+)\s+([\s\S]+)$/);
+        if (m) {
+          try {
+            sendTo(Number(m[1]), m[2]!);
+            log('info', `Sent to Rein ${m[1]}.`);
+          } catch (err) {
+            log('error', (err as Error).message);
+          }
+          break;
+        }
+        const all = listLive().filter((l) => l.pid !== process.pid);
+        log('info', all.length ? ['Other Rein sessions on this machine:', ...all.map((l) => `  ${String(l.pid).padEnd(7)} ${describeLive(l)}`), '/sessions send <pid> <message> sends one a message; rein sessions (in a terminal) is the dashboard.'].join('\n') : 'No other Rein sessions are running on this machine.');
         break;
       }
       case 'env': {

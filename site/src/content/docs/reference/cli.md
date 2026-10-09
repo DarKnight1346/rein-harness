@@ -10,6 +10,7 @@ rein -p "<prompt>" [--model m] [--effort e] [--output-format text|json|stream-js
                    [-c [id]] [--verbose]
 rein schedule [list | run [--due | <job>] | install | uninstall]
 rein attach [id]
+rein sessions
 rein bench [init [--count n] | run --model m [--model m2]… [--tasks n] [--test cmd]]
 rein --update | --version | --help
 ```
@@ -130,6 +131,7 @@ Exits `1` when a job fails or the file has errors. See [Scheduled jobs](../../fe
 | `rein --background` | Starts Rein in a background host and attaches this terminal to it |
 | `rein attach` | Attaches to this folder's background session (or the only one); lists them when there are several |
 | `rein attach <id>` | Attaches to that session (a prefix of its id is enough) |
+| `rein sessions` | The dashboard of every running Rein on this machine: enter attaches (background sessions), `m` sends a message, `k` stops one. Piped, it prints the list |
 
 `rein host …` is the background process itself; you don't run it by hand. See [Background sessions](../../features/sessions/).
 

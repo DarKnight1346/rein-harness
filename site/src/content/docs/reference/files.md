@@ -53,6 +53,8 @@ An existing `~/.rein` keeps being used as it is, and so does `REIN_HOME`. To swi
 | `checkpoints/spec-trace/` | The tree recorded when a spec task starts, so `spec_task done` can trace the lines it changed (a private store like `/rewind`'s) |
 | `index/<hash>.json` | [Semantic indexes](../../features/large-codebases/#search-by-meaning), one per project: each file's change key and its chunks' vectors. `/index` rebuilds it |
 | `schedule/` | [Scheduled jobs](../../features/headless/#scheduled-jobs): `state.json` (last run and result per job), `projects.json` (the projects `rein schedule run --due` covers), `logs/` (each run's output) |
+| `hosts/` | [Background sessions](../../features/sessions/): one `<id>.json` per running host (its pid, folder and socket) |
+| `live/` | The [session dashboard](../../features/sessions/#every-session-at-a-glance): `<pid>.json` per running Rein (state, folder, title, goal) and `<pid>.inbox`, the messages sent to it. Removed when it exits |
 | `skills/` | Global skills, one folder each with a `SKILL.md` |
 | `mcp.json` | User-scope MCP servers (`mcp_add` with `scope: "user"`) |
 | `settings.json` | Global permission rules and hooks (Claude Code format) |

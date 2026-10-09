@@ -19,6 +19,7 @@ if (args.includes('--help') || args.includes('-h')) {
        rein -p "<prompt>" [--model m] [--output-format text|json|stream-json]
        rein schedule [list | run [--due | <job>] | install | uninstall]
        rein attach [id]
+       rein sessions
        rein bench [init [--count n] | run --model m [--model m2] [--tasks n] [--test cmd]]
        rein --update | --version
 
@@ -59,6 +60,28 @@ if (args[0] === 'host') {
   const {runHost} = await import('./host/index.js');
   const [, id, cols, rows, file, ...rest] = args;
   process.exit(await runHost({id: id!, cwd: process.cwd(), file: file!, args: rest, cols: Number(cols) || 100, rows: Number(rows) || 30}));
+}
+if (args[0] === 'sessions') {
+  // The multi-session dashboard: every running Rein; attach loops back here after a detach.
+  if (!process.stdin.isTTY) {
+    const {listLive, describeLive} = await import('./host/live.js');
+    const all = listLive();
+    console.log(all.length ? all.map((l) => `${l.pid}\t${describeLive(l)}`).join('\n') : 'No Rein sessions running.');
+    process.exit(0);
+  }
+  const {render} = await import('ink');
+  const React = await import('react');
+  const {SessionsDashboard} = await import('./ui/SessionsDashboard.js');
+  const h = await import('./host/index.js');
+  for (;;) {
+    let choice: import('./ui/SessionsDashboard.js').DashboardChoice = {quit: true};
+    const app = render(React.createElement(SessionsDashboard, {onDone: (c) => (choice = c)}));
+    await app.waitUntilExit();
+    if (!('attach' in choice)) break;
+    const target = h.listHosts().find((x) => x.id === (choice as {attach: string}).attach);
+    if (target) await h.attach(target);
+  }
+  process.exit(0);
 }
 if (args[0] === 'attach' || args.includes('--background')) {
   const h = await import('./host/index.js');
