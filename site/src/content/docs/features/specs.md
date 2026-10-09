@@ -60,6 +60,25 @@ A spec is plain markdown in `.rein/specs/<name>/` in your project, so it goes in
 
 `/spec` on its own lists the specs and how far along each one is.
 
+## Architecture decisions
+
+Architecture decision records (ADRs) are the "why" behind a codebase: one numbered markdown file per decision, with its context, the decision and its consequences. Rein reads them where [adr-tools](https://github.com/npryce/adr-tools) and [MADR](https://adr.github.io/madr/) put them: the folder named in `.adr-dir`, or else `docs/adr/`, `docs/adrs/`, `doc/adr/`, `adr/`, `docs/architecture/decisions/` or `docs/decisions/`.
+
+```text title="rein"
+> /adr
+  ⎿ Architecture decisions in docs/adr/:
+      0001  Record architecture decisions  (accepted)
+      0002  Use MongoDB  (superseded by)
+      0003  Use Postgres for the ledger  (accepted)
+
+> /adr new Queue retries in Redis
+  ⎿ Created docs/adr/0004-queue-retries-in-redis.md (status Proposed).
+```
+
+`/adr new <title>` writes the next numbered file (Date, Status *Proposed*, Context, Decision, Consequences) and asks the agent to fill it in from the conversation and the code.
+
+With the `adr-check` [experiment](../../reference/configuration/#experiments) on, [plan mode](../plans/) and spec mode give the agent the decisions in force (accepted or proposed; not superseded, deprecated or rejected). The agent checks its plan against them. If the plan goes against one, it says so under Risks and proposes a new ADR that supersedes it, instead of quietly diverging.
+
 ## Related
 
 - [Plan mode](../plans/): a single plan with milestones, for smaller changes

@@ -86,7 +86,7 @@ agent works by default ships as an experiment (`experiments` in config) until it
 | # | Feature | Spec | Docs | Status |
 |---|---|---|---|---|
 | 20 | Specs as committed files | Save specs and plans in `.rein/specs/` so they're reviewed in PRs. | features/specs/#reviewed-with-the-code | done |
-| 21 | ADRs | Write architecture decision records; check plans against existing ones. |  | todo |
+| 21 | ADRs | Write architecture decision records; check plans against existing ones. | features/specs/#architecture-decisions | done |
 | 22 | Plan review by a second model | The advisor or the other provider critiques a plan before code is written. |  | todo |
 | 53 | Spec mode | Requirements, then design, then tasks, each approved, building on `/plan`. | features/specs/#three-stages-each-approved | done |
 | 54 | Task graph | A plan as a dependency graph; independent tasks run in parallel subagents. | features/specs/#tasks-as-a-graph | done |

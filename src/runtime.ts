@@ -49,6 +49,7 @@ import {Checkpoints} from './session/checkpoints.js';
 import {WorkspaceSnapshots} from './session/snapshots.js';
 import {SPEC_MODE_CONTEXT, specTools} from './specs/tools.js';
 import {specSection} from './specs/pr.js';
+import {adrContext} from './specs/adr.js';
 import {McpManager} from './mcp/manager.js';
 import {mcpTools} from './mcp/tools.js';
 import {skillTool} from './skills/tool.js';
@@ -599,7 +600,7 @@ Drop superseded reads of the same file, routine listings, and output that no lon
       ? `<ide_selection file="${path.relative(root, sel.filePath) || sel.filePath}" lines="${sel.startLine}-${sel.endLine}">\n${sel.text.slice(0, 20_000)}\n</ide_selection>\nThe user has this selected in their editor; it may or may not be what the message is about.`
       : undefined;
     const shells = this.userShells.length ? `${this.userShells.join('\n')}\nThe user ran ${this.userShells.length > 1 ? 'these commands' : 'this command'} themselves (with !) before this message.` : undefined;
-    const context = [this.sessionContext, out.context, shells, selection, this.planMode ? (this.specMode ? SPEC_MODE_CONTEXT(this.specMode) : PLAN_MODE_CONTEXT) : undefined].filter(Boolean).join('\n');
+    const context = [this.sessionContext, out.context, shells, selection, this.planMode ? (this.specMode ? SPEC_MODE_CONTEXT(this.specMode) : PLAN_MODE_CONTEXT) : undefined, this.planMode && activeExperiments(this.config).includes('adr-check') ? adrContext(process.cwd()) : undefined].filter(Boolean).join('\n');
     if (!out.block) this.userShells = [];
     if (!out.block) this.sessionContext = undefined;
     return {block: out.block, context: context || undefined};

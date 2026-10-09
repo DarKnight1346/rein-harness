@@ -60,6 +60,7 @@ import {TAB_TITLES} from './ConfigureScreen.js';
 import {describeSpec, listSpecs, nextStage, readSpec, specSlug} from '../specs/store.js';
 import {nextSteps, specInstructions} from '../specs/tools.js';
 import {traceMarkdown} from '../specs/trace.js';
+import {adrDir, listAdrs, newAdr} from '../specs/adr.js';
 import {checkoutState, describeCheckout, sparseAdd} from '../workspace/sparse.js';
 import {buildIndex, DEFAULT_MODEL as EMBED_MODEL, formatSemanticHits, loadIndex, semanticSearch} from '../context/semantic.js';
 import {estimateGoalCost} from '../goals/estimate.js';
@@ -1254,6 +1255,31 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
           if (!files.length) return log('info', 'No changes (vs HEAD). /owners <path> looks up a file or folder.');
           log('info', `Owners of ${arg || `your ${files.length} changed file${files.length === 1 ? '' : 's'}`}:\n${formatOwners(await ownersOf(root, files))}`);
         });
+        break;
+      }
+      case 'adr': {
+        const root = process.cwd();
+        const arg = parsed.args.trim();
+        if (arg.startsWith('new')) {
+          const title = arg.slice(3).trim();
+          if (!title) {
+            log('error', 'Usage: /adr new <title>, e.g. /adr new Use Postgres for the ledger');
+            break;
+          }
+          try {
+            const rel = newAdr(root, title);
+            log('info', `Created ${rel} (status Proposed).`);
+            const msg = `Fill in the architecture decision record ${rel} ("${title}") from what we've discussed and what you find in the code: Context (the forces and constraints), Decision (what we chose, stated plainly), Consequences (what gets easier, what gets harder). Keep the status Proposed. If it supersedes an earlier ADR, say so in both.`;
+            if (chat.busy) setQueued((q) => [...q, msg]);
+            else void chat.send(msg).then(bump);
+          } catch (err) {
+            log('error', (err as Error).message);
+          }
+          break;
+        }
+        const adrs = listAdrs(root);
+        const {dir, exists} = adrDir(root);
+        log('info', adrs.length ? [`Architecture decisions in ${dir}/:`, ...adrs.map((a) => `  ${String(a.number).padStart(4, '0')}  ${a.title}  (${a.status})`), '/adr new <title> starts the next one.'].join('\n') : `No ADRs ${exists ? `in ${dir}/` : 'yet'}. /adr new <title> starts one in ${dir}/.`);
         break;
       }
       case 'spec': {
