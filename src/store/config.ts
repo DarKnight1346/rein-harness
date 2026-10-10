@@ -135,6 +135,8 @@ export type Config = {
   inlineImages: 'auto' | 'off';
   /** Right-to-left text (Hebrew, Arabic): reorder it for display where the terminal doesn't ('auto'), always, or never. */
   rtl: 'auto' | 'on' | 'off';
+  /** App previews streamed with Rein Remote (video) when it's installed: auto, off, or the path to its binary. */
+  reinRemote: string;
   /** The remote page's address (/remote): this computer only by default; reach it through a tunnel. */
   remoteHost: string;
   remotePort: number;
@@ -188,6 +190,7 @@ export const DEFAULT_CONFIG: Config = {
   attribution: true,
   waitForLimits: true,
   goalConfirmUsd: 0,
+  reinRemote: 'auto',
   contextWarnings: true,
   secretScan: 'off',
   sast: 'off',

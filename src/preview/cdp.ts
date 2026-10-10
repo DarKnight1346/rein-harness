@@ -47,6 +47,14 @@ export class BrowserView extends EventEmitter {
   private seq = 0;
   private pending = new Map<number, {resolve(v: any): void; reject(e: Error): void}>();
   private size = {width: 1280, height: 800};
+  /** The page's scale on screen (below 1 when a phone-size page lays out wider than the screen). */
+  private scale = 0;
+
+  private async pageScale(): Promise<number> {
+    const r = (await this.call('Runtime.evaluate', {expression: 'visualViewport.scale', returnByValue: true}).catch(() => undefined)) as {result?: {value?: unknown}} | undefined;
+    const v = Number(r?.result?.value);
+    return v > 0 && v <= 10 ? v : 1;
+  }
   private streaming = false;
   closed = false;
   url = '';
@@ -233,6 +241,7 @@ export class BrowserView extends EventEmitter {
   async resize(size: {width: number; height: number}): Promise<void> {
     this.size = clampSize(size);
     await this.call('Emulation.setDeviceMetricsOverride', {...this.size, deviceScaleFactor: 1, mobile: this.size.width < 600});
+    this.scale = 0;
     if (this.streaming) {
       this.streaming = false;
       await this.call('Page.stopScreencast').catch(() => {});
@@ -241,6 +250,12 @@ export class BrowserView extends EventEmitter {
   }
 
   async input(ev: InputEvent): Promise<void> {
+    // Phone-size (mobile emulation): a page with no mobile viewport lays out wider (980) and is shown
+    // scaled down to fit, but input lands in the page's own pixels; scale what's on screen to them.
+    if ((ev.type === 'mouse' || ev.type === 'wheel') && this.size.width < 600) {
+      if (ev.type === 'wheel' || ev.action === 'down' || !this.scale) this.scale = await this.pageScale();
+      ev = {...ev, x: ev.x / this.scale, y: ev.y / this.scale};
+    }
     if (ev.type === 'mouse') {
       const type = ev.action === 'move' ? 'mouseMoved' : ev.action === 'down' ? 'mousePressed' : 'mouseReleased';
       await this.call('Input.dispatchMouseEvent', {type, x: ev.x, y: ev.y, button: ev.action === 'move' ? 'none' : (ev.button ?? 'left'), clickCount: ev.clicks ?? (ev.action === 'move' ? 0 : 1)});

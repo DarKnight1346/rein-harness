@@ -435,6 +435,10 @@ Label `Stack`. Approval: **mutating**. From the [Multi-repo systems](../../featu
 
 `up` runs `docker compose up -d --wait` and reports each service's state, health and ports. See [The services a change needs](../../features/system/#the-services-a-change-needs).
 
+### `remote_install`
+
+Label `InstallReinRemote`. Approval: **always asks, even in bypass mode.** Offered in [web UI](../../features/web-ui/) chats with the `preview` tool. Installs [Rein Remote](../../features/previews/#video-with-rein-remote) into `~/.rein/bin`: the latest release for this computer, checked against the release's `SHA256SUMS` before anything is unpacked (a mismatch installs nothing). No parameters. The `preview` tool's `window` suggests it when Rein Remote isn't there.
+
 ### `lsp_install`
 
 Label `InstallLanguageServer`. Approval: **always asks, even in bypass mode.**
@@ -555,6 +559,7 @@ Label `Preview`. Approval: none (it opens something for you to see; it doesn't c
 | `vnc` | string | A VNC display: `host:port`, or `:N` for display N (port 5900+N) |
 | `title` | string | A short name for it (default: the address) |
 | `password` | string | The VNC display's password, if it has one (the user is asked otherwise) |
+| `window` | string | Any app's window on this computer (macOS, Windows, Linux), streamed by [Rein Remote](../../features/previews/#any-apps-window) with input: part of its title or app's name, or its id; `list` returns the windows to choose from |
 | `app` | boolean | Linux: start a virtual display for a native app (no VM). Rein starts and shows it; the agent then starts the app on it with its shell tool (`DISPLAY=:N app &`) |
 
 ## Pets

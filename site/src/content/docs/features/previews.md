@@ -45,10 +45,60 @@ For a VM, an emulator or a desktop app, Rein shows a VNC display. Rein itself sp
 |---|---|
 | An OS or anything in QEMU | `qemu-system-x86_64 … -vnc :1`, then preview `:1` |
 | A native Linux app (desktop or headless server), no VM | The agent asks for a virtual display (the `preview` tool's `app`), Rein starts one and shows it, and the agent starts the app on it (`DISPLAY=:20 your-app &`) with its shell tool, so your approvals apply. Rein uses TigerVNC's `Xvnc` if installed, else `Xvfb` with `x11vnc`, and says what to install if neither is there |
-| An Android app | The emulator on a virtual display as above (`-no-window` has no screen to share) |
+| An Android app | The emulator's window, as [any app's window](#any-apps-window) (or the emulator on a virtual display as above) |
+| An iOS app | The iOS Simulator's window, as [any app's window](#any-apps-window) (macOS) |
 | A whole desktop | Its screen sharing (macOS Screen Sharing, a VNC server on Linux or Windows) |
 
 Click into the screen and type: keys, the mouse and the wheel go to it. A display with a VNC password asks for it in the pane (the agent can pass it too); it's kept in the chat, never sent to the page. macOS Screen Sharing works with "VNC viewers may control screen with password" turned on (its macOS-account sign-in isn't supported). A virtual display Rein started stops when its preview closes.
+
+## Any app's window
+
+With [Rein Remote](#video-with-rein-remote) installed, the agent can show you any window on the
+computer Rein runs on, on macOS, Windows or Linux: a desktop app, the iOS Simulator, the Android
+emulator, a game. Nothing in the app needs to support it; the window is captured by the operating
+system, streamed as video and controlled from your device:
+
+- The agent uses the `preview` tool's `window` with part of the window's title or its app's name
+  (`window: "Simulator"`), or asks for `list` first. You can type `window:Calculator` into
+  **+ Preview** (`window` alone lists them).
+- Clicking brings the window to the front first, as Remote Desktop does (a click goes to the window
+  on top where it lands), and moves the computer's pointer. Keys and text go straight to the window's
+  app, so they work while it's behind other windows.
+- On Linux the window streams as it is even when another window covers it (XComposite).
+
+:::note[macOS permissions]
+macOS asks once for the app that runs Rein (your terminal, for example): **Screen Recording** to
+see windows and **Accessibility** to control them, both in System Settings → Privacy & Security.
+Turn them on, then restart that app. Rein Remote asks macOS to show the Accessibility prompt the first
+time.
+:::
+
+## Video with Rein Remote
+
+Every preview can stream as video instead of frames (a web app, a VM's or an emulator's VNC display, a native app's virtual display, any app's window), with
+[Rein Remote](https://github.com/rein-harness/rein-remote) (Rein's own screen protocol). Rein uses it
+when the `rein-remote` binary is in `~/.rein/bin` or on your `PATH`:
+
+- The screen goes as H.264, decoded by your browser (with the device's hardware decoder where it has
+  one), and only when it changes: a still screen sends almost nothing.
+- The cursor is drawn on your device, at your mouse at once, like Remote Desktop: moving it costs no
+  video and has no lag.
+- Touch works as with frames (tap, swipe to scroll, hold to drag, two-finger tap for a right-click),
+  and the keyboard button opens your device's keyboard.
+- The pane's address shows **· video** while it streams this way.
+
+With `rein-remote` installed, `Xvfb` alone is enough for a virtual display (`x11vnc` isn't needed,
+though Rein starts it too when it's there, for the fallback below). Install it with
+[`/preview install`](../../reference/commands/): Rein downloads the latest release for your
+computer from [its repository](https://github.com/rein-harness/rein-remote/releases), checks it against
+the release's `SHA256SUMS`, and puts it in `~/.rein/bin/`. The agent can offer the same
+(`remote_install`, which always asks you first). Turn it off with
+[`/settings reinRemote off`](../../reference/configuration/), or point the setting at a binary.
+
+The stream is a WebSocket on the web UI's own address, after the same sign-in and checks as the rest
+of the page; `rein-remote` itself listens on this computer only, behind a token the page never sees.
+If the WebSocket can't get through (a reverse proxy that doesn't pass WebSockets, see
+[Web UI](../web-ui/#behind-a-reverse-proxy)), the preview falls back to frames by itself.
 
 ## Slow links
 
@@ -64,7 +114,7 @@ When your connection is slow (mobile data, a server far away), frames that can't
 
 ## Not yet
 
-These are on the [roadmap](../../start/whats-new/): native windows on macOS and Windows, hardware-encoded video instead of frames (both through Rein's own screen protocol, [rein-remote](https://github.com/rein-harness/rein-remote)), an Android emulator without a virtual display (over `adb`), and the iOS Simulator (view only: it has no input API).
+Hardware video encoding on Windows and Linux is on [Rein Remote's roadmap](https://github.com/rein-harness/rein-remote/blob/main/ROADMAP.md) (macOS has it; elsewhere it encodes in software).
 
 ## Security
 

@@ -26,4 +26,10 @@ readline.createInterface({input: process.stdin}).on('line', (line) => {
     send({t: 'busy', busy: false});
     send({t: 'snapshot', snapshot: snap()});
   } else if (m.t === 'mode') send({t: 'snapshot', snapshot: {...snap(), mode: m.mode}});
+  // A preview streamed with Rein Remote: where the test's stand-in listens (FAKE_REMOTE=port:token).
+  else if (m.t === 'request' && m.op === 'remote-port') {
+    const [port, token] = (process.env.FAKE_REMOTE ?? '').split(':');
+    if (port && Number(m.args?.id) === 1) send({t: 'reply', id: m.id, value: {port: Number(port), token}});
+    else send({t: 'reply', id: m.id, error: 'that preview has no Rein Remote stream'});
+  }
 });

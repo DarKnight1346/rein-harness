@@ -8,17 +8,20 @@ import {EventEmitter} from 'node:events';
  * command the agent started prints a local URL. Only previews in this registry can be opened:
  * the page names one by id, never an address.
  */
-export type PreviewKind = 'url' | 'vnc';
+export type PreviewKind = 'url' | 'vnc' | 'window';
 export type Preview = {
   id: number;
   kind: PreviewKind;
-  /** `url`: an http(s) URL. `vnc`: host:port. */
+  /** `url`: an http(s) URL. `vnc`: host:port, or `:N` for a display only Rein Remote streams.
+   * `window`: a window on this computer's screen (its id from Rein Remote), streamed by Rein Remote. */
   target: string;
   title: string;
   /** Who found it: the agent asked to show it, or it appeared in a command's output. */
   source: 'agent' | 'detected';
   /** A virtual display Rein started for a native app (display.ts): stopped when the preview goes. */
   stop?(): void;
+  /** Rein Remote streaming this display (remote.ts): the page connects to it through the web UI. */
+  remote?: {port: number; token: string};
   /** A VNC display's password: kept here, never sent to the page. */
   password?: string;
   /** The shell whose output it came from (detected ones), so it goes when that command ends. */

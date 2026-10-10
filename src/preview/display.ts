@@ -10,7 +10,7 @@ import {onPath} from '../lsp/servers.js';
  * shows the display as a VNC preview. macOS and Windows have no virtual displays like this: there
  * an app's window is captured instead (window.ts).
  */
-export type VirtualDisplay = {display: number; port: number; how: string; stop(): void};
+export type VirtualDisplay = {display: number; /** Its VNC port (none: Xvfb alone, streamed by Rein Remote). */ port?: number; how: string; stop(): void};
 
 const free = (port: number) =>
   new Promise<boolean>((resolve) => {
@@ -18,19 +18,21 @@ const free = (port: number) =>
     s.listen(port, '127.0.0.1');
   });
 
-/** What this machine can run a virtual display with, or what to install. */
-export function displayTools(): {xvnc?: string; xvfb?: string; x11vnc?: string; missing?: string} {
+/** What this machine can run a virtual display with, or what to install. `remote`: Rein Remote is
+ * there to stream it, so Xvfb alone will do (no VNC server needed). */
+export function displayTools(remote = false): {xvnc?: string; xvfb?: string; x11vnc?: string; missing?: string} {
   if (process.platform !== 'linux') return {missing: 'virtual displays are a Linux feature: on macOS and Windows, preview the app’s window instead (window: "<app name>")'};
   const xvnc = onPath('Xvnc') ?? onPath('Xtigervnc');
   const xvfb = onPath('Xvfb');
   const x11vnc = onPath('x11vnc');
-  if (xvnc || (xvfb && x11vnc)) return {...(xvnc ? {xvnc} : {}), ...(xvfb ? {xvfb} : {}), ...(x11vnc ? {x11vnc} : {})};
+  if (xvnc || (xvfb && (x11vnc || remote))) return {...(xvnc ? {xvnc} : {}), ...(xvfb ? {xvfb} : {}), ...(x11vnc ? {x11vnc} : {})};
   return {missing: 'no virtual display found: install TigerVNC (apt install tigervnc-standalone-server, dnf install tigervnc-server) or Xvfb and x11vnc'};
 }
 
-/** Start a display (the first free :N from :20) at `width`×`height`, its VNC on localhost only. */
-export async function startDisplay(size: {width: number; height: number}): Promise<VirtualDisplay> {
-  const tools = displayTools();
+/** Start a display (the first free :N from :20) at `width`×`height`, its VNC (when there is one) on
+ * localhost only. `remote`: Rein Remote will stream it, so a VNC server is optional. */
+export async function startDisplay(size: {width: number; height: number}, remote = false): Promise<VirtualDisplay> {
+  const tools = displayTools(remote);
   if (tools.missing) throw new Error(tools.missing);
   let display = 20;
   while (display < 100 && (existsSync(`/tmp/.X11-unix/X${display}`) || existsSync(`/tmp/.X${display}-lock`) || !(await free(5900 + display)))) display++;
@@ -44,10 +46,18 @@ export async function startDisplay(size: {width: number; height: number}): Promi
     how = 'Xvnc';
     procs.push(spawn(tools.xvnc, [`:${display}`, '-geometry', geometry, '-depth', '24', '-SecurityTypes', 'None', '-localhost', '-rfbport', String(port), '-AlwaysShared', '-desktop', 'Rein preview'], {stdio: 'ignore'}));
   } else {
-    how = 'Xvfb + x11vnc';
+    how = tools.x11vnc ? 'Xvfb + x11vnc' : 'Xvfb';
     procs.push(spawn(tools.xvfb!, [`:${display}`, '-screen', '0', `${geometry}x24`, '-nolisten', 'tcp'], {stdio: 'ignore'}));
-    await waitFor(() => existsSync(`/tmp/.X11-unix/X${display}`), 5000);
-    procs.push(spawn(tools.x11vnc!, ['-display', `:${display}`, '-rfbport', String(port), '-localhost', '-nopw', '-forever', '-shared', '-quiet'], {stdio: 'ignore'}));
+    const ready = await waitFor(() => existsSync(`/tmp/.X11-unix/X${display}`), 5000);
+    if (!tools.x11vnc) {
+      for (const p of procs) p.on('error', () => {});
+      if (!ready) {
+        stop();
+        throw new Error("the virtual display (Xvfb) didn't start");
+      }
+      return {display, how, stop};
+    }
+    procs.push(spawn(tools.x11vnc, ['-display', `:${display}`, '-rfbport', String(port), '-localhost', '-nopw', '-forever', '-shared', '-quiet'], {stdio: 'ignore'}));
   }
   for (const p of procs) p.on('error', () => {});
   // Ready when its VNC port answers.
