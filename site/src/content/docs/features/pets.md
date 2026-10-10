@@ -16,19 +16,29 @@ The animated pet you picked in ChatGPT or the Codex app comes along to Rein. It 
 
 Each frame is drawn with half-block characters (two pixels per character, in colour), so it works in any terminal, including macOS Terminal, without image support.
 
-## Where pets come from
+## Your own pets
+
+Rein keeps pets of its own, on this machine, with no account needed. A pet is a sprite sheet in the ChatGPT pets layout: a PNG of 1536×1872 (nine rows of animations) or 1536×2288 (plus two rows of look directions), in 192×208 cells.
+
+- `/pet add <sheet.png> [name]` adds one and shows it.
+- **The create-pet skill's pets are picked up by themselves.** When `/work-pets:create-pet` finishes a sheet (its `Pets/<Name>/final/spritesheet-extended.png` in the conversation's scratchpad), Rein adds it as one of your pets at the end of that turn, named from the skill's `pet_request.json`, and shows it. No upload is needed.
+
+They're kept in `~/.rein/pets/mine/`. Your own pets only show in Rein; to have one in the ChatGPT and Codex apps too, upload it there.
+
+## Pets from your ChatGPT account
 
 Pets live in your **ChatGPT account**, so they come through a **Codex account** signed in to Rein (`/login`). Rein starts the official `codex app-server` with apps on, and calls the Pets app's tools there (`list_pets`, `get_pet_download_link`, `select_pet`…). Codex holds the sign-in, and Rein never sees your tokens. No model is called. The pet's sprite sheet is downloaded once and kept in `~/.rein/pets/`.
 
-With only Claude accounts there's no pet. Built-in pets come as WebP: Rein converts them with whatever this machine has (`sips` on macOS, otherwise libwebp's `dwebp`, ImageMagick or ffmpeg). With none of those, `/pet` says so and the sidebar stays as it is.
+With only Claude accounts you have your own pets only. Built-in pets come as WebP: Rein converts them with whatever this machine has (`sips` on macOS, otherwise libwebp's `dwebp`, ImageMagick or ffmpeg). With none of those, `/pet` says so and the sidebar stays as it is.
 
 ## `/pet`
 
 | Command | What it does |
 |---|---|
-| `/pet` | Lists your pets (built-in and your own), the active one marked `●` |
-| `/pet <name>` | Picks a pet (by name or id; the start of a name is enough). It changes in the ChatGPT and Codex apps too |
-| `/pet off` | No pet, here and in the apps |
+| `/pet` | Lists your own pets, then your ChatGPT account's (built-in and custom), the one showing marked `●` |
+| `/pet <name>` | Picks a pet (by name or id; the start of a name is enough). Picking a ChatGPT pet changes it in the ChatGPT and Codex apps too |
+| `/pet add <sheet> [name]` | Adds a sprite sheet as one of your pets and shows it |
+| `/pet off` | No pet in Rein (the apps keep theirs) |
 | `/pet refresh` | Reads your pet again, after you changed it in another app |
 
 To keep your pet out of Rein only, set **Pet** to **Off** in `/settings` → **General** (`"pet": "off"`).

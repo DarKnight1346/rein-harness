@@ -2,7 +2,8 @@ import {EventEmitter} from 'node:events';
 import type {Account} from '../providers/types.js';
 import {loadAccounts} from '../store/accounts.js';
 import {CodexAppsBridge, type AppTool} from './bridge.js';
-import {forgetPet, loadPetFrames, STATES, type PetFrames, type PetState} from './sprite.js';
+import {forgetPet, loadPetFrames, loadSheetFrames, STATES, type PetFrames, type PetState} from './sprite.js';
+import {activePet, addLocalPet, localPets, pickUpFinished, setActivePet, type LocalPet} from './local.js';
 
 /**
  * Pets: the animated companion from the ChatGPT and Codex apps, in Rein. The one you picked there
@@ -10,7 +11,8 @@ import {forgetPet, loadPetFrames, STATES, type PetFrames, type PetState} from '.
  * apps: running while it works, waiting when it needs you, failed on an error, review when a turn
  * is done, waving hello. Pets live in your ChatGPT account, so they need a Codex account here.
  */
-export type PetInfo = {id: string; name: string; description: string; custom: boolean; active: boolean};
+/** `source`: one of Rein's own (on this machine) or one of your ChatGPT account's. */
+export type PetInfo = {id: string; name: string; description: string; custom: boolean; active: boolean; source: 'rein' | 'chatgpt'};
 /** What the agent is doing, as the pet shows it. */
 export type Activity = 'idle' | 'working' | 'waiting' | 'failed' | 'done' | 'hello';
 
@@ -38,8 +40,15 @@ export class Pets extends EventEmitter {
   async refresh(): Promise<void> {
     if (!this.enabled()) return this.clear('Pets are off (/settings → General → Pet).');
     this.codex = (await loadAccounts()).accounts.find((a) => a.provider === 'codex');
-    if (!this.codex) return this.clear('Pets come from your ChatGPT account: sign in a Codex account (/login) to bring yours.');
-    const pets = await this.list();
+    this.pickUp();
+    const choice = activePet();
+    if (choice.source === 'off') return this.clear('No pet: /pet <name> picks one.');
+    if (choice.source === 'rein') {
+      const mine = localPets().find((p) => p.id === choice.id);
+      if (mine) return this.show(mine);
+    }
+    if (!this.codex) return this.clear(localPets().length ? 'Pick one of your pets: /pet <name>.' : 'No pet yet: /pet add <sprite sheet> adds one, or sign in a Codex account (/login) to bring your ChatGPT pet.');
+    const pets = (await this.list()).filter((p) => p.source === 'chatgpt');
     const active = pets.find((p) => p.active);
     if (!active) return this.clear('No pet is selected: /pet <name> picks one.');
     const link = await this.bridge.call('pets.get_pet_download_link', {pet_id: active.id});
@@ -55,8 +64,39 @@ export class Pets extends EventEmitter {
     this.emit('change');
   }
 
-  /** Every pet you have (built-in and custom), across pages. */
+  /** Show one of your own pets. */
+  private show(p: LocalPet): void {
+    this.pet = {id: p.id, name: p.name, description: p.description, custom: true, active: true, source: 'rein'};
+    this.frames = loadSheetFrames(p.id, p.sheet, PET_WIDTH);
+    this.note = undefined;
+    this.emit('change');
+  }
+
+  /**
+   * Pets the create-pet skill has finished (in a conversation's scratchpad), added as your own; the
+   * newest is shown. Returns the ones added.
+   */
+  pickUp(): LocalPet[] {
+    const added = pickUpFinished();
+    const last = added.at(-1);
+    if (last) setActivePet({source: 'rein', id: last.id});
+    return added;
+  }
+
+  /** Add a sprite sheet as one of your pets and show it. */
+  add(sheet: string, name: string, description = ''): LocalPet {
+    const p = addLocalPet(sheet, name, description);
+    setActivePet({source: 'rein', id: p.id});
+    this.show(p);
+    return p;
+  }
+
+  /** Every pet you have: your own, then your ChatGPT account's (built-in and custom), across pages. */
   async list(): Promise<PetInfo[]> {
+    const choice = activePet();
+    const mine: PetInfo[] = localPets().map((p) => ({id: p.id, name: p.name, description: p.description, custom: true, active: choice.source === 'rein' && choice.id === p.id, source: 'rein'}));
+    if (!this.codex) this.codex = (await loadAccounts()).accounts.find((a) => a.provider === 'codex');
+    if (!this.codex) return mine;
     const out: PetInfo[] = [];
     let cursor: string | null = null;
     let activeId: string | undefined;
@@ -65,21 +105,34 @@ export class Pets extends EventEmitter {
       if (!r.ok) throw new Error(r.text || 'list_pets failed');
       const s = r.structured ?? {};
       activeId = s.active_pet_id ?? activeId;
-      for (const p of s.pets ?? []) out.push({id: String(p.id), name: String(p.name ?? p.id), description: String(p.description ?? ''), custom: !!p.is_custom, active: !!p.is_active});
+      for (const p of s.pets ?? []) out.push({id: String(p.id), name: String(p.name ?? p.id), description: String(p.description ?? ''), custom: !!p.is_custom, active: !!p.is_active, source: 'chatgpt'});
       cursor = s.cursor ?? null;
       if (!cursor) break;
     }
-    return out.map((p) => ({...p, active: p.active || p.id === activeId}));
+    const chatgptShows = choice.source === 'chatgpt';
+    return [...mine, ...out.map((p) => ({...p, active: chatgptShows && (p.active || p.id === activeId)}))];
   }
 
-  /** Pick a pet (by id or name), or `default` for none; then show it. */
+  /**
+   * Pick a pet by id or name (yours first), or `off` for none in Rein. One of your ChatGPT pets is
+   * also selected in your account, so the ChatGPT and Codex apps show it too.
+   */
   async select(which: string): Promise<PetInfo | undefined> {
-    const pets = which === 'default' ? [] : await this.list();
+    if (which === 'off' || which === 'default') {
+      setActivePet({source: 'off'});
+      await this.refresh();
+      return undefined;
+    }
+    const pets = await this.list();
     const q = which.toLowerCase();
-    const pick = which === 'default' ? undefined : (pets.find((p) => p.id.toLowerCase() === q) ?? pets.find((p) => p.name.toLowerCase() === q) ?? pets.find((p) => p.name.toLowerCase().startsWith(q)));
-    if (which !== 'default' && !pick) throw new Error(`No pet called "${which}". /pet lists yours.`);
-    const r = await this.bridge.call('pets.select_pet', {pet_id: pick?.id ?? 'default'});
-    if (!r.ok) throw new Error(r.text || 'select_pet failed');
+    const pick = pets.find((p) => p.id.toLowerCase() === q) ?? pets.find((p) => p.name.toLowerCase() === q) ?? pets.find((p) => p.name.toLowerCase().startsWith(q));
+    if (!pick) throw new Error(`No pet called "${which}". /pet lists yours.`);
+    if (pick.source === 'rein') setActivePet({source: 'rein', id: pick.id});
+    else {
+      const r = await this.bridge.call('pets.select_pet', {pet_id: pick.id});
+      if (!r.ok) throw new Error(r.text || 'select_pet failed');
+      setActivePet({source: 'chatgpt'});
+    }
     await this.refresh();
     return pick;
   }

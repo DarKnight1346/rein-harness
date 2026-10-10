@@ -56,6 +56,7 @@ import {memoryFacts, memoryFile} from '../tools/memory.js';
 import {readFileSync, statSync} from 'node:fs';
 import {accountName, hidingIdentity, redact} from './privacy.js';
 import nodePath from 'node:path';
+import os from 'node:os';
 import {cloneMissing, findWorkspace} from '../workspace/index.js';
 import {CONFIG_KEYS, defaultValue, formatValue, keyInfo, parseValue} from '../store/configKeys.js';
 import {TAB_TITLES} from './ConfigureScreen.js';
@@ -694,7 +695,15 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
   useEffect(() => {
     if (['approval', 'ask', 'plan', 'trust'].includes(overlay.name)) runtime.pets.setActivity('waiting');
     else if (chat.busy) runtime.pets.setActivity('working');
-    else if (petBusy.current) runtime.pets.setActivity(entries.at(-1)?.kind === 'error' ? 'failed' : 'done');
+    else if (petBusy.current) {
+      runtime.pets.setActivity(entries.at(-1)?.kind === 'error' ? 'failed' : 'done');
+      // A pet the create-pet skill just finished: Rein's own now, and on screen.
+      const fresh = runtime.pets.pickUp();
+      if (fresh.length) {
+        void runtime.pets.refresh().then(() => runtime.pets.setActivity('hello'), () => {});
+        log('info', `${fresh.map((x) => x.name).join(', ')} ${fresh.length > 1 ? 'are' : 'is'} one of your pets now (/pet), and here in the sidebar.`);
+      }
+    }
     petBusy.current = chat.busy;
   }, [chat.busy, overlay.name]);
 
@@ -1205,11 +1214,28 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
         const p = runtime.pets;
         void (async () => {
           if (!arg) {
+            p.pickUp();
             const pets = await p.list();
-            log('info', [`Your pets (from the ChatGPT and Codex apps):`, ...pets.map((x) => `  ${x.active ? '●' : '○'} ${x.name}${x.custom ? ' (yours)' : ''} — ${x.description}`), pets.some((x) => x.active) ? '/pet <name> picks another, /pet off hides it.' : '/pet <name> picks one.', ...(p.note && !p.pet ? [p.note] : [])].join('\n'));
+            const row = (x: (typeof pets)[number]) => `  ${x.active ? '●' : '○'} ${x.name}${x.description ? ` — ${x.description}` : ''}`;
+            const mine = pets.filter((x) => x.source === 'rein');
+            const theirs = pets.filter((x) => x.source === 'chatgpt');
+            log('info', [
+              ...(mine.length ? ['Your pets (on this machine):', ...mine.map(row)] : []),
+              ...(theirs.length ? ['From your ChatGPT account (also in the ChatGPT and Codex apps):', ...theirs.map(row)] : []),
+              ...(!pets.length ? ['No pets yet.'] : []),
+              pets.some((x) => x.active) ? '/pet <name> picks another · /pet add <sheet> [name] adds one · /pet off hides it.' : '/pet <name> picks one · /pet add <sprite sheet> [name] adds one.',
+              ...(p.note && !p.pet ? [p.note] : []),
+            ].join('\n'));
+          } else if (arg.startsWith('add ') || arg === 'add') {
+            const [, file = '', ...name] = arg.split(/\s+/);
+            if (!file) return log('info', 'Usage: /pet add <sprite sheet PNG> [name]  (1536×1872 or 1536×2288, the ChatGPT pets layout)');
+            const full = nodePath.resolve(file.replace(/^~(?=$|\/)/, os.homedir()));
+            const pet = p.add(full, name.join(' ') || nodePath.basename(full, '.png').replace(/^spritesheet[-_]?/, '') || 'My pet');
+            log('info', `${pet.name} is one of your pets now, and here at the bottom of the sidebar.`);
+            p.setActivity('hello');
           } else if (arg === 'off') {
-            await p.select('default');
-            log('info', 'Pet off. /pet <name> brings one back.');
+            await p.select('off');
+            log('info', 'No pet here now. /pet <name> brings one back.');
           } else if (arg === 'refresh') {
             await p.refresh();
             log('info', p.pet ? `${p.pet.name} is here.` : (p.note ?? 'No pet.'));

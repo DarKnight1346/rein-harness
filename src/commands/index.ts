@@ -28,7 +28,7 @@ export const COMMANDS: Command[] = [
   {name: 'export', description: 'Save the conversation as Markdown or HTML', usage: 'Save the conversation as Markdown and copy it to the clipboard: /export [file] (default ~/.rein/exports/<id>.md); /export html [file] for a page with tool calls and diffs'},
   {name: 'ide', description: 'Connect to your editor', usage: 'Editor integration (VS Code, Cursor, Windsurf, JetBrains with the Claude Code extension): connect, or show the connection'},
   {name: 'remote', description: 'Use this session from your phone', usage: 'Use this session from your phone or another computer: a page Rein serves (pairing code); /remote pair · status · unpair · off'},
-  {name: 'pet', description: 'Your pet from the ChatGPT and Codex apps', usage: 'Your pet from the ChatGPT and Codex apps, in the sidebar: /pet lists yours, /pet <name> picks one, /pet off hides it, /pet refresh'},
+  {name: 'pet', description: 'Your pet, in the sidebar', usage: 'Your pet, in the sidebar: /pet lists yours, /pet <name> picks one, /pet add <sheet> [name] adds one, /pet off hides it, /pet refresh'},
   {name: 'add-dir', description: 'Let the agent work in another folder', usage: 'Add a working directory the agent can use without asking: /add-dir <path> (no path: list them)'},
   {name: 'permissions', description: 'The allow and deny rules in effect', usage: 'Show the allow/deny rules in effect and where they come from'},
   {name: 'vault', description: 'Secrets the agent can use without seeing them', usage: 'Secrets the agent can use in shell commands as $NAME without seeing them: list, /vault set NAME, /vault rm NAME'},

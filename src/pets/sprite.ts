@@ -138,6 +138,22 @@ export async function loadPetFrames(id: string, url: string, width: number, fetc
   return frames;
 }
 
+/** The frames of a sheet on disk (one of your own pets), cached by its bytes. */
+export function loadSheetFrames(id: string, file: string, width: number): PetFrames {
+  const bytes = readFileSync(file);
+  const key = createHash('sha256').update(bytes).digest('hex').slice(0, 16);
+  mkdirSync(petsDir(), {recursive: true});
+  const cached = path.join(petsDir(), `mine-${id.replace(/[^\w-]/g, '_')}-${key}-${width}.json`);
+  if (existsSync(cached)) {
+    try {
+      return JSON.parse(readFileSync(cached, 'utf8')) as PetFrames;
+    } catch {}
+  }
+  const frames = framesFromSheet(id, decodePng(bytes), width);
+  writeFileSync(cached, JSON.stringify(frames));
+  return frames;
+}
+
 /** Forget a pet's downloaded sheet (its artwork changed). */
 export function forgetPet(id: string): void {
   rmSync(path.join(petsDir(), `${id.replace(/[^\w-]/g, '_')}.sheet`), {force: true});

@@ -1,4 +1,4 @@
-import {mkdtempSync} from 'node:fs';
+import {mkdirSync, mkdtempSync, writeFileSync} from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import {deflateSync} from 'node:zlib';
@@ -139,10 +139,39 @@ describe('Pets', () => {
     await pets.refresh();
     expect(pets.pet).toBeUndefined();
     expect(pets.note).toMatch(/sign in a Codex account/);
-    expect((await pets.list()).map((p) => p.name)).toEqual(['Codex', 'Hoots']);
+    expect(await pets.list()).toEqual([]);
+    writeFileSync(path.join(home, 'accounts.json'), JSON.stringify({version: 1, importOffered: true, accounts: [{id: 'codex-1', provider: 'codex', home: null, imported: true}]}));
+    expect((await pets.list()).map((p) => [p.name, p.source])).toEqual([['Codex', 'chatgpt'], ['Hoots', 'chatgpt']]);
     await pets.select('hoo').catch(() => {}); // refresh after selecting needs the account; the selection itself went through
     expect(state.active).toBe('hoots');
     await expect(pets.select('nobody')).rejects.toThrow(/No pet called "nobody"/);
+  });
+
+  it("keeps your own pets: adds a sheet, picks up what the create-pet skill finished, shows it without an account", async () => {
+    const pets = new Pets(() => true, fakeBridge().bridge as any);
+    // A finished create-pet run in a conversation's scratchpad.
+    const run = path.join(home, 'scratch', 's1', 'Pets', 'Kernel');
+    mkdirSync(path.join(run, 'final'), {recursive: true});
+    writeFileSync(path.join(run, 'final', 'spritesheet-extended.png'), sheet());
+    writeFileSync(path.join(run, 'pet_request.json'), JSON.stringify({display_name: 'Kernel', description: 'A microchip'}));
+    expect(pets.pickUp().map((p) => p.name)).toEqual(['Kernel']);
+    expect(pets.pickUp()).toEqual([]); // once
+    await pets.refresh();
+    expect([pets.pet?.name, pets.pet?.source]).toEqual(['Kernel', 'rein']);
+    expect(pets.frames?.states.idle).toHaveLength(6);
+    // A sheet of the wrong size isn't a pet.
+    const bad = path.join(home, 'bad.png');
+    writeFileSync(bad, png(10, 10, () => [0, 0, 0, 255]));
+    expect(() => pets.add(bad, 'Bad')).toThrow(/1536×1872/);
+    // Another one, then back and forth by name; off hides it.
+    const two = path.join(home, 'two.png');
+    writeFileSync(two, png(CELL.w * 8, CELL.h * 9, (x, y) => (x % CELL.w > 50 && y % CELL.h > 50 ? [10, 200, 10, 255] : [0, 0, 0, 0])));
+    expect(pets.add(two, 'Sprout').name).toBe('Sprout');
+    expect(pets.pet?.name).toBe('Sprout');
+    await pets.select('kern');
+    expect(pets.pet?.name).toBe('Kernel');
+    await pets.select('off');
+    expect(pets.pet).toBeUndefined();
   });
 
   it('turns what the agent does into animations, and settles back to idle', () => {

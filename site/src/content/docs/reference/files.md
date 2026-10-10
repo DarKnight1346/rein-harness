@@ -41,7 +41,7 @@ An existing `~/.rein` keeps being used as it is, and so does `REIN_HOME`. To swi
 | `marketplaces/<repo>/` | Each marketplace's clone (shallow). Safe to delete; fetched again |
 | `plugins/<id>/` | Items you installed from a marketplace, loaded like plugins |
 | `plugins.json` | What's installed: id, version, marketplace, and the settings each changed (so uninstalling undoes them) |
-| `pets/` | Your [pet](../../features/pets/)'s sprite sheet (`<id>.sheet`) and the frames Rein shrank from it for the terminal. Safe to delete; it's downloaded again |
+| `pets/` | [Pets](../../features/pets/): `mine/<id>/` holds your own (a sprite sheet and `pet.json`); `active.json` says which shows; `<id>.sheet` is a ChatGPT pet's downloaded sheet; the `.json` files are frames shrunk for the terminal. The downloads and frames are safe to delete |
 | `state/usage.json` | Last-known usage windows per account, plus limit cooldowns (account unusable until a time) |
 | `exports/<id>.md` | Conversations saved with `/export` (when no file is given) |
 | `mcp-auth/<host>_<path>.json` | OAuth tokens and client registration for each remote MCP server you signed in to (owner-only), e.g. `mcp.linear.app_mcp.json`. Delete one to sign out of that server |
