@@ -37,11 +37,11 @@ describe('skills', () => {
     await mk(g, 'git-sync', 'unused default', {'config.json': JSON.stringify({name: 'git:sync', main: 'PROMPT.md', aliases: ['gs', 'help'], description: 'Sync with origin'}), 'PROMPT.md': 'Fetch and rebase.'});
     const skills = loadSkills(proj);
     const by = Object.fromEntries(skills.map((s) => [s.name, s]));
-    // Built-in skills of packs that are off (migration playbooks, the tour) aren't loaded.
+    // Built-in skills of packs that are off (the tour) aren't loaded.
     expect(Object.keys(by).sort()).toEqual(['audit', 'deploy', 'git:sync', 'help', 'init', 'plan', 'plan:deep', 'review', 'review:deep', 'skill:create', 'skill:edit']);
-    setEnabledPacks(() => ['migrations', 'insight']);
+    setEnabledPacks(() => ['insight']);
     try {
-      expect(loadSkills(proj).map((s) => s.name)).toEqual(expect.arrayContaining(['codemod', 'contract-tests', 'expand-contract', 'migrate:java21', 'migrate:python3', 'migrate:react-hooks', 'tour']));
+      expect(loadSkills(proj).map((s) => s.name)).toEqual(expect.arrayContaining(['tour']));
     } finally {
       setEnabledPacks(() => []);
     }

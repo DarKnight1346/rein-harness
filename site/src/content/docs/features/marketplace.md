@@ -118,7 +118,9 @@ export function activate(rein) {
 | `exec(cmd, args, {cwd?, timeoutMs?})`, `git(args, cwd?)`, `ripgrep()` | Run programs (no shell), git, and the ripgrep that ships with Rein |
 | `workspace()`, `config()` | The [workspace](../workspaces/) Rein is in, and Rein's settings (read-only) |
 | `settings.get(key)`, `settings.set(key, value)` | The item's own settings (`~/.rein/plugin-data/<id>/settings.json`) |
-| `on('turnEnd', fn)` | When a turn of the agent ends |
+| `checks.endOfTurn({id, run(changed)})` | A check when the agent ends a turn, over the files this request changed (`{path, before, after}`): a note returned goes back to the agent, which carries on to address it. Once per request |
+| `checks.afterEdit({id, run({path, args})})` | After each edit the agent makes: a note returned is added to the edit's result |
+| `on('turnEnd' \| 'requestStart', fn)` | When a turn of the agent ends; when your next message starts a new request |
 | `version`, `item` | The API version, and the item's id, folder and data folder |
 
 Types for editors: `import type {Rein} from 'rein-harness/api'`. An item that needs a newer API than this Rein has isn't loaded, and Rein says to update. An item whose code fails to load is reported at startup, and the rest still load; a sidebar section or segment that throws shows its error in place. The store marks items with code *Runs code on your machine*: install them only from a source you trust. The official marketplace's [Git status](https://github.com/rein-harness/rein-marketplace/tree/main/items/git-status) item is a whole example.

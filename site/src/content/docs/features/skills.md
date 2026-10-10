@@ -135,19 +135,13 @@ Fix issue #$1 with priority $2. Recent changes: !`git log --oneline -5`
 
 ## Built-in skills
 
-The migration skills (`/expand-contract`, `/contract-tests`, `/codemod`, `/migrate:java21`, `/migrate:python3`, `/migrate:react-hooks`) are in the **Contracts and migrations** pack and `/tour` in **Insight and automation**. Both packs are off by default: turn them on in `/settings` → **Packs** ([Packs](../../reference/commands/#packs)). While a pack is off, the agent isn't offered its skills either. `/plan:deep`, `/review:deep` and `/skill:edit` don't show in a bare `/` list; type part of the name to find them.
+`/tour` is in the **Insight and automation** pack, off by default: turn it on in `/settings` → **Packs** ([Packs](../../reference/commands/#packs)); while it's off, the agent isn't offered it either. The migration playbooks (`/contracts:codemod`, `/contracts:migrate-java21` and the rest) come with the [Contracts and migrations](../contracts/) marketplace item. `/plan:deep`, `/review:deep` and `/skill:edit` don't show in a bare `/` list; type part of the name to find them.
 
 | Skill | What it does |
 |---|---|
 | `/init [guidance]` | The agent studies the project and writes or improves `AGENTS.md` (commands that actually exist, a map, conventions, gotchas), then reads it back to check every command and path. |
 | `/plan <task>` | Plan mode on. Restate the goal, explore read-only (with subagents for wide areas), ask clarifying questions with `ask_user`, then present a plan with 2–10 checkable milestones. |
 | `/plan:deep <task>` | The thorough version for big or risky work: broader exploration with parallel subagents, more questions, an [advisor](../subagents/) review of the approach *and* of the draft plan (when an advisor is configured), risks, rollback, and 3–10 milestones. |
-| `/expand-contract <change>` | Plan mode on. Finds who reads and writes the old shape, picks the pattern (rename, retype, make required, split, remove), and plans expand → migrate → contract steps that each deploy and roll back alone. See [Expand and contract](../contracts/#expand-and-contract). |
-| `/contract-tests [boundary]` | Finds the services this one calls and what it uses from each, then writes Pact consumer tests (and provider verification in the workspace). Asks before adding Pact. See [Contract tests](../contracts/#contract-tests-between-services). |
-| `/codemod <change>` | Finds every place a repetitive change applies, writes an idempotent script with the right tool for the language, tests it on a few files, runs it everywhere, then builds and tests. See [Codemods](../contracts/#codemods-for-repetitive-changes). |
-| `/migrate:java21 [details]` | Plan mode on. A Java 8/11/17 → 21 upgrade in phases (build on 21 first, dependencies, removed APIs, then `release 21`), with OpenRewrite for the mechanical parts. See [Migration playbooks](../contracts/#migration-playbooks). |
-| `/migrate:python3 [details]` | Plan mode on. Python 2 → 3 keeping the code running on 2 until the switch: tests, `futurize`, bytes vs text by hand, dependencies, then dropping 2. |
-| `/migrate:react-hooks [components]` | Plan mode on. Class components to hooks in batches, leaves first, with a conversion table and the usual traps (stale closures, merged `setState`, imperative refs). |
 | `/review [what]` | Reviews the current changes for bugs, security, test coverage and copyright/licensing, one reviewer per area on the best model for it, then reports verified findings and asks which to fix. See [Reviewing code](#reviewing-code-review-and-reviewdeep). |
 | `/review:deep [what]` | Plan mode on. A reviewer per area on each signed-in provider, every finding checked with the advisor and you, then a plan that fixes only what you picked. |
 | `/skill:create <what>` | The agent writes a new skill for you, project or global. |

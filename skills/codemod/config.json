@@ -1,4 +1,0 @@
-{
-  "name": "codemod",
-  "description": "Make a repetitive change across many files with a deterministic script (jscodeshift, ts-morph, OpenRewrite, Comby) instead of hand edits"
-}

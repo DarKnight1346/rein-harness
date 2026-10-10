@@ -12,7 +12,6 @@ export type Pack = {id: string; label: string; description: string; commands: Co
 export const PACKS: Pack[] = [
   {id: 'ci', label: 'CI and pull requests', description: 'CI checks and fixes, PRs, affected and flaky tests, coverage', commands: ['ci', 'pr', 'affected', 'flaky', 'build', 'coverage', 'mutate', 'trackers'], skills: []},
   {id: 'specs', label: 'Specs and planning', description: 'Specs, ADRs, architecture rules, plan risk, best-of-N runs', commands: ['spec', 'adr', 'arch', 'risk', 'bestof'], skills: []},
-  {id: 'migrations', label: 'Contracts and migrations', description: 'API contracts, schema migrations, dead code, migration playbooks', commands: ['contracts', 'migrations', 'deadcode', 'flags'], skills: ['codemod', 'expand-contract', 'contract-tests', 'migrate:java21', 'migrate:python3', 'migrate:react-hooks']},
   {id: 'system', label: 'Multi-repo systems', description: 'Service and symbol graphs, impact across repos, local stacks', commands: ['services', 'symbols', 'refs', 'impact', 'changeset', 'codemap', 'stack'], skills: []},
   {id: 'codebase', label: 'Large codebases', description: 'Workspaces, monorepo scope, code owners, semantic index', commands: ['workspace', 'scope', 'owners', 'index', 'map', 'pack'], skills: []},
   {id: 'insight', label: 'Insight and automation', description: 'Stats, cache analytics, scheduled jobs, sessions, policy, tours', commands: ['stats', 'cache', 'schedule', 'env', 'sessions', 'policy'], skills: ['tour']},
@@ -36,6 +35,20 @@ export function packsHint(): string {
   if (!off.length) return 'Every pack is on (/settings → Packs).';
   return `${off.reduce((n, p) => n + p.commands.length + p.skills.length, 0)} more commands and skills are in packs that are off: ${off.map((p) => p.label).join(', ')}. Turn them on in /settings → Packs.`;
 }
+
+/**
+ * Commands and skills that moved out of Rein into marketplace items (they ship their own code
+ * there). Typing one says where it went, until the item is installed.
+ */
+export const MOVED: Record<string, {item: string; name: string}> = Object.fromEntries(
+  [
+    ['contracts', ['contracts', 'migrations', 'deadcode', 'flags', 'codemod', 'expand-contract', 'contract-tests', 'migrate:java21', 'migrate:python3', 'migrate:react-hooks']],
+  ].flatMap(([item, names]) => (names as string[]).map((n) => [n, {item: item as string, name: 'Contracts and migrations'}])),
+);
+export const movedMessage = (name: string) => {
+  const m = MOVED[name];
+  return m ? `/${name} moved to the marketplace, in the ${m.name} item: /marketplace install ${m.item} brings it back.` : undefined;
+};
 
 /** What typing a command of a pack that's off says. */
 export function packOffMessage(name: string): string | undefined {

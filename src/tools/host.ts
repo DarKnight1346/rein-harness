@@ -16,7 +16,7 @@ import {addedText, findSecrets, secretMessage} from './secrets.js';
 import {injectionSigns, injectionWarning, networkCapable, untrustedSource} from './untrusted.js';
 import {addedDeps, afterEdit, checkDeps, commandDeps, depMessage} from './deps.js';
 import {checkImports, loadArchitecture, violationMessage} from './architecture.js';
-import {RepeatEdits} from './repeats.js';
+import {extensions} from '../extensions/index.js';
 import {checkPolicy, type Policy} from '../policy.js';
 import {digestLog, formatDigest} from './logDigest.js';
 import {fingerprint, flakyNote, isTestCommand, knownFlaky, parseOutcomes, recordRun} from '../build/flaky.js';
@@ -549,9 +549,16 @@ export class ToolHost extends EventEmitter {
           }
         }
         result = repeat ?? (await tool.run(ctx, args ?? {}));
-        if (tool.name === 'edit' && result.ok && !origin && this.experiment('codemod-nudge')) {
-          const note = this.filesOf(ctx, tool, args).map((f) => this.repeats.after(Array.isArray((args as {edits?: unknown[]})?.edits) ? {edits: (args as {edits: {path?: string}[]}).edits.filter((e) => path.resolve(ctx.root, e.path ?? (args as {path?: string}).path ?? '') === f)} : args, f)).find(Boolean);
-          if (note) result = {...result, text: `${result.text}\n\n${note}`};
+        // Marketplace items' checks after an edit (extensions: checks.afterEdit): a note added to the result.
+        if (tool.name === 'edit' && result.ok && !origin && extensions.editChecks.length) {
+          const notes = this.filesOf(ctx, tool, args).flatMap((f) => extensions.editChecks.map(({value: c}) => {
+            try {
+              return c.run({path: path.relative(ctx.root, f).split(path.sep).join('/'), args});
+            } catch {
+              return undefined;
+            }
+          })).filter(Boolean);
+          if (notes.length) result = {...result, text: `${result.text}\n\n${[...new Set(notes)].join('\n\n')}`};
         }
         if (archNote && result.ok) {
           result = {...result, text: `${result.text}\n\n${archNote}`};
@@ -635,8 +642,6 @@ export class ToolHost extends EventEmitter {
 
   /** The `watchdog` experiment: the main agent repeating a failing command or undoing its own edits. */
   readonly watchdog = new Watchdog();
-  /** codemod-nudge: the same hand edit across files within a request. */
-  readonly repeats = new RepeatEdits();
 
   private experiment(name: string): boolean {
     return this.opts.experiments?.().includes(name) ?? false;

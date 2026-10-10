@@ -106,6 +106,21 @@ describe('extensions', () => {
     expect(ext.commands).toEqual([]);
   });
 
+  it("keeps an item's checks on the agent's work, and drops them with the item", async () => {
+    const dir = item('checker', `
+      export function activate(rein) {
+        rein.checks.endOfTurn({id: 'big', run: (changed) => changed.some((f) => (f.after ?? '').length > 10) ? 'too big' : undefined});
+        rein.checks.afterEdit({id: 'note', run: ({path}) => path.endsWith('.sql') ? 'a migration' : undefined});
+      }`);
+    const ext = new Extensions();
+    await ext.loadAll(host(), plugins);
+    expect(await ext.endChecks[0]!.value.run([{path: 'a.txt', after: 'x'.repeat(20)}])).toBe('too big');
+    expect(ext.editChecks[0]!.value.run({path: 'db/1.sql', args: {}})).toBe('a migration');
+    rmSync(dir, {recursive: true});
+    await ext.loadAll(host(), plugins);
+    expect([ext.endChecks.length, ext.editChecks.length]).toEqual([0, 0]);
+  });
+
   it("never loads a main file outside the item's folder", () => {
     item('sneaky', 'export function activate() {}', {main: '../elsewhere.mjs'});
     expect(codeItems(plugins)).toEqual([]);
