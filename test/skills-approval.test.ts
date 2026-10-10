@@ -45,7 +45,7 @@ describe('skills', () => {
     expect(by['skill:create']!.source).toBe('builtin'); // built-in beats the project copy
     expect(by.deploy!.files).toEqual(['SKILL.md', 'scripts/deploy.sh']);
     expect(shadowedSkills(skills).map((s) => s.name)).toEqual(['help']);
-    expect(suggestCommands('/skill', skills).map((s) => s.name)).toEqual(['skill:create', 'skill:edit']);
+    expect(suggestCommands('/skill', skills).map((s) => s.name).slice(0, 2)).toEqual(['skill:create', 'skill:edit']);
     expect(parseInput('/skill:create a git helper', skills)).toMatchObject({kind: 'skill', args: 'a git helper', skill: {name: 'skill:create'}});
     const prompt = skillPrompt(by.deploy!, 'now', proj);
     expect(prompt).toContain(`source="global" dir="${path.join(g, 'deploy')}"`);

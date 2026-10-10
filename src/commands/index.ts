@@ -114,7 +114,7 @@ export function parseInput(raw: string, skills: Skill[] = []): Parsed | undefine
 export function fuzzyScore(q: string, name: string): number | undefined {
   if (!q) return 0;
   if (name === q) return 10_000;
-  if (name.startsWith(q)) return 9_000 - name.length;
+  if (name.startsWith(q)) return 9_000; // ties keep the list's order
   const word = name.search(new RegExp(`[-:_./]${q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`));
   if (word >= 0) return 8_000 - word - name.length;
   const at = name.indexOf(q);
