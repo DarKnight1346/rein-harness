@@ -33,6 +33,69 @@ const reactProduction = {
   },
 };
 
+/**
+ * Ink caches each line's parsed ANSI and each string's width, but per frame: every render makes a
+ * new Output and so a new, empty cache, and re-parses every character on screen. With a long
+ * conversation on screen that was a quarter of a core just to animate the working line. One cache
+ * shared across frames (emptied when it grows large) parses only what changed.
+ */
+const inkSharedCaches = {
+  name: 'ink-shared-caches',
+  setup(b) {
+    // string-width segments graphemes and tests each for emoji: the costliest call in a frame, and
+    // made for the same strings every frame (widest-line, cli-truncate, Rein's own wrapping too).
+    b.onLoad({filter: /[\\/]node_modules[\\/]string-width[\\/]index\.js$/}, async (args) => {
+      const src = await readFile(args.path, 'utf8');
+      const patched = src.replace('export default function stringWidth(input, options = {}) {', 'function stringWidthUncached(input, options = {}) {');
+      if (patched === src) throw new Error(`ink-shared-caches: string-width changed (${args.path}); update scripts/bundle.mjs`);
+      return {
+        contents: `${patched}
+let widths = new Map();
+export default function stringWidth(input, options) {
+    if (options !== undefined || typeof input !== 'string') return stringWidthUncached(input, options);
+    let w = widths.get(input);
+    if (w === undefined) {
+        if (widths.size > 20000) widths = new Map();
+        w = stringWidthUncached(input);
+        widths.set(input, w);
+    }
+    return w;
+}
+`,
+        loader: 'js',
+      };
+    });
+    b.onLoad({filter: /[\\/]ink[\\/]build[\\/]output\.js$/}, async (args) => {
+      const src = await readFile(args.path, 'utf8');
+      const patched = src
+        .replace('    caches = new OutputCaches();', '    caches = sharedCaches();')
+        .replace('return sliceAnsi(line, from, to);', 'return this.caches.getSlice(line, from, to);');
+      if (!patched.includes('sharedCaches()') || !patched.includes('getSlice(')) throw new Error(`ink-shared-caches: Ink's output.js changed (${args.path}); update scripts/bundle.mjs`);
+      return {
+        contents: `${patched}
+const slices = new Map();
+OutputCaches.prototype.getSlice = function (line, from, to) {
+    const key = from + ':' + to + ':' + line;
+    let cached = slices.get(key);
+    if (cached === undefined) {
+        if (slices.size > 20000) slices.clear();
+        cached = sliceAnsi(line, from, to);
+        slices.set(key, cached);
+    }
+    return cached;
+};
+let shared;
+function sharedCaches() {
+    if (!shared || shared.styledChars.size + shared.widths.size > 20000) shared = new OutputCaches();
+    return shared;
+}
+`,
+        loader: 'js',
+      };
+    });
+  },
+};
+
 /** ui/resizeFix.ts needs Ink's own instances map; with Ink inlined, the file on disk would be a second copy. */
 const inkInstances = {
   name: 'ink-instances',
@@ -57,7 +120,7 @@ await build({
   external: ['@vscode/ripgrep', 'node-pty'],
   // CommonJS packages inside an ES module bundle still need require().
   banner: {js: "import {createRequire as __reinRequire} from 'node:module';\nconst require = __reinRequire(import.meta.url);"},
-  plugins: [noDevtools, reactProduction, inkInstances],
+  plugins: [noDevtools, reactProduction, inkInstances, inkSharedCaches],
   logLevel: 'warning',
 });
 
