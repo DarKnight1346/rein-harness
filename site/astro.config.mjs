@@ -76,6 +76,7 @@ export default defineConfig({
           {label: 'Issue trackers', slug: 'features/trackers'},
           {label: 'Secrets vault', slug: 'features/vault'},
           {label: 'Voice input', slug: 'features/voice'},
+          {label: 'Pets', slug: 'features/pets'},
           {label: 'The terminal UI', slug: 'features/tui'},
           {label: 'Background sessions', slug: 'features/sessions'},
         ]},

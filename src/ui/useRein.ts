@@ -249,6 +249,8 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
       if (rows?.length) setOverlay({name: 'import', rows});
       else if (rows) await skipImport();
       await refresh();
+      // Your pet from the ChatGPT and Codex apps: found in the background (it starts a codex app-server).
+      void runtime.loadPets().then(() => runtime.pets.setActivity('hello'), () => {});
       // A codex whose app-server protocol changed under Rein is switched off (see compat.ts).
       const compat = catalog.codexCompat;
       if (compat?.ok === false) log('error', incompatibleMessage(compat));
@@ -684,6 +686,15 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
     t.unref?.();
     return () => clearTimeout(t);
   }, [ready, chat.busy, compacting, statusTick]);
+
+  // The pet reacts to the agent: working, waiting on you, then done (or failed) when the turn ends.
+  const petBusy = useRef(false);
+  useEffect(() => {
+    if (['approval', 'ask', 'plan', 'trust'].includes(overlay.name)) runtime.pets.setActivity('waiting');
+    else if (chat.busy) runtime.pets.setActivity('working');
+    else if (petBusy.current) runtime.pets.setActivity(entries.at(-1)?.kind === 'error' ? 'failed' : 'done');
+    petBusy.current = chat.busy;
+  }, [chat.busy, overlay.name]);
 
   const working = chat.busy || !!goalNote || queued.length > 0 || !!compacting;
   const workStarted = useRef<number | undefined>(undefined);
@@ -1133,6 +1144,27 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
       case 'mcp':
         setOverlay({name: 'mcp'});
         break;
+      case 'pet': {
+        const arg = parsed.args.trim();
+        const p = runtime.pets;
+        void (async () => {
+          if (!arg) {
+            const pets = await p.list();
+            log('info', [`Your pets (from the ChatGPT and Codex apps):`, ...pets.map((x) => `  ${x.active ? '●' : '○'} ${x.name}${x.custom ? ' (yours)' : ''} — ${x.description}`), pets.some((x) => x.active) ? '/pet <name> picks another, /pet off hides it.' : '/pet <name> picks one.', ...(p.note && !p.pet ? [p.note] : [])].join('\n'));
+          } else if (arg === 'off') {
+            await p.select('default');
+            log('info', 'Pet off. /pet <name> brings one back.');
+          } else if (arg === 'refresh') {
+            await p.refresh();
+            log('info', p.pet ? `${p.pet.name} is here.` : (p.note ?? 'No pet.'));
+          } else {
+            const pick = await p.select(arg);
+            log('info', p.pet ? `${pick?.name ?? p.pet.name} is here, at the bottom of the sidebar (fullscreen).` : (p.note ?? 'No pet.'));
+            p.setActivity('hello');
+          }
+        })().catch((err) => log('error', `/pet: ${(err as Error).message}`));
+        break;
+      }
       case 'voice': {
         const s = detect(runtime.config.voiceModel || DEFAULT_MODEL);
         const hint = installHint(s);

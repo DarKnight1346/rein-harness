@@ -118,6 +118,7 @@ See [permissions](../../features/permissions/) for rules, plan mode and the full
 | --- | --- | --- | --- | --- |
 | `autoUpdate` | boolean | `true` | On launch, check npm for a newer Rein and install it in the background. It takes effect on the next start. `REIN_NO_AUTOUPDATE` also turns it off. | `/settings` → General → Updates |
 | `hidePersonalInfo` | boolean | `true` | Privacy mode. Accounts show as "Claude Account 1" / "Codex Account 1", known emails in rendered text become those names, your home folder becomes `~` and your username becomes `user`. | `/settings` → General → Privacy |
+| `pet` | `"auto"` \| `"off"` | `"auto"` | Your [pet](../../features/pets/) from the ChatGPT and Codex apps at the bottom of the sidebar (needs a Codex account). | `/settings` → General → Pet |
 | `tui` | `"fullscreen"` \| `"classic"` | unset (= fullscreen) | The renderer. `rein --classic` / `--fullscreen` override it for one run without saving. | `/tui fullscreen`, `/tui classic` |
 | `sidebar` | boolean | unset (= shown) | Whether the fullscreen sidebar is open. It auto-hides below 96 columns regardless. | `Ctrl+B` or the `[≡]` button |
 | `statusLine` | string[] | `["model","account","usage","context","sidebarToggle"]` | Top status line segments, left to right. | `/settings` → Status line |
@@ -148,7 +149,7 @@ Valid `sidebarSections` ids: `agents`, `accounts`, `models` (chat model picker),
 | --- | --- |
 | **Status line** | `statusLine`: toggle segments (click / `Space`), reorder (`▲▼`, `Shift+↑↓` or `[` `]`), `r` resets |
 | **Sidebar** | `sidebarSections`: same controls as Status line |
-| **General** | Approvals (`toolApproval`), Sandbox (`sandbox`), Dev environment (`devEnvironment`), Shell (`shellMaxMinutes`), Notifications (`notifications`), Paste (`collapsePastes`), Attribution (`attribution`), Updates (`autoUpdate`), Privacy (`hidePersonalInfo`) |
+| **General** | Approvals (`toolApproval`), Sandbox (`sandbox`), Dev environment (`devEnvironment`), Shell (`shellMaxMinutes`), Notifications (`notifications`), Paste (`collapsePastes`), Attribution (`attribution`), Updates (`autoUpdate`), Privacy (`hidePersonalInfo`), Pet (`pet`) |
 | **Agents** | Subagents (`subagentLimit`), Goals (`goalMaxRounds`), Worktrees (`worktrees`), Compaction (`autoCompactPct`), Plan review (`planReview`) |
 | **Accounts** | Load balancing (`loadBalancing`), Limits (`waitForLimits`), API accounts (`apiAccounts`) |
 | **Safety** | Secrets (`secretScan`), Semgrep (`sast`), Planted instructions (`injectionScan`), Data leaving (`exfilGuard`), MCP pinning (`mcpPinning`), Dependencies (`depCheck`) |
@@ -168,6 +169,7 @@ In General, Agents, Accounts and Safety, `↑` `↓` pick a setting, and `Enter`
 | Attribution | On *(default)* · Off |
 | Updates | Auto-update Rein *(default)* · Only when I run `/update` |
 | Privacy | Hide personal info *(default)* · Show emails and paths |
+| Pet | Show my pet *(default)* · Off |
 | Subagents | 1 · 2 · 3 · 5 · 10 *(default)* · 20 at a time |
 | Goals | Unlimited *(default)* · 10 · 25 · 50 · 100 · 250 continuations |
 | Worktrees | Automatic *(default)* · Off |

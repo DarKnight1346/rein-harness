@@ -50,6 +50,19 @@ readline.createInterface({input: process.stdin}).on('line', (line) => {
       return setTimeout(() => send({method: 'account/login/completed', params: {loginId: 'L1', success: true, error: null}}), 20);
     case 'model/list':
       return send({id: msg.id, result: {data: [{id: 'gpt-x', displayName: 'GPT-X', description: 'Fast and affordable', isDefault: true, hidden: false}]}});
+    // The ChatGPT Pets app through codex_apps (FAKE_PET: the active pet; default none).
+    case 'thread/start':
+      return send({id: msg.id, result: {thread: {id: 'thread-1'}}});
+    case 'mcpServerStatus/list':
+      return send({id: msg.id, result: {data: [{name: 'codex_apps', tools: Object.fromEntries(['list_pets', 'select_pet', 'get_pet_download_link', 'delete_pet'].map((t) => [`pets.${t}`, {name: `pets.${t}`, description: t, inputSchema: {type: 'object', properties: {}}, annotations: {readOnlyHint: t === 'list_pets' || t === 'get_pet_download_link', destructiveHint: t === 'delete_pet'}}]))}]}});
+    case 'mcpServer/tool/call': {
+      const {tool, arguments: args = {}} = msg.params;
+      const active = globalThis.fakePet ?? process.env.FAKE_PET ?? 'default';
+      if (tool === 'pets.list_pets') return send({id: msg.id, result: {content: [{type: 'text', text: 'Action completed.'}], structuredContent: {pets: [{id: 'codex', name: 'Codex', description: 'The original Codex companion.', is_custom: false, is_active: active === 'codex'}], cursor: null, active_pet_id: active}, isError: false}});
+      if (tool === 'pets.select_pet') { globalThis.fakePet = args.pet_id; return send({id: msg.id, result: {content: [], structuredContent: {active_pet_id: args.pet_id}, isError: false}}); }
+      if (tool === 'pets.get_pet_download_link') return send({id: msg.id, result: {content: [], structuredContent: {pet_id: args.pet_id, spritesheet_url: `https://cdn.example/${args.pet_id}.png`}, isError: false}});
+      return send({id: msg.id, result: {content: [{type: 'text', text: `no ${tool}`}], isError: true}});
+    }
     case 'test/askApproval':
       send({id: msg.id, result: {}});
       return send({id: 'srv-1', method: 'item/commandExecution/requestApproval', params: {command: 'rm -rf /'}});

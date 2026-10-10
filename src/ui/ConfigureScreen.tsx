@@ -170,6 +170,16 @@ export const CHOICE_TABS: ChoiceTabDef[] = [
     ],
   },
   {
+    title: 'Pet',
+    group: 'General',
+    key: 'pet',
+    description: 'Your animated companion from the ChatGPT and Codex apps, at the bottom of the sidebar, reacting to what the agent does. It comes from your ChatGPT account, so it needs a Codex account; /pet picks one.',
+    choices: [
+      {value: 'auto', label: 'Show my pet  (default)'},
+      {value: 'off', label: 'Off'},
+    ],
+  },
+  {
     title: 'Compaction',
     group: 'Agents',
     key: 'autoCompactPct',

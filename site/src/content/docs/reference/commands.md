@@ -3,9 +3,9 @@ title: Slash commands
 description: Every built-in Rein slash command, its arguments and aliases, plus the built-in skills that ship with Rein.
 ---
 
-Type `/` in the input to see the list. A bare `/` shows the everyday commands, most-used first (`/model`, `/goal`, `/plan`, `/review`…), then your own skills. Typing searches everything, fuzzily and best match first, including the variants and diagnostics left out of the bare list (`/plan:deep`, `/review:deep`, `/skill:edit`, `/goal:plan`, `/agent`, `/tui`, `/voice`, `/lsp`, `/plugins`) and skills from Claude Code and Codex plugins. **Tab** or **Enter** fills in the highlighted entry so you can add arguments, and a command typed out in full runs right away. You can also click an entry in fullscreen. `/help` shows every command with its arguments.
+Type `/` in the input to see the list. A bare `/` shows the everyday commands, most-used first (`/model`, `/goal`, `/plan`, `/review`…), then your own skills. Typing searches everything, fuzzily and best match first, including the variants and diagnostics left out of the bare list (`/plan:deep`, `/review:deep`, `/skill:edit`, `/goal:plan`, `/agent`, `/tui`, `/voice`, `/lsp`, `/plugins`, `/pet`) and skills from Claude Code and Codex plugins. **Tab** or **Enter** fills in the highlighted entry so you can add arguments, and a command typed out in full runs right away. You can also click an entry in fullscreen. `/help` shows every command with its arguments.
 
-Rein has **31 built-in commands** and **7 built-in skills**, plus **36 commands and 7 skills in [packs](#packs)** that are off until you turn them on. Commands are handled by Rein itself. Skills are prompts sent to the agent (see [Built-in skills](#built-in-skills)).
+Rein has **32 built-in commands** and **7 built-in skills**, plus **36 commands and 7 skills in [packs](#packs)** that are off until you turn them on. Commands are handled by Rein itself. Skills are prompts sent to the agent (see [Built-in skills](#built-in-skills)).
 
 ## While the agent is working
 
@@ -58,6 +58,7 @@ See [Goals](../../features/goals/) and [Plan mode](../../features/plans/).
 | `/remote` | `on` · `pair` · `status` · `unpair` · `off` | Use this session from your phone or another computer: starts a page Rein serves (on this computer only, reach it through a tunnel) and shows a pairing code. → [Remote access](../../features/remote/) |
 | `/vault` | `set NAME` · `rm NAME` | Secrets the agent can use in shell commands as `$NAME` without seeing them. Lists the names; `set` asks for the value in a hidden field; `rm` removes one. → [Secrets vault](../../features/vault/) |
 | `/lsp` | `stop` | Built-in code intelligence: the language servers Rein is running (memory, open files, idle time), and which are installed and where. `stop` shuts them down (they start again when needed). → [Code intelligence](../../features/code-intelligence/) |
+| `/pet` | `[<name> \| off \| refresh]` | Your [pet](../../features/pets/) from the ChatGPT and Codex apps: lists yours, picks one, or turns it off (here and in the apps). Needs a Codex account. |
 | `/plugins` | — | Lists the Claude Code and Codex plugins Rein loaded, and what each adds (commands, agents, hooks, MCP servers), plus Codex skills. → [Plugins](../../features/plugins/) |
 | `/login` | — | Lists accounts; adds Claude (subscription, Console API key, Bedrock, Vertex) or Codex (ChatGPT, OpenAI API key) accounts; re-authenticates or removes them; manages the Jev API key. → [Accounts](../../features/accounts/#api-accounts-pay-per-use) |
 | `/usage` | *(none)* | Usage windows (5h / weekly / 30-day) and reset times for every account. |

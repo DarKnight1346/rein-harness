@@ -37,6 +37,7 @@ An existing `~/.rein` keeps being used as it is, and so does `REIN_HOME`. To swi
 | `state/build-times/` | Per project, the last 10 durations of each build or test command (for `buildTimeWarnings`) |
 | `state/flaky/` | With `flaky-quarantine`: per project, recent test outcomes by code fingerprint and the tests found flaky. `/flaky clear` empties a project's file |
 | `state/mcp-pins.json` | With `mcpPinning`: each MCP server's launch config and tool list as first approved (hashes and tool names). Delete it to start over |
+| `pets/` | Your [pet](../../features/pets/)'s sprite sheet (`<id>.sheet`) and the frames Rein shrank from it for the terminal. Safe to delete; it's downloaded again |
 | `state/usage.json` | Last-known usage windows per account, plus limit cooldowns (account unusable until a time) |
 | `exports/<id>.md` | Conversations saved with `/export` (when no file is given) |
 | `mcp-auth/<host>_<path>.json` | OAuth tokens and client registration for each remote MCP server you signed in to (owner-only), e.g. `mcp.linear.app_mcp.json`. Delete one to sign out of that server |

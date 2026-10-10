@@ -32,6 +32,18 @@ export const REQUIRED = {
   } as Record<string, string[]>,
 };
 
+/**
+ * Optional features and the requests they use: a Codex without them keeps working, the feature
+ * is just unavailable (a warning, not a switch-off). Pets: the ChatGPT Pets app (pets/bridge.ts).
+ */
+export const OPTIONAL: Record<string, string[]> = {pets: ['mcpServerStatus/list', 'mcpServer/tool/call']};
+
+/** Optional features this Codex can't offer, by name. */
+export async function optionalMissing(dir: string): Promise<string[]> {
+  const requests = methodsIn(JSON.parse(await readFile(path.join(dir, 'ClientRequest.json'), 'utf8')));
+  return Object.entries(OPTIONAL).filter(([, methods]) => methods.some((m) => !requests.has(m))).map(([name]) => name);
+}
+
 /** Model catalog fields Rein knows (it nulls the tool-related ones, see catalog.ts). */
 const KNOWN_CATALOG_KEYS = new Set([
   'additional_speed_tiers', 'apply_patch_tool_type', 'availability_nux', 'available_access_programs', 'comp_hash', 'context_window', 'default_reasoning_level',
@@ -129,6 +141,7 @@ export async function checkCodex(version: string, catalogModels?: Record<string,
     else {
       report.missing = await checkSchema(dir);
       report.ok = report.missing.length === 0;
+      for (const f of await optionalMissing(dir)) report.warnings.push(`this Codex has no ${f} (needs ${OPTIONAL[f]!.join(', ')}); Rein works without it`);
     }
   } catch (err) {
     report.warnings.push(`couldn't read the app-server schema (${(err as Error).message})`);

@@ -543,6 +543,10 @@ Removes every memory fact containing `match` (case-insensitive).
 | --- | --- | --- |
 | `match` **(required)** | string | At least 3 characters |
 
+## Pets
+
+With a Codex account and Codex's **Pets** plugin installed, the agent gets the ChatGPT Pets app's tools, whatever the model: `pets_list_pets`, `pets_get_pet_download_link`, `pets_select_pet`, `pets_create_pet`, `pets_update_pet`, `pets_delete_pet` and the others the app offers, with the app's own parameters. Read-only ones don't ask; the rest go through approval, and `pets_delete_pet` always asks. See [Pets](../../features/pets/).
+
 ## MCP
 
 See [MCP](../../features/mcp/) for configuration files and the `/mcp` screen.

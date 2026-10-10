@@ -108,6 +108,8 @@ Two more sections appear at the top when they're relevant:
 - **GOAL · 3/5**: when a goal is working from a plan. Shows the plan title, a progress bar and the milestones (`✓` done, `▸` next, `○` later).
 - **TASKS 2/5**: the agent's task list from `todo_write`, shown while any task is unfinished. Completed tasks are struck through.
 
+Your [pet](../pets/) from the ChatGPT and Codex apps sits at the bottom of the sidebar when you have one, and reacts to what the agent is doing.
+
 ## Windows
 
 In fullscreen, commands that show information or ask you something open a centered window over the conversation. The agent keeps streaming underneath while the window is open. Windows have a dark grey background and a rounded cyan border. Approval windows use a yellow border.

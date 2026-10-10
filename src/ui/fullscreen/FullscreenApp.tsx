@@ -42,6 +42,7 @@ import {kTokens, rainbow, useBlink, Working} from '../Working.js';
 import {agentLines, assistantLines, entryLines, pendingToolLines, wrap} from './lines.js';
 import {InfoWindow, Window} from './Window.js';
 import {COMMANDS} from '../../commands/index.js';
+import {PetView} from '../Pet.js';
 import {commandEnabled, packsHint} from '../../commands/packs.js';
 import {skillDirs, skillSourceLabel, type Skill} from '../../skills/index.js';
 import chalk from 'chalk';
@@ -845,6 +846,8 @@ function Sidebar({width, height, tick, run, view, setView}: {width: number; heig
           <Text dimColor>empty · /settings</Text>
         </Clickable>
       )}
+      <Box flexGrow={1} />
+      <PetView pets={runtime.pets} />
     </Box>
   );
 }

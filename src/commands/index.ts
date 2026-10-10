@@ -1,7 +1,7 @@
 import type {Skill} from '../skills/index.js';
 import {commandEnabled} from './packs.js';
 
-export type CommandName = 'trackers' | 'remote' | 'voice' | 'vault' | 'lsp' | 'plugins' | 'export' | 'ide' | 'memory' | 'mcp' | 'rewind' | 'permissions' | 'add-dir' | 'workspace' | 'owners' | 'stack' | 'codemap' | 'changeset' | 'impact' | 'refs' | 'symbols' | 'services' | 'sessions' | 'env' | 'schedule' | 'cache' | 'stats' | 'deadcode' | 'flags' | 'migrations' | 'contracts' | 'bestof' | 'risk' | 'arch' | 'adr' | 'spec' | 'index' | 'map' | 'pack' | 'pr' | 'mutate' | 'coverage' | 'ci' | 'build' | 'flaky' | 'affected' | 'policy' | 'cost' | 'scope' | 'goal' | 'goal:plan' | 'btw' | 'agents' | 'agent' | 'resume' | 'login' | 'usage' | 'model' | 'context' | 'compact' | 'shells' | 'settings' | 'update' | 'tui' | 'clear' | 'help' | 'exit';
+export type CommandName = 'pet' | 'trackers' | 'remote' | 'voice' | 'vault' | 'lsp' | 'plugins' | 'export' | 'ide' | 'memory' | 'mcp' | 'rewind' | 'permissions' | 'add-dir' | 'workspace' | 'owners' | 'stack' | 'codemap' | 'changeset' | 'impact' | 'refs' | 'symbols' | 'services' | 'sessions' | 'env' | 'schedule' | 'cache' | 'stats' | 'deadcode' | 'flags' | 'migrations' | 'contracts' | 'bestof' | 'risk' | 'arch' | 'adr' | 'spec' | 'index' | 'map' | 'pack' | 'pr' | 'mutate' | 'coverage' | 'ci' | 'build' | 'flaky' | 'affected' | 'policy' | 'cost' | 'scope' | 'goal' | 'goal:plan' | 'btw' | 'agents' | 'agent' | 'resume' | 'login' | 'usage' | 'model' | 'context' | 'compact' | 'shells' | 'settings' | 'update' | 'tui' | 'clear' | 'help' | 'exit';
 
 /**
  * Built-in commands, in the order the `/` list shows them (everyday ones first). `description` is
@@ -40,6 +40,7 @@ export const COMMANDS: Command[] = [
   {name: 'tui', description: 'Switch between fullscreen and classic', usage: 'Switch renderer: /tui fullscreen or /tui classic', listed: false},
   {name: 'voice', description: 'Voice input, on your machine', usage: 'Voice input, on your machine (whisper.cpp): hold Ctrl+Space to talk. /voice shows status or starts/stops recording; /voice setup installs what it needs', listed: false},
   {name: 'lsp', description: 'The language servers Rein runs', usage: "Built-in code intelligence: the language servers Rein runs, their memory, what's installed (/lsp stop stops them)", listed: false},
+  {name: 'pet', description: 'Your pet from the ChatGPT and Codex apps', usage: 'Your pet from the ChatGPT and Codex apps, in the sidebar: /pet lists yours, /pet <name> picks one, /pet off hides it, /pet refresh', listed: false},
   {name: 'plugins', description: 'Claude Code and Codex plugins Rein loaded', usage: 'Installed Claude Code and Codex plugins Rein loaded: their commands, skills, agents, hooks and MCP servers', listed: false},
   {name: 'ci', description: 'Pull request checks, and fixing failures as they come', usage: "This branch's pull request checks: /ci shows them, /ci watch fixes failures as they come (asks before pushing), /ci stop"},
   {name: 'pr', description: "This branch's pull request: status, digest, split, comments", usage: "This branch's pull request: /pr (status), /pr digest [post], /pr split, /pr comments, /pr queue [yes]"},
