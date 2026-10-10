@@ -236,7 +236,7 @@ export function runCommand(raw: string, ui: CommandUi): void {
   const opensWindow = ['goal:plan', 'login', 'usage', 'context', 'help', 'update', 'shells', 'btw', 'resume', 'agents', 'agent'].includes(parsed.name) || (parsed.name === 'settings' && !parsed.args.trim()) || (parsed.name === 'marketplace' && !parsed.args.trim()) || (parsed.name === 'model' && !parsed.args);
   // A value typed after `/vault set NAME` stays off the screen and out of the transcript.
   // The web UI has windows for these whatever the arguments (/settings safety opens on a tab).
-  const webWindow = ui.surface === 'web' && (['settings', 'model', 'goal:plan', 'mcp', 'agents', 'shells', 'rewind'].includes(parsed.name) && (parsed.name !== 'model' || !parsed.args.trim()));
+  const webWindow = ui.surface === 'web' && (['settings', 'model', 'goal:plan', 'mcp', 'agents', 'shells', 'rewind', 'login'].includes(parsed.name) && (parsed.name !== 'model' || !parsed.args.trim()));
   if (!(windowed && opensWindow) && !webWindow) log('user', parsed.name === 'vault' ? raw.trim().replace(/^(\/vault\s+set\s+\S+)\s+.*$/s, '$1 ••••') : raw.trim());
   switch (parsed.name) {
     case 'mcp':

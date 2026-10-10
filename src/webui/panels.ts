@@ -29,14 +29,23 @@ const safe = <T>(f: () => T, fallback: T): T => {
 };
 
 /** The status line: the segments you turned on (/settings → Status line), then marketplace items' segments. */
-export function statusView(): {id: string; label: string; value: string; command?: string}[] {
+export function statusView(): {id: string; label: string; value: string; command?: string; tone?: string}[] {
   const info = statusInfo();
   const label = Object.fromEntries(STATUS_ITEMS.map((i) => [i.id, i.label]));
   const command: Record<string, string> = {model: '/model', account: '/usage', usage: '/usage', context: '/context', approvals: '/settings Safety'};
-  const out = enabledItems('status', runtime.config)
+  const out: {id: string; label: string; value: string; command?: string; tone?: string}[] = enabledItems('status', runtime.config)
     .filter((id) => id !== 'sidebarToggle')
     .map((id) => ({id, label: label[id] ?? id, value: id === 'context' ? `${info.context}%` : String((info as Record<string, unknown>)[id] ?? ''), ...(command[id] ? {command: command[id]} : {})}))
     .filter((s) => s.value);
+  // The goal, as the terminal's top bar shows it: ◎ goal · active · 1/3.
+  const goal = runtime.goals.goal;
+  if (goal) {
+    const p = goal.plan ? runtime.goals.plan() : undefined;
+    out.push({id: 'goal', label: '◎ goal', value: `${goal.status}${p ? ` · ${progress(p).done}/${progress(p).total}` : ''}`, command: '/goal', tone: goal.status === 'done' ? 'green' : 'cyan'});
+  }
+  for (const s of out) if (s.id === 'context') s.tone = info.context >= 90 ? 'red' : info.context >= 70 ? 'yellow' : 'green';
+  for (const s of out) if (s.id === 'model') s.tone = 'cyan';
+  for (const s of out) if (s.id === 'usage') s.tone = 'dim';
   for (const {item, value: seg} of extensions.status) {
     const text = safe(() => seg.render(), '');
     if (text) out.push({id: `${item}:${seg.id}`, label: item, value: text});

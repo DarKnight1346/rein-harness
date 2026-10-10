@@ -52,10 +52,10 @@ function withIdentity(account: Account, status: AccountStatus): Account {
  * Start adding a Rein-owned account. The caller drives `flow` (shows URL, forwards a pasted code)
  * and then calls `finishAdd` with the final status.
  */
-export async function startAdd(provider: ProviderId, api?: Pick<Account, 'api' | 'apiConfig'>): Promise<{account: Account; flow: LoginFlow}> {
+export async function startAdd(provider: ProviderId, api?: Pick<Account, 'api' | 'apiConfig'>, opts?: {remote?: boolean}): Promise<{account: Account; flow: LoginFlow}> {
   const {accounts} = await loadAccounts();
   const account: Account = {...newOwnedAccount(provider, accounts), ...(api?.api ? {api: api.api} : {}), ...(api?.apiConfig ? {apiConfig: api.apiConfig} : {})};
-  return {account, flow: auth[provider].login(account)};
+  return {account, flow: auth[provider].login(account, opts)};
 }
 
 export async function finishAdd(account: Account, status: AccountStatus): Promise<Account> {
@@ -99,8 +99,8 @@ export async function removeAccount(account: Account, idle: () => Promise<void> 
 }
 
 /** Re-run login for an existing account (expired tokens). Imported accounts re-auth in place. */
-export function reauth(account: Account): LoginFlow {
-  return auth[account.provider].login(account);
+export function reauth(account: Account, opts?: {remote?: boolean}): LoginFlow {
+  return auth[account.provider].login(account, opts);
 }
 
 export async function saveIdentity(account: Account, status: AccountStatus): Promise<void> {

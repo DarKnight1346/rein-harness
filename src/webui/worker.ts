@@ -3,6 +3,7 @@ import type {EngineEvent} from '../session/engine.js';
 import type {Message} from '../session/transcript.js';
 import {pickPhrase} from '../ui/phrases.js';
 import type {Overlay} from '../ui/useRein.js';
+import {approvalNote, routeLabel, toolResultSummary} from '../ui/format.js';
 
 /**
  * One web UI chat (`rein --ui-worker`, started by the server in the project's folder): Rein's
@@ -10,7 +11,8 @@ import type {Overlay} from '../ui/useRein.js';
  * init / send / interrupt / answer / model / mode / compact; this sends ready, events, asks
  * (approvals, questions, plans) and a fresh snapshot after each turn.
  */
-export type ToolView = {label: string; summary: string; ok?: boolean; result?: string; diff?: {kind: string; n?: number; text: string}[]};
+/** `brief`: the one-line result the terminal shows under the call; `note`: how it was approved. */
+export type ToolView = {label: string; summary: string; ok?: boolean; result?: string; brief?: string; note?: string; diff?: {kind: string; n?: number; text: string}[]};
 export type MessageView = {role: 'user' | 'assistant'; text: string; at: number; model?: string; tools?: ToolView[]; interrupted?: boolean};
 export type Snapshot = {
   session: string;
@@ -30,6 +32,13 @@ export type Snapshot = {
 type StatusSegment = ReturnType<typeof import('./panels.js').statusView>[number];
 type SidebarSection = import('./panels.js').SidebarSection;
 
+const safeRoute = (ev: Extract<EngineEvent, {type: 'route'}>) => {
+  try {
+    return routeLabel(ev.route, ev.account, ev.effort);
+  } catch {
+    return undefined;
+  }
+};
 const clip = (s: string, n: number) => (s.length > n ? `${s.slice(0, n)}\n… (${s.length - n} more characters)` : s);
 
 export function messageView(m: Message): MessageView {
@@ -39,7 +48,7 @@ export function messageView(m: Message): MessageView {
     at: m.at,
     ...(m.model ? {model: `${m.model.provider}:${m.model.model}`} : {}),
     ...(m.interrupted ? {interrupted: true} : {}),
-    ...(m.tools?.length ? {tools: m.tools.map((t) => ({label: t.label, summary: t.summary, ok: t.ok, result: clip(t.result, 2000), ...(t.diff ? {diff: t.diff.slice(0, 400)} : {})}))} : {}),
+    ...(m.tools?.length ? {tools: m.tools.map((t) => ({label: t.label, summary: t.summary, ok: t.ok, result: clip(t.result, 2000), brief: toolResultSummary(t.label, t.result), ...(t.diff ? {diff: t.diff.slice(0, 400)} : {})}))} : {}),
   };
 }
 
@@ -53,10 +62,11 @@ export function eventView(ev: EngineEvent, label: (ref: {provider: string; model
       if (a.origin) return undefined; // a subagent's call: its own view
       return a.phase === 'start'
         ? {type: 'tool', phase: 'start', id: a.id, label: a.label, summary: a.summary}
-        : {type: 'tool', phase: 'end', id: a.id, label: a.label, summary: a.summary, ok: a.ok, result: clip(a.result, 8000), ...(a.diff ? {diff: a.diff.slice(0, 400)} : {}), ...(a.warning ? {warning: a.warning} : {})};
+        : {type: 'tool', phase: 'end', id: a.id, label: a.label, summary: a.summary, ok: a.ok, result: clip(a.result, 8000), brief: toolResultSummary(a.label, a.result), note: approvalNote(a.approvedBy, a.judge).replace(/^ · /, ''), ...(a.diff ? {diff: a.diff.slice(0, 400)} : {}), ...(a.warning ? {warning: a.warning} : {})};
     }
     case 'route':
-      return {type: 'route', model: label(ev.route.ref), ...(ev.effort ? {effort: ev.effort} : {})};
+      // The terminal's route line: `Opus · effort high · Claude Account 1 (auto · 0.91)`.
+      return {type: 'route', model: label(ev.route.ref), line: safeRoute(ev), ...(ev.effort ? {effort: ev.effort} : {})};
     case 'tokens':
       return {type: 'tokens', ...ev.call};
     case 'compact':
@@ -277,10 +287,76 @@ export async function runWorker(): Promise<number> {
         (err) => log('error', `Couldn't save ${o.secret}: ${(err as Error).message}`),
       );
     }
-    if (o.name === 'login') return log('info', 'Accounts are signed in from a terminal: run rein there, then /login. Every chat here uses the accounts Rein has.');
+    if (o.name === 'login') {
+      const w = await loginView().catch((err) => ({name: 'text', title: 'Accounts', lines: [(err as Error).message]}));
+      return send({t: 'event', ev: {type: 'window', window: w, ...(again ? {refresh: true} : {})}});
+    }
     const w = await windowView(o).catch((err) => ({name: 'text', title: 'Error', lines: [(err as Error).message]}));
     if (w) send({t: 'event', ev: {type: 'window', window: w, ...(again ? {refresh: true} : {})}});
     else log('info', `/${o.name} doesn't have a window in the web UI yet.`);
+  };
+
+  // /login in the browser: the same account flows as the terminal's, through the official CLIs. A
+  // Claude login prints a URL and takes the code shown after signing in; Codex uses a device code,
+  // entered on OpenAI's page from any device (no callback to this machine needed).
+  type LoginRun = {account: import('../providers/types.js').Account; flow: import('../providers/types.js').LoginFlow; isNew: boolean; url?: string; code?: string; needsCode?: boolean; output: string; error?: string};
+  let login: LoginRun | undefined;
+  const {listAccounts, startAdd, finishAdd, abandonAdd, reauth, saveIdentity} = await import('../accounts/service.js');
+  const {getJevKey, setJevKey, deleteJevKey} = await import('../store/secrets.js');
+  const {accountName} = await import('../ui/privacy.js');
+  const {PROVIDERS} = await import('../providers/types.js');
+  const loginView = async () => {
+    const rows = await listAccounts();
+    return {
+      name: 'login',
+      accounts: rows.map(({account, status}) => ({
+        id: account.id,
+        provider: PROVIDERS[account.provider].name,
+        name: accountName(account),
+        ...((status.loggedIn ? status.plan : undefined) ?? account.plan ? {plan: (status.loggedIn ? status.plan : undefined) ?? account.plan} : {}),
+        ...(account.api ? {api: account.api} : {}),
+        imported: !!account.imported,
+        signedIn: !!status.loggedIn,
+        ...(!status.loggedIn && status.error ? {error: status.error.slice(0, 120)} : {}),
+      })),
+      jev: !!(await getJevKey().catch(() => undefined)),
+      ...(login ? {flow: {provider: PROVIDERS[login.account.provider].name, name: accountName(login.account), url: login.url, code: login.code, needsCode: !!login.needsCode, output: login.output.slice(-1500), error: login.error}} : {}),
+    };
+  };
+  const runLogin = async (l: LoginRun) => {
+    login?.flow.cancel();
+    login = l;
+    const redraw = () => overlay.name === 'login' && void showWindow({name: 'login'}, true);
+    let finished = false;
+    for await (const ev of l.flow.events) {
+      if (login !== l) break;
+      if (ev.type === 'url') l.url = ev.url;
+      else if (ev.type === 'deviceCode') Object.assign(l, {url: ev.url, code: ev.code});
+      else if (ev.type === 'needsCode') l.needsCode = true;
+      else if (ev.type === 'output') l.output += ev.text;
+      else if (ev.type === 'error') Object.assign(l, {error: ev.message, needsCode: false});
+      else if (ev.type === 'done') {
+        finished = true;
+        try {
+          if (l.isNew) {
+            const saved = await finishAdd(l.account, ev.status);
+            log('info', `Added ${PROVIDERS[saved.provider].name} account ${accountName(saved)} (${saved.plan ?? 'unknown plan'})`);
+          } else {
+            await saveIdentity(l.account, ev.status);
+            log('info', `Re-authenticated ${accountName(l.account)}`);
+          }
+        } catch (err) {
+          log('error', (err as Error).message);
+        }
+      }
+      redraw();
+    }
+    if (!finished && l.isNew) await abandonAdd(l.account).catch(() => {});
+    if (!finished && l.error) log('error', `Login failed: ${l.error}`);
+    if (login === l) login = undefined;
+    await runtime.refreshCatalog().catch(() => {});
+    chrome();
+    redraw();
   };
 
   const ui: import('../commands/run.js').CommandUi = {
@@ -469,6 +545,51 @@ export async function runWorker(): Promise<number> {
       case 'agent-stop':
         if (!runtime.agents.cancel(Number(args.id))) throw new Error("that subagent isn't running");
         return {ok: true};
+      case 'login-start': {
+        const provider = args.provider === 'codex' ? 'codex' : args.provider === 'claude' ? 'claude' : undefined;
+        const api = (['console', 'openai', 'bedrock', 'vertex'] as const).find((a) => a === args.api);
+        if (!provider) throw new Error('which provider?');
+        const apiConfig = api === 'bedrock' || api === 'vertex' ? Object.fromEntries(Object.entries((args.apiConfig ?? {}) as Record<string, unknown>).filter(([k, v]) => ['region', 'profile', 'projectId'].includes(k) && typeof v === 'string' && v.trim()).map(([k, v]) => [k, String(v).trim()])) : undefined;
+        const {account, flow} = await startAdd(provider, api ? {api, ...(apiConfig ? {apiConfig} : {})} : undefined, {remote: true});
+        void runLogin({account, flow, isNew: true, output: ''});
+        return {ok: true};
+      }
+      case 'login-reauth': {
+        const row = (await listAccounts()).find((r) => r.account.id === args.id);
+        if (!row) throw new Error('that account is gone');
+        void runLogin({account: row.account, flow: reauth(row.account, {remote: true}), isNew: false, output: ''});
+        return {ok: true};
+      }
+      case 'login-code':
+        if (!login) throw new Error('no login in progress');
+        if (typeof args.code !== 'string' || !args.code.trim()) throw new Error('paste the code first');
+        login.flow.submitCode(args.code.trim());
+        login.needsCode = false;
+        return {ok: true};
+      case 'login-cancel':
+        login?.flow.cancel();
+        return {ok: true};
+      case 'account-remove': {
+        const row = (await listAccounts()).find((r) => r.account.id === args.id);
+        if (!row) throw new Error('that account is gone');
+        await runtime.removeAccount(row.account);
+        log('info', `Removed ${accountName(row.account)}${row.account.imported ? ' (unregistered; your CLI login is untouched)' : ''}`);
+        chrome();
+        return loginView();
+      }
+      case 'jev-set': {
+        const {checkJevKey} = await import('../decider/jev.js');
+        const key = String(args.key ?? '').trim();
+        if (!key) throw new Error('paste the key first');
+        const models = await checkJevKey(key);
+        const where = await setJevKey(key);
+        log('info', `Jev key saved (${where === 'keychain' ? 'macOS Keychain' : '~/.rein/secrets, 0600'})${models.length ? ` · models: ${models.join(', ')}` : ''}. Pick Jev as the decision model in /model.`);
+        return loginView();
+      }
+      case 'jev-remove':
+        await deleteJevKey();
+        log('info', 'Jev key removed. Decisions fall back to the cheapest model.');
+        return loginView();
       case 'unqueue':
         queue = queue.filter((_, i) => i !== Number(args.index));
         chrome();

@@ -37,6 +37,8 @@ export type AccountStatus =
 /** Events from an interactive login. The UI renders these and answers `needsCode`. */
 export type LoginEvent =
   | {type: 'url'; url: string}
+  /** A device-code login: open `url` on any device and enter `code` there (Codex, from the web UI). */
+  | {type: 'deviceCode'; url: string; code: string}
   | {type: 'needsCode'}
   | {type: 'output'; text: string}
   | {type: 'done'; status: AccountStatus}
@@ -52,7 +54,11 @@ export type LoginFlow = {
 export interface ProviderAuth {
   id: ProviderId;
   status(account: Account): Promise<AccountStatus>;
-  login(account: Account): LoginFlow;
+  /**
+   * `remote`: the person isn't at this machine (the web UI), so a flow that ends in a callback to
+   * localhost here can't complete: use one they can finish from any device (a code to paste or enter).
+   */
+  login(account: Account, opts?: {remote?: boolean}): LoginFlow;
   logout(account: Account): Promise<void>;
 }
 

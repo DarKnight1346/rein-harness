@@ -38,6 +38,28 @@ export const REQUIRED = {
  */
 export const OPTIONAL: Record<string, string[]> = {pets: ['mcpServerStatus/list', 'mcpServer/tool/call']};
 
+/** Optional values inside requests Rein already uses: `deviceLogin` is the web UI's Codex sign-in. */
+export const OPTIONAL_VALUES: Record<string, string> = {deviceLogin: 'chatgptDeviceCode'};
+
+let schemaText: Promise<string | undefined> | undefined;
+/** Whether this codex's protocol has the device-code login (checked once per process, from its schema). */
+export async function deviceLoginSupported(): Promise<boolean> {
+  schemaText ??= (async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), 'rein-codex-schema-'));
+    try {
+      await run(codexBin(), ['app-server', 'generate-json-schema', '--experimental', '--out', dir], {timeoutMs: 60_000});
+      return await readFile(path.join(dir, 'ClientRequest.json'), 'utf8');
+    } catch {
+      return undefined;
+    } finally {
+      await rm(dir, {recursive: true, force: true}).catch(() => {});
+    }
+  })();
+  const text = await schemaText;
+  // Couldn't check (an old codex without the schema command): try it; Codex refuses cleanly if it can't.
+  return text === undefined || text.includes(`"${OPTIONAL_VALUES.deviceLogin}"`);
+}
+
 /** Optional features this Codex can't offer, by name. */
 export async function optionalMissing(dir: string): Promise<string[]> {
   const requests = methodsIn(JSON.parse(await readFile(path.join(dir, 'ClientRequest.json'), 'utf8')));

@@ -44,6 +44,7 @@ export const claudeAuth: ProviderAuth = {
     }
   },
 
+  // Remote or not, the same flow: the CLI prints a URL and asks for the code shown after signing in.
   login(account): LoginFlow {
     if (account.api === 'bedrock' || account.api === 'vertex') return checkCloud(account);
     const events = new EventQueue<LoginEvent>();

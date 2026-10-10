@@ -278,7 +278,7 @@ function sidebar() {
     }, h('span.dot' + (c.waiting ? '.wait' : c.busy ? '.busy' : '')), h('span.t', c.title || 'New chat'), saved ? h('span.meta', ago(c.updatedAt)) : null);
   return h('aside.side',
     h('div.side-top',
-      h('div.brand', h('img', {src: '/icon.svg', alt: ''}), 'Rein'),
+      h('div.brand', h('span.brandmark', '▁▃▅▇'), h('span', 'Rein')),
       h('button.project-btn', {on: {click: pickProject}, title: state.project}, icon('folder', 16), h('span.t', proj?.name ?? (state.project ? base(state.project) : 'Open a project…'), state.project ? h('span.p', tilde(state.project)) : null)),
       h('button.btn.primary', {disabled: !state.project, on: {click: newChat}}, icon('plus', 16), 'New chat'),
     ),
@@ -404,7 +404,7 @@ function onEvent(c, ev) {
     case 'busy':
       c.busy = ev.busy;
       if (ev.phrase) c.phrase = ev.phrase;
-      if (ev.busy) Object.assign(c, {live: '', tools: [], notes: [], model: undefined});
+      if (ev.busy) Object.assign(c, {live: '', tools: [], notes: [], model: undefined, route: undefined});
       void loadChats().then(() => state.view === 'chat' && renderSide());
       break;
     case 'user': {
@@ -426,6 +426,7 @@ function onEvent(c, ev) {
       break;
     case 'route':
       c.model = ev.model;
+      if (ev.line) c.route = ev.line;
       break;
     case 'notice':
       c.notes.push({text: ev.text});
@@ -493,18 +494,65 @@ function renderSide() {
   if (side) side.replaceWith(sidebar());
 }
 
+/** A tool call as the terminal shows it: ● Shell(npm test) · allowed by rule, then ⎿ its result in a line. Click for all of it. */
 function toolEl(t) {
-  const status = t.pending ? 'busy' : t.ok === false ? 'bad' : 'ok';
-  const d = h('details.tool', h('summary', h('span.dot.' + status), h('span.name', t.label), h('span.arg', t.summary)));
-  if (t.diff?.length) d.append(h('div.diff', t.diff.map((l) => h('div.' + l.kind, (l.kind === 'add' ? '+ ' : l.kind === 'del' ? '- ' : '  ') + l.text))));
-  if (t.result) d.append(h('pre.out', t.result));
-  if (t.warning) d.append(h('div.note', {style: {padding: '0 12px 8px'}}, '⚠ ' + t.warning));
-  return d;
+  const status = t.pending ? 'run' : t.ok === false ? 'bad' : t.label === 'Agent' ? 'agent' : 'ok';
+  const stats = t.diff?.length ? diffStats(t.diff) : undefined;
+  const head = h('summary.tl',
+    h('span.td.' + status, '●'),
+    h('b', t.label), h('span.ta', `(${t.summary})`),
+    stats ? [h('span.plus', ` +${stats.added}`), h('span.minus', ` −${stats.removed}`)] : null,
+    t.note ? h('span.tn', ` · ${t.note}`) : null,
+  );
+  const brief = !t.pending && t.brief && !t.diff?.length ? h('div.tb' + (t.ok === false ? '.bad' : ''), (t.ok === false ? '✗ ' : '') + t.brief) : null;
+  const d = h('details.tool', head);
+  if (t.diff?.length) d.append(diffEl(t.diff));
+  if (t.result && (t.result.includes('\n') || t.result.length > 120)) d.append(h('pre.out', t.result));
+  if (t.warning) d.append(h('div.tw', '⚠ ' + t.warning));
+  if (t.diff?.length) d.open = true; // edits show their diff, as in the terminal
+  return h('div.toolrow', d, brief);
+}
+
+function diffStats(diff) {
+  let added = 0, removed = 0;
+  for (const l of diff) l.kind === 'add' ? added++ : l.kind === 'del' && removed++;
+  return {added, removed};
+}
+
+/** Words that differ between a removed line and the added line after it, marked (as the terminal does). */
+function wordDiff(a, b) {
+  const A = a.split(/(\s+|[^\w\s])/).filter(Boolean), B = b.split(/(\s+|[^\w\s])/).filter(Boolean);
+  if (A.length * B.length > 40000) return [[a, true], [b, true]].map(([x]) => [[x, true]]);
+  const L = Array.from({length: A.length + 1}, () => new Uint16Array(B.length + 1));
+  for (let i = A.length - 1; i >= 0; i--) for (let j = B.length - 1; j >= 0; j--) L[i][j] = A[i] === B[j] ? L[i + 1][j + 1] + 1 : Math.max(L[i + 1][j], L[i][j + 1]);
+  const da = [], db = [];
+  let i = 0, j = 0;
+  while (i < A.length || j < B.length) {
+    if (i < A.length && j < B.length && A[i] === B[j]) da.push([A[i++], false]), db.push([B[j++], false]);
+    else if (j < B.length && (i >= A.length || L[i][j + 1] >= L[i + 1][j])) db.push([B[j++], true]);
+    else da.push([A[i++], true]);
+  }
+  return [da, db];
+}
+
+function diffEl(diff) {
+  const rows = [];
+  for (let k = 0; k < diff.length; k++) {
+    const l = diff[k];
+    if (l.kind === 'gap') { rows.push(h('div.gap', '⋯')); continue; }
+    if (l.kind === 'note') { rows.push(h('div.dnote', l.text)); continue; }
+    const pair = l.kind === 'del' && diff[k + 1]?.kind === 'add' ? diff[k + 1] : undefined;
+    const parts = pair ? wordDiff(l.text, pair.text) : undefined;
+    const line = (x, segs) => h('div.' + x.kind, h('span.no', x.n ?? ''), h('span.sg', x.kind === 'add' ? '+' : x.kind === 'del' ? '-' : ' '), h('span.tx', segs ? segs.map(([w, ch]) => (ch ? h('mark', w) : w)) : x.text));
+    rows.push(line(l, parts?.[0]));
+    if (pair) rows.push(line(pair, parts[1])), k++;
+  }
+  return h('div.diff', rows);
 }
 
 function messageEl(m) {
   if (m.role === 'user') return h('div.msg.user', h('div.bubble', m.text));
-  return h('div.msg.assistant', (m.tools ?? []).map(toolEl), m.text ? md(m.text) : null, m.interrupted ? h('div.note', 'Interrupted.') : null);
+  return h('div.msg.assistant', (m.tools ?? []).map(toolEl), m.text ? h('div.reply', md(m.text)) : null, m.interrupted ? h('div.note', 'Interrupted.') : null, m.model ? h('div.model-tag', m.model.split(':').pop()) : null);
 }
 
 function askEl(c, a) {
@@ -574,6 +622,7 @@ function threadEl() {
   // The turn in progress: the reply so far with its tool calls where they happened.
   const live = [];
   if (c.busy || c.live || c.tools.length) {
+    if (c.route) live.push(h('div.route', `→ ${c.route}`));
     let at = 0;
     for (const t of c.tools) {
       if (t.after > at) live.push(md(c.live.slice(at, t.after)));
@@ -591,7 +640,7 @@ function threadEl() {
   return h('div.thread#thread',
     rows,
     live.length ? h('div.msg.assistant', live) : null,
-    c.notes.map((n) => h('div.note' + (n.error ? '.error' : ''), n.text)),
+    c.notes.map((n) => h('div.note' + (n.error ? '.error' : /^(Load balancing|Failover|Every account)/.test(n.text) ? '.warn' : ''), n.text)),
     [...c.asks.values()].map((a) => askEl(c, a)),
   );
 }
@@ -743,7 +792,7 @@ function updateComposer(c) {
   const s = c.snapshot;
   u.ta.placeholder = c.busy ? 'Queue a message, or /btw <question>' : 'Message Rein, / for commands';
   u.working.classList.toggle('hidden', !c.busy);
-  u.working.replaceChildren(h('span.dot.busy'), c.asks.size ? 'Waiting for you' : `${c.phrase ?? 'Thinking'}…${c.model ? ` · ${c.model}` : ''}`);
+  u.working.replaceChildren(h('span.spin', '▁▃▅▇'), c.asks.size ? h('span.wait', 'Waiting for you') : h('span.rainbow', `${c.phrase ?? 'Thinking'}…`), c.model && !c.asks.size ? h('span.dimtxt', ` · ${c.model}`) : null);
   const q = s?.queued ?? [];
   u.queued.classList.toggle('hidden', !q.length);
   u.queued.replaceChildren(...q.map((t, i) => h('span.chip', {title: t}, `Queued: ${t.length > 60 ? t.slice(0, 60) + '…' : t}`, h('button', {title: 'Remove', on: {click: () => ask(c, 'unqueue', {index: i}).catch((e) => toast(e.message, 'error'))}}, '×'))));
@@ -779,18 +828,26 @@ function chatView() {
 /** The status line: the segments set in /settings → Status line, then marketplace items'. Click one for its command. */
 function statusEl(c) {
   const segs = c.snapshot?.status ?? [];
-  return h('div.statusline#statusline', segs.map((g) => h(g.command ? 'button.seg' : 'span.seg', {title: g.label, on: g.command ? {click: () => runInChat(c, g.command)} : undefined}, h('span.k', g.label), h('span.v', g.value))));
+  const items = [];
+  segs.forEach((g, i) => {
+    if (i) items.push(h('span.sep', '│'));
+    items.push(h(g.command ? 'button.seg' : 'span.seg', {title: g.command ? `${g.label}: ${g.command}` : g.label, on: g.command ? {click: () => runInChat(c, g.command)} : undefined}, h('span.k', g.label), ' ', h('span.v' + (g.tone ? '.' + g.tone : ''), g.value)));
+  });
+  return h('div.statusline#statusline', h('span.brandmark', '▁▃▅▇ Rein'), items.length ? h('span.sep', '│') : null, items);
 }
 
 /** The right sidebar: the goal's plan and tasks, the sections set in /settings → Sidebar, then items' sections. */
 function panelEl(c) {
   const secs = c.snapshot?.sidebar ?? [];
   return h('aside.rpanel#rpanel', secs.map((sec) => h('section',
-    h('h4', sec.title),
+    h('h4', sec.title.toUpperCase()),
     sec.rows.map((r) => {
-      const kids = [r.text ? h('span.t', r.text) : null, r.pct !== undefined ? [bar(r.pct), h('span.n', `${r.pct}%`)] : null];
-      const cls = (r.dim ? '.dim' : '') + (r.bold ? '.bold' : '') + (r.active ? '.active' : '');
-      return r.command ? h('button.row' + cls, {on: {click: () => runInChat(c, r.command)}}, kids) : h('div.row' + cls, kids);
+      const mark = /^([✓▸○●])\s/.exec(r.text ?? '');
+      const tone = mark ? {'✓': '.done', '▸': '.next', '○': '.later', '●': '.on'}[mark[1]] : '';
+      const kids = [r.text ? h('span.t', r.text) : null, r.pct !== undefined ? h('span.n', `${r.pct}%`) : null];
+      const cls = (r.dim ? '.dim' : '') + (r.bold ? '.bold' : '') + (r.active ? '.active' : '') + tone;
+      const row = r.command ? h('button.row' + cls, {on: {click: () => runInChat(c, r.command)}}, kids) : h('div.row' + cls, kids);
+      return r.pct !== undefined ? [row, h('div.meter', h('i' + (r.pct >= 90 ? '.hot' : r.pct >= 70 ? '.warm' : ''), {style: {width: `${Math.min(100, r.pct)}%`}}))] : row;
     }),
   )), !secs.length ? h('div.muted', {style: {padding: '12px'}}, 'Nothing here: choose sections in /settings → Sidebar.') : null);
 }
@@ -850,9 +907,9 @@ function renderWindow(c) {
   document.querySelector('.overlay.cmd-window')?.remove();
   if (state.chat !== c || !c.window) return;
   const w = c.window;
-  const panels = {settings: settingsPanel, model: modelPanel, plans: plansPanel, rewind: rewindPanel, shells: shellsPanel, agents: agentsPanel};
+  const panels = {login: loginPanel, settings: settingsPanel, model: modelPanel, plans: plansPanel, rewind: rewindPanel, shells: shellsPanel, agents: agentsPanel};
   const body = panels[w.name] ? panels[w.name](c, w) : h('pre.text', (w.lines ?? []).join('\n'));
-  const title = {settings: 'Settings', model: 'Models', plans: 'Start a plan as a goal', rewind: 'Rewind', shells: 'Shells', agents: 'Subagents'}[w.name] ?? w.title;
+  const title = {login: 'Accounts', settings: 'Settings', model: 'Models', plans: 'Start a plan as a goal', rewind: 'Rewind', shells: 'Shells', agents: 'Subagents'}[w.name] ?? w.title;
   const o = h('div.overlay.cmd-window', {on: {click: (e) => e.target === o && closeWindow(c)}},
     h('div.dialog.wide', h('header', title, h('button.icon-btn', {style: {float: 'right'}, title: 'Close (Esc)', on: {click: () => closeWindow(c)}}, icon('x'))), h('div.body', body)));
   o.tabIndex = -1;
@@ -936,6 +993,69 @@ function modelPanel(c, v) {
     h('div.options', s.options.map((o) => h('label.opt' + (o.disabled ? '.disabled' : ''), h('input', {type: 'radio', name: `model-${s.id}`, disabled: o.disabled, checked: o.value === s.value, on: {change: () => choose(s.id, o.value)}}), h('span', h('b', o.label), o.hint ? h('small', o.hint) : null)))),
     s.id === 'chat' ? h('div', h('h3', 'Effort'), h('div.options', v.effort.options.map((o) => h('label.opt', h('input', {type: 'radio', name: 'effort', checked: o.value === v.effort.value, on: {change: () => choose('effort', o.value)}}), h('span', h('b', o.label), o.hint ? h('small', o.hint) : null))))) : null,
   );
+}
+
+const ADD = [
+  ['claude', '', 'Claude subscription', 'Pro / Max'],
+  ['claude', 'console', 'Claude API key', 'Anthropic Console, pay per use'],
+  ['claude', 'bedrock', 'Claude on Amazon Bedrock', 'your AWS credentials on this machine'],
+  ['claude', 'vertex', 'Claude on Google Vertex AI', 'your Google Cloud credentials on this machine'],
+  ['codex', '', 'Codex with ChatGPT', 'Plus / Pro / Business'],
+  ['codex', 'openai', 'Codex with an OpenAI API key', 'pay per use'],
+];
+const CLOUD = {
+  bedrock: [['region', 'AWS region', 'us-east-1'], ['profile', 'AWS profile (optional)', 'default']],
+  vertex: [['projectId', 'Google Cloud project', 'my-project'], ['region', 'Region', 'us-east5']],
+};
+
+/** /login: the accounts Rein uses, and adding one through the official CLI's own sign-in, from any device. */
+function loginPanel(c, w) {
+  const u = (c.winUi ??= {});
+  const act = async (op, args = {}) => {
+    try {
+      const r = await ask(c, op, args);
+      if (r && r.name === 'login') ((c.window = r), renderWindow(c));
+    } catch (err) {
+      toast(err.message, 'error');
+    }
+  };
+  const f = w.flow;
+  const flow = f ? h('section.setting.flow',
+    h('h3', `Signing in: ${f.provider}${f.name ? ` · ${f.name}` : ''}`),
+    f.code ? h('div', h('p.muted', 'Open the page below on any device, sign in, and enter this code:'), h('div.devcode', f.code, h('button.btn.small', {on: {click: () => navigator.clipboard?.writeText(f.code).then(() => toast('Code copied'))}}, 'Copy'))) : null,
+    f.url ? h('p', h('a.btn.primary', {href: f.url, target: '_blank', rel: 'noopener noreferrer'}, f.code ? 'Open the sign-in page' : 'Sign in'), h('span.muted', {style: {marginLeft: '10px', fontSize: '12.5px'}}, new URL(f.url).host)) : !f.error ? h('p.muted', 'Starting…') : null,
+    f.needsCode ? h('div.codein',
+      h('p.muted', f.url ? 'After signing in, the page shows a code: paste it here.' : 'Paste the key:'),
+      h('input', {type: f.url ? 'text' : 'password', autocomplete: 'off', placeholder: f.url ? 'code' : 'key', on: {input: (e) => (u.code = e.target.value), keydown: (e) => e.key === 'Enter' && act('login-code', {code: u.code})}}),
+      h('button.btn.primary', {on: {click: () => act('login-code', {code: u.code})}}, 'Continue'),
+    ) : null,
+    f.error ? h('div.note.error', f.error) : null,
+    h('div.actions', h('button.btn', {on: {click: () => act('login-cancel')}}, f.error ? 'Close' : 'Cancel')),
+  ) : null;
+  const list = h('div.options', w.accounts.length ? w.accounts.map((a) => h('div.acctrow',
+    h('span.dot' + (a.signedIn ? '.ok' : '.bad')),
+    h('div.grow', h('b', `${a.provider} `), a.name.startsWith(a.provider) ? a.name.slice(a.provider.length) : a.name, a.plan ? h('span.muted', ` · ${a.plan}`) : null, a.imported ? h('span.muted', ' · imported') : null,
+      h('small', a.signedIn ? 'signed in' : `signed out${a.error ? ` (${a.error})` : ''}`)),
+    h('button.btn.small', {on: {click: () => act('login-reauth', {id: a.id})}}, 'Re-authenticate'),
+    u.remove === a.id
+      ? [h('button.btn.small.danger', {on: {click: () => ((u.remove = undefined), act('account-remove', {id: a.id}))}}, a.imported ? 'Unregister' : 'Remove'), h('button.btn.small', {on: {click: () => ((u.remove = undefined), renderWindow(c))}}, 'Keep')]
+      : h('button.btn.small', {on: {click: () => ((u.remove = a.id), renderWindow(c))}}, 'Remove'),
+  )) : h('p.muted', 'No accounts yet. Add one below.'));
+  const add = h('div.addgrid', ADD.map(([provider, api, label, hint]) => {
+    const key = `${provider}:${api}`;
+    if (u.cloud === key) {
+      const vals = (u.cloudVals ??= {});
+      return h('div.choice.on.cloud', h('div', h('b', label),
+        CLOUD[api].map(([k, l, ph]) => h('label.field', l, h('input', {type: 'text', placeholder: ph, value: vals[k] ?? '', on: {input: (e) => (vals[k] = e.target.value)}}))),
+        h('div.actions', h('button.btn.primary', {on: {click: () => ((u.cloud = undefined), act('login-start', {provider, api, apiConfig: vals}))}}, 'Check and add'), h('button.btn', {on: {click: () => ((u.cloud = undefined), renderWindow(c))}}, 'Cancel'))));
+    }
+    return h('button.choice', {disabled: !!f && !f.error, on: {click: () => (CLOUD[api] ? ((u.cloud = key), (u.cloudVals = {}), renderWindow(c)) : act('login-start', {provider, ...(api ? {api} : {})}))}}, h('div', h('b', `+ ${label}`), h('small', hint)));
+  }));
+  const jev = h('section.setting',
+    h('h3', 'Jev API key'), h('p.muted', w.jev ? 'Set. Jev is a fast, nearly free decision model for auto routing (pick it in /model).' : 'Optional: a fast, nearly free decision model for auto routing, from typesafe.ai.'),
+    w.jev ? h('button.btn.small.danger', {on: {click: () => act('jev-remove')}}, 'Remove key') : h('div.codein', h('input', {type: 'password', autocomplete: 'off', placeholder: 'paste key from typesafe.ai', on: {input: (e) => (u.jev = e.target.value)}}), h('button.btn', {on: {click: () => act('jev-set', {key: u.jev})}}, 'Save')),
+  );
+  return h('div', flow, list, h('h3', 'Add an account'), h('p.muted', 'Sign-in goes through the official claude and codex CLIs on the computer Rein runs on; Rein never sees the tokens.'), add, jev);
 }
 
 const when = (ms) => new Date(ms).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'});
