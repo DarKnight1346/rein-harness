@@ -126,6 +126,7 @@ Details worth knowing:
 | `midturn` | While the agent works, a request's input reaches `autoCompactPct` of the window. The agent carries on (see below) | `Compacted mid-task at 80% of the context window — the agent carries on from the summary` |
 | `auto` | After a turn, input tokens ≥ `autoCompactPct` of the window (default 80%) | `Auto-compacted at 80% of the context window · change it in /settings → Agents → Compaction` |
 | `handoff` | A carry into a new session would exceed 24k tokens | `Compacted before handing the conversation to another model` |
+| `idle` | Experiment `idle-compact`, in the TUI: the conversation sat idle until 2 minutes before its prompt cache expires (58 minutes after the last request; 4 minutes with `cache-5m`), and its last request was at least 40% of the auto-compact size. The open session writes the summary from its warm cache, so your next message starts small instead of re-reading the whole history uncached. Once per idle stretch; a message you send meanwhile waits for it | `Compacted while idle, before the prompt cache expired · your next message starts from the summary` |
 | `context` | The model rejected the prompt as too long (Claude: "prompt is too long"; Codex: `contextWindowExceeded`). If the agent had already done work in the turn, it's kept and the agent carries on like a mid-turn compaction; otherwise the engine compacts and retries the request once | `The model's context window was full — compacted, and the agent carries on` |
 
 ### Compacting without stopping the agent

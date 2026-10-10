@@ -22,11 +22,11 @@ import {PlansScreen} from './PlansScreen.js';
 import {StatusBar} from './StatusBar.js';
 import {UsageReport} from './UsageReport.js';
 import {TextInput} from './TextInput.js';
-import {rainbow, Working} from './Working.js';
+import {rainbow, useBlink, Working} from './Working.js';
 import {ContextView} from './ContextView.js';
 import type {Entry} from './entries.js';
 import {useRein} from './useRein.js';
-import {diffLines} from './fullscreen/lines.js';
+import {diffLines, pendingToolLines} from './fullscreen/lines.js';
 import {planPreviewLines} from './planPreview.js';
 import {renderMarkdown} from './markdown.js';
 import {redact} from './privacy.js';
@@ -94,6 +94,7 @@ export function ClassicApp({resume}: {resume: Resume}) {
     },
   });
   const {chat, overlay} = r;
+  const dotOn = useBlink(chat.running.length > 0);
   useInlineImages(r.transcript);
 
   return (
@@ -105,6 +106,7 @@ export function ClassicApp({resume}: {resume: Resume}) {
             <Text>{chat.live}</Text>
           </Box>
         ) : null}
+        {chat.running.length ? <Text>{pendingToolLines(chat.running, Math.max(20, (process.stdout.columns ?? 80) - 2), dotOn).join('\n')}</Text> : null}
         <ForegroundTail />
         {chat.busy ? (
           <Working startedAt={chat.startedAt} phase={chat.phase} tool={chat.toolLabel} tokens={chat.tokens} queued={r.queued.length} waitUntil={chat.waitUntil} />

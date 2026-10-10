@@ -54,6 +54,7 @@ export function compactText(reason: string, r: {summarized: number; summaryToken
     : reason === 'midturn' ? `Compacted mid-task at ${autoPct}% of the context window — the agent carries on from the summary`
     : reason === 'handoff' ? 'Compacted before handing the conversation to another model'
     : reason === 'context' ? "The model's context window was full — compacted, and the agent carries on"
+    : reason === 'idle' ? 'Compacted while idle, before the prompt cache expired · your next message starts from the summary'
     : 'You ran /compact · the next reply starts from the summary · /context for details';
   return {stats, why};
 }

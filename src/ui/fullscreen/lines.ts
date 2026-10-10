@@ -63,6 +63,11 @@ function imageLines(files: string[], width: number): string[] {
   return out;
 }
 
+/** Tool calls still running, as pending lines in the conversation: the dot blinks until each finishes. */
+export function pendingToolLines(running: {label: string; summary: string}[], width: number, dotOn: boolean): string[] {
+  return running.flatMap((t) => ['', ...wrap(chalk.bold(t.label) + chalk.dim(`(${t.summary})`), width, dotOn ? chalk.white('⏺ ') : '  ', '  ')]);
+}
+
 export function entryLines(entry: Entry, width: number): string[] {
   switch (entry.kind) {
     case 'banner':

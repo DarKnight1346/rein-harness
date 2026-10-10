@@ -1,4 +1,6 @@
 import {useCallback, useEffect, useRef, useState} from 'react';
+
+export type RunningTool = {id: number; label: string; summary: string};
 import {planPreview} from './planPreview.js';
 import {useStdout} from 'ink';
 import type {Route} from '../session/engine.js';
@@ -39,8 +41,10 @@ export function useChat(commit: (e: NewEntry<ChatEntry>) => void, notice: (kind:
   const [startedAt, setStartedAt] = useState(0);
   const [phase, setPhase] = useState<Phase>('thinking');
   const [waitUntil, setWaitUntil] = useState<number | undefined>(undefined);
-  /** Tool currently running, e.g. `Edit(src/a.ts)`. */
+  /** What a mid-turn compaction shows on the working line (tools show in the conversation instead). */
   const [toolLabel, setToolLabel] = useState<string | undefined>();
+  /** Tool calls in flight, shown in the conversation as pending lines (a blinking dot) until they finish. */
+  const [running, setRunning] = useState<RunningTool[]>([]);
   /** Tokens of the call in flight: sent (incl. cached) / received. */
   const [tokens, setTokens] = useState<{input: number; cached: number; output: number} | undefined>();
   const pending = useRef('');
@@ -114,11 +118,14 @@ export function useChat(commit: (e: NewEntry<ChatEntry>) => void, notice: (kind:
               flush(true); // text before the tool call stays above its line
               firstSegment.current = true;
               responding = false;
-              setToolLabel(`${a.label}(${a.summary})`);
+              setRunning((r) => [...r, {id: a.id, label: a.label, summary: a.summary}]);
               setPhase('tool');
             } else {
-              setToolLabel(undefined);
-              setPhase('thinking');
+              setRunning((r) => {
+                const rest = r.filter((t) => t.id !== a.id);
+                if (!rest.length) setPhase('thinking');
+                return rest;
+              });
               const plan = planPreview(a.label, a.summary, a.ok, a.result); // plans show rendered, not as a diff
               commit({kind: 'tool', label: a.label, summary: a.summary, ok: a.ok, result: a.result, approvedBy: a.approvedBy, judge: a.judge, diff: a.diff, ...(plan ? {plan} : {}), ...(a.warning ? {warning: a.warning} : {})});
             }
@@ -149,6 +156,7 @@ export function useChat(commit: (e: NewEntry<ChatEntry>) => void, notice: (kind:
         flush(true);
         notice('error', (err as Error).message);
       } finally {
+        setRunning([]);
         setBusy(false);
       }
       // A Stop hook may keep the agent working (bounded, like Claude Code's stop_hook_active).
@@ -172,5 +180,5 @@ export function useChat(commit: (e: NewEntry<ChatEntry>) => void, notice: (kind:
     runtime.agents.cancelAll({foregroundOnly: true}); // the main turn is waiting on them
     runtime.engine.interrupt();
   };
-  return {live, busy, startedAt, phase, toolLabel, tokens, send, interrupt, waitUntil};
+  return {live, busy, startedAt, phase, toolLabel, running, tokens, send, interrupt, waitUntil};
 }

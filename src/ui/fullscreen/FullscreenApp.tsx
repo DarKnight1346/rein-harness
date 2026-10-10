@@ -38,8 +38,8 @@ import {ResumeScreen} from '../ResumeScreen.js';
 import {LiveShell, ShellsWindow, ShellWindow, useShellsTick} from './Shells.js';
 import {AgentsWindow, agentGlyph, useAgentsTick} from './Agents.js';
 import {subagentStatusText, type Subagent} from '../../agents/manager.js';
-import {kTokens, rainbow, Working} from '../Working.js';
-import {agentLines, assistantLines, entryLines, wrap} from './lines.js';
+import {kTokens, rainbow, useBlink, Working} from '../Working.js';
+import {agentLines, assistantLines, entryLines, pendingToolLines, wrap} from './lines.js';
 import {InfoWindow, Window} from './Window.js';
 import {COMMANDS} from '../../commands/index.js';
 import {skillDirs, skillSourceLabel, type Skill} from '../../skills/index.js';
@@ -94,6 +94,7 @@ export function FullscreenApp({resume}: {resume: Resume}) {
   // Lines pass through redact() (hide personal info): emails → "Claude Account 1", home → ~.
   const hide = hidingIdentity();
   const cache = useRef(new Map<number, {width: number; hide: boolean; lines: string[]}>());
+  const dotOn = useBlink(chat.running.length > 0);
   const mainLines = useMemo(() => {
     const out: string[] = [];
     for (const e of r.entries) {
@@ -105,8 +106,9 @@ export function FullscreenApp({resume}: {resume: Resume}) {
       out.push(...c.lines);
     }
     if (chat.live) out.push(...assistantLines(chat.live, textWidth).map(redact));
+    if (chat.running.length) out.push(...pendingToolLines(chat.running, textWidth, dotOn).map(redact));
     return out;
-  }, [r.entries, chat.live, textWidth, hide]);
+  }, [r.entries, chat.live, chat.running, dotOn, textWidth, hide]);
   // Blank-state splash: fades in at launch and out once the first message is sent (and again after
   // /clear). <Splash> animates it.
   const hasUserMessage = r.entries.some((e) => e.kind === 'user');

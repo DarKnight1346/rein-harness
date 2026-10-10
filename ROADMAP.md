@@ -1,6 +1,6 @@
 # Open-source roadmap
 
-The 81 free features from the Rein feature roadmap, in build order. Numbers (`#29`) are the roadmap's feature
+The free features from the Rein feature roadmap, in build order. Numbers (`#29`) are the roadmap's feature
 numbers. Waves are ordered so each one builds on the last: workspace and cost foundations first, because most later
 features read the workspace (which repos) or the price of a run. Update the Docs (a path under the docs site) and Status columns as features land; the site's What's new page is built from this file.
 
@@ -133,3 +133,13 @@ agent works by default ships as an experiment (`experiments` in config) until it
 | 110 | Codemaps | Browsable, annotated architecture maps, generated and kept fresh. | features/system/#codemaps | done |
 | 111 | Container sandbox per task | Each task in Docker or Podman with an egress allowlist. | features/system/#a-container-per-task | done |
 | 112 | Multi-service local stack | Bring up the services a change needs (compose or Helm) with health checks, and test against them. | features/system/#the-services-a-change-needs | done |
+
+## Wave 10: Web UI
+
+| # | Feature | Spec | Docs | Status |
+|---|---|---|---|---|
+| 113 | Web UI server | `rein --ui` serves a web UI on port 9333; `rein --ui --port <number>` picks another. The same engine, accounts, tools and approvals as the TUI, through the official CLIs. |  | todo |
+| 114 | Web UI as a system service | `rein service --install [--port <number>]` installs the web UI as a service that starts with the system (launchd on macOS, a systemd user unit on Linux, a scheduled task on Windows); `rein service --uninstall` removes it. |  | todo |
+| 115 | First-run setup | The first visit walks through setup: no login (local only, or reached through a Tailscale tunnel), or with login credentials, for running it on your own server. |  | todo |
+| 116 | Desktop-style chat | Conversations like Claude Desktop or ChatGPT desktop: a sidebar of chats per project, streaming replies, tool calls, diffs, approvals, plans, goals, subagents and model choice, on any device. Builds on #113. |  | todo |
+| 117 | File manager | Open any directory on the machine as a project, from a full file manager for headless servers: browse, search, preview, edit, upload, download, rename, move, copy, delete and new folders. Builds on #113. |  | todo |

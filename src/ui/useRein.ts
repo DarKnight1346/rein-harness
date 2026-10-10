@@ -178,7 +178,7 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
   const [ready, setReady] = useState(false);
   const [updating, setUpdating] = useState(false);
   /** Manual /compact in progress (drives the animated status line). */
-  const [compacting, setCompacting] = useState<{startedAt: number; label: string} | undefined>();
+  const [compacting, setCompacting] = useState<{startedAt: number; label: string; idle?: boolean} | undefined>();
   /** Update output, kept so the fullscreen update window can be closed and reopened. */
   const [updateLog, setUpdateLog] = useState<UpdateLine[]>([]);
   const windowed = opts.renderer === 'fullscreen';
@@ -657,6 +657,32 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
     else if (overlay.name === 'plan') notify(mode, 'Rein has a plan for you', overlay.plan.title);
     else if (overlay.name === 'trust') notify(mode, 'Rein', "This project's hooks need your review");
   }, [overlay.name]);
+  // idle-compact: a conversation left idle is compacted a little before its prompt cache expires,
+  // from the warm cache (Engine.idleCompactAt). A message sent meanwhile waits in the queue.
+  useEffect(() => {
+    if (chat.busy || compacting) return;
+    const at = runtime.engine.idleCompactAt();
+    if (at === undefined) return;
+    const t = setTimeout(() => {
+      if (chatRef.current.busy) return;
+      setCompacting({startedAt: Date.now(), label: 'Compacting while idle', idle: true});
+      void runtime.engine
+        .idleCompact()
+        .then(
+          (res) => {
+            if (res && !('skipped' in res)) add({kind: 'compact', reason: 'idle', result: res});
+          },
+          (err) => log('error', `Compaction while idle failed: ${(err as Error).message}`),
+        )
+        .finally(() => {
+          setCompacting(undefined);
+          bump();
+        });
+    }, Math.max(0, at - Date.now()));
+    t.unref?.();
+    return () => clearTimeout(t);
+  }, [chat.busy, compacting, statusTick]);
+
   const working = chat.busy || !!goalNote || queued.length > 0 || !!compacting;
   const workStarted = useRef<number | undefined>(undefined);
   useEffect(() => {
@@ -720,7 +746,7 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
   }, []);
 
   useEffect(() => {
-    if (chat.busy || !queued.length) return;
+    if (chat.busy || compacting?.idle || !queued.length) return;
     const [next, ...rest] = queued;
     setQueued(rest);
     if (next!.startsWith(DELIVER)) {
@@ -733,7 +759,7 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
       return;
     }
     runRef.current(next!); // through the normal path, so queued skills expand
-  }, [chat.busy, queued]);
+  }, [chat.busy, queued, compacting]);
 
   const prevDraft = useRef('');
   // Pastes, images and dropped files shown as placeholders in the input; expanded on send.
@@ -1058,7 +1084,7 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
       return;
     }
     if (parsed.kind === 'text') {
-      if (chat.busy) {
+      if (chat.busy || compacting?.idle) {
         // Sent when the current reply finishes (shown as "N queued" on the status line).
         setQueued((q) => [...q, parsed.text]);
         return;

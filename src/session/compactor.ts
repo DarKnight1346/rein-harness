@@ -68,7 +68,7 @@ export type CompactResult =
   | {skipped: string};
 
 /** `midturn`: the context filled up while the agent was working; it carries on from the summary. */
-export type CompactReason = 'manual' | 'auto' | 'midturn' | 'handoff' | 'context';
+export type CompactReason = 'manual' | 'auto' | 'midturn' | 'handoff' | 'context' | 'idle';
 
 const MAP_MAX_PARTS = 40;
 const FILE_TOOLS = new Set(['Write', 'Edit', 'Delete']);

@@ -154,7 +154,9 @@ While the agent works, the line above the input shows Rein's mark: a four-cell b
 
 - `Routing…`: auto mode is choosing a model.
 - `Thinking…`, then `Responding…`.
-- The name of the running tool and its argument, e.g. `Read(src/commands/export.ts)…`.
+- `Working…`: a tool call is running.
+
+Tool calls show in the conversation itself. A call that's still running is a pending line with a blinking dot, such as `⏺ Shell(npm test)`. When it finishes, the line becomes the result: a green dot if it worked, a red one if it failed. Calls made in parallel each get their own line.
 
 After the label come the elapsed time, tokens in and out, any queued messages, and a reminder of what you can do:
 
