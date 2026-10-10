@@ -51,22 +51,41 @@ export class BrowserView extends EventEmitter {
   closed = false;
   url = '';
 
-  /** Start the browser and open `url` at the viewer's size. */
+  /** Start the browser and open `url` at the viewer's size (30 s at most, with the browser's own words if it fails). */
   async start(url: string, size: {width: number; height: number}): Promise<void> {
     if (!allowed(url)) throw new Error('a preview shows http(s) pages only');
+    let timer: NodeJS.Timeout | undefined;
+    const limit = new Promise<never>((_, reject) => (timer = setTimeout(() => reject(new Error(`the browser didn't come up in 30 s${this.stderr ? `: ${tail(this.stderr)}` : ''}`)), 30_000)));
+    try {
+      await Promise.race([this.launch(url, size), limit]);
+    } catch (err) {
+      this.close();
+      throw err;
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  private stderr = '';
+
+  private async launch(url: string, size: {width: number; height: number}): Promise<void> {
     const bin = await findBrowser();
     if (!bin) throw new Error('no Chrome, Chromium or Edge found on this machine (set REIN_BROWSER to one)');
     this.size = clampSize(size);
     this.profile = await mkdtemp(path.join(os.tmpdir(), 'rein-preview-'));
-    this.proc = spawn(bin, [
-      '--headless=new', '--remote-debugging-port=0', `--user-data-dir=${this.profile}`, '--no-first-run', '--no-default-browser-check',
-      '--disable-extensions', '--disable-background-networking', '--disable-sync', '--disable-features=Translate,MediaRouter',
-      '--hide-scrollbars', '--mute-audio', `--window-size=${this.size.width},${this.size.height}`, 'about:blank',
-    ], {stdio: ['ignore', 'ignore', 'pipe'], windowsHide: true});
-    this.proc.on('exit', () => this.close());
+    // Chrome's sandbox can't run as root, and newer Linux kernels (Ubuntu 23.10+) may refuse the user
+    // namespaces it needs: then it's started again without it (the page is still a separate process).
+    const asRoot = process.platform === 'linux' && process.getuid?.() === 0;
+    let wsBase: string;
+    try {
+      wsBase = await this.spawnBrowser(bin, asRoot);
+    } catch (err) {
+      if (process.platform !== 'linux' || asRoot || !/sandbox|namespace|zygote/i.test(String((err as Error).message) + this.stderr)) throw err;
+      wsBase = await this.spawnBrowser(bin, true);
+    }
     // The tab Chrome opened (the active one: a background tab gets no screencast), over the tab's own
     // connection, which outlives navigations and process swaps.
-    const base = (await this.devtoolsUrl()).replace(/^ws:\/\/([^/]+)\/.*$/, 'http://$1');
+    const base = wsBase.replace(/^ws:\/\/([^/]+)\/.*$/, 'http://$1');
     let tab: {webSocketDebuggerUrl?: string} | undefined;
     for (let i = 0; i < 50 && !tab; i++) {
       tab = ((await (await fetch(`${base}/json/list`)).json()) as {type: string; webSocketDebuggerUrl?: string}[]).find((t) => t.type === 'page' && t.webSocketDebuggerUrl);
@@ -90,20 +109,40 @@ export class BrowserView extends EventEmitter {
     await this.navigate(url);
   }
 
+  private async spawnBrowser(bin: string, noSandbox: boolean): Promise<string> {
+    this.proc?.kill();
+    this.stderr = '';
+    const linux = process.platform === 'linux';
+    this.proc = spawn(bin, [
+      '--headless=new', '--remote-debugging-port=0', `--user-data-dir=${this.profile}`, '--no-first-run', '--no-default-browser-check',
+      '--disable-extensions', '--disable-background-networking', '--disable-sync', '--disable-features=Translate,MediaRouter',
+      '--hide-scrollbars', '--mute-audio', `--window-size=${this.size.width},${this.size.height}`,
+      // Containers often have a tiny /dev/shm, and servers no GPU.
+      ...(linux ? ['--disable-dev-shm-usage', '--disable-gpu'] : []),
+      ...(noSandbox ? ['--no-sandbox'] : []),
+      'about:blank',
+    ], {stdio: ['ignore', 'ignore', 'pipe'], windowsHide: true});
+    // Only this browser's exit closes the view (a first try, without the sandbox fallback, may exit later).
+    const proc = this.proc;
+    proc.on('exit', () => this.proc === proc && this.close());
+    return this.devtoolsUrl();
+  }
+
   /** Chrome prints its DevTools address on stderr when it's ready. */
   private devtoolsUrl(): Promise<string> {
     return new Promise((resolve, reject) => {
       let buf = '';
-      const timer = setTimeout(() => reject(new Error('the browser did not start')), 20_000);
+      const timer = setTimeout(() => reject(new Error(`the browser did not start${buf ? `: ${tail(buf)}` : ''}`)), 12_000);
       this.proc!.stderr!.on('data', (d) => {
         buf += d;
+        this.stderr = (this.stderr + d).slice(-4000);
         const m = buf.match(/DevTools listening on (ws:\/\/\S+)/);
         if (m) {
           clearTimeout(timer);
           resolve(m[1]!);
         }
       });
-      this.proc!.on('exit', () => (clearTimeout(timer), reject(new Error(`the browser exited${buf ? `: ${buf.trim().split('\n').slice(-2).join(' ')}` : ''}`))));
+      this.proc!.on('exit', () => (clearTimeout(timer), reject(new Error(`the browser exited${buf ? `: ${tail(buf)}` : ''}`))));
       // The port file is the other way to learn it (some builds print nothing).
       void (async () => {
         for (let i = 0; i < 100 && !this.closed; i++) {
@@ -145,9 +184,14 @@ export class BrowserView extends EventEmitter {
       case 'Page.frameNavigated':
         if (!m.params.frame.parentId) {
           this.url = m.params.frame.url;
-          if (!allowed(this.url)) void this.navigate('about:blank');
+          // Chrome's own error page ("can't be reached": the server isn't up yet) stays; anything else not http(s) goes.
+          if (!allowed(this.url) && !this.url.startsWith('chrome-error://')) void this.navigate('about:blank');
           this.emit('navigated', this.url);
         }
+        break;
+      case 'Page.loadEventFired':
+        // A screencast sends frames on paints; a page that's done painting gets one frame now.
+        void this.call('Page.captureScreenshot', {format: 'jpeg', quality: 70}).then((r) => this.emit('frame', {data: r.data, width: this.size.width, height: this.size.height} satisfies Frame), () => {});
         break;
       case 'Page.javascriptDialogOpening':
         // An alert would freeze the stream: dismiss it, and say what it said.
@@ -216,6 +260,7 @@ export class BrowserView extends EventEmitter {
   }
 }
 
+const tail = (s: string) => s.trim().split('\n').filter((l) => l.trim()).slice(-2).join(' ').slice(0, 300);
 const clampSize = (s: {width: number; height: number}) => ({width: Math.max(320, Math.min(2560, Math.round(s.width) || 1280)), height: Math.max(240, Math.min(1600, Math.round(s.height) || 800))});
 
 /** Windows virtual-key codes for the keys a page usually listens to (Enter, arrows, Backspace…). */
