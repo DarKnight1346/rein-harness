@@ -8,6 +8,11 @@ rein [--continue|-c [id]] [--classic|--fullscreen] [--add-dir <path>]... [--scop
 rein -p "<prompt>" [--model m] [--effort e] [--output-format text|json|stream-json]
                    [--permission-mode ask|auto|bypass|plan] [--allowedTools …] [--disallowedTools …]
                    [-c [id]] [--verbose]
+rein schedule [list | run [--due | <job>] | install | uninstall]
+rein --acp
+rein attach [id]
+rein sessions
+rein bench [init [--count n] | run --model m [--model m2]… [--tasks n] [--test cmd]]
 rein --update | --version | --help
 ```
 
@@ -23,6 +28,8 @@ Run `rein` from the project folder you want to work in. That folder becomes the 
 | `--classic` | Inline renderer: native terminal scrollback, no mouse, no sidebar. |
 | `--fullscreen` | App-style renderer: top bar, sidebar, windows, mouse. This is the default. |
 | `--add-dir <path>` | Lets the agent also use this folder without asking, for this session. Repeatable. |
+| `--acp` | Runs Rein as an [Agent Client Protocol](https://agentclientprotocol.com) agent on stdin/stdout, for Zed, JetBrains and other ACP editors. See [ACP editors](../../features/ide/#acp-editors-zed-jetbrains). |
+| `--background` | Runs the session in a background host: closing the terminal (or `Ctrl+\`) only detaches, and `rein attach` comes back to it from any terminal. Combines with the other flags. See [Background sessions](../../features/sessions/). |
 | `--scope <dir>` | Works in one package of a monorepo: `list`, `search` and `shell` start there and its instructions are loaded. See [Workspaces](../../features/workspaces/#one-package-of-a-monorepo). |
 | `--update` | Updates Rein and the `claude` / `codex` CLIs, prints the steps, then exits (no TTY needed). Exits `1` if a step failed. |
 | `-v`, `--version` | Prints Rein's version. |
@@ -106,6 +113,39 @@ rein -p "now add docs" -c --output-format stream-json --verbose
 :::note
 Headless mode needs at least one account: run `rein` once to import or add one.
 :::
+
+## Scheduled jobs: `rein schedule`
+
+| Command | What it does |
+| --- | --- |
+| `rein schedule` | Lists the jobs in `.rein/schedule.yaml` with their next run and how the last one went |
+| `rein schedule run <job>` | Runs one job now (all of them without a name) |
+| `rein schedule run --due` | Runs the jobs whose time has come, in every scheduled project. This is what the OS scheduler calls |
+| `rein schedule install` | Adds this project to the scheduled ones, and (once) a crontab entry, or a Task Scheduler task on Windows, that runs `rein schedule run --due` every 15 minutes |
+| `rein schedule uninstall` | Takes this project off; removes the OS entry when it was the last one |
+
+Exits `1` when a job fails or the file has errors. See [Scheduled jobs](../../features/headless/#scheduled-jobs).
+
+## Background sessions: `rein attach`
+
+| Command | What it does |
+| --- | --- |
+| `rein --background` | Starts Rein in a background host and attaches this terminal to it |
+| `rein attach` | Attaches to this folder's background session (or the only one); lists them when there are several |
+| `rein attach <id>` | Attaches to that session (a prefix of its id is enough) |
+| `rein sessions` | The dashboard of every running Rein on this machine: enter attaches (background sessions), `m` sends a message, `k` stops one. Piped, it prints the list |
+
+`rein host …` is the background process itself; you don't run it by hand. See [Background sessions](../../features/sessions/).
+
+## Benchmarks: `rein bench`
+
+| Command | What it does |
+| --- | --- |
+| `rein bench init [--count n]` | Picks up to `n` (default 10) recent commits that change code and its tests (non-merge, under 400 lines) and saves them as tasks in `.rein/bench/tasks.json` |
+| `rein bench run --model <a> [--model <b>]… [--tasks n] [--test "<cmd>"]` | Runs every task on each model and prints the pass rate, time and cost per model; results go to `.rein/bench/results/` |
+| `rein bench` | Says how many tasks there are |
+
+Each run is a real headless run on your accounts. See [Benchmark on your own repo](../../features/insight/#benchmark-on-your-own-repo).
 
 ## Environment variables
 

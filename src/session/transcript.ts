@@ -22,6 +22,8 @@ export type Message = {
   /** Tool calls made while producing this reply (kept for the record and for session search). */
   /** `result` is clipped to 4,000 characters; `size` is the full result's length (what the model saw). */
   tools?: {label: string; summary: string; ok: boolean; result: string; size?: number; diff?: DiffLine[]}[];
+  /** Prompt-cache use of the turn that produced this reply: input tokens, how many were cached, and why the cache was cold (when Rein knows). */
+  cache?: {input: number; cached: number; cold?: string};
   /** Images attached to a user message (files in the session's scratch folder). */
   images?: import('../providers/types.js').ImageInput[];
 };

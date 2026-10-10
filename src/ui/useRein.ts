@@ -67,6 +67,11 @@ import {detectTestCommand} from '../agents/bestOf.js';
 import {branchContracts} from '../contracts/changes.js';
 import {formatChanges} from '../contracts/diff.js';
 import {branchMigrations, formatFindings} from '../contracts/migrations.js';
+import {collectStats, formatStats} from '../insight/stats.js';
+import {collectCache, formatCache} from '../insight/cache.js';
+import {describeJobs, loadJobs, scheduledProjects} from '../schedule/index.js';
+import {describeDevEnv, detectDevEnv} from '../env/devenv.js';
+import {describeLive, listLive, removeLive, sendTo, watchInbox, writeLive} from '../host/live.js';
 import {deadCodeTask, findDeadCode, findFlags, flagRemovalTask, formatFlags, isStale} from '../contracts/deadcode.js';
 import {checkoutState, describeCheckout, sparseAdd} from '../workspace/sparse.js';
 import {buildIndex, DEFAULT_MODEL as EMBED_MODEL, formatSemanticHits, loadIndex, semanticSearch} from '../context/semantic.js';
@@ -428,6 +433,38 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
     },
     {isActive: overlay.name === 'none' && !viewing && !chat.busy && !draft},
   );
+
+  // Multi-session dashboard (rein sessions): this session's status, and messages sent from there.
+  const sendFromInbox = useRef<(text: string) => void>(() => {});
+  sendFromInbox.current = (text) => {
+    log('info', `From rein sessions: ${text.length > 80 ? `${text.slice(0, 80)}…` : text}`);
+    if (chat.busy) setQueued((q) => [...q, text]);
+    else void chat.send(text).then(bump);
+  };
+  useEffect(() => {
+    const stop = watchInbox((text) => sendFromInbox.current(text));
+    const bye = () => removeLive();
+    process.on('exit', bye);
+    return () => {
+      stop();
+      bye();
+      process.off('exit', bye);
+    };
+  }, []);
+  useEffect(() => {
+    const t = runtime.engine?.transcript;
+    const first = t?.messages.find((m) => m.role === 'user' && !m.synthetic)?.text ?? '';
+    const ref = runtime.engine?.currentRef();
+    const goal = runtime.goals.goal?.status === 'active' ? runtime.goals.goal.text : undefined;
+    writeLive({
+      cwd: process.cwd(),
+      title: first.replace(/<skill[^>]*>[\s\S]*?<\/skill>\s*/g, '').replace(/\s+/g, ' ').trim().slice(0, 120) || '(new conversation)',
+      state: ['approval', 'ask', 'plan', 'trust'].includes(overlay.name) ? 'waiting' : chat.busy ? 'working' : 'idle',
+      ...(goal ? {goal} : {}),
+      ...(process.env.REIN_HOST ? {host: process.env.REIN_HOST} : {}),
+      ...(ref ? {model: `${ref.provider}:${ref.model}`} : {}),
+    });
+  }, [chat.busy, overlay.name, statusTick]);
 
   const togglePlanMode = () => {
     runtime.planMode = !runtime.planMode;
@@ -1262,6 +1299,51 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
           if (!files.length) return log('info', 'No changes (vs HEAD). /owners <path> looks up a file or folder.');
           log('info', `Owners of ${arg || `your ${files.length} changed file${files.length === 1 ? '' : 's'}`}:\n${formatOwners(await ownersOf(root, files))}`);
         });
+        break;
+      }
+      case 'sessions': {
+        const m = parsed.args.trim().match(/^send\s+(\d+)\s+([\s\S]+)$/);
+        if (m) {
+          try {
+            sendTo(Number(m[1]), m[2]!);
+            log('info', `Sent to Rein ${m[1]}.`);
+          } catch (err) {
+            log('error', (err as Error).message);
+          }
+          break;
+        }
+        const all = listLive().filter((l) => l.pid !== process.pid);
+        log('info', all.length ? ['Other Rein sessions on this machine:', ...all.map((l) => `  ${String(l.pid).padEnd(7)} ${describeLive(l)}`), '/sessions send <pid> <message> sends one a message; rein sessions (in a terminal) is the dashboard.'].join('\n') : 'No other Rein sessions are running on this machine.');
+        break;
+      }
+      case 'env': {
+        const found = detectDevEnv(process.cwd());
+        const mode = runtime.config.devEnvironment ?? 'off';
+        if (parsed.args.trim() === 'up') {
+          if (mode === 'off') log('info', `devEnvironment is off${found ? ` (this repo has a ${found})` : ''}: turn it on in /settings → General → Dev environment.`);
+          else void runtime.devEnv.ready().then(() => log('info', describeDevEnv(runtime.devEnv.current())));
+          break;
+        }
+        log('info', `${describeDevEnv(runtime.devEnv.current())}${mode === 'off' && found ? ` This repo has a ${found}: /settings → General → Dev environment runs commands in it.` : ''}`);
+        break;
+      }
+      case 'schedule': {
+        const {jobs, errors} = loadJobs(process.cwd());
+        for (const e of errors) log('error', e);
+        log('info', jobs.length ? `Jobs in .rein/schedule.yaml:\n${describeJobs(jobs)}\n${scheduledProjects().includes(process.cwd()) ? 'They run on time (rein schedule uninstall stops that).' : 'Not installed yet: run rein schedule install in a terminal to run them on time.'}` : 'No scheduled jobs. Add them to .rein/schedule.yaml (a cron time and a prompt each); see the Scheduled jobs docs.');
+        break;
+      }
+      case 'cache': {
+        const words = parsed.args.trim().split(/\s+/).filter(Boolean);
+        const days = Math.max(1, Number(words.find((w) => /^\d+$/.test(w)) ?? 30));
+        void collectCache({...(words.includes('all') ? {} : {cwd: process.cwd()}), days}).then(({turns, scope}) => log('info', formatCache(turns, days, scope)));
+        break;
+      }
+      case 'stats': {
+        const words = parsed.args.trim().split(/\s+/).filter(Boolean);
+        const days = Math.max(1, Number(words.find((w) => /^\d+$/.test(w)) ?? 30));
+        const everywhere = words.includes('all');
+        void collectStats({...(everywhere ? {} : {cwd: process.cwd()}), days}).then((s) => log('info', `${formatStats(s, days)}${everywhere ? '' : '\n/stats all covers every project; /stats 90 a longer window.'}`));
         break;
       }
       case 'deadcode': {

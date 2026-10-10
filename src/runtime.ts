@@ -51,6 +51,7 @@ import {advisorRef, advisorTool} from './agents/advisor.js';
 import {GoalManager} from './goals/manager.js';
 import {Checkpoints} from './session/checkpoints.js';
 import {WorkspaceSnapshots} from './session/snapshots.js';
+import {DevEnv} from './env/devenv.js';
 import {SPEC_MODE_CONTEXT, specTools} from './specs/tools.js';
 import {specSection} from './specs/pr.js';
 import {adrContext} from './specs/adr.js';
@@ -101,6 +102,8 @@ export class Runtime {
   ciSubmit: (task: string) => void = () => {};
   /** A line for you (not the agent) in the conversation view, set by the UI. */
   uiLog: (text: string, kind?: 'info' | 'error') => void = () => {};
+  /** devEnvironment: the repo's dev container or Nix/devbox shell for the agent's commands. */
+  readonly devEnv = new DevEnv(process.cwd(), () => this.config?.devEnvironment ?? 'off', undefined, (t) => this.uiLog(t));
   readonly ci = new CiWatcher({log: (t, k) => this.uiLog(t, k), submit: (t) => this.ciSubmit(t)});
   /** OpenTelemetry export (config `otel`). */
   readonly telemetry = new Telemetry(() => this.config);
@@ -954,6 +957,7 @@ Drop superseded reads of the same file, routine listings, and output that no lon
     this.workspace = findWorkspace();
     await this.vault.load();
     this.tools.shells.vault = this.vault;
+    this.tools.shells.devEnv = this.devEnv;
     // provenance: what the trailers say, current at the moment of each command.
     this.tools.shells.extraEnv = (): Record<string, string> => {
       if (!this.config.provenance) return {};

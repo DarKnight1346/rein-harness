@@ -36,7 +36,11 @@ and a compaction model. No OAuth tokens are extracted: all traffic goes through 
 - **Contracts and migrations:** breaking-change detection for OpenAPI, protobuf, GraphQL and Avro
   (`/contracts`), migration safety checks (`/migrations`), expand/contract plans, Pact contract
   tests, codemods, Java 21 / Python 3 / React hooks playbooks, dead code and stale flags.
-- **Coming next:** sessions, environments and insight, then system-level understanding across repos.
+- **Sessions, environments and insight:** background sessions you reattach from any terminal
+  (`rein --background`), a dashboard of every running session (`rein sessions`), commands in the
+  repo's dev container or Nix shell, `rein --acp` for Zed and other ACP editors, `/stats`, `/cache`,
+  `rein bench` on your own history, onboarding tours and scheduled jobs.
+- **Coming next:** system-level understanding across repos.
 
 ## Install
 

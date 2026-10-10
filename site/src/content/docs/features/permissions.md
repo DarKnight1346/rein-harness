@@ -30,7 +30,7 @@ That means reading `.env` *inside* your project never prompts. Rein treats the p
 
 ## The command sandbox
 
-Approvals decide *whether* a command runs. The sandbox limits *what it can do* once it runs, which is what makes long unattended runs (bypass mode, `/goal`) safe. It's **on by default** (`/settings` → **General → Sandbox**):
+Approvals decide *whether* a command runs. The sandbox limits *what it can do* once it runs, which is what makes long unattended runs (bypass mode, `/goal`) safe. It's **on by default** (`/settings` → **General → Sandbox**). Commands that run inside a [dev container](../tools/#in-the-repos-own-environment) aren't wrapped by it: the container is the isolation there.
 
 | Mode | The agent's shell commands… |
 |---|---|

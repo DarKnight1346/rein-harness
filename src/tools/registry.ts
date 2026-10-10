@@ -274,6 +274,7 @@ async function shellTool(ctx: ToolContext, args: {command: string; background?: 
   if (typeof args?.command !== 'string' || !args.command.trim()) throw new ToolError('command is required');
   if (args.interactive && args.background) throw new ToolError('interactive commands run in the foreground (the user may need to answer them): drop background');
   const cwd = resolveInRoot(ctx, args.cwd ?? '.');
+  await ctx.shells.devEnv?.ready(); // devEnvironment: the container or Nix shell, started once
   // The sandbox may write to the project and every working directory (subagent worktrees included).
   const sandbox: SandboxSpec | undefined = ctx.sandbox && ctx.sandbox !== 'off' && !args.unsandboxed ? {mode: ctx.sandbox, roots: [ctx.root, ...(ctx.extraRoots ?? [])]} : undefined;
   const {shell, done} = ctx.shells.start(args.command, {cwd, background: !!args.background, timeoutMs: args.timeout_ms, maxMs: ctx.shellMaxMs, origin: ctx.origin, sandbox, tty: !!args.interactive});
