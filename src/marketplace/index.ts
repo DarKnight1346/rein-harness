@@ -46,7 +46,7 @@ export type Item = {
   config?: ItemConfig;
   theme?: Theme;
   /** What it adds, counted from its folder, for the store page. */
-  adds: {commands: number; skills: number; agents: number; mcp: string[]; hooks: string[]};
+  adds: {commands: number; skills: number; agents: number; mcp: string[]; hooks: string[]; code?: boolean};
   readme?: string;
   dir: string;
   marketplace: string;
@@ -151,7 +151,7 @@ function guessCategory(adds: Item['adds'], m: any): Category {
 function item(dir: string, m: any, marketplace: string, fallbackId: string): Item | undefined {
   const id = String(m.id ?? m.name ?? fallbackId).toLowerCase().replace(/[^\w-]+/g, '-');
   if (!id) return undefined;
-  const adds = addsOf(dir);
+  const adds = {...addsOf(dir), ...(typeof m.main === 'string' ? {code: true} : {})};
   const readme = ['README.md', 'readme.md'].map((f) => path.join(dir, f)).find(existsSync);
   return {
     id,

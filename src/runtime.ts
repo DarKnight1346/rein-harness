@@ -1,5 +1,7 @@
 import {existsSync, readFileSync, realpathSync, statSync} from 'node:fs';
 import {run} from './util/proc.js';
+import {extensions} from './extensions/index.js';
+import {ripgrep} from './tools/fs.js';
 import {EventEmitter} from 'node:events';
 import {adapters} from './providers/index.js';
 import {onSideUsage} from './providers/usage.js';
@@ -77,6 +79,7 @@ import {imageGenRef, imageTool} from './tools/image.js';
 import {newTranscript, saveTranscript, setSaveFilter} from './session/transcript.js';
 import {setPromptCacheTtl} from './providers/claude/session.js';
 import {setEnabledPacks} from './commands/packs.js';
+import {setExtensionCommands} from './commands/index.js';
 import {Pets} from './pets/index.js';
 import {loadSkills} from './skills/index.js';
 import {petTools} from './pets/tools.js';
@@ -350,6 +353,42 @@ export class Runtime {
    * Find your pet, and when the pets plugin is installed, give the agent its tools (so the pets
    * skills work with any model). Background, after startup: it starts a codex app-server.
    */
+  /**
+   * Load the code of the marketplace items you installed (extensions/index.ts): their commands,
+   * tools, sidebar sections, status segments and themes. At startup and after an install.
+   */
+  async loadExtensions(): Promise<{loaded: string[]; failed: {id: string; error: string}[]}> {
+    const r = await extensions.loadAll({
+      cwd: () => process.cwd(),
+      config: () => this.config as unknown as Record<string, unknown>,
+      registerTool: (item, t) => {
+        this.tools.register({
+          name: t.name,
+          label: t.label,
+          description: `${t.description}\n(From the marketplace item ${item}.)`,
+          inputSchema: t.inputSchema,
+          mutating: !!t.mutating,
+          summarize: (args: any) => (t.summarize ? t.summarize(args) : ''),
+          run: async (ctx, args) => {
+            const res = await t.run(args, {cwd: ctx.root});
+            return {ok: !!res?.ok, text: String(res?.text ?? '')};
+          },
+        });
+      },
+      exec: async (command, args, opts) => {
+        const r = await run(command, args, {cwd: opts?.cwd ?? process.cwd(), timeoutMs: opts?.timeoutMs ?? 120_000}).catch((err) => ({code: 1, stdout: '', stderr: (err as Error).message}));
+        return {code: r.code ?? 1, stdout: r.stdout, stderr: r.stderr};
+      },
+      ripgrep: async () => (await ripgrep()) ?? undefined,
+      workspace: () => {
+        const w = this.workspace;
+        return w ? {root: w.root, repos: w.repos.map((x) => ({name: x.name, path: x.path, present: x.present, ...(x.role ? {role: x.role} : {})}))} : undefined;
+      },
+    });
+    if (r.loaded.length) this.engine?.refreshTools();
+    return r;
+  }
+
   async loadPets(): Promise<void> {
     await this.pets.refresh();
     const hasSkills = loadSkills().some((s) => s.plugin === 'work-pets' || s.name.startsWith('work-pets:'));
@@ -1140,6 +1179,7 @@ Drop superseded reads of the same file, routine listings, and output that no lon
     setManyCalls(() => activeExperiments(this.config).includes('many-calls'));
     setSelfTest(() => activeExperiments(this.config).includes('self-test'));
     setEnabledPacks(() => this.config.packs ?? []);
+    setExtensionCommands(() => extensions.commands.map((c) => c.value));
     setPromptCacheTtl(() => (activeExperiments(this.config).includes('cache-5m') ? '5m' : undefined));
     setCacheWriteTtl(() => (activeExperiments(this.config).includes('cache-5m') ? '5m' : '1h'));
     setPriceOverrides(() => this.config.prices);

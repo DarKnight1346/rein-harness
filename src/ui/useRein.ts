@@ -10,6 +10,7 @@ import {autoUpdate, reinVersion, runUpdate, type UpdateLine} from '../commands/u
 import {runtime, type Resume} from '../runtime.js';
 import {listTranscripts, loadTranscript, type SessionInfo} from '../session/transcript.js';
 import {catalog} from '../router/catalog.js';
+import {extensions} from '../extensions/index.js';
 import {subagentContextReport, contextReport, type ContextReport} from '../session/context.js';
 import {compactableCount} from '../session/compactor.js';
 import {onUntrustedHooks, trustProjectHooks, type ProjectHooks} from '../hooks.js';
@@ -146,6 +147,7 @@ export type Overlay =
   | {name: 'resume'; sessions: SessionInfo[]}
   | {name: 'rewind'; points: RewindPoint[]}
   | {name: 'mcp'}
+  | {name: 'text'; title: string; lines: string[]}
   | {name: 'marketplace'}
   | {name: 'marketplace-updates'; items: import('../marketplace/index.js').Item[]; updates: {id: string; from: string; to: string}[]}
   | {name: 'plan'; plan: PresentedPlan; resolve(d: PlanDecision): void}
@@ -199,6 +201,12 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
     return () => void runtime.agents.off('change', onChange);
   }, []);
   const [skills, setSkills] = useState<Skill[]>(() => loadSkills());
+  // An item's code registered or changed something it draws: draw again.
+  useEffect(() => {
+    const on = () => setStatusTick((t) => t + 1);
+    extensions.on('change', on);
+    return () => void extensions.off('change', on);
+  }, []);
   const [statusTick, setStatusTick] = useState(0);
   const bump = useCallback(() => setStatusTick((t) => t + 1), []);
 
@@ -261,6 +269,10 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
       await listed;
       // Your pet from the ChatGPT and Codex apps: found in the background (it starts a codex app-server).
       void runtime.loadPets().then(() => runtime.pets.setActivity('hello'), () => {});
+      // Marketplace items' code: their commands, tools, sidebar sections, status segments and themes.
+      void runtime.loadExtensions().then((r) => {
+        for (const f of r.failed) log('error', `The marketplace item ${f.id} didn't load: ${f.error}`);
+      }, (err) => log('error', `Marketplace items didn't load: ${(err as Error).message}`));
       // A codex whose app-server protocol changed under Rein is switched off (see compat.ts).
       const compat = catalog.codexCompat;
       if (compat?.ok === false) log('error', incompatibleMessage(compat));
@@ -702,6 +714,7 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
     if (['approval', 'ask', 'plan', 'trust'].includes(overlay.name)) runtime.pets.setActivity('waiting');
     else if (chat.busy) runtime.pets.setActivity('working');
     else if (petBusy.current) {
+      extensions.emit('turnEnd');
       runtime.pets.setActivity(entries.at(-1)?.kind === 'error' ? 'failed' : 'done');
       // A pet the create-pet skill just finished: Rein's own now, and on screen.
       const fresh = runtime.pets.pickUp();
@@ -1126,6 +1139,22 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
         return;
       }
       void chat.send(msg.text, msg.images).then(bump);
+      return;
+    }
+    if (parsed.kind === 'extension') {
+      // A marketplace item's command: its own code runs, with a few things it can do here.
+      log('user', raw.trim());
+      const cmd = parsed.command;
+      const ctx = {
+        cwd: process.cwd(),
+        log: (text: string, kind?: 'info' | 'error') => log(kind === 'error' ? 'error' : 'info', String(text)),
+        send: (text: string) => (chat.busy ? setQueued((q) => [...q, text]) : void chat.send(text).then(bump)),
+        window: (title: string, lines: string[]) => (windowed ? setOverlay({name: 'text', title, lines}) : log('info', [title, ...lines].join('\n'))),
+      };
+      void Promise.resolve()
+        .then(() => cmd.run(parsed.args, ctx))
+        .catch((err) => log('error', `/${cmd.name}: ${(err as Error).message}`))
+        .finally(bump);
       return;
     }
     if (parsed.kind === 'unknown') {
