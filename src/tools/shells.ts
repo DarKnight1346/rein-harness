@@ -363,6 +363,8 @@ export class ShellManager extends EventEmitter {
   }
 
   private append(shell: Shell, stream: 'out' | 'err', chunk: string): void {
+    // Every command's output, from either path (previews look for the local URLs servers print).
+    this.emit('output', shell, chunk);
     const key = `${shell.id}:${stream}`;
     const text = (this.partial.get(key) ?? '') + stripAnsi(chunk);
     const parts = text.split('\n');

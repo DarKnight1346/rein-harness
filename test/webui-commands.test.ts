@@ -144,6 +144,15 @@ describe('web UI commands (the real worker)', () => {
     expect(inst.said).toMatch(/^Installed Hello skill 1\.0\.0/);
     expect(inst.view.items[0].installed).toBe('1.0.0');
 
+    // A command that prints a local URL (a dev server coming up) becomes a preview, unprompted.
+    evs = events(id, (ev) => ev.type === 'chrome' && ev.previews?.some((p: any) => p.target === 'http://localhost:4321/'));
+    await call(`/api/chats/${id}/send`, {text: `!node -e "console.log('  Local: http://localhost:4321/'); setInterval(() => {}, 1000)"`});
+    const pv = (await evs).at(-1).previews.find((p: any) => p.target === 'http://localhost:4321/');
+    expect(pv).toMatchObject({kind: 'url', source: 'detected', open: false});
+    // Only registered previews open: the page names one by id, never an address.
+    expect((await call(`/api/chats/${id}/request`, {op: 'preview-open', args: {id: 999, width: 800, height: 600}})).json.error).toBe('that preview is gone');
+    await call(`/api/chats/${id}/interrupt`, {});
+
     // /clear empties the conversation on the page too: a fresh snapshot follows the clear.
     let sawClear = false;
     evs = events(id, (ev) => (ev.type === 'clear' && (sawClear = true), sawClear && ev.type === 'snapshot'));

@@ -59,6 +59,8 @@ Every mutating tool call (writes, edits, deletes, shell commands, MCP adds and r
 
 `rein --ui` only listens on this computer unless you set it up with a username and password, and setup itself needs a one-time code printed where Rein started. Without a login it only answers to `localhost` (and your Tailscale name in Tailscale mode), so other sites can't reach it through DNS rebinding; every change needs a header other sites can't send. Passwords are scrypt hashes, sessions are hashed, failed sign-ins are rate-limited, and the page runs under a strict content security policy. A signed-in user can do what the account running Rein can do, files included: treat it like a shell on that machine. See [Web UI](../../features/web-ui/#security).
 
+[Previews](../../features/previews/#security) stream a browser or a display from that machine. The page only opens previews Rein registered, by number, never an address it's handed, so a preview can't reach other services there. The browser only loads http(s) pages, in a throwaway profile. Typing into a VM's or a desktop's screen is shell-level access too.
+
 ## Honest limitations
 
 These are real, and you should know them:

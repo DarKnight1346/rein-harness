@@ -5,7 +5,7 @@ description: Every built-in Rein slash command, its arguments and aliases, plus 
 
 Type `/` in the input to see the list. A bare `/` shows the everyday commands, most-used first (`/model`, `/goal`, `/plan`, `/review`…), then your own skills. Typing searches everything, fuzzily and best match first, including the variants and diagnostics left out of the bare list (`/plan:deep`, `/review:deep`, `/skill:edit`, `/goal:plan`, `/agent`, `/tui`, `/voice`, `/lsp`, `/plugins`) and skills from Claude Code and Codex plugins. **Tab** or **Enter** fills in the highlighted entry so you can add arguments, and a command typed out in full runs right away. You can also click an entry in fullscreen. `/help` shows every command with its arguments.
 
-Rein has **54 built-in commands** and **7 built-in skills**. 21 of the commands are [specialist commands](#specialist-commands), which the bare `/` list leaves out. More come from [marketplace items](#from-the-marketplace), which ship their own code. Commands are handled by Rein itself. Skills are prompts sent to the agent (see [Built-in skills](#built-in-skills)).
+Rein has **55 built-in commands** and **7 built-in skills**. 21 of the commands are [specialist commands](#specialist-commands), which the bare `/` list leaves out. More come from [marketplace items](#from-the-marketplace), which ship their own code. Commands are handled by Rein itself. Skills are prompts sent to the agent (see [Built-in skills](#built-in-skills)).
 
 ## While the agent is working
 
@@ -74,6 +74,7 @@ See [Goals](../../features/goals/) and [Plan mode](../../features/plans/).
 | | `<id> <message>` | Sends a message to that subagent (useful in classic). |
 | `/shells` | *(none)* | Shell commands the agent started. Open one to see its logs (`k` kills it). |
 | | `<id>` | Opens that shell's logs directly. |
+| `/preview` | `[<n> \| <url> \| <:display or host:port>]` | [Previews](../../features/previews/) of what the agent made with a screen: web servers it started (found in their output) and displays. No argument lists them; `<n>` opens one (the web UI shows it live beside the chat; the terminal opens your browser, or your VNC viewer for a display); a URL or a display adds one. |
 
 ### Project and permissions
 

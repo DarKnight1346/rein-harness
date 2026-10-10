@@ -576,7 +576,7 @@ async function openSaved(session, cwd) {
 function attachChat(id) {
   if (!/^[\da-f]{16}$/.test(id)) return;
   state.chat?.es?.close();
-  const c = {id, snapshot: undefined, live: '', tools: [], asks: new Map(), busy: false, notes: [], model: undefined, es: undefined, stick: true, feed: [], window: undefined, ui: undefined};
+  const c = {id, snapshot: undefined, live: '', tools: [], asks: new Map(), busy: false, notes: [], model: undefined, es: undefined, stick: true, feed: [], window: undefined, ui: undefined, pv: {}, pvOpen: undefined};
   state.chat = c;
   const es = new EventSource(`/api/chats/${id}/events`);
   c.es = es;
@@ -651,6 +651,15 @@ function onEvent(c, ev) {
     case 'clear':
       c.feed = [];
       break;
+    case 'pframe':
+      drawFrame(c, ev);
+      return;
+    case 'preview-url':
+      if (c.pv?.[ev.id]) ((c.pv[ev.id].url = ev.url), updatePreviewBar(c));
+      return;
+    case 'preview-show':
+      openPreview(c, ev.id);
+      return;
     case 'window':
       // A live refresh (shells, subagents) keeps what's open in the window; a new window starts fresh.
       if (!ev.refresh) c.winUi = {};
@@ -659,10 +668,11 @@ function onEvent(c, ev) {
       renderWindow(c);
       return;
     case 'chrome':
-      if (c.snapshot) Object.assign(c.snapshot, {status: ev.status, sidebar: ev.sidebar, queued: ev.queued, mode: ev.mode, chatModel: ev.chatModel, accent: ev.accent});
+      if (c.snapshot) Object.assign(c.snapshot, {status: ev.status, sidebar: ev.sidebar, queued: ev.queued, mode: ev.mode, chatModel: ev.chatModel, accent: ev.accent, previews: ev.previews});
       applyAccent(ev.accent);
       renderChrome(c);
       updateComposer(c);
+      renderPreviewChips(c);
       return;
     case 'ask':
       c.asks.set(ev.id, ev);
@@ -1033,7 +1043,7 @@ function chatView() {
   return h('main.main.chat' + (panelOpen ? '.with-panel' : ''),
     topbar(s?.title ?? 'Chat', [s && !isOneOff(s.cwd) ? h('span.path', tilde(s.cwd)) : null, h('button.icon-btn', {title: 'Sidebar', on: {click: togglePanel}}, icon('panel')), h('button.icon-btn', {title: 'More', on: {click: (e) => chatMenu(e, c)}}, icon('more'))]),
     statusEl(c),
-    h('div.chat-body', h('div.chat-col', h('div.scroll', threadEl()), composer()), panelOpen ? panelEl(c) : null, panelOpen && !wide ? h('div.rpanel-backdrop', {on: {click: togglePanel}}) : null),
+    h('div.chat-body' + (c.pvOpen ? '.with-preview' : ''), h('div.chat-col', h('div.scroll', threadEl()), h('div.pchips#pchips'), composer()), c.pvOpen ? previewPane(c) : null, panelOpen ? panelEl(c) : null, panelOpen && !wide ? h('div.rpanel-backdrop', {on: {click: togglePanel}}) : null),
   );
 }
 
@@ -1076,6 +1086,7 @@ function runInChat(c, text) {
   return api(`/api/chats/${c.id}/send`, {body: {text}}).catch((e) => toast(e.message, 'error'));
 }
 function afterChatRender() {
+  if (state.chat) (renderPreviewChips(state.chat), state.chat.pvOpen && fitPreview(state.chat));
   if (state.chat?.window) renderWindow(state.chat);
   const scroll = $('.scroll');
   if (scroll) scroll.scrollTop = scroll.scrollHeight;
@@ -1504,6 +1515,166 @@ function plansPanel(c, v) {
     closeWindow(c);
     await ask(c, 'plan-goal', {file: p.file}).catch((e) => toast(e.message, 'error'));
   }}}, h('div', h('b', p.title), h('small', `${p.done}/${p.total} milestones done`)))), h('button.btn', {on: {click: () => (closeWindow(c), (c.ui.ta.value = '/plan '), c.ui.ta.focus())}}, 'Write a new plan'));
+}
+
+// ---------- previews: what the agent made that has a screen, streamed from the machine Rein runs on ----------
+
+/** Chips above the input: each preview (a server the agent started, a display), open or not. */
+function renderPreviewChips(c) {
+  const el = $('#pchips');
+  if (!el || state.chat !== c) return;
+  // The open pane's tabs and bar follow the list (a preview added or renamed, its server gone).
+  const pane = $('#ppane');
+  if (pane && c.pvOpen) {
+    if (!(c.snapshot?.previews ?? []).some((p) => p.id === c.pvOpen)) ((c.pvOpen = undefined), render());
+    else {
+      const fresh = previewPane(c);
+      pane.querySelector('.ptabs')?.replaceWith(fresh.querySelector('.ptabs'));
+      pane.querySelector('.pbar')?.replaceWith(fresh.querySelector('.pbar'));
+    }
+  }
+  const list = c.snapshot?.previews ?? [];
+  el.replaceChildren(...list.map((p) => h('button.pchip' + (c.pvOpen === p.id ? '.on' : ''), {title: p.target, on: {click: () => (c.pvOpen === p.id ? closePane(c) : openPreview(c, p.id))}},
+    h('span.pdot' + (p.open ? '.live' : '')), p.kind === 'vnc' ? '▣ ' : '◫ ', p.title)),
+    h('button.pchip.add', {title: 'Preview a URL or a VNC display', on: {click: () => addPreview(c)}}, '+ Preview'));
+}
+
+async function addPreview(c) {
+  const t = prompt('Preview what? A URL (localhost:3000) or a VNC display (:1, host:5901)');
+  if (!t) return;
+  try {
+    const p = await ask(c, 'preview-add', {target: t});
+    openPreview(c, p.id);
+  } catch (err) {
+    toast(err.message, 'error');
+  }
+}
+
+function openPreview(c, id) {
+  c.pvOpen = id;
+  c.pv[id] ??= {id, canvas: undefined, w: 0, h: 0, url: ''};
+  if (state.chat === c && state.view === 'chat') render();
+}
+function closePane(c) {
+  c.pvOpen = undefined;
+  render();
+}
+
+/** The pane: tabs for the previews, a browser bar for a web one, and the live screen. */
+function previewPane(c) {
+  const list = c.snapshot?.previews ?? [];
+  const p = list.find((x) => x.id === c.pvOpen);
+  const pv = c.pv[c.pvOpen] ?? (c.pv[c.pvOpen] = {id: c.pvOpen});
+  if (!pv.canvas) {
+    pv.canvas = h('canvas.pcanvas', {tabIndex: 0});
+    bindInput(c, pv);
+  }
+  const nav = (dir) => ask(c, 'preview-nav', {id: pv.id, dir}).catch((e) => toast(e.message, 'error'));
+  const urlIn = h('input.purl', {type: 'text', value: pv.url || p?.target || '', spellcheck: false, on: {keydown: (e) => e.key === 'Enter' && ask(c, 'preview-nav', {id: pv.id, url: /^https?:\/\//i.test(e.target.value) ? e.target.value : `http://${e.target.value}`}).catch((x) => toast(x.message, 'error'))}});
+  pv.urlIn = urlIn;
+  const bar = p?.kind === 'url'
+    ? h('div.pbar', h('button.icon-btn', {title: 'Back', on: {click: () => nav('back')}}, icon('back', 15)), h('button.icon-btn', {title: 'Forward', on: {click: () => nav('forward')}}, icon('forward', 15)), h('button.icon-btn', {title: 'Reload', on: {click: () => nav('reload')}}, icon('refresh', 15)), urlIn)
+    : h('div.pbar', h('span.ptarget', p ? `▣ ${p.target}` : ''), h('span.muted', 'click to focus, then type'));
+  const status = h('div.pstatus#pstatus', pv.error ? h('div.note.error', pv.error) : !pv.w ? h('div.working', h('span.spin', '▁▃▅▇'), h('span.rainbow', p?.kind === 'vnc' ? 'Connecting to the display…' : 'Starting the browser…')) : null);
+  return h('section.ppane#ppane',
+    h('div.ptabs', list.filter((x) => c.pv[x.id] || x.id === c.pvOpen).map((x) => h('button.ptab' + (x.id === c.pvOpen ? '.on' : ''), {on: {click: () => openPreview(c, x.id)}}, x.title, h('span.px', {title: 'Close', on: {click: (e) => (e.stopPropagation(), closePreview(c, x.id))}}, '×'))),
+      h('span.grow'), h('button.icon-btn', {title: 'Hide the preview', on: {click: () => closePane(c)}}, icon('x', 15))),
+    bar,
+    h('div.pscreen#pscreen', pv.canvas, status),
+  );
+}
+
+async function closePreview(c, id) {
+  delete c.pv[id];
+  if (c.pvOpen === id) c.pvOpen = undefined;
+  render();
+  await ask(c, 'preview-close', {id}).catch(() => {});
+}
+
+function updatePreviewBar(c) {
+  const pv = c.pv[c.pvOpen];
+  if (pv?.urlIn && document.activeElement !== pv.urlIn) pv.urlIn.value = pv.url;
+}
+
+/** Ask the worker for the stream at the pane's size (a web page lays out to it). */
+let fitTimer = 0;
+function fitPreview(c) {
+  clearTimeout(fitTimer);
+  fitTimer = setTimeout(async () => {
+    const pv = c.pv[c.pvOpen];
+    const screen = $('#pscreen');
+    if (!pv || !screen) return;
+    const size = {width: Math.round(screen.clientWidth), height: Math.round(screen.clientHeight)};
+    try {
+      if (!pv.started) {
+        pv.started = true;
+        const r = await ask(c, 'preview-open', {id: pv.id, ...size});
+        if (r?.url) ((pv.url = r.url), updatePreviewBar(c));
+      } else await ask(c, 'preview-resize', {id: pv.id, ...size});
+    } catch (err) {
+      pv.started = false;
+      pv.error = err.message;
+      $('#pstatus')?.replaceChildren(h('div.note.error', err.message));
+    }
+  }, 120);
+}
+addEventListener('resize', () => state.chat?.pvOpen && fitPreview(state.chat));
+
+/** A frame: a whole JPEG from the browser, or a PNG patch of a display. */
+function drawFrame(c, ev) {
+  const pv = c.pv[ev.id];
+  if (!pv?.canvas) return;
+  const img = new Image();
+  img.onload = () => {
+    const cv = pv.canvas;
+    const w = ev.format === 'jpeg' ? img.naturalWidth : ev.width;
+    const hgt = ev.format === 'jpeg' ? img.naturalHeight : ev.height;
+    if (cv.width !== w || cv.height !== hgt) ((cv.width = w), (cv.height = hgt));
+    const ctx = (pv.ctx ??= cv.getContext('2d'));
+    if (ev.format === 'jpeg') ctx.drawImage(img, 0, 0);
+    else ctx.drawImage(img, ev.x, ev.y);
+    if (!pv.w) $('#pstatus')?.replaceChildren();
+    pv.w = w;
+    pv.h = hgt;
+    pv.vw = ev.width;
+    pv.vh = ev.height;
+  };
+  img.src = `data:image/${ev.format};base64,${ev.data ?? ev.png}`;
+}
+
+/** Mouse, wheel and keys on the screen go to the preview (in its own pixels). */
+function bindInput(c, pv) {
+  const cv = pv.canvas;
+  const at = (e) => {
+    const r = cv.getBoundingClientRect();
+    // The page may lay out at a different size than the frame (device pixels): scale to its viewport.
+    const sx = (pv.vw || cv.width) / r.width, sy = (pv.vh || cv.height) / r.height;
+    return {x: Math.round((e.clientX - r.left) * sx), y: Math.round((e.clientY - r.top) * sy)};
+  };
+  const send = (ev) => ask(c, 'preview-input', {id: pv.id, ev}).catch(() => {});
+  const btn = (b) => (b === 2 ? 'right' : b === 1 ? 'middle' : 'left');
+  let lastMove = 0;
+  cv.addEventListener('mousedown', (e) => (cv.focus(), e.preventDefault(), send({type: 'mouse', action: 'down', button: btn(e.button), clicks: e.detail || 1, ...at(e)})));
+  cv.addEventListener('mouseup', (e) => send({type: 'mouse', action: 'up', button: btn(e.button), clicks: e.detail || 1, ...at(e)}));
+  cv.addEventListener('mousemove', (e) => {
+    if (Date.now() - lastMove < 33) return;
+    lastMove = Date.now();
+    send({type: 'mouse', action: 'move', ...at(e)});
+  });
+  cv.addEventListener('contextmenu', (e) => e.preventDefault());
+  cv.addEventListener('wheel', (e) => (e.preventDefault(), send({type: 'wheel', dx: e.deltaX, dy: e.deltaY, ...at(e)})), {passive: false});
+  const mods = (e) => (e.altKey ? 1 : 0) | (e.ctrlKey ? 2 : 0) | (e.metaKey ? 4 : 0) | (e.shiftKey ? 8 : 0);
+  cv.addEventListener('keydown', (e) => {
+    // Paste goes through the paste event (as text); everything else to the preview.
+    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'v') return;
+    e.preventDefault();
+    send({type: 'key', action: 'down', key: e.key, code: e.code, text: e.key.length === 1 ? e.key : undefined, modifiers: mods(e)});
+  });
+  cv.addEventListener('keyup', (e) => (e.preventDefault(), send({type: 'key', action: 'up', key: e.key, code: e.code, modifiers: mods(e)})));
+  cv.addEventListener('paste', (e) => {
+    const text = e.clipboardData?.getData('text');
+    if (text) (e.preventDefault(), send({type: 'text', text}));
+  });
 }
 
 // ---------- files ----------

@@ -153,3 +153,15 @@ agent works by default ships as an experiment (`experiments` in config) until it
 | 117 | File manager | Open any directory on the machine as a project, from a full file manager for headless servers: browse, search, preview, edit, upload, download, rename, move, copy, delete and new folders. Builds on #113. | features/web-ui/#files | done |
 | 121 | Web UI parity: commands and chrome | Everything typed goes through the terminal's command code: every slash command, skill and `!command`, with the same fuzzy `/` list. `/settings` (every tab and config key) and `/model` open as windows; the status line and sidebar follow the `/settings` layout, with marketplace items' segments and sections; messages typed mid-turn are queued. Builds on #116. | features/web-ui/#slash-commands | done |
 | 122 | Web UI parity: rewind, shells, subagents | `/rewind` (code, conversation or both, the message back in the box), `/shells` and `/shell` (output that follows a running command, stop it), and `/agents` (follow a subagent, message it, stop it) as windows in the browser. Builds on #121. | features/web-ui/#slash-commands | done |
+
+## Wave 12: Previews
+
+| # | Feature | Spec | Docs | Status |
+|---|---|---|---|---|
+| 123 | Web app previews | A web server the agent runs is shown live in the web UI from a headless browser on the machine Rein runs on, streamed to the page with clicks, scrolls and keys sent back, so `localhost` and an app's calls to its own API work from any device. Back, forward, reload and an address bar; http(s) only, a throwaway profile. | features/previews/#web-apps | done |
+| 124 | Display previews (VNC) | Anything with a screen (QEMU, a desktop app in a virtual display, an emulator, a desktop's screen sharing) through Rein's own VNC client, streamed as PNG patches, with the mouse and keyboard. | features/previews/#anything-with-a-screen-vnc | done |
+| 125 | Previews that start themselves | A local URL in a command's output becomes a preview; the agent's `preview` tool shows the user a URL or a display; `/preview` lists and opens them (the terminal opens your browser or VNC viewer). | features/previews/#how-a-preview-starts | done |
+| 126 | Android emulator previews | The emulator's screen and touch over `adb` (`screencap`, `input tap/swipe/text`), with no virtual display needed. | features/previews/#not-yet | todo |
+| 127 | iOS Simulator previews | The Simulator's screen (`xcrun simctl io … screenshot`), view only: the Simulator has no input API. | features/previews/#not-yet | todo |
+| 128 | Native window previews | A native app's window captured on macOS (ScreenCaptureKit) or Windows, for apps that run on the machine's own desktop. | features/previews/#not-yet | todo |
+

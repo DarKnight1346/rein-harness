@@ -255,14 +255,14 @@ export async function startServer(opts: ServerOptions = {}): Promise<{url: strin
         for (const ev of c.backlog) write(ev);
         for (const a of c.asks.values()) write({type: 'ask', ...a});
         if (c.window) write({type: 'window', window: c.window});
-        c.watchers++;
+        if (c.watchers++ === 0) c.setWatching(true);
         const on = (ev: unknown) => write(ev);
         c.on('event', on);
         const ping = setInterval(() => res.write(': ping\n\n'), 25_000);
         const done = () => {
           clearInterval(ping);
           c.off('event', on);
-          c.watchers--;
+          if (--c.watchers === 0) c.setWatching(false);
           c.lastSeen = Date.now();
         };
         c.once('exit', () => res.end());
