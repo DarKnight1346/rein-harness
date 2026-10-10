@@ -282,9 +282,11 @@ export function install(it: Item): Installed {
   cpSync(it.dir, dest, {recursive: true, filter: (src) => !/[\\/]\.git([\\/]|$)/.test(src)});
   // Rein loads installed items as plugins: give one without a manifest the plugin layout's name.
   const manifest = path.join(dest, '.claude-plugin', 'plugin.json');
-  if (!existsSync(manifest)) {
-    mkdirSync(path.dirname(manifest), {recursive: true});
-    writeFileSync(manifest, JSON.stringify({name: it.id, version: it.version, description: it.description}, null, 2) + '\n');
+  mkdirSync(path.dirname(manifest), {recursive: true});
+  try {
+    writeFileSync(manifest, JSON.stringify({name: it.id, version: it.version, description: it.description}, null, 2) + '\n', {flag: 'wx'}); // unless the item has its own
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code !== 'EEXIST') throw err;
   }
   const old = installedItems().find((i) => i.id === it.id);
   const rec: Installed = {id: it.id, marketplace: it.marketplace, version: it.version, installedAt: Date.now(), ...(old?.applied ? {applied: old.applied} : {})};

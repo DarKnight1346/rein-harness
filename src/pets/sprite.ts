@@ -23,6 +23,9 @@ export type PetFrames = {id: string; w: number; h: number; states: Record<PetSta
 
 export const petsDir = () => path.join(reinHome(), 'pets');
 
+/** PNG or WebP, by their first bytes. */
+const isSheetImage = (b: Buffer) => (b.length > 12 && b.readUInt32BE(0) === 0x89504e47) || (b.toString('latin1', 0, 4) === 'RIFF' && b.toString('latin1', 8, 12) === 'WEBP');
+
 /** The sheet as PNG bytes: WebP is converted with whatever this machine has (none: undefined). */
 async function asPng(file: string): Promise<Buffer | undefined> {
   const buf = readFileSync(file);
@@ -118,19 +121,27 @@ export async function loadPetFrames(id: string, url: string, width: number, fetc
   mkdirSync(dir, {recursive: true});
   const safe = id.replace(/[^\w-]/g, '_');
   const sheetFile = path.join(dir, `${safe}.sheet`);
-  if (!existsSync(sheetFile)) {
+  let bytes: Buffer;
+  try {
+    bytes = readFileSync(sheetFile);
+  } catch {
     const res = await fetcher(url);
     if (!res.ok) throw new Error(`couldn't download the sprite sheet (HTTP ${res.status})`);
-    writeFileSync(sheetFile, Buffer.from(await res.arrayBuffer()));
+    const got = Buffer.from(await res.arrayBuffer());
+    // Only an image is kept: a PNG or WebP of at most 20 MB (what the Pets app accepts).
+    if (got.length > 20 * 1024 * 1024 || !isSheetImage(got)) throw new Error("the download isn't a PNG or WebP sprite sheet");
+    try {
+      writeFileSync(sheetFile, got, {flag: 'wx'});
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code !== 'EEXIST') throw err;
+    }
+    bytes = got;
   }
-  const bytes = readFileSync(sheetFile);
   const key = createHash('sha256').update(bytes).digest('hex').slice(0, 16);
   const cached = path.join(dir, `${safe}-${key}-${width}.json`);
-  if (existsSync(cached)) {
-    try {
-      return JSON.parse(readFileSync(cached, 'utf8')) as PetFrames;
-    } catch {}
-  }
+  try {
+    return JSON.parse(readFileSync(cached, 'utf8')) as PetFrames;
+  } catch {}
   const png = await asPng(sheetFile);
   if (!png) return undefined;
   const frames = framesFromSheet(id, decodePng(png), width);
@@ -144,11 +155,9 @@ export function loadSheetFrames(id: string, file: string, width: number): PetFra
   const key = createHash('sha256').update(bytes).digest('hex').slice(0, 16);
   mkdirSync(petsDir(), {recursive: true});
   const cached = path.join(petsDir(), `mine-${id.replace(/[^\w-]/g, '_')}-${key}-${width}.json`);
-  if (existsSync(cached)) {
-    try {
-      return JSON.parse(readFileSync(cached, 'utf8')) as PetFrames;
-    } catch {}
-  }
+  try {
+    return JSON.parse(readFileSync(cached, 'utf8')) as PetFrames;
+  } catch {}
   const frames = framesFromSheet(id, decodePng(bytes), width);
   writeFileSync(cached, JSON.stringify(frames));
   return frames;
