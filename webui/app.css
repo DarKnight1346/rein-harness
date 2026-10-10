@@ -462,6 +462,7 @@ pre.text { white-space: pre-wrap; font-family: var(--mono); font-size: 12.5px; m
 .meter { height: 6px; margin: 2px 4px 6px; border-radius: 3px; background: var(--line); overflow: hidden; }
 .meter i { display: block; height: 100%; background: var(--ok); transition: width 1.2s cubic-bezier(.2,.8,.2,1), background .4s; }
 .meter i.warm { background: var(--warn); } .meter i.hot { background: var(--bad); }
+.meter i.prog { background: var(--accent); } .meter i.done { background: var(--ok); }
 .composer { border-radius: 14px; }
 .composer textarea { font-family: var(--sans); }
 .msg.user .bubble { border: 1px solid var(--line); }

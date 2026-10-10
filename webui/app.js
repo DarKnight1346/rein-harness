@@ -1019,7 +1019,8 @@ function panelEl(c) {
       const kids = [r.text ? h('span.t', r.text) : null, r.pct !== undefined ? h('span.n', `${r.pct}%`) : null];
       const cls = (r.dim ? '.dim' : '') + (r.bold ? '.bold' : '') + (r.active ? '.active' : '') + tone;
       const row = r.command ? h('button.row' + cls, {on: {click: () => runInChat(c, r.command)}}, kids) : h('div.row' + cls, kids);
-      return r.pct !== undefined ? [row, h('div.meter', h('i' + (r.pct >= 90 ? '.hot' : r.pct >= 70 ? '.warm' : ''), {style: {width: `${Math.min(100, r.pct)}%`}}))] : row;
+      const fill = r.progress ? (r.pct >= 100 ? '.done' : '.prog') : r.pct >= 90 ? '.hot' : r.pct >= 70 ? '.warm' : '';
+      return r.pct !== undefined ? [row, h('div.meter', h('i' + fill, {style: {width: `${Math.min(100, r.pct)}%`}}))] : row;
     }),
   )), !secs.length ? h('div.muted', {style: {padding: '12px'}}, 'Nothing here: choose sections in /settings → Sidebar.') : null);
 }

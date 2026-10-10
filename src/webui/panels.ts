@@ -65,7 +65,8 @@ export function usageRows(rows: import('../accounts/usage.js').UsageRow[]) {
   }));
 }
 
-export type SidebarSection = {id: string; title: string; rows: {text: string; dim?: boolean; bold?: boolean; active?: boolean; pct?: number; command?: string}[]};
+/** `progress`: the bar fills toward done (a goal), not toward a limit (an account's usage). */
+export type SidebarSection = {id: string; title: string; rows: {text: string; dim?: boolean; bold?: boolean; active?: boolean; pct?: number; progress?: boolean; command?: string}[]};
 
 /** The sidebar: the goal's plan and the task list while there are any, the sections you turned on, then items' sections. */
 export function sidebarView(): SidebarSection[] {
@@ -78,7 +79,7 @@ export function sidebarView(): SidebarSection[] {
     out.push({
       id: 'plan',
       title: `Goal · ${done}/${total}${g.status === 'active' ? '' : ` · ${g.status}`}`,
-      rows: [{text: plan.title, bold: true, command: '/goal'}, {text: '', pct}, ...plan.milestones.slice(0, 12).map((m, i) => ({text: `${m.done ? '✓' : i === next ? '▸' : '○'} ${m.text}`, dim: !m.done && i !== next, active: i === next}))],
+      rows: [{text: plan.title, bold: true, command: '/goal'}, {text: '', pct, progress: true}, ...plan.milestones.slice(0, 12).map((m, i) => ({text: `${m.done ? '✓' : i === next ? '▸' : '○'} ${m.text}`, dim: !m.done && i !== next, active: i === next}))],
     });
   }
   const milestones = plan?.milestones.map((m) => m.text) ?? [];
