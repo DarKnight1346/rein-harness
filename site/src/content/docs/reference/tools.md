@@ -395,7 +395,7 @@ The chunks (about 60 lines each) closest in meaning to the query, with `file:sta
 
 ### `service_graph`
 
-Label `Services`. Approval: none (read-only). Only listed with the `system-graph` [experiment](../configuration/#experiments) on.
+Label `Services`. Approval: none (read-only). From the [Multi-repo systems](../../features/system/) marketplace item, with its tools turned on (`/services tools on`). on.
 
 | Parameter | Type | Notes |
 | --- | --- | --- |
@@ -405,7 +405,7 @@ The service's callers and what it calls, each with the evidence (file and line).
 
 ### `symbol_refs`
 
-Label `SymbolRefs`. Approval: none (read-only). Only listed with the `system-graph` [experiment](../configuration/#experiments) on.
+Label `SymbolRefs`. Approval: none (read-only). From the [Multi-repo systems](../../features/system/) marketplace item, with its tools turned on (`/services tools on`). on.
 
 | Parameter | Type | Notes |
 | --- | --- | --- |
@@ -415,7 +415,7 @@ Where it's defined and every use, across repos, from their SCIP indexes. See [Sy
 
 ### `api_refs`
 
-Label `ApiRefs`. Approval: none (read-only). Only listed with the `system-graph` [experiment](../configuration/#experiments) on.
+Label `ApiRefs`. Approval: none (read-only). From the [Multi-repo systems](../../features/system/) marketplace item, with its tools turned on (`/services tools on`). on.
 
 | Parameter | Type | Notes |
 | --- | --- | --- |
@@ -425,7 +425,7 @@ The gateway route, the places it's served, and every call site across repos. See
 
 ### `stack`
 
-Label `Stack`. Approval: **mutating**. Only listed with the `stack-tool` [experiment](../configuration/#experiments) on.
+Label `Stack`. Approval: **mutating**. From the [Multi-repo systems](../../features/system/) marketplace item, with its tools turned on (`/services tools on`). on.
 
 | Parameter | Type | Notes |
 | --- | --- | --- |

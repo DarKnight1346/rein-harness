@@ -1,7 +1,7 @@
 import type {Skill} from '../skills/index.js';
 import {commandEnabled} from './packs.js';
 
-export type CommandName = 'marketplace' | 'pet' | 'trackers' | 'remote' | 'voice' | 'vault' | 'lsp' | 'plugins' | 'export' | 'ide' | 'memory' | 'mcp' | 'rewind' | 'permissions' | 'add-dir' | 'workspace' | 'owners' | 'stack' | 'codemap' | 'changeset' | 'impact' | 'refs' | 'symbols' | 'services' | 'sessions' | 'env' | 'schedule' | 'cache' | 'stats' | 'bestof' | 'risk' | 'arch' | 'adr' | 'spec' | 'index' | 'map' | 'pack' | 'pr' | 'mutate' | 'coverage' | 'ci' | 'build' | 'flaky' | 'affected' | 'policy' | 'cost' | 'scope' | 'goal' | 'goal:plan' | 'btw' | 'agents' | 'agent' | 'resume' | 'login' | 'usage' | 'model' | 'context' | 'compact' | 'shells' | 'settings' | 'update' | 'tui' | 'clear' | 'help' | 'exit';
+export type CommandName = 'marketplace' | 'pet' | 'trackers' | 'remote' | 'voice' | 'vault' | 'lsp' | 'plugins' | 'export' | 'ide' | 'memory' | 'mcp' | 'rewind' | 'permissions' | 'add-dir' | 'workspace' | 'owners' | 'sessions' | 'env' | 'schedule' | 'cache' | 'stats' | 'bestof' | 'risk' | 'arch' | 'adr' | 'spec' | 'index' | 'map' | 'pack' | 'pr' | 'mutate' | 'coverage' | 'ci' | 'build' | 'flaky' | 'affected' | 'policy' | 'cost' | 'scope' | 'goal' | 'goal:plan' | 'btw' | 'agents' | 'agent' | 'resume' | 'login' | 'usage' | 'model' | 'context' | 'compact' | 'shells' | 'settings' | 'update' | 'tui' | 'clear' | 'help' | 'exit';
 
 /**
  * Built-in commands, in the order the `/` list shows them (everyday ones first). `description` is
@@ -56,13 +56,6 @@ export const COMMANDS: Command[] = [
   {name: 'arch', description: 'Check the code against the architecture rules', usage: 'Architecture rules (.rein/architecture.yaml): /arch checks every file against them'},
   {name: 'risk', description: 'What a plan touches, and how risky it is', usage: "What a plan touches: files, services, owners, contracts and migrations. /risk [plan file or spec name] (default: the newest plan)"},
   {name: 'bestof', description: 'Run a task on Claude and Codex at once; keep what passes', usage: 'Run a task on Claude and Codex at once, each in its own worktree; keep the result that passes the tests: /bestof [--test "<command>"] <task>'},
-  {name: 'services', description: 'Which service calls which', usage: 'Which service calls which, from compose, Kubernetes, URLs, gRPC clients and packages: /services, /services mermaid'},
-  {name: 'symbols', description: 'Symbols across repos, from their SCIP indexes', usage: 'Symbols across repos from their SCIP indexes: /symbols <name> (definition and every use), /symbols cross (used outside their repo), /symbols index'},
-  {name: 'refs', description: 'Follow an endpoint or RPC across repos', usage: 'Follow an endpoint (POST /orders/{id}) or RPC (Ledger.Post) across repos: gateway, the service that serves it, every caller'},
-  {name: 'impact', description: 'Every caller, in every repo, of what this branch changes', usage: 'Every caller, in every repo, of the endpoints, RPCs and exported symbols this branch changes, breaking changes first'},
-  {name: 'changeset', description: 'One change across several repos', usage: 'One change across several repos: /changeset start <name> [repos], status, test (in dependency order), pr [yes] (linked PRs)'},
-  {name: 'codemap', description: 'Architecture maps of the services', usage: 'Architecture map in docs/codemap/: a page per service, kept fresh. /codemap writes or refreshes it, /codemap status, /codemap annotate'},
-  {name: 'stack', description: 'Run the services a change needs locally', usage: 'Run the services a change needs locally (Docker Compose), wait for health checks: /stack up [services | --helm <chart>], status, logs <service>, down'},
   {name: 'workspace', description: 'The repos of this workspace', usage: 'The repos of this workspace (rein.workspace.yaml): /workspace lists them, /workspace clone clones the missing ones, /workspace prs and link-prs link the PRs of one change'},
   {name: 'scope', description: 'Work in one package of a monorepo', usage: 'Work in one package of a monorepo: /scope <dir> (search, list, shell and instructions start there), /scope off, or no argument to show it'},
   {name: 'owners', description: 'Who owns your changed files', usage: 'Who owns your changed files (or a path): CODEOWNERS, Backstage, then git history'},

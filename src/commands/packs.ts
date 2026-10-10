@@ -12,7 +12,6 @@ export type Pack = {id: string; label: string; description: string; commands: Co
 export const PACKS: Pack[] = [
   {id: 'ci', label: 'CI and pull requests', description: 'CI checks and fixes, PRs, affected and flaky tests, coverage', commands: ['ci', 'pr', 'affected', 'flaky', 'build', 'coverage', 'mutate', 'trackers'], skills: []},
   {id: 'specs', label: 'Specs and planning', description: 'Specs, ADRs, architecture rules, plan risk, best-of-N runs', commands: ['spec', 'adr', 'arch', 'risk', 'bestof'], skills: []},
-  {id: 'system', label: 'Multi-repo systems', description: 'Service and symbol graphs, impact across repos, local stacks', commands: ['services', 'symbols', 'refs', 'impact', 'changeset', 'codemap', 'stack'], skills: []},
   {id: 'codebase', label: 'Large codebases', description: 'Workspaces, monorepo scope, code owners, semantic index', commands: ['workspace', 'scope', 'owners', 'index', 'map', 'pack'], skills: []},
   {id: 'insight', label: 'Insight and automation', description: 'Stats, cache analytics, scheduled jobs, sessions, policy, tours', commands: ['stats', 'cache', 'schedule', 'env', 'sessions', 'policy'], skills: ['tour']},
 ];
@@ -42,8 +41,9 @@ export function packsHint(): string {
  */
 export const MOVED: Record<string, {item: string; name: string}> = Object.fromEntries(
   [
-    ['contracts', ['contracts', 'migrations', 'deadcode', 'flags', 'codemod', 'expand-contract', 'contract-tests', 'migrate:java21', 'migrate:python3', 'migrate:react-hooks']],
-  ].flatMap(([item, names]) => (names as string[]).map((n) => [n, {item: item as string, name: 'Contracts and migrations'}])),
+    ['contracts', 'Contracts and migrations', ['contracts', 'migrations', 'deadcode', 'flags', 'codemod', 'expand-contract', 'contract-tests', 'migrate:java21', 'migrate:python3', 'migrate:react-hooks']],
+    ['system', 'Multi-repo systems', ['services', 'symbols', 'refs', 'impact', 'changeset', 'codemap', 'stack']],
+  ].flatMap(([item, name, names]) => (names as string[]).map((n) => [n, {item: item as string, name: name as string}])),
 );
 export const movedMessage = (name: string) => {
   const m = MOVED[name];

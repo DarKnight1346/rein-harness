@@ -73,15 +73,6 @@ import {collectCache, formatCache} from '../insight/cache.js';
 import {describeJobs, loadJobs, scheduledProjects} from '../schedule/index.js';
 import {describeDevEnv, detectDevEnv} from '../env/devenv.js';
 import {describeLive, listLive, removeLive, sendTo, watchInbox, writeLive} from '../host/live.js';
-import {formatGraph, mermaid} from '../system/services.js';
-import {graphFor} from '../system/tools.js';
-import {findServices} from '../system/services.js';
-import {buildSymbolGraph, crossRepo, formatLookup, indexRepos, lookup} from '../system/scip.js';
-import {findApiRefs, formatRefs} from '../system/api.js';
-import {formatImpact, impactReport} from '../system/impact.js';
-import {annotateTask, codemapDir, codemapStatus, writeCodemap} from '../system/codemap.js';
-import {composeFile, formatServices, LocalStack, servicesForChange} from '../env/stack.js';
-import {changeSetState, formatState, formatTests, loadChangeSets, openPrs, startChangeSet, testChangeSet} from '../system/changeset.js';
 import {checkoutState, describeCheckout, sparseAdd} from '../workspace/sparse.js';
 import {buildIndex, DEFAULT_MODEL as EMBED_MODEL, formatSemanticHits, loadIndex, semanticSearch} from '../context/semantic.js';
 import {estimateGoalCost} from '../goals/estimate.js';
@@ -1488,122 +1479,6 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
           if (!files.length) return log('info', 'No changes (vs HEAD). /owners <path> looks up a file or folder.');
           log('info', `Owners of ${arg || `your ${files.length} changed file${files.length === 1 ? '' : 's'}`}:\n${formatOwners(await ownersOf(root, files))}`);
         });
-        break;
-      }
-      case 'stack': {
-        const root = findWorkspace()?.root ?? process.cwd();
-        const stack = new LocalStack(root);
-        const [stSub = 'status', ...rest] = parsed.args.trim().split(/\s+/).filter(Boolean);
-        if (stSub === 'up' && rest[0] === '--helm') {
-          if (!rest[1]) log('error', 'Usage: /stack up --helm <chart folder>');
-          else void stack.helm(nodePath.resolve(process.cwd(), rest[1])).then((m) => log('info', m));
-        } else if (stSub === 'up') {
-          void (async () => {
-            const names = rest.length ? rest : await servicesForChange(root, findServices(process.cwd()));
-            log('info', `Starting ${names.length ? names.join(', ') : 'the whole stack'} (docker compose up --wait)…`);
-            const r = await stack.up(names);
-            log(r.ok ? 'info' : 'error', `${r.message}\n${formatServices(r.services)}`);
-          })();
-        } else if (stSub === 'logs') void stack.logs(rest[0] ?? '').then((t) => log('info', t));
-        else if (stSub === 'down') void stack.down().then((m) => log('info', m));
-        else void stack.status().then((s) => log('info', composeFile(root) ? formatServices(s) : 'No compose file here (compose.yaml or docker-compose.yml).'));
-        break;
-      }
-      case 'codemap': {
-        const root = findWorkspace()?.root ?? process.cwd();
-        const arg = parsed.args.trim();
-        void graphFor(process.cwd(), 0).then(async (g) => {
-          if (arg === 'status') {
-            const s = await codemapStatus(root, g);
-            return log('info', [`Codemap in ${nodePath.relative(process.cwd(), codemapDir(root)) || 'docs/codemap'}:`, s.missing.length ? `  no page yet: ${s.missing.join(', ')}` : '', s.stale.length ? `  out of date: ${s.stale.join(', ')} (/codemap refreshes them)` : '', s.unannotated.length ? `  no notes yet: ${s.unannotated.join(', ')} (/codemap annotate)` : '', !s.missing.length && !s.stale.length && !s.unannotated.length ? '  up to date' : ''].filter(Boolean).join('\n'));
-          }
-          const r = await writeCodemap(root, g, {force: arg === 'rebuild'});
-          log('info', `Codemap: ${r.written.length ? `wrote ${r.written.join(', ')}` : 'every page was up to date'}${r.unchanged.length && r.written.length ? ` (${r.unchanged.length} unchanged)` : ''}, in ${nodePath.relative(process.cwd(), r.dir) || r.dir}/.`);
-          if (arg === 'annotate') {
-            const {unannotated} = await codemapStatus(root, g);
-            if (!unannotated.length) return log('info', 'Every page has notes.');
-            const msg = annotateTask(root, unannotated);
-            if (chat.busy) setQueued((q) => [...q, msg]);
-            else void chat.send(msg).then(bump);
-          }
-        });
-        break;
-      }
-      case 'changeset': {
-        const ws = findWorkspace();
-        if (!ws) {
-          log('error', 'Change sets span the repos of a workspace: put a rein.workspace.yaml above them first (see the Workspaces docs).');
-          break;
-        }
-        const [csSub = 'status', ...rest] = parsed.args.trim().split(/\s+/).filter(Boolean);
-        if (csSub === 'start') {
-          const [name, ...repos] = rest;
-          if (!name) {
-            log('error', 'Usage: /changeset start <name> [repo…] (all cloned repos when none are named)');
-            break;
-          }
-          void startChangeSet(ws, name, repos).then(({set, done, failed}) => {
-            log(failed.length ? 'error' : 'info', [`Change set ${set.name}: branch ${set.branch} in ${done.join(', ') || 'no repo'}.`, ...failed].join('\n'));
-            runtime.engine?.refreshTools();
-          });
-          break;
-        }
-        const sets = loadChangeSets(ws);
-        const yes = rest.includes('yes');
-        const named = rest.filter((x) => x !== 'yes')[0];
-        const set = named ? sets.find((s) => s.name === named) : sets[0];
-        if (!set) {
-          log('info', sets.length ? `No change set "${named}". Change sets: ${sets.map((s) => s.name).join(', ')}` : 'No change sets yet: /changeset start <name> makes one branch for the task in each repo.');
-          break;
-        }
-        if (csSub === 'status') void changeSetState(ws, set).then((s) => log('info', formatState(set, s)));
-        else if (csSub === 'test') void graphFor(process.cwd()).then(async (g) => log('info', formatTests(await testChangeSet(ws, set, g.edges, undefined, (l) => log('info', l)))));
-        else if (csSub === 'pr') {
-          if (!yes) log('info', `/changeset pr yes will push ${set.branch} in ${set.repos.join(', ')}, open a pull request in each (gh), and link them to each other.`);
-          else void openPrs(ws, set, set.name).then((r) => log(r.failed.length ? 'error' : 'info', [r.opened.length && `Opened pull requests in ${r.opened.join(', ')}.`, r.linked.length && `Linked ${r.linked.join(', ')}.`, ...r.failed].filter(Boolean).join('\n')));
-        } else log('error', 'Usage: /changeset [start <name> [repo…] | status | test | pr [yes]] [name]');
-        break;
-      }
-      case 'impact': {
-        log('info', 'Working out what this branch changes and who uses it…');
-        void graphFor(process.cwd()).then(async (g) => log('info', formatImpact(await impactReport(process.cwd(), g.services))));
-        break;
-      }
-      case 'refs': {
-        const target = parsed.args.trim();
-        if (!target) {
-          log('error', 'Usage: /refs <endpoint or RPC>, e.g. /refs POST /orders/{id} or /refs Ledger.Post');
-          break;
-        }
-        void graphFor(process.cwd()).then(async (g) => {
-          const r = await findApiRefs(process.cwd(), g.services, target);
-          log(r ? 'info' : 'error', r ? formatRefs(r) : 'Give an endpoint like POST /orders/{id} or an RPC like Ledger.Post (for a function or type, /symbols <name>).');
-        });
-        break;
-      }
-      case 'symbols': {
-        const arg = parsed.args.trim();
-        const repos = findServices(process.cwd());
-        if (arg === 'index') {
-          void indexRepos(repos, (line) => log('info', line));
-          break;
-        }
-        const g = buildSymbolGraph(repos);
-        if (!g.repos.length) {
-          log('info', 'No SCIP indexes (index.scip) here yet. /symbols index writes one per repo with scip-typescript, scip-python, scip-go, scip-java or rust-analyzer, where installed.');
-          break;
-        }
-        if (!arg || arg === 'cross') {
-          const seams = crossRepo(g);
-          log('info', seams.length ? [`${seams.length} symbol${seams.length === 1 ? '' : 's'} used outside the repo that defines ${seams.length === 1 ? 'it' : 'them'} (indexes from ${g.repos.join(', ')}):`, ...seams.slice(0, 40).map((s) => `  ${s.name}  ${s.from} → ${s.usedIn.join(', ')}`)].join('\n') : `Nothing is shared between ${g.repos.join(', ')} (by their indexes).`);
-          break;
-        }
-        log('info', formatLookup(lookup(g, arg)));
-        break;
-      }
-      case 'services': {
-        const asMermaid = parsed.args.trim() === 'mermaid';
-        void graphFor(process.cwd(), 0).then((g) => log('info', asMermaid ? mermaid(g) : formatGraph(g)));
         break;
       }
       case 'sessions': {

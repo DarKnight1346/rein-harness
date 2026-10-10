@@ -5,8 +5,10 @@ description: Understanding across services and repos. Which service calls which,
 
 A change to one service is a change to everything that calls it. These features give the agent, and you, the view across services and repos that a single checkout doesn't have. They work best in a [workspace](../workspaces/), and also in a monorepo with `services/`, `apps/` or `packages/` folders.
 
-:::note[Multi-repo systems pack]
-`/services`, `/symbols`, `/refs`, `/impact`, `/changeset`, `/codemap`, `/stack` are in the **Multi-repo systems** pack, which is off by default: turn it on in `/settings` → **Packs** ([Packs](../../reference/commands/#packs)).
+:::note[A marketplace item]
+This is the **Multi-repo systems** item from the [marketplace](../marketplace/): its commands and tools ship with it, code and all. Install it with `/marketplace install system`; uninstalling removes it. It adds `/services`, `/symbols`, `/refs`, `/impact`, `/changeset`, `/codemap` and `/stack`.
+
+The agent's tools (`service_graph`, `symbol_refs`, `api_refs`, `stack`) are off until you turn them on: `/services tools on` (from the next time Rein starts). The [container sandbox](#a-container-per-task) is part of Rein itself.
 :::
 
 ## Which service calls which
@@ -36,7 +38,7 @@ A change to one service is a change to everything that calls it. These features 
 | gRPC | A `LedgerClient` / `LedgerStub` where another service's `.proto` defines `service Ledger` |
 | Packages | A `package.json` dependency on another service's package, or a `go.mod` require of its module |
 
-Each service's contracts (OpenAPI, protobuf services, GraphQL) are listed as what it **provides**. `/services mermaid` prints the graph as a Mermaid diagram for docs and PRs. With the `system-graph` [experiment](../../reference/configuration/#experiments) on, the agent gets a [`service_graph`](../../reference/tools/#service_graph) tool to ask who calls a service before changing its API.
+Each service's contracts (OpenAPI, protobuf services, GraphQL) are listed as what it **provides**. `/services mermaid` prints the graph as a Mermaid diagram for docs and PRs. With the item's tools (`/services tools on`) on, the agent gets a [`service_graph`](../../reference/tools/#service_graph) tool to ask who calls a service before changing its API.
 
 ## Symbols across repos
 
@@ -57,7 +59,7 @@ A language server knows one repo. When `@shop/money` defines `format` and three 
 
 A symbol in one repo matches one in another when the package and the path to it are the same. The version is left out, since repos pin different versions of a shared library. Local symbols (inside one function) aren't joined.
 
-`/symbols index` writes each repo's `index.scip` with the indexer for its language, when it's installed: `scip-typescript`, `scip-python`, `scip-go`, `scip-java` or `rust-analyzer scip`. Indexers that aren't installed are skipped and listed. You can also produce the indexes in CI and check them out with the code. With the `system-graph` [experiment](../../reference/configuration/#experiments) on, the agent gets a [`symbol_refs`](../../reference/tools/#symbol_refs) tool for the same lookups.
+`/symbols index` writes each repo's `index.scip` with the indexer for its language, when it's installed: `scip-typescript`, `scip-python`, `scip-go`, `scip-java` or `rust-analyzer scip`. Indexers that aren't installed are skipped and listed. You can also produce the indexes in CI and check them out with the code. With the item's tools (`/services tools on`) on, the agent gets a [`symbol_refs`](../../reference/tools/#symbol_refs) tool for the same lookups.
 
 Within one repo, the agent's usual code intelligence (language servers) still answers go-to-definition and references. SCIP is what connects the repos.
 
@@ -88,7 +90,7 @@ When the method shows on the line (`axios.post`, `requests.get`, `method: 'POST'
 
 **gRPC methods** (`/refs Ledger.Post`) go from the `rpc` in the `.proto`, to its implementation in the service that owns it, to the calls in files that use a `LedgerClient` or `LedgerStub`.
 
-For a function or type, use [`/symbols <name>`](#symbols-across-repos). With the `system-graph` experiment on, the agent gets [`api_refs`](../../reference/tools/#api_refs) for the same search.
+For a function or type, use [`/symbols <name>`](#symbols-across-repos). With the item's tools on (`/services tools on`) on, the agent gets [`api_refs`](../../reference/tools/#api_refs) for the same search.
 
 ## Who a change affects
 
@@ -221,7 +223,7 @@ Tests against mocks pass while the real service disagrees. `/stack up` brings up
 - **The rest:** `/stack status` shows what's running, `/stack logs <service>` its recent output, and `/stack down` stops it all. The stack keeps running until you stop it.
 - **Helm:** `/stack up --helm <chart folder>` installs a chart with `helm upgrade --install … --wait`. It only goes into a **local** cluster (a kubectl context of kind, k3d, minikube, Docker Desktop, Rancher Desktop, OrbStack or Colima); any other context is refused.
 
-The compose file is the workspace's (or the project's) `compose.yaml` or `docker-compose.yml`. With the `stack-tool` [experiment](../../reference/configuration/#experiments) on, the agent gets a [`stack`](../../reference/tools/#stack) tool. It can bring up what its change needs, test against it, read a service's logs when something fails, and stop it again. Like any command, that goes through approvals.
+The compose file is the workspace's (or the project's) `compose.yaml` or `docker-compose.yml`. With the item's tools (`/services tools on`) on, the agent gets a [`stack`](../../reference/tools/#stack) tool. It can bring up what its change needs, test against it, read a service's logs when something fails, and stop it again. Like any command, that goes through approvals.
 
 ## Related
 

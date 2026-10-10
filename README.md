@@ -33,14 +33,14 @@ and a compaction model. No OAuth tokens are extracted: all traffic goes through 
 - **Specs and planning:** `/spec` writes requirements, a design and tasks you approve in turn; tasks
   run as a parallel graph and trace back to requirements. ADRs, architecture rules on every edit, plan
   risk, a second model's review of each plan, and `/bestof` on Claude and Codex at once.
-- **Contracts and migrations:** breaking-change detection for OpenAPI, protobuf, GraphQL and Avro
+- **Contracts and migrations** (the `contracts` marketplace item): breaking-change detection for OpenAPI, protobuf, GraphQL and Avro
   (`/contracts`), migration safety checks (`/migrations`), expand/contract plans, Pact contract
   tests, codemods, Java 21 / Python 3 / React hooks playbooks, dead code and stale flags.
 - **Sessions, environments and insight:** background sessions you reattach from any terminal
   (`rein --background`), a dashboard of every running session (`rein sessions`), commands in the
   repo's dev container or Nix shell, `rein --acp` for Zed and other ACP editors, `/stats`, `/cache`,
   `rein bench` on your own history, onboarding tours and scheduled jobs.
-- **System-level understanding:** which service calls which (`/services`), symbols across repos from
+- **System-level understanding** (the `system` marketplace item): which service calls which (`/services`), symbols across repos from
   SCIP indexes, `/refs POST /orders/{id}` from gateway to every caller, `/impact` of a branch,
   coordinated change sets across repos, codemaps, a container sandbox per task, and `/stack up` for
   the services a change needs.
