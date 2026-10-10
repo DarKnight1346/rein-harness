@@ -829,6 +829,12 @@ export async function runWorker(): Promise<number> {
         else await v.navigate(String(args.url ?? ''));
         return {ok: true};
       }
+      case 'preview-full': {
+        // A page dropped frames (a slow link): the whole screen again, so nothing stale stays.
+        const v = views.get(Number(args.id));
+        if (v instanceof VncView) v.full();
+        return {ok: true};
+      }
       case 'preview-resize': {
         const v = views.get(Number(args.id));
         if (v instanceof BrowserView) await v.resize({width: Number(args.width), height: Number(args.height)});

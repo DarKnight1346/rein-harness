@@ -44,11 +44,15 @@ For a VM, an emulator or a desktop app, Rein shows a VNC display. Rein itself sp
 | What you're building | How it gets a display |
 |---|---|
 | An OS or anything in QEMU | `qemu-system-x86_64 … -vnc :1`, then preview `:1` |
-| A desktop app on a headless Linux machine | Run it in a virtual display (`Xvfb :99`, then `DISPLAY=:99 your-app`) and share it with `x11vnc -display :99 -rfbport 5999 -nopw`, then preview `localhost:5999` |
-| An Android app | The emulator in a virtual display as above (`-no-window` has no screen to share) |
+| A native Linux app (desktop or headless server), no VM | The agent asks for a virtual display (the `preview` tool's `app`), Rein starts one and shows it, and the agent starts the app on it (`DISPLAY=:20 your-app &`) with its shell tool, so your approvals apply. Rein uses TigerVNC's `Xvnc` if installed, else `Xvfb` with `x11vnc`, and says what to install if neither is there |
+| An Android app | The emulator on a virtual display as above (`-no-window` has no screen to share) |
 | A whole desktop | Its screen sharing (macOS Screen Sharing, a VNC server on Linux or Windows) |
 
-Click into the screen and type: keys, the mouse and the wheel go to it. Raw and CopyRect updates are supported; a server that asks for a VNC password isn't yet, so start it without one (QEMU's `-vnc :1` has none).
+Click into the screen and type: keys, the mouse and the wheel go to it. A display with a VNC password asks for it in the pane (the agent can pass it too); it's kept in the chat, never sent to the page. macOS Screen Sharing works with "VNC viewers may control screen with password" turned on (its macOS-account sign-in isn't supported). A virtual display Rein started stops when its preview closes.
+
+## Slow links
+
+When your connection is slow (mobile data, a server far away), frames that can't get through are dropped rather than queued, so the preview never falls behind: you see the latest screen, a little less smoothly. Over Tailscale or a domain pointed at your server, previews travel in the same HTTPS connection as the rest of the web UI, so nothing else needs opening.
 
 ## How a preview starts
 
@@ -60,7 +64,7 @@ Click into the screen and type: keys, the mouse and the wheel go to it. Raw and 
 
 ## Not yet
 
-These are on the [roadmap](../../start/whats-new/): an Android emulator streamed without a virtual display (over `adb`), the iOS Simulator (view only: it has no input API), and capturing a native window on macOS or Windows.
+These are on the [roadmap](../../start/whats-new/): native windows on macOS and Windows, hardware-encoded video instead of frames (both through Rein's own screen protocol, [rein-remote](https://github.com/rein-harness/rein-remote)), an Android emulator without a virtual display (over `adb`), and the iOS Simulator (view only: it has no input API).
 
 ## Security
 

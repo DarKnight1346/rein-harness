@@ -554,6 +554,8 @@ Label `Preview`. Approval: none (it opens something for you to see; it doesn't c
 | `url` | string | An http(s) URL to show, e.g. `http://localhost:3000/dashboard`. Local URLs work as-is: the browser runs on the machine Rein runs on |
 | `vnc` | string | A VNC display: `host:port`, or `:N` for display N (port 5900+N) |
 | `title` | string | A short name for it (default: the address) |
+| `password` | string | The VNC display's password, if it has one (the user is asked otherwise) |
+| `app` | boolean | Linux: start a virtual display for a native app (no VM). Rein starts and shows it; the agent then starts the app on it with its shell tool (`DISPLAY=:N app &`) |
 
 ## Pets
 

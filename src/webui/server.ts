@@ -249,7 +249,21 @@ export async function startServer(opts: ServerOptions = {}): Promise<{url: strin
       }
       if (action === 'events' && m === 'GET') {
         res.writeHead(200, {'content-type': 'text/event-stream', 'cache-control': 'no-store', connection: 'keep-alive', 'x-accel-buffering': 'no'});
-        const write = (ev: unknown) => res.write(`data: ${JSON.stringify(ev)}\n\n`);
+        // A slow link (a phone on mobile data, a far server): while this page's connection is backed up,
+        // preview frames are dropped instead of queued, so it never falls behind. A VNC patch can't be
+        // dropped without leaving a stale area, so the next one is sent as the whole screen.
+        let dropped = false;
+        const write = (ev: any) => {
+          if (ev?.type === 'pframe') {
+            if (res.writableNeedDrain) return void (dropped = true);
+            if (dropped && ev.format === 'png' && !ev.full) {
+              dropped = false;
+              return void c.request('preview-full', {id: ev.id}).catch(() => {});
+            }
+            dropped = false;
+          }
+          res.write(`data: ${JSON.stringify(ev)}\n\n`);
+        };
         if (c.snapshot) write({type: 'snapshot', snapshot: c.snapshot});
         write({type: 'busy', busy: c.busy, ...(c.busy && c.phrase ? {phrase: c.phrase} : {})});
         for (const ev of c.backlog) write(ev);
