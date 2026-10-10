@@ -177,3 +177,74 @@ export function MarketplaceScreen({width, height, onClose, log}: {width: number;
     </Box>
   );
 }
+
+/**
+ * /marketplace update: the installed items a marketplace has a newer version of. Space ticks one
+ * (or All), enter updates what's ticked; everything is ticked to start with.
+ */
+export function UpdatesScreen({items, updates, onDone, log}: {items: Item[]; updates: {id: string; from: string; to: string}[]; onDone(): void; log(kind: 'info' | 'error', text: string): void}) {
+  const [cursor, setCursor] = useState(0);
+  const [picked, setPicked] = useState(() => new Set(updates.map((u) => u.id)));
+  const [busy, setBusy] = useState(false);
+  const rows = updates.length + 1; // "All", then one per item
+  const toggle = (i: number) =>
+    setPicked((p) => {
+      if (i === 0) return p.size === updates.length ? new Set() : new Set(updates.map((u) => u.id));
+      const id = updates[i - 1]!.id;
+      const next = new Set(p);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  const run = async () => {
+    if (busy || !picked.size) return;
+    setBusy(true);
+    const lines: string[] = [];
+    let restart = false;
+    for (const u of updates.filter((x) => picked.has(x.id))) {
+      try {
+        const r = await installItem(runtime, items, u.id);
+        lines.push(...r.lines);
+        restart ||= r.restart;
+      } catch (err) {
+        lines.push(`${u.id}: ${(err as Error).message}`);
+      }
+    }
+    log('info', lines.join('\n') + (restart ? '\nRestart Rein to start the updated MCP servers and hooks.' : ''));
+    onDone();
+  };
+  useInput((input, key) => {
+    if (key.escape || input === 'q') onDone();
+    else if (key.upArrow) setCursor((c) => Math.max(0, c - 1));
+    else if (key.downArrow) setCursor((c) => Math.min(rows - 1, c + 1));
+    else if (input === ' ') toggle(cursor);
+    else if (key.return) void run();
+  });
+  const name = (id: string) => items.find((i) => i.id === id)?.name ?? id;
+  return (
+    <Box flexDirection="column">
+      <Text dimColor>
+        {updates.length} update{updates.length === 1 ? '' : 's'} for what you installed.
+      </Text>
+      <Box flexDirection="column" marginY={1}>
+        {[{id: '*', label: 'All'}, ...updates.map((u) => ({id: u.id, label: `${name(u.id)}  `, from: u.from, to: u.to}))].map((r, i) => {
+          const on = i === 0 ? picked.size === updates.length : picked.has(r.id);
+          return (
+            <Clickable key={r.id} onHover={() => setCursor(i)} onClick={() => toggle(i)}>
+              <Text color={i === cursor ? accent() : undefined} wrap="truncate">
+                {i === cursor ? '❯ ' : '  '}
+                {on ? '[✓] ' : i === 0 && picked.size ? '[-] ' : '[ ] '}
+                {i === 0 ? <Text bold>All</Text> : r.label}
+                {'from' in r ? <Text dimColor>{(r as {from: string}).from} → </Text> : null}
+                {'to' in r ? <Text color="green">{(r as {to: string}).to}</Text> : null}
+              </Text>
+            </Clickable>
+          );
+        })}
+      </Box>
+      <Text color={busy ? 'yellow' : undefined} dimColor={!busy}>
+        {busy ? `Updating ${picked.size}…` : `space tick · enter update ${picked.size} · esc cancel`}
+      </Text>
+    </Box>
+  );
+}

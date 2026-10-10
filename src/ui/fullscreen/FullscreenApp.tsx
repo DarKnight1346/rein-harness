@@ -43,7 +43,7 @@ import {agentLines, assistantLines, entryLines, pendingToolLines, wrap} from './
 import {InfoWindow, Window} from './Window.js';
 import {COMMANDS} from '../../commands/index.js';
 import {PetView} from '../Pet.js';
-import {MarketplaceScreen} from '../MarketplaceScreen.js';
+import {MarketplaceScreen, UpdatesScreen} from '../MarketplaceScreen.js';
 import {commandEnabled, packsHint} from '../../commands/packs.js';
 import {skillDirs, skillSourceLabel, type Skill} from '../../skills/index.js';
 import chalk from 'chalk';
@@ -244,6 +244,12 @@ export function FullscreenApp({resume}: {resume: Resume}) {
         return (
           <Window title="Plan — approve to start" width={windowWidth} onClose={() => overlay.resolve('revise')}>
             <PlanScreen plan={overlay.plan} width={windowText} onDecide={overlay.resolve} />
+          </Window>
+        );
+      case 'marketplace-updates':
+        return (
+          <Window title="Marketplace updates" width={windowWidth} onClose={r.closeOverlay}>
+            <UpdatesScreen items={overlay.items} updates={overlay.updates} onDone={r.closeOverlay} log={r.log} />
           </Window>
         );
       case 'marketplace':

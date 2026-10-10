@@ -23,7 +23,7 @@ export const COMMANDS: Command[] = [
   {name: 'agents', description: 'Subagents: watch and message them', usage: 'Subagents the agent spawned; pick one to view and message it'},
   {name: 'shells', description: 'Commands the agent started, and their output', usage: 'Shell commands the agent started; open one to see its logs (/shells <id>)'},
   {name: 'memory', description: 'What Rein has learned about this project', usage: "This project's memory (.rein/MEMORY.md) — what Rein has learned here"},
-  {name: 'marketplace', description: 'Add tools, commands, skills and themes', usage: 'The marketplace: /marketplace opens the store; add <gitRepoUrl> · list · remove <gitRepoUrl> · update · install <id> · uninstall <id>'},
+  {name: 'marketplace', description: 'Add tools, commands, skills and themes', usage: 'The marketplace: /marketplace opens the store; add <gitRepoUrl> · list · remove <gitRepoUrl> · update [all | <id>…] · install <id> · uninstall <id>'},
   {name: 'mcp', description: 'MCP servers and their tools', usage: 'MCP servers: status and tools; approve project servers, reconnect'},
   {name: 'export', description: 'Save the conversation as Markdown or HTML', usage: 'Save the conversation as Markdown and copy it to the clipboard: /export [file] (default ~/.rein/exports/<id>.md); /export html [file] for a page with tool calls and diffs'},
   {name: 'ide', description: 'Connect to your editor', usage: 'Editor integration (VS Code, Cursor, Windsurf, JetBrains with the Claude Code extension): connect, or show the connection'},

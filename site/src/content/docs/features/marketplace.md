@@ -46,7 +46,9 @@ In the classic renderer, `/marketplace` prints the catalog instead.
 | `/marketplace add <gitRepoUrl>` | Adds a marketplace (`https://github.com/owner/repo`, `owner/repo`, an SSH URL, or a folder on this machine). Rein clones it and checks it's a marketplace |
 | `/marketplace list` | The marketplaces you've added, the official one first |
 | `/marketplace remove <gitRepoUrl>` | Removes one. Items you installed from it stay installed. The official marketplace can't be removed |
-| `/marketplace update` | Fetches every marketplace again and lists updates to what you've installed |
+| `/marketplace update` | Fetches every marketplace again, then lists the items you installed that have a newer version: **All** and each item are ticked, `Space` unticks or ticks one, Enter updates what's ticked (fullscreen; the classic renderer prints the list) |
+| `/marketplace update all` | Updates every installed item that has a newer version |
+| `/marketplace update <id> [<id>…]` | Updates just those |
 | `/marketplace install <id>` | Installs an item (and what it needs) without opening the store |
 | `/marketplace uninstall <id>` | Uninstalls an item |
 

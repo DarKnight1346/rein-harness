@@ -85,7 +85,7 @@ See [Goals](../../features/goals/) and [Plan mode](../../features/plans/).
 | `/permissions` | — | Lists the allow/deny rules in effect, grouped by the settings file they come from. |
 | `/ide` | `reconnect` | Editor integration: shows the connected editor (VS Code, Cursor, Windsurf or JetBrains, through the Claude Code extension) and what's selected, or connects to one. → [Editor integration](../../features/ide/) |
 | `/memory` | — | Shows the project's memory (`.rein/MEMORY.md`): the facts Rein has learned here. |
-| `/marketplace` | `[add <gitRepoUrl> \| list \| remove <gitRepoUrl> \| update \| install <id> \| uninstall <id>]` | The [marketplace](../../features/marketplace/): no argument opens the store (tools, commands, skills, themes, features, bundles); the rest manage your marketplace repos and installed items. The official Rein Marketplace can't be removed. |
+| `/marketplace` | `[add <gitRepoUrl> \| list \| remove <gitRepoUrl> \| update [all \| <id>…] \| install <id> \| uninstall <id>]` | The [marketplace](../../features/marketplace/): no argument opens the store (tools, commands, skills, themes, features, bundles); the rest manage your marketplace repos and installed items; `update` lets you pick which installed items to update (or `update all`). The official Rein Marketplace can't be removed. |
 | `/mcp` | — | MCP servers with status and tools. Enter approves a waiting project server or reconnects one. |
 
 ### Rein itself

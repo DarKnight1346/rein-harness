@@ -146,6 +146,7 @@ export type Overlay =
   | {name: 'rewind'; points: RewindPoint[]}
   | {name: 'mcp'}
   | {name: 'marketplace'}
+  | {name: 'marketplace-updates'; items: import('../marketplace/index.js').Item[]; updates: {id: string; from: string; to: string}[]}
   | {name: 'plan'; plan: PresentedPlan; resolve(d: PlanDecision): void}
   | {name: 'plans'; plans: SavedPlan[]}
   | {name: 'ask'; questions: AskQuestion[]; resolve(a: AskAnswer[] | undefined): void}
@@ -1168,10 +1169,24 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
             if (!arg) return log('info', 'Usage: /marketplace remove <gitRepoUrl>');
             log('info', `Removed ${m.removeMarketplace(arg)}. Items you installed from it stay installed (/marketplace uninstall <id>).`);
           } else if (sub === 'update') {
+            // Fetch every marketplace, then the installed items that have a newer version: pick
+            // which to update (a window), or `update all` / `update <id>…` straight away.
+            log('info', 'Fetching the marketplaces…');
             const markets = await m.loadMarketplaces({refresh: true});
             const ups = m.updatesFor(markets);
+            const items = markets.flatMap((x) => x.items);
             const errs = markets.filter((x) => x.error).map((x) => `${x.name}: ${x.error}`);
-            log('info', [`Refreshed ${markets.length} marketplace${markets.length === 1 ? '' : 's'}.`, ...errs, ups.length ? `Updates: ${ups.map((u) => `${u.id} ${u.from} → ${u.to}`).join(', ')} (/marketplace install <id>)` : 'Everything installed is up to date.'].join('\n'));
+            if (errs.length) log('error', errs.join('\n'));
+            if (!ups.length) return log('info', 'Everything you installed is up to date.');
+            const want = arg === 'all' ? ups : arg ? ups.filter((u) => arg.split(/\s+/).includes(u.id)) : undefined;
+            if (want) {
+              const a = await import('../marketplace/actions.js');
+              const lines: string[] = [];
+              for (const u of want) lines.push(...(await a.installItem(runtime, items, u.id)).lines);
+              const unknown = arg === 'all' ? [] : arg.split(/\s+/).filter((id) => !ups.some((u) => u.id === id));
+              log('info', [...lines, ...(unknown.length ? [`No update for ${unknown.join(', ')}.`] : [])].join('\n') || 'Nothing to update.');
+            } else if (windowed) setOverlay({name: 'marketplace-updates', items, updates: ups});
+            else log('info', [`Updates for what you installed:`, ...ups.map((u) => `  ${u.id}  ${u.from} → ${u.to}`), '/marketplace update all, or /marketplace update <id> [<id>…].'].join('\n'));
           } else if (sub === 'install' || sub === 'uninstall') {
             if (!arg) return log('info', `Usage: /marketplace ${sub} <id>`);
             const a = await import('../marketplace/actions.js');
