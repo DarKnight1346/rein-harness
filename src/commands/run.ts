@@ -110,9 +110,6 @@ const TERMINAL_ONLY: Record<string, string> = {
   voice: 'Voice input records from the terminal; in the browser, use your system dictation',
   remote: 'The remote page is for a terminal session; you are already on the web UI',
   exit: 'Close the chat from the list instead',
-  shells: 'Background shells are listed in the terminal; /shells is not in the web UI yet',
-  shell: 'Background shells are listed in the terminal; /shell is not in the web UI yet',
-  rewind: 'Rewind is not in the web UI yet; use it from the terminal',
   resume: 'Open a previous conversation from the chat list',
 };
 
@@ -239,7 +236,7 @@ export function runCommand(raw: string, ui: CommandUi): void {
   const opensWindow = ['goal:plan', 'login', 'usage', 'context', 'help', 'update', 'shells', 'btw', 'resume', 'agents', 'agent'].includes(parsed.name) || (parsed.name === 'settings' && !parsed.args.trim()) || (parsed.name === 'marketplace' && !parsed.args.trim()) || (parsed.name === 'model' && !parsed.args);
   // A value typed after `/vault set NAME` stays off the screen and out of the transcript.
   // The web UI has windows for these whatever the arguments (/settings safety opens on a tab).
-  const webWindow = ui.surface === 'web' && (['settings', 'model', 'goal:plan', 'mcp', 'agents'].includes(parsed.name) && (parsed.name !== 'model' || !parsed.args.trim()));
+  const webWindow = ui.surface === 'web' && (['settings', 'model', 'goal:plan', 'mcp', 'agents', 'shells', 'rewind'].includes(parsed.name) && (parsed.name !== 'model' || !parsed.args.trim()));
   if (!(windowed && opensWindow) && !webWindow) log('user', parsed.name === 'vault' ? raw.trim().replace(/^(\/vault\s+set\s+\S+)\s+.*$/s, '$1 ••••') : raw.trim());
   switch (parsed.name) {
     case 'mcp':
@@ -1240,7 +1237,7 @@ export function runCommand(raw: string, ui: CommandUi): void {
     }
     case 'agents': {
       const all = runtime.agents.list();
-      if (windowed) {
+      if (windowed || ui.surface === 'web') {
         if (!all.length) log('info', 'No subagents yet — the agent spawns them with its agent tool.');
         else setOverlay({name: 'agents'});
         break;
@@ -1274,7 +1271,7 @@ export function runCommand(raw: string, ui: CommandUi): void {
       // The viewed agent's commands (main: its own; a subagent: the ones it started).
       const shells = runtime.tools.shells.list().filter((s) => (viewing ? s.origin?.agentId === viewing.id : !s.origin));
       const id = Number(parsed.args.replace('#', ''));
-      if (windowed) {
+      if (windowed || ui.surface === 'web') {
         if (parsed.args && shells.some((s) => s.id === id)) setOverlay({name: 'shell', id});
         else openShells?.();
         break;

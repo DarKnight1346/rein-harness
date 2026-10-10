@@ -3,6 +3,7 @@ import {useApp, useInput} from 'ink';
 import {detectImports, importAccounts, skipImport, type AccountRow} from '../accounts/service.js';
 import {type UsageRow} from '../accounts/usage.js';
 import {shadowedSkills, suggestCommands} from '../commands/index.js';
+import {displayText, rewindPoints, rewindTo} from '../session/rewind.js';
 import {runBang as runBangWith, runCommand as runCommandWith} from '../commands/run.js';
 export {goalSummary} from '../commands/run.js';
 import {loadSkills, type Skill} from '../skills/index.js';
@@ -487,52 +488,24 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
 
   /** /rewind: your messages, newest first, with how many files Rein changed since each. */
   function openRewind() {
-    const points: RewindPoint[] = runtime.engine.transcript.messages
-      .map((m, index) => ({m, index}))
-      .filter(({m}) => m.role === 'user' && !m.synthetic)
-      .map(({m, index}) => ({index, at: m.at, text: displayText(m.text), files: runtime.checkpoints.changedSince(index).length, whole: runtime.snapshots.has(index)}))
-      .reverse();
-    setOverlay({name: 'rewind', points});
+    setOverlay({name: 'rewind', points: rewindPoints()});
   }
 
   const doRewind = async (index: number, mode: RewindMode) => {
     setOverlay({name: 'none'});
     if (chat.busy) chat.interrupt();
-    const t = runtime.engine.transcript;
-    const text = t.messages[index]?.text ?? '';
-    if (mode !== 'conversation') {
-      // The whole-tree snapshot first (covers shell-made changes), then Rein's per-file checkpoints
-      // for anything outside it (e.g. .gitignore'd files the agent edited).
-      const changed = new Set<string>();
-      let removedCount = 0;
-      if (runtime.snapshots.has(index)) {
-        try {
-          const t = await runtime.snapshots.restore(index);
-          t.restored.forEach((f) => changed.add(f));
-          removedCount += t.removed.length;
-          t.removed.forEach((f) => changed.add(f));
-          for (const f of t.failed) log('error', `Couldn't restore the snapshot of ${f}`);
-        } catch (err) {
-          log('error', `Couldn't restore the project snapshot: ${(err as Error).message}`);
-        }
-      }
-      const r = runtime.checkpoints.restore(index);
-      for (const f of [...r.restored, ...r.removed]) changed.add(nodePath.relative(process.cwd(), f));
-      removedCount += r.removed.filter((f) => !changed.has(nodePath.relative(process.cwd(), f))).length;
-      const n = changed.size;
-      log('info', `Rewound ${n} file${n === 1 ? '' : 's'}${removedCount ? ` (files created since were removed)` : ''}${r.skipped.length ? ` · ${r.skipped.length} too large to restore: ${r.skipped.join(', ')}` : ''}.`);
-    }
-    if (mode !== 'code') {
-      await runtime.engine.rewind(index);
+    const text = await rewindTo(index, mode, log);
+    if (text !== undefined) {
       opts.onClear();
       setEntries([banner()]);
       replay(runtime.engine.transcript, add);
-      prevDraft.current = displayText(text);
-      setDraft(displayText(text)); // edit and resend
+      prevDraft.current = text;
+      setDraft(text); // edit and resend
       log('info', 'Conversation rewound — your message is back in the input.');
     }
     bump();
   };
+
 
   const suggestions = suggestCommands(draft, skills);
   const selected = suggestions[Math.min(suggestIndex, suggestions.length - 1)];
@@ -1154,8 +1127,7 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
 }
 
 /** Show the last few turns of a resumed conversation. */
-/** A stored user message as the user typed it (skill prompts back to `/name args`). */
-export const displayText = (text: string) => text.replace(/^<skill name="([^"]+)"[\s\S]*?<\/skill>\s*/, '/$1 ');
+export {displayText} from '../session/rewind.js';
 
 function replay(t: Transcript, add: AddEntry): void {
   const recent = t.messages.slice(-10);

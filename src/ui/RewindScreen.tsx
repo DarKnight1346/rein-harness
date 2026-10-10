@@ -1,18 +1,12 @@
-import React, {useState} from 'react';
+import {useState} from 'react';
 import {Box, Text, useInput} from 'ink';
 import {age} from './format.js';
 import {Clickable} from './terminal/clicks.js';
 
-/** `whole`: a project snapshot exists, so shell-made changes are restored too. */
-export type RewindPoint = {index: number; text: string; at: number; files: number; whole?: boolean};
-export type RewindMode = 'both' | 'conversation' | 'code';
+import {REWIND_MODES as MODES, type RewindMode, type RewindPoint} from '../session/rewind.js';
+export type {RewindMode, RewindPoint} from '../session/rewind.js';
 
 const ROWS = 10;
-const MODES: [RewindMode, string, string][] = [
-  ['both', 'Restore code and conversation', 'files back to before this message; the conversation ends just before it'],
-  ['conversation', 'Restore conversation only', 'files stay as they are now'],
-  ['code', 'Restore code only', 'the conversation stays; files go back to before this message'],
-];
 
 /**
  * /rewind (or esc twice): pick one of your messages (newest first), then what to restore. The

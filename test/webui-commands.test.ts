@@ -114,6 +114,16 @@ describe('web UI commands (the real worker)', () => {
     await call(`/api/chats/${id}/send`, {text: '/tui classic'});
     expect((await evs).at(-1).text).toBe('The web UI has one layout; /tui switches the terminal renderer.');
 
+    // /shells and /rewind open their windows; a subagent that isn't there is an error, not a crash.
+    evs = events(id, (ev) => ev.type === 'window' && ev.window?.name === 'shells');
+    await call(`/api/chats/${id}/send`, {text: '/shells'});
+    expect((await evs).at(-1).window).toEqual({name: 'shells', shells: []});
+    evs = events(id, (ev) => ev.type === 'window' && ev.window?.name === 'rewind');
+    await call(`/api/chats/${id}/send`, {text: '/rewind'});
+    expect((await evs).at(-1).window).toMatchObject({name: 'rewind', points: [], modes: [{mode: 'both'}, {mode: 'conversation'}, {mode: 'code'}]});
+    expect((await call(`/api/chats/${id}/request`, {op: 'agent', args: {id: 99}})).json.error).toBe('that subagent is gone');
+    expect((await call(`/api/chats/${id}/request`, {op: 'rewind', args: {index: 0, mode: 'both'}})).json.error).toMatch(/pick one of your messages/);
+
     // /clear empties the conversation on the page too: a fresh snapshot follows the clear.
     let sawClear = false;
     evs = events(id, (ev) => (ev.type === 'clear' && (sawClear = true), sawClear && ev.type === 'snapshot'));

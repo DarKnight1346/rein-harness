@@ -450,7 +450,10 @@ function onEvent(c, ev) {
       c.feed = [];
       break;
     case 'window':
+      // A live refresh (shells, subagents) keeps what's open in the window; a new window starts fresh.
+      if (!ev.refresh) c.winUi = {};
       c.window = ev.close ? undefined : ev.window;
+      if (ev.refresh && document.activeElement?.closest?.('.cmd-window textarea, .cmd-window input')) return void (c.windowStale = true);
       renderWindow(c);
       return;
     case 'chrome':
@@ -649,7 +652,7 @@ function composer() {
       return showList();
     }
     timer = setTimeout(async () => {
-      const items = await ask(c, 'suggest', {text}).catch(() => []);
+      const items = await ask(c, 'suggest', {text}).then((r) => (Array.isArray(r) ? r : []), () => []);
       if (ta.value !== text) return;
       Object.assign(sug, {items, index: 0, text});
       showList();
@@ -847,8 +850,9 @@ function renderWindow(c) {
   document.querySelector('.overlay.cmd-window')?.remove();
   if (state.chat !== c || !c.window) return;
   const w = c.window;
-  const body = w.name === 'settings' ? settingsPanel(c, w) : w.name === 'model' ? modelPanel(c, w) : w.name === 'plans' ? plansPanel(c, w) : h('pre.text', (w.lines ?? []).join('\n'));
-  const title = w.name === 'settings' ? 'Settings' : w.name === 'model' ? 'Models' : w.name === 'plans' ? 'Start a plan as a goal' : w.title;
+  const panels = {settings: settingsPanel, model: modelPanel, plans: plansPanel, rewind: rewindPanel, shells: shellsPanel, agents: agentsPanel};
+  const body = panels[w.name] ? panels[w.name](c, w) : h('pre.text', (w.lines ?? []).join('\n'));
+  const title = {settings: 'Settings', model: 'Models', plans: 'Start a plan as a goal', rewind: 'Rewind', shells: 'Shells', agents: 'Subagents'}[w.name] ?? w.title;
   const o = h('div.overlay.cmd-window', {on: {click: (e) => e.target === o && closeWindow(c)}},
     h('div.dialog.wide', h('header', title, h('button.icon-btn', {style: {float: 'right'}, title: 'Close (Esc)', on: {click: () => closeWindow(c)}}, icon('x'))), h('div.body', body)));
   o.tabIndex = -1;
@@ -931,6 +935,94 @@ function modelPanel(c, v) {
     h('p.muted', s.description),
     h('div.options', s.options.map((o) => h('label.opt' + (o.disabled ? '.disabled' : ''), h('input', {type: 'radio', name: `model-${s.id}`, disabled: o.disabled, checked: o.value === s.value, on: {change: () => choose(s.id, o.value)}}), h('span', h('b', o.label), o.hint ? h('small', o.hint) : null)))),
     s.id === 'chat' ? h('div', h('h3', 'Effort'), h('div.options', v.effort.options.map((o) => h('label.opt', h('input', {type: 'radio', name: 'effort', checked: o.value === v.effort.value, on: {change: () => choose('effort', o.value)}}), h('span', h('b', o.label), o.hint ? h('small', o.hint) : null))))) : null,
+  );
+}
+
+const when = (ms) => new Date(ms).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'});
+
+/** /rewind: your messages, newest first; pick one, then what to restore. Its text comes back into the box. */
+function rewindPanel(c, w) {
+  const u = (c.winUi ??= {});
+  if (!w.points.length) return h('p.muted', 'Nothing to rewind to yet: rewind goes back to before one of your messages.');
+  const pick = async (p, mode) => {
+    try {
+      const r = await ask(c, 'rewind', {index: p.index, mode});
+      if (r.draft !== undefined && c.ui) {
+        c.ui.ta.value = r.draft;
+        c.ui.ta.dispatchEvent(new Event('input'));
+        c.ui.ta.focus();
+      }
+    } catch (err) {
+      toast(err.message, 'error');
+    }
+  };
+  return h('div.options', w.points.map((p) => {
+    const open = u.point === p.index;
+    const modes = p.files === 0 && !p.whole ? w.modes.filter((m) => m.mode === 'conversation') : w.modes;
+    return h('div.rw' + (open ? '.on' : ''),
+      h('button.choice', {on: {click: () => ((u.point = open ? undefined : p.index), renderWindow(c))}}, h('div', h('b', p.text.split('\n')[0].slice(0, 140) || '(empty)'), h('small', `${when(p.at)} · ${p.files ? `${p.files} file${p.files === 1 ? '' : 's'} changed since` : 'no file changes since'}${p.whole ? ' · project snapshot' : ''}`))),
+      open ? h('div.rw-modes', modes.map((m) => h('button.btn' + (m.mode === 'both' ? '.primary' : ''), {title: m.hint, on: {click: () => pick(p, m.mode)}}, m.label))) : null,
+    );
+  }));
+}
+
+const shellState = (s) => (s.status === 'running' ? 'running' : s.status === 'exited' ? `exit ${s.exitCode ?? '?'}` : s.status);
+
+/** /shells: the commands you and the agent started; open one for its output (live), stop a running one. */
+function shellsPanel(c, w) {
+  const u = (c.winUi ??= {});
+  if (u.shell === undefined && w.open !== undefined) u.shell = w.open;
+  if (!w.shells.length) return h('p.muted', 'No shells yet: commands the agent runs (and your !commands) show here.');
+  const out = h('pre.text.shell-out', '…');
+  if (u.shell !== undefined)
+    ask(c, 'shell', {id: u.shell}).then((sh) => {
+      out.textContent = sh.output || '(no output)';
+      out.scrollTop = out.scrollHeight;
+    }, (err) => (out.textContent = err.message));
+  return h('div.split',
+    h('div.split-list', w.shells.slice().reverse().map((sh) => h('button.choice' + (u.shell === sh.id ? '.on' : ''), {on: {click: () => ((u.shell = sh.id), renderWindow(c))}},
+      h('span.dot' + (sh.status === 'running' ? '.busy' : sh.status === 'exited' && sh.exitCode === 0 ? '.ok' : '.bad')),
+      h('div', h('code', sh.command.length > 80 ? sh.command.slice(0, 80) + '…' : sh.command), h('small', `#${sh.id} · ${shellState(sh)} · ${sh.origin === 'agent' ? 'the agent' : 'you'}${sh.background ? ' · background' : ''} · ${when(sh.startedAt)}`))))),
+    u.shell !== undefined ? h('div.split-main',
+      out,
+      w.shells.find((x) => x.id === u.shell)?.status === 'running' ? h('div.actions', h('button.btn.danger', {on: {click: () => ask(c, 'shell-kill', {id: u.shell}).catch((e) => toast(e.message, 'error'))}}, 'Stop it')) : null,
+    ) : h('div.split-main', h('p.muted', 'Pick a shell to see its output.')),
+  );
+}
+
+/** /agents: the conversation's subagents; open one to follow it, message it, or stop it. */
+function agentsPanel(c, w) {
+  const u = (c.winUi ??= {});
+  if (!w.agents.length) return h('p.muted', 'No subagents yet: the agent starts them with its agent tool.');
+  const view = h('div.agent-log', h('p.muted', 'Pick a subagent to follow it.'));
+  const draw = (a) => view.replaceChildren(
+    h('div.muted', a.task),
+    ...a.events.map((e) => e.kind === 'text' ? md(e.text) : e.kind === 'tool' ? toolEl({...e, pending: e.ok === undefined}) : e.kind === 'user' ? h('div.msg.user', h('div.bubble', e.text)) : h('div.note', e.kind === 'check' ? `${e.complete ? '✓' : '…'} ${e.note}` : e.text)),
+    ...(a.error ? [h('div.note.error', a.error)] : []),
+  );
+  if (u.agent !== undefined) ask(c, 'agent', {id: u.agent}).then(draw, (err) => view.replaceChildren(h('div.note.error', err.message)));
+  const chosen = w.agents.find((a) => a.id === u.agent);
+  const msg = h('textarea', {rows: 2, placeholder: chosen ? `Message ${chosen.name}` : ''});
+  if (u.draft) msg.value = u.draft;
+  msg.addEventListener('input', () => (u.draft = msg.value));
+  const sendMsg = async () => {
+    const text = msg.value.trim();
+    if (!text) return;
+    try {
+      u.draft = '';
+      msg.value = '';
+      draw(await ask(c, 'agent-message', {id: u.agent, text}));
+    } catch (err) {
+      toast(err.message, 'error');
+    }
+  };
+  msg.addEventListener('keydown', (e) => e.key === 'Enter' && !e.shiftKey && (e.preventDefault(), void sendMsg()));
+  msg.addEventListener('blur', () => c.windowStale && ((c.windowStale = false), renderWindow(c)));
+  return h('div.split',
+    h('div.split-list', w.agents.map((a) => h('button.choice' + (u.agent === a.id ? '.on' : ''), {on: {click: () => ((u.agent = a.id), renderWindow(c))}},
+      h('span.dot' + (a.status === 'running' ? '.busy' : a.status === 'done' ? '.ok' : a.status === 'failed' ? '.bad' : '')),
+      h('div', h('b', a.name), h('small', `#${a.id} · ${a.model} · ${a.mode} · ${a.status}${a.background ? ' · background' : ''}`))))),
+    chosen ? h('div.split-main', view, h('div.agent-send', msg, h('button.btn.primary', {on: {click: sendMsg}}, 'Send'), chosen.status === 'running' ? h('button.btn.danger', {on: {click: () => ask(c, 'agent-stop', {id: chosen.id}).catch((e) => toast(e.message, 'error'))}}, 'Stop') : null)) : h('div.split-main', view),
   );
 }
 

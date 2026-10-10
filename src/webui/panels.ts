@@ -91,7 +91,7 @@ const named = (provider: string, label: string) => (label.startsWith(provider) ?
 function sectionRows(id: string): SidebarSection['rows'] | undefined {
   switch (id) {
     case 'agents':
-      return [{text: 'main', bold: true, active: true, ...(runtime.engine?.isBusy ? {text: 'main ●'} : {})}, ...runtime.agents.list().filter((a) => runtime.agents.isActive(a)).map((a) => ({text: `${a.name} · ${a.modelLabel ?? a.requested}`, dim: true}))];
+      return [{text: 'main', bold: true, active: true, ...(runtime.engine?.isBusy ? {text: 'main ●'} : {})}, ...runtime.agents.list().filter((a) => runtime.agents.isActive(a)).map((a) => ({text: `${a.name} · ${a.modelLabel ?? a.requested}`, dim: true, command: '/agents'}))];
     case 'accounts': {
       const accounts = [...new Map(catalog.all().flatMap((m) => m.accountIds).map((id) => [id, catalog.account(id)])).values()].filter((a) => !!a);
       if (!accounts.length) return [{text: 'No accounts yet: sign in from a terminal with rein, then /login', dim: true}];

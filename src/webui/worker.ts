@@ -88,10 +88,50 @@ async function windowView(o: Overlay): Promise<Record<string, unknown> | undefin
     case 'mcp':
       return {name: 'text', title: 'MCP servers', lines: mcpLines(runtime)};
     case 'agents':
-      return {name: 'text', title: 'Subagents', lines: runtime.agents.list().length ? runtime.agents.list().map((a) => `${a.status.padEnd(9)} ${a.name} · ${a.modelLabel ?? a.requested}`) : ['No subagents in this conversation.']};
+      return {name: 'agents', agents: runtime.agents.list().map((a) => agentView(a))};
+    case 'shells':
+      return {name: 'shells', shells: runtime.tools.shells.list().map((sh) => shellView(runtime, sh))};
+    case 'shell': {
+      const sh = runtime.tools.shells.get(o.id);
+      return sh ? {name: 'shells', open: sh.id, shells: runtime.tools.shells.list().map((x) => shellView(runtime, x, x.id === sh.id))} : {name: 'text', title: 'Shell', lines: [`No shell #${o.id}.`]};
+    }
+    case 'rewind': {
+      const {REWIND_MODES} = await import('../session/rewind.js');
+      return {name: 'rewind', points: o.points, modes: REWIND_MODES.map(([mode, label, hint]) => ({mode, label, hint}))};
+    }
     default:
       return undefined;
   }
+}
+
+function agentView(a: import('../agents/manager.js').Subagent, withEvents = false) {
+  return {
+    id: a.id,
+    name: a.name,
+    task: a.task,
+    mode: a.mode,
+    model: a.modelLabel ?? a.requested,
+    status: a.status,
+    background: a.background,
+    startedAt: a.startedAt,
+    ...(a.endedAt ? {endedAt: a.endedAt} : {}),
+    ...(a.error ? {error: a.error} : {}),
+    ...(withEvents ? {events: a.events.slice(-300).map((e) => (e.kind === 'tool' ? {kind: 'tool', label: e.label, summary: e.summary, ok: e.ok, result: clip(e.result ?? '', 4000)} : e)), output: a.output} : {}),
+  };
+}
+
+function shellView(runtime: typeof import('../runtime.js').runtime, sh: import('../tools/shells.js').Shell, withOutput = false) {
+  return {
+    id: sh.id,
+    command: sh.command,
+    status: sh.status,
+    background: sh.background,
+    startedAt: sh.startedAt,
+    ...(sh.endedAt ? {endedAt: sh.endedAt} : {}),
+    ...(sh.exitCode !== undefined ? {exitCode: sh.exitCode} : {}),
+    origin: sh.origin ? 'agent' : 'you',
+    ...(withOutput ? {output: runtime.tools.shells.tail(sh, 400)} : {}),
+  };
 }
 
 function skillTag(s: import('../skills/index.js').Skill): string {
@@ -118,6 +158,7 @@ export async function runWorker(): Promise<number> {
   const {extensions} = await import('../extensions/index.js');
   const panels = await import('./panels.js');
   const nodePath = await import('node:path');
+  const {rewindPoints, rewindTo} = await import('../session/rewind.js');
   const label = (ref: {provider: string; model: string}) => catalog.get(ref as Parameters<typeof catalog.get>[0])?.label ?? ref.model;
 
   const waiting = new Map<number, (v: any) => void>();
@@ -169,6 +210,18 @@ export async function runWorker(): Promise<number> {
     }, 250);
   };
   extensions.on('change', chrome);
+  // An open shells or subagents window follows them live (at most every 300ms).
+  let liveTimer: NodeJS.Timeout | undefined;
+  const live = () => {
+    if (liveTimer || !['shells', 'shell', 'agents'].includes(overlay.name) ) return;
+    liveTimer = setTimeout(() => {
+      liveTimer = undefined;
+      if (['shells', 'shell', 'agents'].includes(overlay.name)) void showWindow(overlay, true);
+    }, 300);
+  };
+  runtime.tools.shells.on('change', live);
+  runtime.tools.shells.on('data', live);
+  runtime.agents.on('change', () => (live(), chrome()));
 
   // A command's echo ('user' through logMain) shows as "> /cost" with its output, not as a message;
   // a message you sent comes through add() and is a 'user' event.
@@ -212,7 +265,8 @@ export async function runWorker(): Promise<number> {
     }
   };
 
-  const showWindow = async (o: Overlay) => {
+  /** `again`: a live refresh of the open window, which keeps what the page has open in it. */
+  const showWindow = async (o: Overlay, again = false) => {
     overlay = o;
     if (o.name === 'none') return send({t: 'event', ev: {type: 'window', close: true}});
     if (o.name === 'vault') {
@@ -225,7 +279,7 @@ export async function runWorker(): Promise<number> {
     }
     if (o.name === 'login') return log('info', 'Accounts are signed in from a terminal: run rein there, then /login. Every chat here uses the accounts Rein has.');
     const w = await windowView(o).catch((err) => ({name: 'text', title: 'Error', lines: [(err as Error).message]}));
-    if (w) send({t: 'event', ev: {type: 'window', window: w}});
+    if (w) send({t: 'event', ev: {type: 'window', window: w, ...(again ? {refresh: true} : {})}});
     else log('info', `/${o.name} doesn't have a window in the web UI yet.`);
   };
 
@@ -273,6 +327,8 @@ export async function runWorker(): Promise<number> {
     setUpdateLog: () => {},
     compacting: undefined,
     setCompacting: (v) => send({t: 'event', ev: v ? {type: 'compact', phase: 'start', label: v.label} : {type: 'compact', phase: 'end'}}),
+    openRewind: () => void showWindow({name: 'rewind', points: rewindPoints()}),
+    openShells: () => void showWindow({name: 'shells'}),
     exit: () => {},
     refresh: async () => {
       skills = loadSkills();
@@ -372,6 +428,47 @@ export async function runWorker(): Promise<number> {
         else void turn(kick);
         return {ok: true};
       }
+      case 'rewind': {
+        const index = Number(args.index);
+        const mode = (['both', 'conversation', 'code'] as const).find((m) => m === args.mode);
+        if (!mode || !rewindPoints().some((p) => p.index === index)) throw new Error('pick one of your messages, and what to restore');
+        if (busy) {
+          runtime.tools.shells.killForeground();
+          runtime.engine.interrupt();
+        }
+        const text = await rewindTo(index, mode, log);
+        if (text !== undefined) {
+          send({t: 'event', ev: {type: 'clear'}});
+          log('info', 'Conversation rewound — your message is back in the box.');
+        }
+        send({t: 'snapshot', snapshot: snapshot()});
+        await showWindow({name: 'none'});
+        return {draft: text};
+      }
+      case 'shell': {
+        const sh = runtime.tools.shells.get(Number(args.id));
+        if (!sh) throw new Error('that shell is gone');
+        overlay = {name: 'shell', id: sh.id};
+        return shellView(runtime, sh, true);
+      }
+      case 'shell-kill':
+        if (!runtime.tools.shells.kill(Number(args.id))) throw new Error('that shell already ended');
+        return {ok: true};
+      case 'agent': {
+        const a = runtime.agents.get(Number(args.id));
+        if (!a) throw new Error('that subagent is gone');
+        return agentView(a, true);
+      }
+      case 'agent-message': {
+        const a = runtime.agents.get(Number(args.id));
+        if (!a) throw new Error('that subagent is gone');
+        if (typeof args.text !== 'string' || !args.text.trim()) throw new Error('nothing to send');
+        await runtime.agents.message(a.id, args.text.trim());
+        return agentView(a, true);
+      }
+      case 'agent-stop':
+        if (!runtime.agents.cancel(Number(args.id))) throw new Error("that subagent isn't running");
+        return {ok: true};
       case 'unqueue':
         queue = queue.filter((_, i) => i !== Number(args.index));
         chrome();

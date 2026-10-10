@@ -59,7 +59,10 @@ What a command prints shows in the thread under `› /command`, and `/usage` and
 | `/settings [tab]` | Every tab of the terminal's: Status line and Sidebar (check to show, arrows to reorder), General, Agents, Accounts, Safety, and Advanced with every key in `config.json` (searchable; empty means the default) |
 | `/model` | Every section (Chat model, Subagents, Subagent priority, Decision model, Compaction model, Advisor, Web) and the chat model's effort |
 | `/goal:plan` | The unfinished plans in `.rein/plans/`, to start one as a goal |
-| `/mcp`, `/agents` | The MCP servers and their state; the conversation's subagents |
+| `/rewind` | Your messages, newest first: pick one, then restore code and conversation, the conversation only, or the code only. The message comes back into the box to edit and resend |
+| `/shells`, `/shell <id>` | The commands you and the agent started, with their status; open one for its output (it follows a running command) and **Stop it** |
+| `/agents` | The conversation's subagents: open one to follow what it does, message it, or **Stop** it (clicking one in the sidebar opens this too) |
+| `/mcp` | The MCP servers and their state |
 | `/vault set NAME` | A hidden field for the value |
 
 The **Settings** page (bottom left) opens the same settings and model windows for the chat you're in.
@@ -71,7 +74,6 @@ A few commands are for the terminal, and say what to use instead:
 | `/login` | Sign accounts in from a terminal (`rein`, then `/login`); every chat uses them |
 | `/resume` | Open a conversation from the list on the left |
 | `/tui`, `/voice`, `/remote`, `/exit` | Terminal features (close a chat from the list) |
-| `/rewind`, `/shells`, `/shell` | Not in the web UI yet; use them from the terminal |
 
 ### Status line and sidebar
 
