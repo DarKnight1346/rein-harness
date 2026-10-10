@@ -53,8 +53,8 @@ Entries Rein can't use (no path or name, a name used twice, invalid YAML) are sk
 
 ## `/workspace`
 
-:::note[Large codebases pack]
-`/workspace` is in the **Large codebases** pack, which is off by default: turn it on in `/settings` → **Packs** ([Packs](../../reference/commands/#packs)). The manifest and everything it sets up work without it.
+:::note
+`/workspace` is a specialist command: it works as always, and shows in the `/` list once you start typing its name ([Specialist commands](../../reference/commands/#specialist-commands)).
 :::
 
 ```text title="rein"
@@ -129,8 +129,8 @@ A change that spans repos ends up as one pull request per repo, and reviewers ne
 
 ## One package of a monorepo
 
-:::note[Large codebases pack]
-`/scope` is in the **Large codebases** pack, which is off by default: turn it on in `/settings` → **Packs** ([Packs](../../reference/commands/#packs)). `rein --scope <dir>` works without it.
+:::note
+`/scope` is a specialist command: it works as always, and shows in the `/` list once you start typing its name ([Specialist commands](../../reference/commands/#specialist-commands)).
 :::
 
 The opposite problem: one huge repo where you only work on one package. `rein --scope packages/api` (or `/scope packages/api` in a session) focuses the agent there:

@@ -15,14 +15,14 @@ const w = (f: string, s: string) => {
 };
 const j = (f: string, o: unknown) => w(f, JSON.stringify(o));
 
-/** A Rein-layout marketplace: a skill, a theme, a pack switch and a bundle of two of them. */
+/** A Rein-layout marketplace: a skill, a theme, an experiment switch and a bundle of two of them. */
 function reinMarket(dir: string, version = '1.0.0') {
   j(path.join(dir, 'marketplace.json'), {name: 'Test Market', description: 'For tests'});
   j(path.join(dir, 'items/commits/rein.json'), {id: 'commits', name: 'Commits', version, description: 'Commit messages', category: 'skills'});
   w(path.join(dir, 'items/commits/skills/write/SKILL.md'), '---\nname: write\ndescription: Write a commit message\n---\nWrite one.');
   j(path.join(dir, 'items/violet/rein.json'), {id: 'violet', name: 'Violet', version: '1.0.0', description: 'A theme', theme: {accent: '#a78bfa'}});
-  j(path.join(dir, 'items/pack-ci/rein.json'), {id: 'pack-ci', name: 'CI pack', version: '1.0.0', description: 'CI', config: {packs: ['ci']}});
-  j(path.join(dir, 'items/starter/rein.json'), {id: 'starter', name: 'Starter', version: '1.0.0', description: 'Both', requires: ['commits', 'pack-ci']});
+  j(path.join(dir, 'items/keep-going/rein.json'), {id: 'keep-going', name: 'Keep going', version: '1.0.0', description: 'An experiment', config: {experiments: ['keep-going']}});
+  j(path.join(dir, 'items/starter/rein.json'), {id: 'starter', name: 'Starter', version: '1.0.0', description: 'Both', requires: ['commits', 'keep-going']});
   w(path.join(dir, 'items/starter/README.md'), '# Starter\n\nEverything a team needs.');
 }
 
@@ -45,7 +45,7 @@ afterEach(() => {
 
 /** Settings in memory, standing in for the runtime. */
 const host = () => {
-  const h = {config: {packs: [], experiments: []} as any, async setConfig(p: any) {
+  const h = {config: {experiments: []} as any, async setConfig(p: any) {
     h.config = {...h.config, ...p};
   }};
   return h;
@@ -64,7 +64,7 @@ describe('marketplaces', () => {
     const [m] = await loadMarketplaces();
     expect(m!.official).toBe(true);
     expect(m!.name).toBe('Test Market');
-    expect(m!.items.map((i) => [i.id, i.category])).toEqual([['commits', 'skills'], ['pack-ci', 'feature'], ['starter', 'bundle'], ['violet', 'ui']]);
+    expect(m!.items.map((i) => [i.id, i.category])).toEqual([['commits', 'skills'], ['keep-going', 'feature'], ['starter', 'bundle'], ['violet', 'ui']]);
     expect(m!.items.find((i) => i.id === 'starter')!.readme).toContain('Everything a team needs');
     expect(() => removeMarketplace(official)).toThrow(/built in and can't be removed/);
   });
@@ -102,18 +102,18 @@ describe('marketplaces', () => {
     const h = host();
     const all = (await loadMarketplaces()).flatMap((m) => m.items);
     const r = await installItem(h, all, 'starter');
-    expect(r.lines.map((l) => l.split(' (')[0])).toEqual(['Installed Commits 1.0.0', 'Installed CI pack 1.0.0', 'Installed Starter 1.0.0']);
+    expect(r.lines.map((l) => l.split(' (')[0])).toEqual(['Installed Commits 1.0.0', 'Installed Keep going 1.0.0', 'Installed Starter 1.0.0']);
     expect(r.restart).toBe(false);
-    expect(installedItems().map((i) => i.id).sort()).toEqual(['commits', 'pack-ci', 'starter']);
-    expect(h.config.packs).toEqual(['ci']);
+    expect(installedItems().map((i) => i.id).sort()).toEqual(['commits', 'keep-going', 'starter']);
+    expect(h.config.experiments).toEqual(['keep-going']);
     // The skill loads like a plugin's, and shows in a bare `/` list (you chose to install it).
     const skill = loadSkills(home).find((s) => s.name === 'commits:write');
     expect(skill?.marketplace).toBe(true);
     expect(suggestCommands('/', loadSkills(home)).map((c) => c.name)).toContain('commits:write');
     expect(existsSync(path.join(pluginsDir(), 'commits', '.claude-plugin', 'plugin.json'))).toBe(true);
-    await uninstallItem(h, 'pack-ci');
-    expect(h.config.packs).toEqual([]);
-    await expect(uninstallItem(h, 'pack-ci')).rejects.toThrow(/isn't installed/);
+    await uninstallItem(h, 'keep-going');
+    expect(h.config.experiments).toEqual([]);
+    await expect(uninstallItem(h, 'keep-going')).rejects.toThrow(/isn't installed/);
   });
 
   it('applies a theme and restores the previous one, unless you changed it since', () => {
@@ -123,7 +123,7 @@ describe('marketplaces', () => {
     expect(change.patch.theme).toEqual({accent: '#a78bfa'});
     expect(unapplyItem({theme: {accent: '#a78bfa'}}, change.applied)).toEqual({theme: {accent: 'green'}});
     expect(unapplyItem({theme: {accent: 'red'}}, change.applied)).toBeUndefined(); // you changed it: kept
-    expect(applyItem({packs: ['ci']}, {config: {packs: ['ci']}})).toBeUndefined(); // already on: nothing to do
+    expect(applyItem({experiments: ['keep-going']}, {config: {experiments: ['keep-going']}})).toBeUndefined(); // already on: nothing to do
   });
 
   it('finds updates to what you installed', async () => {

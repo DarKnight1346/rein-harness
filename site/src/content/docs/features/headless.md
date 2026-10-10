@@ -267,8 +267,8 @@ With `--permission-mode ask` the reviewer can read the checkout, search it and r
 
 ## Scheduled jobs
 
-:::note[Insight and automation pack]
-`/schedule` is in the **Insight and automation** pack, which is off by default: turn it on in `/settings` → **Packs** ([Packs](../../reference/commands/#packs)). `rein schedule` works without it.
+:::note
+`/schedule` is a specialist command: it works as always, and shows in the `/` list once you start typing its name ([Specialist commands](../../reference/commands/#specialist-commands)).
 :::
 
 Some work should just happen every week: bump patch versions and open a PR if the tests pass, triage the flaky tests, refresh the docs index. Put the jobs in the project:

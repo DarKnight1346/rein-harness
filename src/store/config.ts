@@ -127,8 +127,6 @@ export type Config = {
   otel?: OtelConfig;
   /** Efficiency experiments to turn on, by name (see the configuration reference): measured before they become defaults. */
   experiments: string[];
-  /** Command packs that are on (commands/packs.ts): specialist commands and skills, off by default. */
-  packs?: string[];
   /** Run simple shell reads and searches the agent writes (cat, head, grep -rn, sed -n, ls, find -name) as the built-in tools. */
   steerShell: boolean;
   /** MCP servers asking for a completion (sampling): ask you per server (default), allow, or refuse. */

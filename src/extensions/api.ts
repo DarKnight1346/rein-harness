@@ -7,7 +7,7 @@
  * Item authors: `import type {Rein} from 'rein-harness/api'` for the types.
  */
 /** 1: commands, tools, UI, services. 2: checks (endOfTurn, afterEdit) and the requestStart event. */
-export const API_VERSION = 2;
+export const API_VERSION = 3;
 
 export type LogKind = 'info' | 'error';
 
@@ -87,6 +87,12 @@ export type Rein = {
   };
   /** Run a program (no shell), in `cwd` (default: the project). */
   exec(command: string, args: string[], opts?: {cwd?: string; timeoutMs?: number}): Promise<ExecResult>;
+  /**
+   * A shell command line run as the agent's own commands are: through the shell tool, so the
+   * approval mode, permission rules and sandbox apply (in ask mode the user approves it first).
+   * `ok` is false when it failed or wasn't allowed. API 3.
+   */
+  shell(command: string, opts?: {timeoutMs?: number}): Promise<{ok: boolean; text: string}>;
   /** git, in `cwd` (default: the project). */
   git(args: string[], cwd?: string): Promise<ExecResult>;
   /** The ripgrep that ships with Rein (undefined if it's missing). */

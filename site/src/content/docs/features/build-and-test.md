@@ -5,8 +5,8 @@ description: Feedback from builds, tests and CI at monorepo scale. What a change
 
 Big repos make the build-and-test loop slow and noisy: the whole suite takes an hour, logs run to thousands of lines, and one flaky test sends the agent chasing ghosts. These features make the loop fast and focused.
 
-:::note[CI and pull requests pack]
-`/ci`, `/affected`, `/flaky`, `/build`, `/coverage`, `/mutate` are in the **CI and pull requests** pack, which is off by default: turn it on in `/settings` → **Packs** ([Packs](../../reference/commands/#packs)). What Rein does on its own here works without it.
+:::note
+`/affected`, `/build`, `/coverage` and `/mutate` come with the **Test quality** item from the [marketplace](../marketplace/), code and all: `/marketplace install quality`. Its `affected` tool and its affected-tests check are off until you turn them on (`/affected tool on`, `/affected check on`). `/ci` and `/flaky` are specialist commands in Rein: they show in the `/` list once you start typing their name.
 :::
 
 ## What a change affects
@@ -31,7 +31,7 @@ In a monorepo with **Nx**, **Turborepo**, **Bazel** or **Pants**, the build syst
 | Bazel | `bazel query 'rdeps(//..., set(<files>))'` | `bazel test` on the `*_test` targets among them |
 | Pants | `pants --changed-since=HEAD --changed-dependents=transitive list` | the same, with `test` |
 
-With the `affected-tool` [experiment](../../reference/configuration/#experiments) on, the agent gets an [`affected`](../../reference/tools/#affected) tool that answers the same question, so it can run the tests that matter instead of the whole suite. The tool only appears in workspaces with one of these build systems.
+With the Test quality item's tool on (`/affected tool on`, from the next start), the agent gets an [`affected`](../../reference/tools/#affected) tool that answers the same question, so it can run the tests that matter instead of the whole suite. The tool only appears in workspaces with one of these build systems.
 
 ## Build caches
 
@@ -76,7 +76,7 @@ The same failed run is only handed over once. Logs are read for GitHub Actions c
 
 ## Testing what a request changed
 
-With the `verify-affected` [experiment](../../reference/configuration/#experiments) on, in an Nx, Turborepo, Bazel or Pants workspace, Rein runs the tests for what a request changed once, at the end of its turn, after the [code check](../code-intelligence/):
+With the Test quality item's check on (`/affected check on`), in an Nx, Turborepo, Bazel or Pants workspace, Rein runs the tests for what a request changed once, at the end of its turn, after the [code check](../code-intelligence/):
 
 - it finds the affected projects or targets (above) and runs their test command;
 - it runs it through the `shell` tool, so your approval mode, permission rules and the sandbox apply (in `ask` mode you approve it first);

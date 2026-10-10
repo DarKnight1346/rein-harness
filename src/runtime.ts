@@ -11,11 +11,9 @@ import {maskSecrets} from './tools/secrets.js';
 import {sastCheck} from './tools/sast.js';
 import {loadPolicy, modelBlocked} from './policy.js';
 import {reinConfigDir} from './store/paths.js';
-import {affectedTool} from './build/tool.js';
 import {repoMapTool} from './context/repoMap.js';
 import {orgSearchTool} from './context/orgSearch.js';
 import {semanticSearchTool} from './context/semantic.js';
-import {affected, changedFiles} from './build/affected.js';
 import {CiWatcher} from './build/ci.js';
 import {branchSize} from './pr/github.js';
 import {digestLog, formatDigest} from './tools/logDigest.js';
@@ -73,7 +71,6 @@ import {isMilestoneCopy, todoTool} from './tools/todo.js';
 import {imageGenRef, imageTool} from './tools/image.js';
 import {newTranscript, saveTranscript, setSaveFilter} from './session/transcript.js';
 import {setPromptCacheTtl} from './providers/claude/session.js';
-import {setEnabledPacks} from './commands/packs.js';
 import {setExtensionCommands} from './commands/index.js';
 import {Pets} from './pets/index.js';
 import {loadSkills} from './skills/index.js';
@@ -124,7 +121,6 @@ export class Runtime {
   private sastChecked = false;
   /** Marketplace items' end-of-turn checks that ran for this request (once each). */
   private extChecksRun = new Set<string>();
-  private affectedChecked = false;
   private sizeChecked = false;
   /** The last budget stop (for rein -p's exit status), cleared by your next message. */
   budgetStop: string | undefined;
@@ -145,20 +141,6 @@ export class Runtime {
     this.budgetStop = msg;
     if (this.goals.goal?.status === 'active') this.goals.pause();
     return msg;
-  }
-
-  /** verify-affected: run the affected tests; a failure as the message for the agent (undefined: they passed or nothing to run). */
-  private async verifyAffected(): Promise<string | undefined> {
-    const root = process.cwd();
-    const files = await changedFiles(root);
-    const a = files.length ? await affected(root, files) : undefined;
-    if (!a?.test) return undefined;
-    // Through the shell tool, so the approval mode, permission rules and the sandbox apply as to the agent's own commands.
-    const r = await this.tools.call('shell', {command: a.test, timeout_ms: Math.min(60, this.config.shellMaxMinutes || 60) * 60_000});
-    if (r.ok) return undefined;
-    const out = r.text.trim();
-    const digest = formatDigest(digestLog(out), out.split('\n').length);
-    return `The tests for what this request changed failed (${a.system}: ${a.targets.slice(0, 8).join(', ')}${a.targets.length > 8 ? ', …' : ''}; \`${a.test}\`):\n${digest ?? out.split('\n').slice(-60).join('\n')}\nFix them before you finish, or if a failure isn't caused by this change, say so.`;
   }
 
   /** /pr digest: a plain-language summary of the branch for reviewers (risks, test evidence), from the utility model. */
@@ -371,6 +353,10 @@ export class Runtime {
       exec: async (command, args, opts) => {
         const r = await run(command, args, {cwd: opts?.cwd ?? process.cwd(), timeoutMs: opts?.timeoutMs ?? 120_000}).catch((err) => ({code: 1, stdout: '', stderr: (err as Error).message}));
         return {code: r.code ?? 1, stdout: r.stdout, stderr: r.stderr};
+      },
+      shell: async (command, timeoutMs) => {
+        const r = await this.tools.call('shell', {command, timeout_ms: timeoutMs ?? Math.min(60, this.config.shellMaxMinutes || 60) * 60_000});
+        return {ok: r.ok, text: r.text};
       },
       ripgrep: async () => (await ripgrep()) ?? undefined,
       workspace: () => {
@@ -705,7 +691,6 @@ Drop superseded reads of the same file, routine listings, and output that no lon
       this.sastChecked = false;
       this.extChecksRun.clear();
       extensions.emit('requestStart');
-      this.affectedChecked = false;
       this.sizeChecked = false;
       this.budgetStop = undefined;
       this.tools.watchdog.reset();
@@ -827,12 +812,6 @@ Drop superseded reads of the same file, routine listings, and output that no lon
       const size = await branchSize(process.cwd()).catch(() => undefined);
       if (size && size.lines > this.config.prMaxLines)
         this.uiLog(`This branch now changes ${size.lines.toLocaleString()} lines (+${size.added} −${size.removed} vs ${size.base}), over prMaxLines (${this.config.prMaxLines}). Smaller PRs get reviewed faster: /pr split asks the agent to split it into a stack.`);
-    }
-    // verify-affected: in an Nx/Turborepo/Bazel/Pants workspace, the tests for what this request changed, once.
-    if (activeExperiments(this.config).includes('verify-affected') && !this.affectedChecked && this.engine && this.checkpoints.changedSince(this.currentTurn()).length) {
-      this.affectedChecked = true;
-      const failed = await this.verifyAffected().catch(() => undefined);
-      if (failed) return {reason: failed, kind: 'diagnostics'};
     }
     // keep-going: the agent ended its turn but its own reply says the work isn't done ("I've only
     // partly done this"), and it isn't waiting on the user: send it back, a few times per request.
@@ -1031,7 +1010,6 @@ Drop superseded reads of the same file, routine listings, and output that no lon
         void saveTranscript(t).catch(() => {});
       }),
       ...webTools(() => this.config),
-      affectedTool(() => activeExperiments(this.config), () => process.cwd()),
       repoMapTool(() => activeExperiments(this.config)),
       orgSearchTool(() => this.config),
       semanticSearchTool(() => this.config, () => process.cwd()),
@@ -1156,7 +1134,6 @@ Drop superseded reads of the same file, routine listings, and output that no lon
     setInScope(() => activeExperiments(this.config).includes('in-scope'));
     setManyCalls(() => activeExperiments(this.config).includes('many-calls'));
     setSelfTest(() => activeExperiments(this.config).includes('self-test'));
-    setEnabledPacks(() => this.config.packs ?? []);
     setExtensionCommands(() => extensions.commands.map((c) => c.value));
     setPromptCacheTtl(() => (activeExperiments(this.config).includes('cache-5m') ? '5m' : undefined));
     setCacheWriteTtl(() => (activeExperiments(this.config).includes('cache-5m') ? '5m' : '1h'));

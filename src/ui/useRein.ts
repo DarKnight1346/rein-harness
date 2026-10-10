@@ -3,7 +3,7 @@ import {useApp, useInput} from 'ink';
 import {detectImports, importAccounts, skipImport, type AccountRow} from '../accounts/service.js';
 import {collectUsage, type UsageRow} from '../accounts/usage.js';
 import {COMMANDS, parseInput, shadowedSkills, suggestCommands} from '../commands/index.js';
-import {commandEnabled, movedMessage, packOffMessage, packsHint} from '../commands/packs.js';
+import {movedMessage} from '../commands/moved.js';
 import {commandColumn} from './format.js';
 import {loadSkills, skillDirs, skillPrompt, type Skill} from '../skills/index.js';
 import {autoUpdate, reinVersion, runUpdate, type UpdateLine} from '../commands/update.js';
@@ -78,12 +78,9 @@ import {buildIndex, DEFAULT_MODEL as EMBED_MODEL, formatSemanticHits, loadIndex,
 import {estimateGoalCost} from '../goals/estimate.js';
 import {loadPolicy, type PolicyRule} from '../policy.js';
 import {reinConfigDir} from '../store/paths.js';
-import {affected, changedFiles, detectBuild, formatAffected} from '../build/affected.js';
+import {changedFiles} from '../util/changes.js';
 import {clearFlaky, knownFlaky} from '../build/flaky.js';
-import {detectCaches} from '../build/caches.js';
 import {failed as failedChecks, MAX_FIX_ROUNDS, prChecks, summary as ciSummary} from '../build/ci.js';
-import {addedLinesByFile, findReport, parseCoverage, ranges, uncoveredChanges} from '../build/coverage.js';
-import {detectMutator, formatMutation, mutate} from '../build/mutate.js';
 import {branchSize, currentPr, describePr, queueFor, reviewComments, runQueue} from '../pr/github.js';
 import {linkPrs, prsForBranch} from '../pr/linked.js';
 import {loadPacks, packFiles, packMessage, savePack} from '../context/packs.js';
@@ -1150,11 +1147,6 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
       log('error', `Unknown command /${parsed.name}. Try /help.`);
       return;
     }
-    const packOff = packOffMessage(parsed.name);
-    if (packOff) {
-      log('info', packOff);
-      return;
-    }
     // Commands about the main conversation itself: say so instead of silently acting on main while
     // a subagent is on screen.
     const MAIN_ONLY: Record<string, string> = {
@@ -1457,19 +1449,6 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
           for (const r of p.deny ?? []) lines.push(`  deny  ${r}`);
         }
         log('info', lines.length ? `Permission rules (deny wins):\n${lines.join('\n')}` : 'No permission rules yet. Choose "3 Always allow" in an approval prompt, or add "permissions": {"allow": [...], "deny": [...]} to .rein/settings.json (Claude Code format; .claude/settings.json rules apply too).');
-        break;
-      }
-      case 'affected': {
-        const root = process.cwd();
-        if (!detectBuild(root)) {
-          log('info', 'No Nx, Turborepo, Bazel or Pants workspace here (nx.json, turbo.json, MODULE.bazel/WORKSPACE, pants.toml).');
-          break;
-        }
-        void changedFiles(root).then(async (files) => {
-          if (!files.length) return log('info', 'No changes (vs HEAD) to analyze.');
-          const a = await affected(root, files);
-          log(a?.note && !a.targets.length ? 'error' : 'info', a ? `${files.length} changed file${files.length === 1 ? '' : 's'}. ${formatAffected(a)}` : 'No build system answered.');
-        });
         break;
       }
       case 'owners': {
@@ -1776,50 +1755,6 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
         });
         break;
       }
-      case 'mutate': {
-        const root = process.cwd();
-        const wantTests = parsed.args.trim() === 'tests';
-        void changedFiles(root).then(async (files) => {
-          if (!files.length) return log('info', 'No changes (vs HEAD) to mutation-test.');
-          const m = await detectMutator(root, files);
-          if (!m) return log('info', 'No mutation tool for these files: install Stryker (npm i -D @stryker-mutator/core), mutmut (Python) or go-mutesting (Go).');
-          log('info', `Running ${m.tool} on ${files.length} changed file${files.length === 1 ? '' : 's'} (this can take a while)…`);
-          const r = await mutate(root, files, m);
-          const text = formatMutation(r);
-          if (!wantTests || !(r.survivors?.length || r.summary)) return log(r.error ? 'error' : 'info', text);
-          const task = `${text}\n\nStrengthen the tests so they catch these: each surviving mutant is a bug the tests would miss. Add or tighten assertions (don't change the code under test to suit them), then run the tests.`;
-          if (chat.busy) setQueued((q) => [...q, task]);
-          else void chat.send(task).then(bump);
-        });
-        break;
-      }
-      case 'coverage': {
-        const root = process.cwd();
-        const report = findReport(root);
-        if (!report) {
-          log('info', 'No coverage report here (coverage/lcov.info, coverage-final.json, coverage.xml or a Go cover profile). Run your tests with coverage first.');
-          break;
-        }
-        const wantTests = parsed.args.trim() === 'tests';
-        void addedLinesByFile(root).then((added) => {
-          let hits;
-          try {
-            hits = parseCoverage(report, readFileSync(report, 'utf8'));
-          } catch (err) {
-            return log('error', `Couldn't read ${nodePath.relative(root, report)}: ${(err as Error).message}`);
-          }
-          const missed = uncoveredChanges(hits, root, added);
-          const age = Math.round((Date.now() - statSync(report).mtimeMs) / 60_000);
-          const from = `${nodePath.relative(root, report)} (${age < 1 ? 'just now' : `${age} min ago`})`;
-          if (!missed.length) return log('info', `Every changed line the report covers ran in a test, per ${from}.`);
-          const list = missed.map((m) => `  ${m.file}: ${ranges(m.lines)}`);
-          if (!wantTests) return log('info', [`Changed lines no test ran, per ${from}:`, ...list, '/coverage tests asks the agent to write tests for them.'].join('\n'));
-          const task = [`Write tests that cover these lines my changes added, which no test runs (from ${from}):`, ...list, '', "Follow the project's existing test style and location. Test the behavior, not just the lines; run the new tests to show they pass."].join('\n');
-          if (chat.busy) setQueued((q) => [...q, task]);
-          else void chat.send(task).then(bump);
-        });
-        break;
-      }
       case 'ci': {
         const sub = parsed.args.trim();
         if (sub === 'stop') {
@@ -1837,23 +1772,6 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
           if (!res.checks.length) return log('info', 'No checks on this branch\'s pull request yet.');
           log(failedChecks(res.checks).length ? 'error' : 'info', [`${ciSummary(res.checks)}${runtime.ci.watching ? ' · watching' : ''}`, ...res.checks.map((c) => `  ${c.bucket === 'pass' ? '✓' : c.bucket === 'fail' ? '✗' : c.bucket === 'pending' ? '…' : '·'} ${c.workflow ? `${c.workflow} / ` : ''}${c.name}`), ...(failedChecks(res.checks).length && !runtime.ci.watching ? ['/ci watch hands failures to the agent.'] : [])].join('\n'));
         });
-        break;
-      }
-      case 'build': {
-        const root = process.cwd();
-        const b = detectBuild(root);
-        const caches = detectCaches(root);
-        const sandbox = runtime.config.sandbox ?? 'write';
-        if (!b && !caches.length) {
-          log('info', 'No Nx, Turborepo, Bazel or Pants workspace and no build cache configured here.');
-          break;
-        }
-        const remoteBlocked = sandbox === 'strict' && caches.some((c) => c.kind === 'remote');
-        log(remoteBlocked ? 'error' : 'info', [
-          b ? `Build system: ${b.system}${b.bin.includes('node_modules') ? ' (from node_modules)' : ''}. /affected shows what your changes affect.` : 'No monorepo build system (Nx, Turborepo, Bazel, Pants).',
-          ...(caches.length ? ['Caches:', ...caches.map((c) => `  ${c.system}: ${c.kind} (${c.where})`)] : ['No build cache configured.']),
-          remoteBlocked ? 'The sandbox is strict (no network), so agent builds can\'t reach the remote cache: /settings sandbox write allows it.' : caches.length ? `Agent builds use these: the sandbox (${sandbox}) leaves build caches writable${caches.some((c) => c.kind === 'remote') && sandbox !== 'off' ? ' and the network open' : ''}.` : '',
-        ].filter(Boolean).join('\n'));
         break;
       }
       case 'flaky': {
@@ -2303,7 +2221,7 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
           setOverlay({name: 'help'});
           break;
         }
-        log('info', ((cs) => cs.map((c) => `${commandColumn(cs.map((x) => x.name))(c.name)}${c.usage}`))(COMMANDS.filter((c) => commandEnabled(c.name))).join('\n') + `\n${packsHint()}\nesc interrupts a reply · rein --continue picks a conversation to continue`);
+        log('info', ((cs) => cs.map((c) => `${commandColumn(cs.map((x) => x.name))(c.name)}${c.usage}`))(COMMANDS).join('\n') + `\nesc interrupts a reply · rein --continue picks a conversation to continue`);
         break;
       case 'clear':
         runtime.agents.closeAll();

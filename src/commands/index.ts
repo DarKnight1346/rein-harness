@@ -1,7 +1,6 @@
 import type {Skill} from '../skills/index.js';
-import {commandEnabled} from './packs.js';
 
-export type CommandName = 'marketplace' | 'pet' | 'trackers' | 'remote' | 'voice' | 'vault' | 'lsp' | 'plugins' | 'export' | 'ide' | 'memory' | 'mcp' | 'rewind' | 'permissions' | 'add-dir' | 'workspace' | 'owners' | 'sessions' | 'env' | 'schedule' | 'cache' | 'stats' | 'bestof' | 'risk' | 'arch' | 'adr' | 'spec' | 'index' | 'map' | 'pack' | 'pr' | 'mutate' | 'coverage' | 'ci' | 'build' | 'flaky' | 'affected' | 'policy' | 'cost' | 'scope' | 'goal' | 'goal:plan' | 'btw' | 'agents' | 'agent' | 'resume' | 'login' | 'usage' | 'model' | 'context' | 'compact' | 'shells' | 'settings' | 'update' | 'tui' | 'clear' | 'help' | 'exit';
+export type CommandName = 'marketplace' | 'pet' | 'trackers' | 'remote' | 'voice' | 'vault' | 'lsp' | 'plugins' | 'export' | 'ide' | 'memory' | 'mcp' | 'rewind' | 'permissions' | 'add-dir' | 'workspace' | 'owners' | 'sessions' | 'env' | 'schedule' | 'cache' | 'stats' | 'bestof' | 'risk' | 'arch' | 'adr' | 'spec' | 'index' | 'map' | 'pack' | 'pr' | 'ci' | 'flaky' | 'policy' | 'cost' | 'scope' | 'goal' | 'goal:plan' | 'btw' | 'agents' | 'agent' | 'resume' | 'login' | 'usage' | 'model' | 'context' | 'compact' | 'shells' | 'settings' | 'update' | 'tui' | 'clear' | 'help' | 'exit';
 
 /**
  * Built-in commands, in the order the `/` list shows them (everyday ones first). `description` is
@@ -43,31 +42,27 @@ export const COMMANDS: Command[] = [
   {name: 'voice', description: 'Voice input, on your machine', usage: 'Voice input, on your machine (whisper.cpp): hold Ctrl+Space to talk. /voice shows status or starts/stops recording; /voice setup installs what it needs', listed: false},
   {name: 'lsp', description: 'The language servers Rein runs', usage: "Built-in code intelligence: the language servers Rein runs, their memory, what's installed (/lsp stop stops them)", listed: false},
   {name: 'plugins', description: 'Claude Code and Codex plugins Rein loaded', usage: 'Installed Claude Code and Codex plugins Rein loaded: their commands, skills, agents, hooks and MCP servers', listed: false},
-  {name: 'ci', description: 'Pull request checks, and fixing failures as they come', usage: "This branch's pull request checks: /ci shows them, /ci watch fixes failures as they come (asks before pushing), /ci stop"},
-  {name: 'pr', description: "This branch's pull request: status, digest, split, comments", usage: "This branch's pull request: /pr (status), /pr digest [post], /pr split, /pr comments, /pr queue [yes]"},
-  {name: 'affected', description: 'What your changes affect, and the command that tests just that', usage: "What your changes affect, from the monorepo's build graph (Nx, Turborepo, Bazel, Pants), and the command that tests just that"},
-  {name: 'flaky', description: 'Tests known to be flaky here', usage: 'Tests known to be flaky here (they failed and passed on the same code): /flaky lists them, /flaky clear forgets them'},
-  {name: 'build', description: 'The build system here and its caches', usage: 'The build system here (Nx, Turborepo, Bazel, Pants), its caches, and whether the sandbox lets agent builds use them'},
-  {name: 'coverage', description: 'Lines your changes add that no test covers', usage: 'Lines your changes add that no test covers, from the last coverage report; /coverage tests asks the agent to write tests for them'},
-  {name: 'mutate', description: 'Mutation testing of your changed files', usage: 'Mutation testing of your changed files (Stryker, mutmut, go-mutesting): do the tests catch planted bugs? /mutate tests asks the agent to close the gaps'},
-  {name: 'trackers', description: 'Issue trackers handing work to Rein', usage: 'Issue trackers handing work to Rein (GitHub, Linear, GitLab, Azure DevOps, Jira): status · check · retry <ref>'},
-  {name: 'spec', description: 'Spec mode: requirements, design, then tasks', usage: 'Spec mode: requirements, design, then tasks, each approved; /spec <what>, /spec resume <name>, /spec trace <name>, /spec lists them'},
-  {name: 'adr', description: 'Architecture decision records', usage: 'Architecture decision records: /adr lists them, /adr new <title> starts the next one'},
-  {name: 'arch', description: 'Check the code against the architecture rules', usage: 'Architecture rules (.rein/architecture.yaml): /arch checks every file against them'},
-  {name: 'risk', description: 'What a plan touches, and how risky it is', usage: "What a plan touches: files, services, owners, contracts and migrations. /risk [plan file or spec name] (default: the newest plan)"},
-  {name: 'bestof', description: 'Run a task on Claude and Codex at once; keep what passes', usage: 'Run a task on Claude and Codex at once, each in its own worktree; keep the result that passes the tests: /bestof [--test "<command>"] <task>'},
-  {name: 'workspace', description: 'The repos of this workspace', usage: 'The repos of this workspace (rein.workspace.yaml): /workspace lists them, /workspace clone clones the missing ones, /workspace prs and link-prs link the PRs of one change'},
-  {name: 'scope', description: 'Work in one package of a monorepo', usage: 'Work in one package of a monorepo: /scope <dir> (search, list, shell and instructions start there), /scope off, or no argument to show it'},
-  {name: 'owners', description: 'Who owns your changed files', usage: 'Who owns your changed files (or a path): CODEOWNERS, Backstage, then git history'},
-  {name: 'index', description: 'The semantic index, for search by meaning', usage: 'Build or update the local semantic index (Ollama) for search by meaning: /index, /index <query> to search it, /index status'},
-  {name: 'map', description: "A map of the repo's declarations", usage: "A map of the repo's declarations, file by file: /map shows it, /map send gives it to the agent"},
-  {name: 'pack', description: 'Context packs to attach to a message', usage: 'Context packs (.rein/packs.yaml): /pack lists them, /pack <name> [message] attaches one, /pack save <name> <globs…> makes one'},
-  {name: 'stats', description: 'How your requests go: time, tools, failures and cost', usage: 'How your requests go, from saved conversations: time, tool calls, failures, retries, tests passed and cost, per model: /stats [days] [all]'},
-  {name: 'cache', description: 'Prompt-cache hit rates, and what made it cold', usage: 'Prompt-cache hit rates per model, and what made the cache cold: /cache [days] [all]'},
-  {name: 'schedule', description: 'Scheduled jobs', usage: 'Scheduled jobs in .rein/schedule.yaml: when each runs next and how the last run went (rein schedule install runs them on time)'},
-  {name: 'env', description: "The dev environment the agent's commands run in", usage: "The dev environment the agent's commands run in (dev container, Nix, devbox): /env shows it, /env up starts it now"},
-  {name: 'sessions', description: 'Every Rein running on this machine', usage: 'Every running Rein on this machine, across repos: state, folder, goal. /sessions send <pid> <message> steers one; rein sessions is the full dashboard'},
-  {name: 'policy', description: 'The policy in force here', usage: 'The policy in force here (.rein/policy.yaml, ~/.rein/policy.yaml): its rules, allowed models and any mistakes in the files'},
+  {name: 'ci', description: 'Pull request checks, and fixing failures as they come', usage: "This branch's pull request checks: /ci shows them, /ci watch fixes failures as they come (asks before pushing), /ci stop", listed: false},
+  {name: 'pr', description: "This branch's pull request: status, digest, split, comments", usage: "This branch's pull request: /pr (status), /pr digest [post], /pr split, /pr comments, /pr queue [yes]", listed: false},
+  {name: 'flaky', description: 'Tests known to be flaky here', usage: 'Tests known to be flaky here (they failed and passed on the same code): /flaky lists them, /flaky clear forgets them', listed: false},
+  {name: 'trackers', description: 'Issue trackers handing work to Rein', usage: 'Issue trackers handing work to Rein (GitHub, Linear, GitLab, Azure DevOps, Jira): status · check · retry <ref>', listed: false},
+  {name: 'spec', description: 'Spec mode: requirements, design, then tasks', usage: 'Spec mode: requirements, design, then tasks, each approved; /spec <what>, /spec resume <name>, /spec trace <name>, /spec lists them', listed: false},
+  {name: 'adr', description: 'Architecture decision records', usage: 'Architecture decision records: /adr lists them, /adr new <title> starts the next one', listed: false},
+  {name: 'arch', description: 'Check the code against the architecture rules', usage: 'Architecture rules (.rein/architecture.yaml): /arch checks every file against them', listed: false},
+  {name: 'risk', description: 'What a plan touches, and how risky it is', usage: "What a plan touches: files, services, owners, contracts and migrations. /risk [plan file or spec name] (default: the newest plan)", listed: false},
+  {name: 'bestof', description: 'Run a task on Claude and Codex at once; keep what passes', usage: 'Run a task on Claude and Codex at once, each in its own worktree; keep the result that passes the tests: /bestof [--test "<command>"] <task>', listed: false},
+  {name: 'workspace', description: 'The repos of this workspace', usage: 'The repos of this workspace (rein.workspace.yaml): /workspace lists them, /workspace clone clones the missing ones, /workspace prs and link-prs link the PRs of one change', listed: false},
+  {name: 'scope', description: 'Work in one package of a monorepo', usage: 'Work in one package of a monorepo: /scope <dir> (search, list, shell and instructions start there), /scope off, or no argument to show it', listed: false},
+  {name: 'owners', description: 'Who owns your changed files', usage: 'Who owns your changed files (or a path): CODEOWNERS, Backstage, then git history', listed: false},
+  {name: 'index', description: 'The semantic index, for search by meaning', usage: 'Build or update the local semantic index (Ollama) for search by meaning: /index, /index <query> to search it, /index status', listed: false},
+  {name: 'map', description: "A map of the repo's declarations", usage: "A map of the repo's declarations, file by file: /map shows it, /map send gives it to the agent", listed: false},
+  {name: 'pack', description: 'Context packs to attach to a message', usage: 'Context packs (.rein/packs.yaml): /pack lists them, /pack <name> [message] attaches one, /pack save <name> <globs…> makes one', listed: false},
+  {name: 'stats', description: 'How your requests go: time, tools, failures and cost', usage: 'How your requests go, from saved conversations: time, tool calls, failures, retries, tests passed and cost, per model: /stats [days] [all]', listed: false},
+  {name: 'cache', description: 'Prompt-cache hit rates, and what made it cold', usage: 'Prompt-cache hit rates per model, and what made the cache cold: /cache [days] [all]', listed: false},
+  {name: 'schedule', description: 'Scheduled jobs', usage: 'Scheduled jobs in .rein/schedule.yaml: when each runs next and how the last run went (rein schedule install runs them on time)', listed: false},
+  {name: 'env', description: "The dev environment the agent's commands run in", usage: "The dev environment the agent's commands run in (dev container, Nix, devbox): /env shows it, /env up starts it now", listed: false},
+  {name: 'sessions', description: 'Every Rein running on this machine', usage: 'Every running Rein on this machine, across repos: state, folder, goal. /sessions send <pid> <message> steers one; rein sessions is the full dashboard', listed: false},
+  {name: 'policy', description: 'The policy in force here', usage: 'The policy in force here (.rein/policy.yaml, ~/.rein/policy.yaml): its rules, allowed models and any mistakes in the files', listed: false},
 ];
 
 export type Parsed =
@@ -154,7 +149,7 @@ export function suggestCommands(input: string, skills: Skill[] = []): Suggestion
   const q = input.slice(1).toLowerCase();
   const shadowed = new Set(shadowedSkills(skills).map((s) => s.name));
   const all: (Suggestion & {names: string[]})[] = [
-    ...COMMANDS.filter((c) => commandEnabled(c.name)).map((c) => ({...c, names: [c.name, ...Object.keys(ALIASES).filter((a) => ALIASES[a] === c.name)]})),
+    ...COMMANDS.map((c) => ({...c, names: [c.name, ...Object.keys(ALIASES).filter((a) => ALIASES[a] === c.name)]})),
     ...itemCommands().map((c) => ({name: c.name, description: c.description, extension: c, names: [c.name], ...(c.listed === false ? {listed: false as const} : {})})),
     ...skills
       .filter((s) => !shadowed.has(s.name))

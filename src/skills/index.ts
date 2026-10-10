@@ -1,5 +1,4 @@
 import {existsSync, readdirSync, readFileSync, statSync} from 'node:fs';
-import {builtinSkillEnabled} from '../commands/packs.js';
 import path from 'node:path';
 import {packageRoot} from '../util/root.js';
 import os from 'node:os';
@@ -146,7 +145,8 @@ function pluginSkills(cwd: string): Skill[] {
       if (name && body) out.push({name, description: fields.description || firstLine(body), source: 'plugin', plugin: p.name, ...(p.from === 'rein' ? {marketplace: true as const} : {}), dir: path.dirname(file), path: file, body, files: [path.basename(file)], aliases: [], command: true, ...(fields['argument-hint'] ? {argumentHint: fields['argument-hint']} : {})});
     }
     for (const dir of p.skills) {
-      for (const s of scan(path.dirname(dir), 'plugin').filter((x) => x.dir === dir)) out.push({...s, name: skillName(`${p.name}:${s.name.replace(/^.*:/, '')}`), plugin: p.name, ...(p.from === 'rein' ? {marketplace: true as const} : {}), body: pluginVars(s.body, p)});
+      // A marketplace item's skill named like the item is just /<item> (the tour item's /tour, not /tour:tour).
+      for (const s of scan(path.dirname(dir), 'plugin').filter((x) => x.dir === dir)) out.push({...s, name: skillName(p.from === 'rein' && s.name.replace(/^.*:/, '') === p.name ? p.name : `${p.name}:${s.name.replace(/^.*:/, '')}`), plugin: p.name, ...(p.from === 'rein' ? {marketplace: true as const} : {}), body: pluginVars(s.body, p)});
     }
   }
   return out;
@@ -219,8 +219,7 @@ export function loadSkills(cwd = process.cwd()): Skill[] {
   for (const s of scanCommands(commands.project, 'claude-project')) byName.set(s.name, s);
   for (const s of scan(dirs.global, 'global')) byName.set(s.name, s);
   for (const s of scan(dirs.project, 'project')) byName.set(s.name, s);
-  // Built-in skills of a pack that's off (migration playbooks…) aren't offered at all.
-  for (const s of scan(dirs.builtin, 'builtin')) if (builtinSkillEnabled(s.name)) byName.set(s.name, s);
+  for (const s of scan(dirs.builtin, 'builtin')) byName.set(s.name, s);
   return [...byName.values()].sort((a, b) => a.name.localeCompare(b.name));
 }
 

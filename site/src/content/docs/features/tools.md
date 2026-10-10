@@ -222,7 +222,7 @@ Many repos say exactly what they need to build: a dev container, a Nix flake, a 
 | `shell.nix` / `default.nix` | The same, with `nix-shell` |
 | `devbox.json` | The same, with `devbox run` |
 
-`auto` uses whichever the repo has, a dev container first. You can also pick one kind. The environment starts with the agent's first command; `/env` shows its state and `/env up` starts it now (`/env` is in the **Insight and automation** [pack](../../reference/commands/#packs), off by default). A Nix or devbox environment is captured again when its lock file changes.
+`auto` uses whichever the repo has, a dev container first. You can also pick one kind. The environment starts with the agent's first command; `/env` shows its state and `/env up` starts it now (`/env` is a [specialist command](../../reference/commands/#specialist-commands): it shows in the `/` list once you start typing it). A Nix or devbox environment is captured again when its lock file changes.
 
 When the tool isn't installed (the [`devcontainer` CLI](https://github.com/devcontainers/cli), `nix`, `devbox`) or fails to start, commands run on your machine as usual, and Rein says why once. Commands in subagent worktrees, or in folders outside the project, also run on your machine, since they aren't inside the container.
 

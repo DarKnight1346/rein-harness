@@ -69,7 +69,6 @@ How these play together is covered in [load balancing](../../internals/load-bala
 | `budget` | object | unset (no caps) | Spending caps in USD at API list prices: `{"requestUsd": 2, "goalUsd": 20, "conversationUsd": 50}`. A repo's `.rein/settings.json` `budget` can set lower ones. See [Cost & budgets](../../features/cost/#budgets). | `/settings budget {…}`, `/settings` → Advanced |
 | `otel` | object | unset (off) | OpenTelemetry export of turns, tool calls, tokens and cost: `{"endpoint": "http://localhost:4318", "headers": {…}, "serviceName": "rein"}`. Metadata only. See [Observability](../../features/observability/). | `/settings <key>`, `/settings` → Advanced |
 | `experiments` | string[] | `[]` | Efficiency experiments to turn on by name, or `-name` to turn a default one off; see [Experiments](#experiments). | `/settings <key>`, `/settings` → Advanced |
-| `packs` | string[] | `[]` | [Command packs](../commands/#packs) to turn on: `ci`, `specs`, `migrations`, `system`, `codebase`, `insight`. A pack that's off keeps its commands out of the `/` list and `/help` and its skills from the agent. | `/settings` → Packs, `/settings <key>` |
 | `lspServers` | object | — | Use your own server command instead of Rein's, per server id: `{"python": {"command": "/path/to/server", "args": ["--stdio"]}}`. | `/settings <key>`, `/settings` → Advanced |
 | `waitForLimits` | boolean | `true` | When every account for the model is at its limit and no other model can take over, wait for the earliest reset (up to 12 hours) and continue the turn. `false` stops with `Every account for … is at its limit`. | `/settings` → Accounts → Limits |
 | `secretScan` | `"off"` \| `"warn"` \| `"block"` | `"off"` | A `write` or `edit` that adds something that looks like a credential: tell the agent (`warn`) or refuse the change (`block`). When on, credentials are also masked in saved conversations. See [Secret scanning](../../features/permissions/#secret-scanning). | `/settings secretScan`, `/settings` → Advanced |
@@ -144,7 +143,7 @@ Valid `sidebarSections` ids: `agents`, `accounts`, `models` (chat model picker),
 
 ## The `/settings` tabs
 
-`/settings` opens a window with eight tabs. Switch with click, `←` `→` or `Tab`; close with `Esc`. `/settings <tab>` (`/settings safety`) opens on that tab.
+`/settings` opens a window with seven tabs. Switch with click, `←` `→` or `Tab`; close with `Esc`. `/settings <tab>` (`/settings safety`) opens on that tab.
 
 | Tab | What's in it |
 | --- | --- |
@@ -154,7 +153,6 @@ Valid `sidebarSections` ids: `agents`, `accounts`, `models` (chat model picker),
 | **Agents** | Subagents (`subagentLimit`), Goals (`goalMaxRounds`), Worktrees (`worktrees`), Compaction (`autoCompactPct`), Plan review (`planReview`) |
 | **Accounts** | Load balancing (`loadBalancing`), Limits (`waitForLimits`), API accounts (`apiAccounts`) |
 | **Safety** | Secrets (`secretScan`), Semgrep (`sast`), Planted instructions (`injectionScan`), Data leaving (`exfilGuard`), MCP pinning (`mcpPinning`), Dependencies (`depCheck`) |
-| **Packs** | `packs`: the [command packs](../commands/#packs) that are on (all off by default). Click or `Space` toggles one; the line below lists its commands and skills |
 | **Advanced** | Every key in the file as a list: `Enter` cycles a choice or on/off, or opens an editor for text, numbers, lists (comma-separated) and JSON; `r` resets the key to its default |
 
 In General, Agents, Accounts and Safety, `↑` `↓` pick a setting, and `Enter`, `Space` or a click cycles its value. The focused setting's explanation and all its choices show below the list; click a choice to pick it.
@@ -272,8 +270,6 @@ Changes meant to cut what a task costs (tokens, round trips, time), measured wit
 | `verify-requirements` | Once per request, when the agent is about to stop after changing files (with its own tools or through the shell), Rein sends it back to go through the request line by line and run each requirement and edge case (a quick script or test, not a reread), fix what fails, then run the project's tests. If that pass changed the code, it checks once more against the final code. Usually one extra turn, against tasks that fail on the one requirement that was skipped. The end-of-turn code check runs after it. |
 | `watchdog` | The main agent going in circles within one request: the same command failing again with no file changed in between, or a file edited back to a version it just had. At the 3rd time the tool result tells the agent to stop and rethink; at the 5th the call is refused with the reason. An edit between two runs of a command counts as progress and starts the count over. Your next message resets it. |
 | `log-digest` | A failing shell command with a long output (80 lines or more) gets a digest in front: the failing step (GitHub Actions and GitLab sections, Gradle tasks), the first error lines and the `file:line` locations they name, then the full output. The CI watcher uses the same digest on failed checks. |
-| `affected-tool` | In an Nx, Turborepo, Bazel or Pants workspace, the agent gets an `affected` tool: what a change affects, from the build graph, and the command that tests just that. See [Build & test](../../features/build-and-test/#what-a-change-affects). |
-| `verify-affected` | In an Nx, Turborepo, Bazel or Pants workspace, at the end of a request that changed files: run the tests for the affected projects (through the `shell` tool, so approvals and the sandbox apply) and send failures back to the agent. Once per request. See [Testing what a request changed](../../features/build-and-test/#testing-what-a-request-changed). |
 | `flaky-quarantine` | Records each test's outcome with a fingerprint of the code it ran on; a test that failed and passed on the same code is flaky, and when a run's failures are known flakes the agent is told not to chase them. `/flaky` lists them. See [Flaky tests](../../features/build-and-test/#flaky-tests). |
 | `repo-map` | The agent gets a `repo_map` tool: each source file's top-level declarations within a token budget, to find its way in a large codebase. See [A map of the repo](../../features/large-codebases/#a-map-of-the-repo). |
 | `adr-check` | In plan and spec mode, the agent gets the architecture decisions in force (not superseded, deprecated or rejected) and checks its plan against them. See [Architecture decisions](../../features/specs/#architecture-decisions). |

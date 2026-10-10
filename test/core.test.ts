@@ -107,9 +107,8 @@ describe('splitLiveTail', () => {
 describe('suggestCommands', () => {
   it('filters until a space is typed, prefix matches first', async () => {
     const {suggestCommands, COMMANDS} = await import('../src/commands/index.js');
-    const {commandEnabled} = await import('../src/commands/packs.js');
-    // A bare `/`: everyday commands only (no pack commands, variants or diagnostics).
-    expect(suggestCommands('/')).toHaveLength(COMMANDS.filter((c) => c.listed !== false && commandEnabled(c.name)).length);
+    // A bare `/`: everyday commands only (no specialist commands, variants or diagnostics).
+    expect(suggestCommands('/')).toHaveLength(COMMANDS.filter((c) => c.listed !== false).length);
     expect(suggestCommands('/').map((c) => c.name).slice(0, 3)).toEqual(['model', 'goal', 'btw']);
     expect(suggestCommands('/').map((c) => c.name)).not.toContain('tui');
     expect(suggestCommands('/tu').map((c) => c.name)[0]).toBe('tui'); // typed: found
@@ -128,19 +127,14 @@ describe('suggestCommands', () => {
     expect(names('/model')[0]).toBe('model'); // exact beats everything
   });
 
-  it("leaves out the commands of packs that are off, and says where they are", async () => {
+  it('lists specialist commands only once typed, and says where moved ones went', async () => {
     const {suggestCommands} = await import('../src/commands/index.js');
-    const {packOffMessage, setEnabledPacks} = await import('../src/commands/packs.js');
-    expect(suggestCommands('/stats').map((c) => c.name)).not.toContain('stats');
-    expect(packOffMessage('stats')).toMatch(/Insight and automation pack, which is off.*\/settings → Packs.*"insight"/);
-    expect(packOffMessage('model')).toBeUndefined();
-    setEnabledPacks(() => ['insight']);
-    try {
-      expect(suggestCommands('/stat').map((c) => c.name)[0]).toBe('stats');
-      expect(packOffMessage('stats')).toBeUndefined();
-    } finally {
-      setEnabledPacks(() => []);
-    }
+    const {movedMessage} = await import('../src/commands/moved.js');
+    expect(suggestCommands('/').map((c) => c.name)).not.toContain('stats');
+    expect(suggestCommands('/stat').map((c) => c.name)[0]).toBe('stats');
+    expect(movedMessage('coverage')).toMatch(/Test quality item: \/marketplace install quality/);
+    expect(movedMessage('services')).toMatch(/install system/);
+    expect(movedMessage('model')).toBeUndefined();
   });
 
   it('ranks skills with commands, and matches their aliases', async () => {

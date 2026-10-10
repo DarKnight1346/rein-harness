@@ -17,6 +17,7 @@ export type Host = {
   config(): Record<string, unknown>;
   registerTool(item: string, t: Tool): void;
   exec(command: string, args: string[], opts?: {cwd?: string; timeoutMs?: number}): Promise<{code: number; stdout: string; stderr: string}>;
+  shell(command: string, timeoutMs?: number): Promise<{ok: boolean; text: string}>;
   ripgrep(): Promise<string | undefined>;
   workspace(): ReturnType<Rein['workspace']>;
 };
@@ -152,6 +153,7 @@ export class Extensions extends EventEmitter {
         afterEdit: (c) => own(this.editChecks, c, (x) => x.id),
       },
       exec: (command, args, opts) => host.exec(command, args, {cwd: opts?.cwd ?? host.cwd(), ...(opts?.timeoutMs ? {timeoutMs: opts.timeoutMs} : {})}),
+      shell: (command, opts) => host.shell(command, opts?.timeoutMs),
       git: (args, cwd) => host.exec('git', args, {cwd: cwd ?? host.cwd()}),
       ripgrep: () => host.ripgrep(),
       workspace: () => host.workspace(),

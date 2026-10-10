@@ -45,7 +45,6 @@ import {COMMANDS} from '../../commands/index.js';
 import {PetView} from '../Pet.js';
 import {extensions} from '../../extensions/index.js';
 import {MarketplaceScreen, UpdatesScreen} from '../MarketplaceScreen.js';
-import {commandEnabled, packsHint} from '../../commands/packs.js';
 import {skillDirs, skillSourceLabel, type Skill} from '../../skills/index.js';
 import chalk from 'chalk';
 import {isEmpty, lineRange, selectedText, type Selection} from './selection.js';
@@ -466,7 +465,7 @@ export function FullscreenApp({resume}: {resume: Resume}) {
 
 function helpLines(width: number, skills: Skill[]): string[] {
   const dirs = skillDirs();
-  const commands = COMMANDS.filter((c) => commandEnabled(c.name));
+  const commands = COMMANDS;
   const col = commandColumn(commands.map((c) => c.name));
   // Skills from Claude Code / Codex plugins come last, one sentence each (theirs run to paragraphs).
   const fromPlugin = (s: Skill) => s.source === 'plugin' || s.source === 'codex';
@@ -477,7 +476,6 @@ function helpLines(width: number, skills: Skill[]): string[] {
   return [
     ...commands.flatMap((c) => wrap(c.usage, width, chalk.cyan(col(c.name)))),
     ...(extensions.commands.length ? ['', chalk.bold('From the marketplace'), ...extensions.commands.flatMap(({item, value: c}) => wrap(`${c.usage ?? c.description} ${chalk.dim(`(${item})`)}`, width, chalk.cyan(col(c.name))))] : []),
-    ...wrap(chalk.dim(packsHint()), width),
     '',
     chalk.bold('Skills') + chalk.dim(`  name clashes: built-in → ${dirs.project} (project) → ${dirs.global} (global)`),
     ...(own.length ? own.flatMap((s) => wrap(`${s.description}${s.source === 'builtin' ? '' : ` ${chalk.dim(`(${s.source})`)}`}`, width, chalk.magenta(skillCol(s.name)))) : [chalk.dim('  none yet — /skill:create makes one')]),
