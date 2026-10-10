@@ -40,6 +40,7 @@ An existing `~/.rein` keeps being used as it is, and so does `REIN_HOME`. To swi
 | `webui.json` | The [web UI](../../features/web-ui/)'s setup: its mode (`local`, `tailscale`, `password`), users (scrypt hashes), listen address, optional `tls`. Delete it to run setup again |
 | `webui-setup-code` | The one-time setup code, until setup is done |
 | `webui-archived.json` | The web UI's archived conversations (hidden from its sidebar; the conversations themselves stay in `sessions/`) |
+| `bin/rein-remote` | [Rein Remote](../../features/previews/#video-with-rein-remote), if you put it here: app previews stream as video with it (it's also found on your `PATH`) |
 | `chats/<date>-<id>/` | The folder of a one-off web UI chat (a chat without a project) |
 | `webui-sessions.json` | Web UI sign-ins (hashes of their tokens), kept for 30 days |
 | `webui-projects.json` | The web UI's recent projects |

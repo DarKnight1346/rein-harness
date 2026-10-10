@@ -1,6 +1,7 @@
 import type {ToolDef} from '../tools/registry.js';
 import {startDisplay} from './display.js';
 import {vncTarget, type Previews} from './registry.js';
+import {remoteBinary, startRemote, type RemoteStream} from './remote.js';
 
 /**
  * `preview`: the agent shows the user something with a screen. A web app it started (a URL, local
@@ -8,7 +9,7 @@ import {vncTarget, type Previews} from './registry.js';
  * an emulator, a desktop app in a virtual display). Offered in web UI chats, where the user may be
  * on another device; servers that print a local URL are offered as previews without it.
  */
-export function previewTool(previews: Previews, opened: (id: number) => void): ToolDef {
+export function previewTool(previews: Previews, opened: (id: number) => void, reinRemote: () => string | undefined = () => 'auto'): ToolDef {
   return {
     name: 'preview',
     label: 'Preview',
@@ -45,10 +46,19 @@ export function previewTool(previews: Previews, opened: (id: number) => void): T
         // A virtual display for a native app: Rein starts the display (no project code runs); the agent
         // starts the app on it with its shell tool, so the user's approvals apply to that as always.
         try {
-          const d = await startDisplay({width: 1280, height: 800});
-          const p = previews.add({kind: 'vnc', target: `localhost:${d.port}`, title: title ?? `display :${d.display}`, source: 'agent', stop: d.stop});
+          // Streamed with Rein Remote when it's installed (video, smooth on slow links), else over VNC.
+          const bin = remoteBinary(reinRemote());
+          const d = await startDisplay({width: 1280, height: 800}, !!bin);
+          let remote: RemoteStream | undefined;
+          if (bin) remote = await startRemote(bin, d.display).catch(() => undefined);
+          if (!remote && d.port === undefined) {
+            d.stop();
+            return {ok: false, text: "Couldn't start a virtual display: Rein Remote didn't start and there's no VNC server to fall back on (install x11vnc, or TigerVNC)"};
+          }
+          const stop = () => (remote?.stop(), d.stop());
+          const p = previews.add({kind: 'vnc', target: d.port !== undefined ? `localhost:${d.port}` : `:${d.display}`, title: title ?? `display :${d.display}`, source: 'agent', stop, ...(remote ? {remote: {port: remote.port, token: remote.token}} : {})});
           opened(p.id);
-          return {ok: true, text: `A virtual display is up (${d.how}, :${d.display}, 1280×800) and the user is looking at it (preview #${p.id}). Start the app on it in the background with your shell tool: DISPLAY=:${d.display} <command> &. It stops when the preview closes.`};
+          return {ok: true, text: `A virtual display is up (${d.how}${remote ? ', streamed with Rein Remote' : ''}, :${d.display}, 1280×800) and the user is looking at it (preview #${p.id}). Start the app on it in the background with your shell tool: DISPLAY=:${d.display} <command> &. It stops when the preview closes.`};
         } catch (err) {
           return {ok: false, text: `Couldn't start a virtual display: ${(err as Error).message}`};
         }

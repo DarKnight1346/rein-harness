@@ -1,6 +1,7 @@
 import {existsSync, readFileSync, statSync} from 'node:fs';
 import http, {type IncomingMessage, type ServerResponse} from 'node:http';
 import https from 'node:https';
+import net from 'node:net';
 import {createRequire} from 'node:module';
 import os from 'node:os';
 import path from 'node:path';
@@ -237,6 +238,19 @@ export async function startServer(opts: ServerOptions = {}): Promise<{url: strin
       if (c.error) throw new HttpError(500, c.error);
       return json(res, 200, {id: c.id});
     }
+    // A preview streamed with Rein Remote: its web client, from the rein-remote that streams it (so the
+    // two always match). The stream itself is a WebSocket (the upgrade handler below).
+    const remoteJs = p.match(/^\/api\/chats\/([\da-f]+)\/previews\/(\d+)\/rein-remote\.js$/);
+    if (remoteJs && m === 'GET') {
+      const c = chats.get(remoteJs[1]!);
+      if (!c) throw new HttpError(404, 'that chat is closed');
+      const r = (await c.request('remote-port', {id: Number(remoteJs[2])}).catch((err: Error) => {
+        throw new HttpError(404, err.message);
+      })) as {port: number};
+      const js = await fetch(`http://127.0.0.1:${r.port}/rein-remote.js`).then((x) => (x.ok ? x.text() : Promise.reject(new Error(`rein-remote answered ${x.status}`))));
+      res.writeHead(200, {'content-type': 'text/javascript; charset=utf-8', 'cache-control': 'no-store', 'x-content-type-options': 'nosniff'});
+      return void res.end(js);
+    }
     const chatRoute = p.match(/^\/api\/chats\/([\da-f]+)(?:\/(events|send|interrupt|answer|model|mode|compact|request|window))?$/);
     if (chatRoute) {
       const c = chats.get(chatRoute[1]!);
@@ -299,7 +313,7 @@ export async function startServer(opts: ServerOptions = {}): Promise<{url: strin
         c.window = undefined;
         return json(res, 200, {ok: true});
       } else if (action === 'request') {
-        if (typeof b.op !== 'string' || !/^[a-z-]{1,32}$/.test(b.op)) throw new HttpError(400, 'which request?');
+        if (typeof b.op !== 'string' || !/^[a-z-]{1,32}$/.test(b.op) || b.op === 'remote-port') throw new HttpError(400, 'which request?');
         const value = await c.request(b.op, b.args && typeof b.args === 'object' ? b.args : {}).catch((err: Error) => {
           throw new HttpError(400, err.message);
         });
@@ -384,6 +398,47 @@ export async function startServer(opts: ServerOptions = {}): Promise<{url: strin
   };
 
   const server = config?.tls ? https.createServer({cert: readFileSync(config.tls.cert), key: readFileSync(config.tls.key)}, handler) : http.createServer(handler);
+
+  // A preview's Rein Remote stream: the page's WebSocket, after the same checks as the API, piped to
+  // the rein-remote on this computer that streams it (with its token, which the page never sees).
+  // Upgraded sockets are the server's no more (closeAllConnections doesn't see them): closed here.
+  const streams = new Set<net.Socket>();
+  server.on('upgrade', async (req: IncomingMessage, socket: net.Socket, head: Buffer) => {
+    streams.add(socket);
+    socket.on('close', () => streams.delete(socket));
+    const refuse = (status: string) => socket.end(`HTTP/1.1 ${status}\r\nConnection: close\r\nContent-Length: 0\r\n\r\n`);
+    socket.on('error', () => socket.destroy());
+    try {
+      const url = new URL(req.url ?? '/', 'http://x');
+      const route = url.pathname.match(/^\/api\/chats\/([\da-f]+)\/previews\/(\d+)\/stream$/);
+      if (!route) return refuse('404 Not Found');
+      if (!config || !hostAllowed(config, req.headers.host)) return refuse('403 Forbidden');
+      // The same-origin policy doesn't cover WebSockets: another site's page could open one, so the
+      // Origin has to be this page's.
+      const origin = req.headers.origin;
+      if (!origin || new URL(origin).host !== req.headers.host) return refuse('403 Forbidden');
+      if (!userOf(req)) return refuse('401 Unauthorized');
+      const c = chats.get(route[1]!);
+      if (!c) return refuse('404 Not Found');
+      const r = (await c.request('remote-port', {id: Number(route[2])})) as {port: number; token: string};
+      const up = net.connect(r.port, '127.0.0.1');
+      up.on('error', () => socket.destroy());
+      socket.on('close', () => up.destroy());
+      up.on('close', () => socket.destroy());
+      up.once('connect', () => {
+        // Input and frames go at once, not gathered into bigger packets.
+        up.setNoDelay(true);
+        socket.setNoDelay(true);
+        const key = String(req.headers['sec-websocket-key'] ?? '');
+        up.write([`GET /stream?token=${encodeURIComponent(r.token)} HTTP/1.1`, `Host: 127.0.0.1:${r.port}`, 'Upgrade: websocket', 'Connection: Upgrade', `Sec-WebSocket-Key: ${key}`, `Sec-WebSocket-Version: ${req.headers['sec-websocket-version'] ?? '13'}`, '', ''].join('\r\n'));
+        if (head.length) up.write(head);
+        socket.pipe(up);
+        up.pipe(socket);
+      });
+    } catch {
+      refuse('502 Bad Gateway');
+    }
+  });
   await new Promise<void>((resolve, reject) => {
     server.once('error', reject);
     server.listen(port, host, () => resolve());
@@ -400,6 +455,7 @@ export async function startServer(opts: ServerOptions = {}): Promise<{url: strin
     close: () =>
       new Promise((resolve) => {
         chats.closeAll();
+        for (const s of streams) s.destroy();
         server.closeAllConnections?.();
         server.close(() => resolve());
       }),

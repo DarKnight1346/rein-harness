@@ -50,6 +50,31 @@ For a VM, an emulator or a desktop app, Rein shows a VNC display. Rein itself sp
 
 Click into the screen and type: keys, the mouse and the wheel go to it. A display with a VNC password asks for it in the pane (the agent can pass it too); it's kept in the chat, never sent to the page. macOS Screen Sharing works with "VNC viewers may control screen with password" turned on (its macOS-account sign-in isn't supported). A virtual display Rein started stops when its preview closes.
 
+## Video with Rein Remote
+
+A native Linux app's virtual display can stream as video instead of frames, with
+[Rein Remote](https://github.com/rein-harness/rein-remote) (Rein's own screen protocol). Rein uses it
+when the `rein-remote` binary is in `~/.rein/bin` or on your `PATH`:
+
+- The screen goes as H.264, decoded by your browser (with the device's hardware decoder where it has
+  one), and only when it changes: a still screen sends almost nothing.
+- The cursor is drawn on your device, at your mouse at once, like Remote Desktop: moving it costs no
+  video and has no lag.
+- Touch works as with frames (tap, swipe to scroll, hold to drag, two-finger tap for a right-click),
+  and the keyboard button opens your device's keyboard.
+- The pane's address shows **· video** while it streams this way.
+
+With `rein-remote` installed, `Xvfb` alone is enough for a virtual display (`x11vnc` isn't needed,
+though Rein starts it too when it's there, for the fallback below). It isn't bundled with Rein yet:
+build it from its repository (`cargo build --release -p rr-server`, then copy
+`target/release/rein-remote` to `~/.rein/bin/`). Turn it off with
+[`/settings reinRemote off`](../../reference/configuration/), or point the setting at a binary.
+
+The stream is a WebSocket on the web UI's own address, after the same sign-in and checks as the rest
+of the page; `rein-remote` itself listens on this computer only, behind a token the page never sees.
+If the WebSocket can't get through (a reverse proxy that doesn't pass WebSockets, see
+[Web UI](../web-ui/#behind-a-reverse-proxy)), the preview falls back to frames by itself.
+
 ## Slow links
 
 When your connection is slow (mobile data, a server far away), frames that can't get through are dropped rather than queued, so the preview never falls behind: you see the latest screen, a little less smoothly. Over Tailscale or a domain pointed at your server, previews travel in the same HTTPS connection as the rest of the web UI, so nothing else needs opening.
@@ -64,7 +89,7 @@ When your connection is slow (mobile data, a server far away), frames that can't
 
 ## Not yet
 
-These are on the [roadmap](../../start/whats-new/): native windows on macOS and Windows, hardware-encoded video instead of frames (both through Rein's own screen protocol, [rein-remote](https://github.com/rein-harness/rein-remote)), an Android emulator without a virtual display (over `adb`), and the iOS Simulator (view only: it has no input API).
+These are on the [roadmap](../../start/whats-new/): native windows on macOS and Windows, Rein Remote video for every preview (web apps, VMs and VNC displays, not only Linux app displays) with hardware encoding (all through [rein-remote](https://github.com/rein-harness/rein-remote)), an Android emulator without a virtual display (over `adb`), and the iOS Simulator (view only: it has no input API).
 
 ## Security
 

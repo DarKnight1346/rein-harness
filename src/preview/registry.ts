@@ -12,13 +12,15 @@ export type PreviewKind = 'url' | 'vnc';
 export type Preview = {
   id: number;
   kind: PreviewKind;
-  /** `url`: an http(s) URL. `vnc`: host:port. */
+  /** `url`: an http(s) URL. `vnc`: host:port, or `:N` for a display only Rein Remote streams. */
   target: string;
   title: string;
   /** Who found it: the agent asked to show it, or it appeared in a command's output. */
   source: 'agent' | 'detected';
   /** A virtual display Rein started for a native app (display.ts): stopped when the preview goes. */
   stop?(): void;
+  /** Rein Remote streaming this display (remote.ts): the page connects to it through the web UI. */
+  remote?: {port: number; token: string};
   /** A VNC display's password: kept here, never sent to the page. */
   password?: string;
   /** The shell whose output it came from (detected ones), so it goes when that command ends. */

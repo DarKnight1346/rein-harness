@@ -599,6 +599,8 @@ function onEvent(c, ev) {
       c.snapshot = ev.snapshot;
       applyAccent(ev.snapshot.accent);
       renderChrome(c);
+      // Previews it already has (a page opening a chat that made some).
+      renderPreviewChips(c);
       c.busy = ev.snapshot.busy;
       if (!c.busy) Object.assign(c, {live: '', tools: [], notes: [], model: undefined});
       void loadChats().then(() => state.view === 'chat' && renderSide());
@@ -1562,8 +1564,51 @@ function openPreview(c, id) {
   if (state.chat === c && state.view === 'chat') render();
 }
 function closePane(c) {
+  // A hidden Rein Remote stream stops (it connects again when shown).
+  const pv = c.pv[c.pvOpen];
+  if (pv?.session) stopRemote(pv);
   c.pvOpen = undefined;
   render();
+}
+
+/**
+ * A display streamed with Rein Remote (video, decoded here with WebCodecs): its client comes from the
+ * rein-remote that streams it, through this server, and so does the stream (a WebSocket, signed in
+ * like the rest of the page). If it doesn't get going (rein-remote too old, a proxy that won't pass
+ * WebSockets), the preview falls back to the frames path.
+ */
+async function startRemote(c, pv) {
+  pv.rcanvas = h('canvas.pcanvas');
+  const base = `/api/chats/${c.id}/previews/${pv.id}`;
+  const t0 = Date.now();
+  try {
+    const {connect} = await import(`${base}/rein-remote.js`);
+    if (!pv.rcanvas) return; // closed while loading
+    pv.session = connect(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}${base}/stream`, pv.rcanvas, {name: 'Rein web UI'});
+  } catch {
+    return remoteFallback(c, pv);
+  }
+  pv.watch = setInterval(() => {
+    const st = pv.session?.stats;
+    if (!st) return;
+    if (st.frames > 0 && !pv.w) ((pv.w = 1), state.chat === c && c.pvOpen === pv.id && $('#pstatus')?.replaceChildren());
+    if (st.state === 'closed') {
+      // It was streaming: connect again. It never did: the frames path instead.
+      if (pv.w) ((pv.w = 0), stopRemote(pv), state.chat === c && c.pvOpen === pv.id && render());
+      else remoteFallback(c, pv);
+    } else if (!pv.w && Date.now() - t0 > 8000) remoteFallback(c, pv);
+  }, 250);
+}
+function stopRemote(pv) {
+  clearInterval(pv.watch);
+  pv.session?.close();
+  pv.session = pv.rcanvas = undefined;
+  pv.w = 0;
+}
+function remoteFallback(c, pv) {
+  stopRemote(pv);
+  pv.fallback = true;
+  if (state.chat === c && c.pvOpen === pv.id) render();
 }
 
 /** The pane: tabs for the previews, a browser bar for a web one, and the live screen. */
@@ -1571,6 +1616,11 @@ function previewPane(c) {
   const list = c.snapshot?.previews ?? [];
   const p = list.find((x) => x.id === c.pvOpen);
   const pv = c.pv[c.pvOpen] ?? (c.pv[c.pvOpen] = {id: c.pvOpen});
+  if (p?.remote && !pv.fallback) {
+    if (!pv.rcanvas) startRemote(c, pv);
+    const waiting = !pv.w ? h('div.working', h('span.spin', '▁▃▅▇'), h('span.rainbow', 'Connecting to the display…')) : null;
+    return h('section.ppane#ppane', paneTabs(c, list), paneBar(c, p, pv), h('div.pscreen#pscreen', pv.rcanvas, h('div.pstatus#pstatus', waiting)));
+  }
   if (!pv.canvas) {
     pv.canvas = h('canvas.pcanvas', {tabIndex: 0});
     bindInput(c, pv);
@@ -1596,13 +1646,14 @@ function paneBar(c, p, pv) {
   pv.urlIn = urlIn;
   const bar = p?.kind === 'url'
     ? h('div.pbar', h('button.icon-btn', {title: 'Back', on: {click: () => nav('back')}}, icon('back', 15)), h('button.icon-btn', {title: 'Forward', on: {click: () => nav('forward')}}, icon('forward', 15)), h('button.icon-btn', {title: 'Reload', on: {click: () => nav('reload')}}, icon('refresh', 15)), urlIn)
-    : h('div.pbar', h('span.ptarget', p ? `▣ ${p.target}` : ''), h('span.muted.hide-touch', 'click to focus, then type'));
+    : h('div.pbar', h('span.ptarget', p ? `▣ ${p.target}${p.remote && !pv?.fallback ? ' · video' : ''}` : ''), h('span.muted.hide-touch', 'click to focus, then type'));
   // The device's keyboard, for phones and tablets (a hardware keyboard works straight on the screen).
-  bar.append(h('button.icon-btn.pkb', {title: 'Keyboard', 'aria-label': 'Open the keyboard', on: {click: () => pv.keyboard?.focus()}}, icon('keyboard', 16)));
+  bar.append(h('button.icon-btn.pkb', {title: 'Keyboard', 'aria-label': 'Open the keyboard', on: {click: () => (pv?.session ? pv.session.keyboard() : pv?.keyboard?.focus())}}, icon('keyboard', 16)));
   return bar;
 }
 
 async function closePreview(c, id) {
+  if (c.pv[id]?.session || c.pv[id]?.rcanvas) stopRemote(c.pv[id]);
   delete c.pv[id];
   if (c.pvOpen === id) c.pvOpen = undefined;
   render();
@@ -1621,7 +1672,7 @@ function fitPreview(c) {
   fitTimer = setTimeout(async () => {
     const pv = c.pv[c.pvOpen];
     const screen = $('#pscreen');
-    if (!pv || !screen) return;
+    if (!pv || !screen || pv.rcanvas) return; // a Rein Remote stream sizes itself
     const size = {width: Math.round(screen.clientWidth), height: Math.round(screen.clientHeight)};
     try {
       if (!pv.started) {

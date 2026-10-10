@@ -36,6 +36,31 @@ To change your choice later, delete `~/.rein/webui.json` and restart `rein --ui`
 With a username and password, put HTTPS in front of the web UI, either a reverse proxy (Caddy, nginx) or a `tls` entry in `~/.rein/webui.json`: `"tls": {"cert": "/path/cert.pem", "key": "/path/key.pem"}`. Without it, the password travels unencrypted.
 :::
 
+### Behind a reverse proxy
+
+Keep the browser's `Host` header (Rein compares it with the page's origin), don't buffer responses
+(chat events stream), and pass WebSockets through (app previews stream video over one). For nginx:
+
+```nginx
+map $http_upgrade $connection_upgrade { default upgrade; '' close; }
+server {
+  # listen, server_name and TLS as usual
+  location / {
+    proxy_pass http://127.0.0.1:9333;
+    proxy_http_version 1.1;
+    proxy_set_header Host $http_host;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection $connection_upgrade;
+    proxy_buffering off;
+    proxy_read_timeout 1h;
+  }
+}
+```
+
+Caddy (`reverse_proxy 127.0.0.1:9333`) and `tailscale serve` do all of this already. Without the
+WebSocket lines everything still works; previews just fall back to frames instead of video.
+
 ## Chats
 
 The sidebar on the left lists your chats like a desktop chat app:
@@ -98,7 +123,7 @@ A new account is used by new chats right away; a chat that's already open picks 
 
 ### Previews
 
-When the agent starts a web server, or shows you a VM, an emulator or a desktop app, you see it live beside the conversation, from any device: the page streams from a browser on the machine Rein runs on, so `localhost` works. See [Previews](../previews/).
+When the agent starts a web server, or shows you a VM, an emulator or a desktop app, you see it live beside the conversation, from any device: the page streams from a browser on the machine Rein runs on, so `localhost` works. A native Linux app's display streams as video when [Rein Remote](../previews/#video-with-rein-remote) is installed. See [Previews](../previews/).
 
 ### Marketplace items
 

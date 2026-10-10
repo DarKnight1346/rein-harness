@@ -90,6 +90,7 @@ export const CONFIG_KEYS: KeyInfo[] = [
   k('devEnvironment', "Run the agent's commands in the repo's dev container (devcontainer exec) or Nix/devbox shell: off, auto (whichever the repo has), devcontainer, nix or devbox", oneOf('off', 'auto', 'devcontainer', 'nix', 'devbox')),
   k('planReview', "A second model critiques each plan (and a spec's design) before you see it: other (the other provider's best model), advisor (advisorModel) or off", oneOf('off', 'other', 'advisor')),
   k('prMaxLines', 'Tell you when the branch changes more lines than this (0 = off); /pr split then offers to split it', num(0)),
+  k('reinRemote', "Stream app previews in the web UI with Rein Remote (video; found in ~/.rein/bin or on PATH): auto, off, or the path to its binary", str),
   k('remoteHost', 'Address /remote listens on', str),
   k('remotePort', 'Port /remote listens on', num(1, 65535)),
   k('trackers', 'Issue trackers Rein takes labelled issues from (see /trackers)', json),

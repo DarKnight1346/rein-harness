@@ -1,0 +1,129 @@
+import {createHash} from 'node:crypto';
+import {chmodSync, mkdtempSync, writeFileSync} from 'node:fs';
+import http from 'node:http';
+import net from 'node:net';
+import os from 'node:os';
+import path from 'node:path';
+import {fileURLToPath} from 'node:url';
+import {afterEach, beforeEach, describe, expect, it} from 'vitest';
+import {remoteBinary, startRemote} from '../src/preview/remote.js';
+import {saveWebConfig} from '../src/webui/auth.js';
+import {startServer} from '../src/webui/server.js';
+
+const fixture = path.join(path.dirname(fileURLToPath(import.meta.url)), 'fixtures', 'fake-webui-worker.mjs');
+let home: string;
+const saved = {home: process.env.REIN_HOME, remote: process.env.FAKE_REMOTE};
+const closers: (() => unknown)[] = [];
+beforeEach(() => {
+  home = mkdtempSync(path.join(os.tmpdir(), 'rein-remote-'));
+  process.env.REIN_HOME = home;
+});
+afterEach(async () => {
+  for (const c of closers.splice(0)) await c();
+  for (const [k, v] of [['REIN_HOME', saved.home], ['FAKE_REMOTE', saved.remote]] as const) v === undefined ? delete process.env[k] : (process.env[k] = v);
+});
+
+/** A stand-in for `rein-remote serve`: its web client, and a WebSocket that echoes, behind a token. */
+async function fakeRemote(token: string) {
+  const seen: string[] = [];
+  const srv = http.createServer((req, res) => {
+    if (req.url === '/rein-remote.js') return void (res.writeHead(200, {'content-type': 'text/javascript'}), res.end('export const connect = () => "rein-remote client";'));
+    res.writeHead(404).end();
+  });
+  const sockets = new Set<net.Socket>();
+  srv.on('upgrade', (req, socket: net.Socket) => {
+    sockets.add(socket);
+    seen.push(req.url ?? '');
+    if (!req.url?.endsWith(`token=${token}`)) return socket.end('HTTP/1.1 403 Forbidden\r\n\r\n');
+    const accept = createHash('sha1').update(`${req.headers['sec-websocket-key']}258EAFA5-E914-47DA-95CA-C5AB0DC85B11`).digest('base64');
+    socket.write(`HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: ${accept}\r\n\r\n`);
+    socket.on('data', (d) => socket.write(d)); // echo
+  });
+  await new Promise<void>((r) => srv.listen(0, '127.0.0.1', r));
+  closers.push(() => new Promise((r) => (sockets.forEach((x) => x.destroy()), srv.closeAllConnections(), srv.close(r))));
+  return {port: (srv.address() as net.AddressInfo).port, seen};
+}
+
+/** A raw WebSocket handshake (plus a few bytes after it) through the web UI; what came back. */
+function upgrade(port: number, pathname: string, headers: Record<string, string>): Promise<string> {
+  return new Promise((resolve) => {
+    const s = net.connect(port, '127.0.0.1', () => {
+      const h = {Host: `127.0.0.1:${port}`, Upgrade: 'websocket', Connection: 'Upgrade', 'Sec-WebSocket-Key': 'dGhlIHNhbXBsZSBub25jZQ==', 'Sec-WebSocket-Version': '13', ...headers};
+      s.write(`GET ${pathname} HTTP/1.1\r\n${Object.entries(h).map(([k, v]) => `${k}: ${v}`).join('\r\n')}\r\n\r\n`);
+    });
+    let got = '';
+    s.on('data', (d) => {
+      got += d.toString('latin1');
+      if (got.includes('101 Switching') && !got.includes('ping-through')) s.write('ping-through');
+      if (got.includes('ping-through') || /^HTTP\/1\.1 [45]/.test(got)) s.destroy();
+    });
+    s.on('close', () => resolve(got));
+    setTimeout(() => s.destroy(), 4000);
+  });
+}
+
+describe('previews streamed with Rein Remote', () => {
+  it('proxies the stream only for this page, signed in, with the token the page never sees', async () => {
+    saveWebConfig({mode: 'local', createdAt: Date.now()});
+    const token = 'secret-token-123';
+    const remote = await fakeRemote(token);
+    process.env.FAKE_REMOTE = `${remote.port}:${token}`;
+    const server = await startServer({port: 0, worker: () => ({command: process.execPath, args: [fixture]}), log: () => {}});
+    closers.push(() => server.close());
+    const base = `http://127.0.0.1:${server.port}`;
+    const open = await fetch(`${base}/api/chats`, {method: 'POST', headers: {'x-rein': '1', 'content-type': 'application/json'}, body: JSON.stringify({project: home})});
+    const {id} = (await open.json()) as {id: string};
+    const stream = `/api/chats/${id}/previews/1/stream`;
+
+    // Another site's page (or no Origin at all) is refused before anything reaches rein-remote.
+    expect(await upgrade(server.port, stream, {Origin: 'https://evil.example'})).toMatch(/^HTTP\/1\.1 403/);
+    expect(await upgrade(server.port, stream, {})).toMatch(/^HTTP\/1\.1 403/);
+    expect(remote.seen).toEqual([]);
+    // This page: through to rein-remote with its token, and bytes go both ways.
+    const ok = await upgrade(server.port, stream, {Origin: base});
+    expect(ok).toMatch(/^HTTP\/1\.1 101/);
+    expect(ok).toContain('ping-through');
+    expect(remote.seen).toEqual([`/stream?token=${token}`]);
+    // A preview without a stream, and a chat that isn't open: no.
+    expect(await upgrade(server.port, `/api/chats/${id}/previews/2/stream`, {Origin: base})).toMatch(/^HTTP\/1\.1 502/);
+    expect(await upgrade(server.port, '/api/chats/abc/previews/1/stream', {Origin: base})).toMatch(/^HTTP\/1\.1 404/);
+
+    // The client script comes from that rein-remote; the page can't ask the worker for the token.
+    const js = await fetch(`${base}/api/chats/${id}/previews/1/rein-remote.js`);
+    expect(js.headers.get('content-type')).toContain('javascript');
+    expect(await js.text()).toContain('rein-remote client');
+    const peek = await fetch(`${base}/api/chats/${id}/request`, {method: 'POST', headers: {'x-rein': '1', 'content-type': 'application/json'}, body: JSON.stringify({op: 'remote-port', args: {id: 1}})});
+    expect(peek.status).toBe(400);
+    expect(await peek.text()).not.toContain(token);
+  });
+
+  it('refuses the stream to someone not signed in (password mode)', async () => {
+    saveWebConfig({mode: 'password', createdAt: Date.now(), users: []});
+    process.env.FAKE_REMOTE = '1:x';
+    const server = await startServer({port: 0, host: '127.0.0.1', worker: () => ({command: process.execPath, args: [fixture]}), log: () => {}});
+    closers.push(() => server.close());
+    expect(await upgrade(server.port, '/api/chats/abc/previews/1/stream', {Origin: `http://127.0.0.1:${server.port}`})).toMatch(/^HTTP\/1\.1 401/);
+  });
+
+  it('finds the binary, and starts it with the token in its environment, not its arguments', async () => {
+    expect(remoteBinary('off')).toBeUndefined();
+    expect(remoteBinary(path.join(home, 'missing'))).toBeUndefined();
+    const bin = path.join(home, 'rein-remote-stub.mjs');
+    writeFileSync(bin, `#!${process.execPath}\nconsole.error('rein-remote: streaming a 640×480 screen on http://127.0.0.1:45678 (open it in a browser)');\nconsole.error('args=' + JSON.stringify(process.argv.slice(2)) + ' token=' + (process.env.REIN_REMOTE_TOKEN ? 'set' : 'unset'));\nsetInterval(() => {}, 1000);\n`);
+    chmodSync(bin, 0o755);
+    if (process.platform === 'win32') return; // a shebang script isn't a program there
+    expect(remoteBinary(bin)).toBe(bin);
+    const r = await startRemote(bin, 20);
+    closers.push(() => r.stop());
+    expect(r.port).toBe(45678);
+    expect(r.token.length).toBeGreaterThan(20);
+  });
+
+  it("says so when it doesn't start", async () => {
+    if (process.platform === 'win32') return;
+    const bin = path.join(home, 'rein-remote-broken.mjs');
+    writeFileSync(bin, `#!${process.execPath}\nconsole.error("rein-remote: can't open the X display :20: Connection refused");\nprocess.exit(1);\n`);
+    chmodSync(bin, 0o755);
+    await expect(startRemote(bin, 20)).rejects.toThrow(/can't open the X display/);
+  });
+});

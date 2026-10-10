@@ -24,7 +24,7 @@ export type Snapshot = {
   mode: 'ask' | 'auto' | 'bypass' | 'plan';
   busy: boolean;
   /** Things with a screen the agent made (preview/registry.ts), and whether each is open. */
-  previews: {id: number; kind: string; target: string; title: string; source: string; open: boolean; url?: string}[];
+  previews: {id: number; kind: string; target: string; title: string; source: string; open: boolean; url?: string; remote?: boolean}[];
   /** The accent of a theme from a marketplace item or your theme setting (a CSS color), if any. */
   accent?: string;
   /** The status line and sidebar, as /settings lays them out (panels.ts). */
@@ -437,7 +437,7 @@ export async function runWorker(): Promise<number> {
   const previewList = () =>
     runtime.previews.list().map((p) => {
       const v = views.get(p.id);
-      return {id: p.id, kind: p.kind, target: p.target, title: p.title, source: p.source, open: !!v, ...(v instanceof BrowserView && v.url ? {url: v.url} : {})};
+      return {id: p.id, kind: p.kind, target: p.target, title: p.title, source: p.source, open: !!v, ...(v instanceof BrowserView && v.url ? {url: v.url} : {}), ...(p.remote ? {remote: true} : {})};
     });
   const openView = async (id: number, size: {width: number; height: number}, password?: string) => {
     const p = runtime.previews.get(id);
@@ -571,7 +571,7 @@ export async function runWorker(): Promise<number> {
         void catalog.probeWindows().catch(() => {});
         await runtime.loadExtensions().catch(() => {});
         // The agent can show the user what it made, live, wherever they are (web UI chats only).
-        runtime.tools.register(previewTool(runtime.previews, (id) => send({t: 'event', ev: {type: 'preview-show', id}})));
+        runtime.tools.register(previewTool(runtime.previews, (id) => send({t: 'event', ev: {type: 'preview-show', id}}), () => runtime.config.reinRemote));
         runtime.engine.refreshTools();
         skills = loadSkills();
         return send({t: 'ready', snapshot: snapshot()});
@@ -812,6 +812,12 @@ export async function runWorker(): Promise<number> {
         } else await runtime.mcp.reconnect(s.name);
         await showWindow({name: 'mcp'}, true);
         return {ok: true};
+      }
+      case 'remote-port': {
+        // For the web UI server only (it refuses this op from the page): where Rein Remote listens.
+        const p = runtime.previews.get(Number(args.id));
+        if (!p?.remote) throw new Error('that preview has no Rein Remote stream');
+        return p.remote;
       }
       case 'preview-open':
         return openView(Number(args.id), {width: Number(args.width) || 1280, height: Number(args.height) || 800}, typeof args.password === 'string' && args.password ? args.password : undefined);
