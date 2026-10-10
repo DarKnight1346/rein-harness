@@ -1,4 +1,4 @@
-import {EnvHttpProxyAgent, setGlobalDispatcher} from 'undici';
+import {createRequire} from 'node:module';
 
 /**
  * Corporate proxies: Node's built-in fetch ignores HTTPS_PROXY / HTTP_PROXY, so Rein's own requests
@@ -14,6 +14,8 @@ export function installProxy(env: NodeJS.ProcessEnv = process.env): string | und
   const http = pick('HTTP_PROXY', 'http_proxy', 'ALL_PROXY', 'all_proxy');
   if (!https && !http) return undefined;
   const noProxy = [pick('NO_PROXY', 'no_proxy'), 'localhost', '127.0.0.1', '::1'].filter(Boolean).join(',');
+  // undici loads only when a proxy is set: it's a large package and most setups have none.
+  const {EnvHttpProxyAgent, setGlobalDispatcher} = createRequire(import.meta.url)('undici') as typeof import('undici');
   setGlobalDispatcher(new EnvHttpProxyAgent({...(http ? {httpProxy: http} : {}), ...(https ? {httpsProxy: https} : {}), noProxy}));
   return (https ?? http)!.replace(/\/\/[^@/]*@/, '//***@');
 }

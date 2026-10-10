@@ -29,6 +29,7 @@ jobs:
       - run: npm run typecheck
       - run: npm test
       - run: npm run build
+      - run: npm run smoke
 
   # Every supported platform must pass before a PR can merge (test, test-macos and test-windows are
   # all required checks on main) and before anything is published.
@@ -44,6 +45,7 @@ jobs:
       - run: npm run typecheck
       - run: npm test
       - run: npm run build
+      - run: npm run smoke
 
   # Windows: typecheck + tests on a real Windows runner (Git Bash is preinstalled there, as most
   # Windows developers have it).
@@ -59,6 +61,7 @@ jobs:
       - run: npm run typecheck
       - run: npm test
       - run: npm run build
+      - run: npm run smoke
 
   publish:
     needs: [test, test-macos, test-windows]

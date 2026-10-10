@@ -1,6 +1,7 @@
 import chalk from 'chalk';
 import cliTruncate from 'cli-truncate';
-import hljs from 'highlight.js';
+import {createRequire} from 'node:module';
+import type {HLJSApi} from 'highlight.js';
 import {marked, type Token, type Tokens} from 'marked';
 import stringWidth from 'string-width';
 import wrapAnsi from 'wrap-ansi';
@@ -107,12 +108,16 @@ function htmlToAnsi(html: string): string {
   return out;
 }
 
+/** highlight.js, loaded at the first code block: its ~190 languages are a large share of startup. */
+let hl: HLJSApi | undefined;
+const hljs = () => (hl ??= createRequire(import.meta.url)('highlight.js') as HLJSApi);
+
 /** Language id highlight.js knows for a fence tag or file name/extension (`ts`, `src/a.tsx`, `Makefile`). */
 export function languageFor(hint: string | undefined): string | undefined {
   if (!hint) return undefined;
   const base = hint.trim().split(/[\\/]/).pop() ?? '';
   const ext = /\.([A-Za-z0-9+#-]+)$/.exec(base)?.[1];
-  for (const c of [hint.trim().match(/^[\w.+#-]+/)?.[0], ext, base]) if (c && hljs.getLanguage(c)) return c;
+  for (const c of [hint.trim().match(/^[\w.+#-]+/)?.[0], ext, base]) if (c && hljs().getLanguage(c)) return c;
   return undefined;
 }
 
@@ -121,7 +126,7 @@ export function highlight(code: string, lang: string | undefined): string {
   const l = languageFor(lang);
   if (!l) return code;
   try {
-    return htmlToAnsi(hljs.highlight(code, {language: l, ignoreIllegals: true}).value);
+    return htmlToAnsi(hljs().highlight(code, {language: l, ignoreIllegals: true}).value);
   } catch {
     return code;
   }
