@@ -23,6 +23,10 @@
     "url": "git+https://github.com/DarKnight1346/rein-harness.git"
   },
   "type": "module",
+  "exports": {
+    "./api": {"types": "./dist/extensions/api.d.ts", "default": "./dist/extensions/api.js"},
+    "./package.json": "./package.json"
+  },
   "bin": {
     "rein": "dist/cli.js"
   },
@@ -38,7 +42,7 @@
   },
   "scripts": {
     "dev": "tsx src/cli.ts",
-    "build": "tsc -p tsconfig.build.json && node scripts/bundle.mjs",
+    "build": "tsc -p tsconfig.build.json && tsc -p tsconfig.api.json && node scripts/bundle.mjs",
     "smoke": "node scripts/smoke-dist.mjs",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",

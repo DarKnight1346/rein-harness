@@ -43,6 +43,7 @@ import {agentLines, assistantLines, entryLines, pendingToolLines, wrap} from './
 import {InfoWindow, Window} from './Window.js';
 import {COMMANDS} from '../../commands/index.js';
 import {PetView} from '../Pet.js';
+import {extensions} from '../../extensions/index.js';
 import {MarketplaceScreen, UpdatesScreen} from '../MarketplaceScreen.js';
 import {commandEnabled, packsHint} from '../../commands/packs.js';
 import {skillDirs, skillSourceLabel, type Skill} from '../../skills/index.js';
@@ -324,6 +325,8 @@ export function FullscreenApp({resume}: {resume: Resume}) {
             lines={overlay.report ? entryLines({id: -1, kind: 'context', report: overlay.report}, windowText).slice(1) : ['Measuring…']}
           />
         );
+      case 'text':
+        return <InfoWindow title={overlay.title} width={windowWidth} onClose={r.closeOverlay} lines={overlay.lines.flatMap((l) => wrap(l, windowText))} />;
       case 'help':
         return <InfoWindow title="Commands" width={windowWidth} onClose={r.closeOverlay} lines={helpLines(windowText, r.skills)} />;
       case 'update':
@@ -473,6 +476,7 @@ function helpLines(width: number, skills: Skill[]): string[] {
   const firstSentence = (t: string) => t.match(/^.*?[.!?](?=\s|$)/)?.[0] ?? t;
   return [
     ...commands.flatMap((c) => wrap(c.usage, width, chalk.cyan(col(c.name)))),
+    ...(extensions.commands.length ? ['', chalk.bold('From the marketplace'), ...extensions.commands.flatMap(({item, value: c}) => wrap(`${c.usage ?? c.description} ${chalk.dim(`(${item})`)}`, width, chalk.cyan(col(c.name))))] : []),
     ...wrap(chalk.dim(packsHint()), width),
     '',
     chalk.bold('Skills') + chalk.dim(`  name clashes: built-in → ${dirs.project} (project) → ${dirs.global} (global)`),
@@ -761,6 +765,17 @@ function TopBar(props: {cols: number; tick: number; sidebarOpen: boolean; onTogg
       ),
     });
   }
+  // Marketplace items' segments, last (and first to go when the bar is short).
+  for (const {item, value: s} of extensions.status) {
+    let t: string | undefined;
+    try {
+      t = s.render();
+    } catch {
+      t = undefined;
+    }
+    if (!t) continue;
+    parts.push({key: `ext:${item}:${s.id}`, width: stringWidth(stripAnsi(t)) + 3, drop: 0, node: <Text key={`ext:${item}:${s.id}`}><Text dimColor> │ </Text>{t}</Text>});
+  }
   const toggle = items.includes('sidebarToggle');
   const room = props.cols - 'XXXX Rein '.length - (toggle ? 4 : 0);
   const shown = new Set(parts.map((p) => p.key));
@@ -809,6 +824,16 @@ function Heading({children}: {children: string}) {
 }
 
 /** Sidebar: the sections chosen in /settings, in order. */
+/** An item's drawing code, kept from taking the screen down with it: a failure shows as one line. */
+function safeLines(render: () => string[]): string[] {
+  try {
+    const out = render();
+    return Array.isArray(out) ? out.map(String) : [];
+  } catch (err) {
+    return [`(error: ${(err as Error).message})`];
+  }
+}
+
 function Sidebar({width, height, tick, run, view, setView}: {width: number; height: number; tick: number; run(cmd: string): void; view: 'main' | number; setView(v: 'main' | number): void}) {
   const [, setUsageTick] = useState(0);
   useEffect(() => usageStore.subscribe(() => setUsageTick((t) => t + 1)), []);
@@ -860,6 +885,16 @@ function Sidebar({width, height, tick, run, view, setView}: {width: number; heig
           <Text dimColor>empty · /settings</Text>
         </Clickable>
       )}
+      {extensions.sidebar.map(({item, value: s}) => (
+        <Box key={`${item}:${s.id}`} flexDirection="column" marginTop={1} flexShrink={0}>
+          <Heading>{s.title.toUpperCase()}</Heading>
+          {safeLines(() => s.render(inner)).map((l, i) => (
+            <Text key={i} wrap="truncate">
+              {l}
+            </Text>
+          ))}
+        </Box>
+      ))}
       <Box flexGrow={1} />
       <PetView pets={runtime.pets} />
     </Box>

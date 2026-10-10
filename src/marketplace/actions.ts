@@ -2,7 +2,7 @@ import type {Config} from '../store/config.js';
 import {resetPluginCache} from '../plugins/index.js';
 import {applyItem, install, installedItems, recordApplied, unapplyItem, uninstall, withRequirements, type Item} from './index.js';
 
-type Host = {config: Config; setConfig(patch: Partial<Config>): Promise<void>};
+type Host = {config: Config; setConfig(patch: Partial<Config>): Promise<void>; loadExtensions?(): Promise<{loaded: string[]; failed: {id: string; error: string}[]}>};
 
 /** Install an item and what it requires; returns a line per item, and whether a restart is needed. */
 export async function installItem(host: Host, all: Item[], id: string): Promise<{lines: string[]; restart: boolean}> {
@@ -20,10 +20,13 @@ export async function installItem(host: Host, all: Item[], id: string): Promise<
       recordApplied(it.id, change.applied);
     }
     // MCP servers and hooks start with Rein; skills and commands are there right away.
-    if (it.adds.mcp.length || it.adds.hooks.length) restart = true;
+    if (it.adds.mcp.length || it.adds.hooks.length) restart = true; // (code loads right away, below)
     lines.push(`${was ? `Updated ${it.name} ${was.version} → ${it.version}` : `Installed ${it.name} ${it.version}`}${describe(it)}`);
   }
   resetPluginCache();
+  // Items that ship code: load it now (commands, sidebar sections, themes work right away).
+  const ext = await host.loadExtensions?.();
+  for (const f of ext?.failed ?? []) lines.push(`${f.id}'s code didn't load: ${f.error}`);
   return {lines, restart};
 }
 
@@ -34,6 +37,7 @@ export async function uninstallItem(host: Host, id: string): Promise<string> {
   if (undo) await host.setConfig(undo as Partial<Config>);
   uninstall(id);
   resetPluginCache();
+  await host.loadExtensions?.();
   return `Uninstalled ${id}${undo ? ' and undid its settings' : ''}.`;
 }
 
@@ -46,6 +50,7 @@ export function describe(it: Item): string {
     a.agents && `${a.agents} subagent${a.agents > 1 ? 's' : ''}`,
     a.mcp.length && `tools from ${a.mcp.join(', ')}`,
     a.hooks.length && `hooks on ${a.hooks.join(', ')}`,
+    a.code && 'its own code',
     it.theme && 'a theme',
     it.config?.packs?.length && `packs ${it.config.packs.join(', ')}`,
     it.config?.experiments?.length && `experiments ${it.config.experiments.join(', ')}`,

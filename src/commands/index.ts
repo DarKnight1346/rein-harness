@@ -83,12 +83,23 @@ export const COMMANDS: Command[] = [
 
 export type Parsed =
   | {kind: 'command'; name: CommandName; args: string}
+  | {kind: 'extension'; command: ExtensionCommand; args: string}
   | {kind: 'skill'; skill: Skill; args: string}
   | {kind: 'unknown'; name: string}
   | {kind: 'text'; text: string};
 
-/** An autocomplete row: a built-in command or a skill. */
-export type Suggestion = {name: string; description: string; skill?: Skill};
+/** An autocomplete row: a built-in command, a marketplace item's command, or a skill. */
+export type Suggestion = {name: string; description: string; skill?: Skill; extension?: ExtensionCommand};
+
+/** A command a marketplace item's code registered (extensions/index.ts). */
+export type ExtensionCommand = import('../extensions/api.js').Command;
+let extensionCommands: () => ExtensionCommand[] = () => [];
+/** The runtime says which commands installed items have (set at startup; read on every keystroke). */
+export function setExtensionCommands(fn: () => ExtensionCommand[]): void {
+  extensionCommands = fn;
+}
+/** Item commands Rein's own don't shadow. */
+const itemCommands = () => extensionCommands().filter((c) => !COMMANDS.some((b) => b.name === c.name));
 
 const ALIASES: Record<string, CommandName> = {};
 
@@ -111,6 +122,8 @@ export function parseInput(raw: string, skills: Skill[] = []): Parsed | undefine
   const name = ALIASES[head.toLowerCase()] ?? head.toLowerCase();
   const cmd = COMMANDS.find((c) => c.name === name);
   if (cmd) return {kind: 'command', name: cmd.name, args: rest.join(' ')};
+  const ext = itemCommands().find((c) => c.name === name);
+  if (ext) return {kind: 'extension', command: ext, args: rest.join(' ')};
   const skill = findSkill(skills, head);
   return skill ? {kind: 'skill', skill, args: rest.join(' ')} : {kind: 'unknown', name: head};
 }
@@ -153,6 +166,7 @@ export function suggestCommands(input: string, skills: Skill[] = []): Suggestion
   const shadowed = new Set(shadowedSkills(skills).map((s) => s.name));
   const all: (Suggestion & {names: string[]})[] = [
     ...COMMANDS.filter((c) => commandEnabled(c.name)).map((c) => ({...c, names: [c.name, ...Object.keys(ALIASES).filter((a) => ALIASES[a] === c.name)]})),
+    ...itemCommands().map((c) => ({name: c.name, description: c.description, extension: c, names: [c.name], ...(c.listed === false ? {listed: false as const} : {})})),
     ...skills
       .filter((s) => !shadowed.has(s.name))
       .map((s) => ({name: s.name, description: s.description + (s.aliases.length ? ` (alias: ${s.aliases.map((a) => `/${a}`).join(', ')})` : ''), skill: s, names: [s.name, ...s.aliases]})),

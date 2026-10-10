@@ -147,9 +147,9 @@ export function MarketplaceScreen({width, height, onClose, log}: {width: number;
                 </Text>
               </Box>
             ) : null}
-            {sel.adds.mcp.length || sel.adds.hooks.length ? (
+            {sel.adds.mcp.length || sel.adds.hooks.length || sel.adds.code ? (
               <Text color="yellow" wrap="wrap">
-                Runs code on your machine ({[sel.adds.mcp.length && 'MCP servers', sel.adds.hooks.length && 'hooks'].filter(Boolean).join(' and ')}): install it only from a source you trust.
+                Runs code on your machine ({[sel.adds.code && 'its own code, inside Rein', sel.adds.mcp.length && 'MCP servers', sel.adds.hooks.length && 'hooks'].filter(Boolean).join(', ')}): install it only from a source you trust.
               </Text>
             ) : null}
             {sel.readme ? (
