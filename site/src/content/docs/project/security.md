@@ -55,6 +55,10 @@ Every mutating tool call (writes, edits, deletes, shell commands, MCP adds and r
 
 `web_fetch` (`src/tools/web.ts`) upgrades `http` to `https`, refuses non-HTTP schemes and URLs with credentials, and refuses local and private hosts: `localhost`, `*.localhost`, `*.local`, `*.internal`, dotless names, and loopback, private, link-local and CGNAT IP literals (IPv4 and IPv6). Redirects are followed only on the same host. A cross-host redirect is reported back to the agent instead of followed. Bodies are capped at 10 MB, requests at 30 s.
 
+## The web UI
+
+`rein --ui` only listens on this computer unless you set it up with a username and password, and setup itself needs a one-time code printed where Rein started. Without a login it only answers to `localhost` (and your Tailscale name in Tailscale mode), so other sites can't reach it through DNS rebinding; every change needs a header other sites can't send. Passwords are scrypt hashes, sessions are hashed, failed sign-ins are rate-limited, and the page runs under a strict content security policy. A signed-in user can do what the account running Rein can do, files included: treat it like a shell on that machine. See [Web UI](../../features/web-ui/#security).
+
 ## Honest limitations
 
 These are real, and you should know them:

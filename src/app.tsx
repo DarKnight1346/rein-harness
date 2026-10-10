@@ -21,6 +21,8 @@ if (args.includes('--help') || args.includes('-h')) {
        rein attach [id]
        rein sessions
        rein bench [init [--count n] | run --model m [--model m2] [--tasks n] [--test cmd]]
+       rein --ui [--port n] [--host h]
+       rein service --install [--port n] | --uninstall
        rein --update | --version
 
   -c, --continue [id]   pick a saved conversation from this project to continue (or continue <id>)
@@ -29,6 +31,7 @@ if (args.includes('--help') || args.includes('-h')) {
   --add-dir <path> also let the agent use this folder without asking (repeatable)
   --scope <dir>    work in one package of a monorepo: search, list and shell start there
   --acp            run as an Agent Client Protocol agent on stdin/stdout (Zed, JetBrains…)
+  --ui             the web UI, on port 9333 (--port picks another; --host the address to listen on)
   --background     run the session in the background: closing the terminal (or Ctrl+\\) detaches,
                    rein attach [id] comes back from any terminal
   -p, --print      headless: run one prompt (or stdin) and print the result; also --model,
@@ -55,6 +58,62 @@ if (args.includes('--update')) {
     console.log(line.level ? color[line.level](text) : text);
   }
   process.exit(failed ? 1 : 0);
+}
+if (args.includes('--ui-worker')) {
+  // Internal: one web UI chat, started by the web UI server in the project's folder (webui/worker.ts).
+  const {runWorker} = await import('./webui/worker.js');
+  process.exit(await runWorker());
+}
+const flagValue = (name: string) => {
+  const i = args.indexOf(name);
+  return i >= 0 ? args[i + 1] : undefined;
+};
+const portFlag = () => {
+  const v = flagValue('--port');
+  if (v === undefined) return undefined;
+  const n = Number(v);
+  if (!Number.isInteger(n) || n < 1 || n > 65535) {
+    console.error(`rein: --port needs a port number (1-65535), not ${v}`);
+    process.exit(1);
+  }
+  return n;
+};
+if (args.includes('--ui')) {
+  // The web UI: Rein in the browser, on any of your devices (webui/server.ts).
+  const {startServer} = await import('./webui/server.js');
+  const port = portFlag();
+  const host = flagValue('--host');
+  try {
+    const s = await startServer({...(port ? {port} : {}), ...(host ? {host} : {})});
+    const stop = () => void s.close().then(() => process.exit(0));
+    process.on('SIGINT', stop);
+    process.on('SIGTERM', stop);
+  } catch (err) {
+    const e = err as NodeJS.ErrnoException;
+    console.error(`rein: ${e.code === 'EADDRINUSE' ? `port ${port ?? 9333} is in use (is the web UI already running? rein --ui --port <n> picks another)` : e.message}`);
+    process.exit(1);
+  }
+  await new Promise(() => {});
+}
+if (args[0] === 'service') {
+  // The web UI as a service that starts with the system (webui/service.ts).
+  const svc = await import('./webui/service.js');
+  try {
+    if (args.includes('--install')) {
+      const port = portFlag();
+      for (const line of await svc.installService(port ? {port} : {})) console.log(line);
+      const {loadWebConfig, setupCode} = await import('./webui/auth.js');
+      if (!loadWebConfig()) console.log(`First run: open http://localhost:${port ?? 9333}/?setup=${setupCode()} to set it up.`);
+    } else if (args.includes('--uninstall')) console.log(await svc.uninstallService());
+    else {
+      console.log('Usage: rein service --install [--port <n>] | --uninstall');
+      process.exit(1);
+    }
+  } catch (err) {
+    console.error(`rein: ${(err as Error).message}`);
+    process.exit(1);
+  }
+  process.exit(0);
 }
 if (args.includes('--acp')) {
   // An Agent Client Protocol agent on stdin/stdout, for Zed, JetBrains and other ACP editors.

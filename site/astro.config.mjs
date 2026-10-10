@@ -66,6 +66,7 @@ export default defineConfig({
           {label: 'Skills', slug: 'features/skills'},
           {label: 'Plugins', slug: 'features/plugins'},
           {label: 'Marketplace', slug: 'features/marketplace'},
+          {label: 'Web UI', slug: 'features/web-ui'},
           {label: 'Hooks', slug: 'features/hooks'},
           {label: 'Memory & instructions', slug: 'features/memory'},
           {label: 'Headless & CI', slug: 'features/headless'},

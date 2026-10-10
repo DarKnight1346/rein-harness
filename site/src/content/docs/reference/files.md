@@ -37,6 +37,11 @@ An existing `~/.rein` keeps being used as it is, and so does `REIN_HOME`. To swi
 | `state/build-times/` | Per project, the last 10 durations of each build or test command (for `buildTimeWarnings`) |
 | `state/flaky/` | With `flaky-quarantine`: per project, recent test outcomes by code fingerprint and the tests found flaky. `/flaky clear` empties a project's file |
 | `state/mcp-pins.json` | With `mcpPinning`: each MCP server's launch config and tool list as first approved (hashes and tool names). Delete it to start over |
+| `webui.json` | The [web UI](../../features/web-ui/)'s setup: its mode (`local`, `tailscale`, `password`), users (scrypt hashes), listen address, optional `tls`. Delete it to run setup again |
+| `webui-setup-code` | The one-time setup code, until setup is done |
+| `webui-sessions.json` | Web UI sign-ins (hashes of their tokens), kept for 30 days |
+| `webui-projects.json` | The web UI's recent projects |
+| `logs/webui.log` | The web UI service's output |
 | `marketplaces.json` | The [marketplaces](../../features/marketplace/) you added (the official one is always there and isn't listed) |
 | `marketplaces/<repo>/` | Each marketplace's clone (shallow). Safe to delete; fetched again |
 | `plugins/<id>/` | Items you installed from a marketplace, loaded like plugins |

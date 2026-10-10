@@ -112,7 +112,7 @@ export function ClassicApp({resume}: {resume: Resume}) {
         {chat.running.length ? <Text>{pendingToolLines(chat.running, Math.max(20, (process.stdout.columns ?? 80) - 2), dotOn).join('\n')}</Text> : null}
         <ForegroundTail />
         {chat.busy ? (
-          <Working startedAt={chat.startedAt} phase={chat.phase} tool={chat.toolLabel} tokens={chat.tokens} queued={r.queued.length} waitUntil={chat.waitUntil} />
+          <Working startedAt={chat.startedAt} phase={chat.phase} tool={chat.toolLabel} tokens={chat.tokens} queued={r.queued.length} waitUntil={chat.waitUntil} phrase={chat.phrase} />
         ) : r.compacting ? (
           <Working startedAt={r.compacting.startedAt} phase="tool" tool={r.compacting.label} />
         ) : r.goalNote ? (

@@ -59,7 +59,7 @@ export const rainbow = (i: number, tick: number) => hueHex(wrapHue(i * 24 - tick
  * brighter band sweeping the label. One short line re-rendering at ~9 fps; incremental rendering
  * rewrites only that line.
  */
-export function Working({startedAt, phase, tool, tokens, queued = 0, waitUntil}: {startedAt: number; phase: Phase; tool?: string; tokens?: {input: number; cached: number; output: number}; queued?: number; waitUntil?: number}) {
+export function Working({startedAt, phase, tool, tokens, queued = 0, waitUntil, phrase}: {startedAt: number; phase: Phase; tool?: string; tokens?: {input: number; cached: number; output: number}; queued?: number; waitUntil?: number; phrase?: string}) {
   const [tick, setTick] = useState(0);
   const waiting = phase === 'waiting' && waitUntil !== undefined;
   useEffect(() => {
@@ -78,7 +78,8 @@ export function Working({startedAt, phase, tool, tokens, queued = 0, waitUntil}:
     );
   }
   const bar = barFrame(tick);
-  const label = phase === 'tool' && tool ? `${tool}…` : `${LABEL[phase]}…`;
+  // The turn's phrase stands in for Routing / Thinking / Working; Responding stays (text is arriving).
+  const label = phase === 'tool' && tool ? `${tool}…` : phrase && phase !== 'responding' && phase !== 'waiting' ? `${phrase}…` : `${LABEL[phase]}…`;
   const band = tick % (label.length + 8);
   const elapsed = elapsedText(Date.now() - startedAt);
   return (

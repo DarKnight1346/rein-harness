@@ -154,9 +154,8 @@ It fades in over 700 ms at launch, fades out over 900 ms when you send your firs
 
 While the agent works, the line above the input shows Rein's mark: a four-cell bar wave (`▇▅▃▁`) with a rainbow flowing through it and a brighter band sweeping across the label. The label tells you what's happening:
 
-- `Routing…`: auto mode is choosing a model.
-- `Thinking…`, then `Responding…`.
-- `Working…`: a tool call is running.
+- A phrase for the turn while the agent thinks, routes or runs tools: one of about 380 (`Pondering…`, `Untangling spaghetti…`, `Consulting the rubber duck…`), picked at random for each message you send and never the same twice in a row.
+- `Responding…` while the reply streams in.
 
 Tool calls show in the conversation itself. A call that's still running is a pending line with a blinking dot, such as `⏺ Shell(npm test)`. When it finishes, the line becomes the result: a green dot if it worked, a red one if it failed. Calls made in parallel each get their own line.
 

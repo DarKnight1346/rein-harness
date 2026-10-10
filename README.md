@@ -44,6 +44,12 @@ and a compaction model. No OAuth tokens are extracted: all traffic goes through 
   SCIP indexes, `/refs POST /orders/{id}` from gateway to every caller, `/impact` of a branch,
   coordinated change sets across repos, codemaps, a container sandbox per task, and `/stack up` for
   the services a change needs.
+- **Web UI:** `rein --ui` puts Rein in the browser on any of your devices: chats in your projects, approvals,
+  and a file manager for the machine. Local only, over Tailscale, or with a login on your own server;
+  `rein service --install` starts it with the system.
+- **Marketplace:** `/marketplace` is a store of tools, commands, skills, themes and bundles from git repos,
+  the official [Rein Marketplace](https://github.com/rein-harness/rein-marketplace) first. Specialist
+  commands come in packs you turn on in `/settings`.
 
 ## Install
 

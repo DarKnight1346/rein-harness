@@ -65,7 +65,7 @@ If you've never picked a chat model, Rein uses the **provider default**, which i
 - **Pinned** (`/model sonnet`): every message goes to that model. Rein still spreads the work across your accounts and fails over when one hits a limit (see [Accounts](../accounts/)). No decider call is made.
 - **Auto** (`/model auto`): one decision-model call per message picks the model. The top bar shows `auto · Sonnet` (the model currently in use), and the sidebar's **Auto routing** section shows the last decision, e.g. `claude:haiku (0.91) via jev` or `stay (switch 0.12) via jev`.
 
-While a message is being routed, the working indicator reads `Routing…` instead of `Thinking…`.
+While a message is being routed, the working indicator shows the turn's phrase (`Pondering…`, `Brewing ideas…`; see [the working indicator](../tui/#the-working-indicator)).
 
 ## How auto picks
 

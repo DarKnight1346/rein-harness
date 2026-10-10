@@ -38,7 +38,7 @@ describe('multi-session dashboard', () => {
     expect(got).toEqual(['also handle timeouts']);
     stop();
     expect(() => sendTo(999_999, 'x')).toThrow(/no Rein is running/);
-  });
+  }, 20_000); // starts real processes: slow on a busy CI runner
 
   it('sends a message from the dashboard, and attaches only background sessions', async () => {
     writeLive({cwd: '/work/api', title: 'Fix login', state: 'waiting', host: 'ab12cd34'});

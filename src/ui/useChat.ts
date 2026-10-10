@@ -1,4 +1,5 @@
 import {useCallback, useEffect, useRef, useState} from 'react';
+import {pickPhrase} from './phrases.js';
 
 export type RunningTool = {id: number; label: string; summary: string};
 import {planPreview} from './planPreview.js';
@@ -43,6 +44,8 @@ export function useChat(commit: (e: NewEntry<ChatEntry>) => void, notice: (kind:
   const [waitUntil, setWaitUntil] = useState<number | undefined>(undefined);
   /** What a mid-turn compaction shows on the working line (tools show in the conversation instead). */
   const [toolLabel, setToolLabel] = useState<string | undefined>();
+  /** This turn's fun stand-in for "Thinking" (phrases.ts): a new one for each message you send. */
+  const [phrase, setPhrase] = useState<string>(() => pickPhrase());
   /** Tool calls in flight, shown in the conversation as pending lines (a blinking dot) until they finish. */
   const [running, setRunning] = useState<RunningTool[]>([]);
   /** Tokens of the call in flight: sent (incl. cached) / received. */
@@ -83,6 +86,8 @@ export function useChat(commit: (e: NewEntry<ChatEntry>) => void, notice: (kind:
   const send = useCallback(
     async (text: string, images?: ImageInput[], stopDepth = 0): Promise<void> => {
       let finished = false;
+      // A continuation (stop hook, code check) keeps the turn's phrase; your next message gets a new one.
+      if (stopDepth === 0) setPhrase(pickPhrase());
       setBusy(true);
       setStartedAt(Date.now());
       setPhase(runtime.config.chatModel === 'auto' ? 'routing' : 'thinking');
@@ -180,5 +185,5 @@ export function useChat(commit: (e: NewEntry<ChatEntry>) => void, notice: (kind:
     runtime.agents.cancelAll({foregroundOnly: true}); // the main turn is waiting on them
     runtime.engine.interrupt();
   };
-  return {live, busy, startedAt, phase, toolLabel, running, tokens, send, interrupt, waitUntil};
+  return {live, busy, startedAt, phase, toolLabel, running, tokens, send, interrupt, waitUntil, phrase};
 }

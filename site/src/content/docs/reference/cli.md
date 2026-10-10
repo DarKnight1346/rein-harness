@@ -10,6 +10,8 @@ rein -p "<prompt>" [--model m] [--effort e] [--output-format text|json|stream-js
                    [-c [id]] [--verbose]
 rein schedule [list | run [--due | <job>] | install | uninstall]
 rein --acp
+rein --ui [--port n] [--host h]
+rein service --install [--port n] | --uninstall
 rein attach [id]
 rein sessions
 rein bench [init [--count n] | run --model m [--model m2]… [--tasks n] [--test cmd]]
@@ -28,6 +30,8 @@ Run `rein` from the project folder you want to work in. That folder becomes the 
 | `--classic` | Inline renderer: native terminal scrollback, no mouse, no sidebar. |
 | `--fullscreen` | App-style renderer: top bar, sidebar, windows, mouse. This is the default. |
 | `--add-dir <path>` | Lets the agent also use this folder without asking, for this session. Repeatable. |
+| `--ui` | Serves the [web UI](../../features/web-ui/) on port 9333: chats in your projects, approvals and a file manager, in the browser. With `--port <n>` another port, with `--host <address>` another address to listen on (default: `127.0.0.1`, or `0.0.0.0` in password mode). |
+| `--ui-worker` | Internal: one web UI chat, started by the web UI server in the chat's folder. You don't run it yourself. |
 | `--acp` | Runs Rein as an [Agent Client Protocol](https://agentclientprotocol.com) agent on stdin/stdout, for Zed, JetBrains and other ACP editors. See [ACP editors](../../features/ide/#acp-editors-zed-jetbrains). |
 | `--background` | Runs the session in a background host: closing the terminal (or `Ctrl+\`) only detaches, and `rein attach` comes back to it from any terminal. Combines with the other flags. See [Background sessions](../../features/sessions/). |
 | `--scope <dir>` | Works in one package of a monorepo: `list`, `search` and `shell` start there and its instructions are loaded. See [Workspaces](../../features/workspaces/#one-package-of-a-monorepo). |
@@ -125,6 +129,14 @@ Headless mode needs at least one account: run `rein` once to import or add one.
 | `rein schedule uninstall` | Takes this project off; removes the OS entry when it was the last one |
 
 Exits `1` when a job fails or the file has errors. See [Scheduled jobs](../../features/headless/#scheduled-jobs).
+
+## The web UI as a service: `rein service`
+
+| Command | What it does |
+|---|---|
+| `rein service --install` | Installs the [web UI](../../features/web-ui/#as-a-service) as a service that starts with the system: a launchd agent (macOS), a systemd user service (Linux) or a scheduled task (Windows). Prints the setup link if the web UI isn't set up yet |
+| `rein service --install --port <n>` | The same, on another port (default 9333) |
+| `rein service --uninstall` | Stops and removes the service |
 
 ## Background sessions: `rein attach`
 
