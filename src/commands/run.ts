@@ -133,6 +133,8 @@ let pendingGoal: string | undefined;
 /** A slash command, typed in the terminal or the web UI: `ui` is how it shows its result. */
 export function runCommand(raw: string, ui: CommandUi): void {
   const {windowed, viewing, logMain, add, setEntries, banner, bump, chat, setOverlay, setQueued, setView, attachments, skills, setSkills, opts, updating, setUpdating, setUpdateLog, compacting, setCompacting, exit, refresh, remoteCommand, openShells, openRewind, openResume, startVoice, stopVoice, recording} = ui;
+  // Windows: the fullscreen terminal's, or the web UI's (which has one for every command that opens one).
+  const win = windowed || ui.surface === 'web';
   // `!command` runs a shell command directly (main conversation only).
   if (/^\s*!\s*\S/.test(raw) && !viewing) {
     runBang(raw.trim().slice(1).trim(), logMain);
@@ -198,7 +200,7 @@ export function runCommand(raw: string, ui: CommandUi): void {
       cwd: process.cwd(),
       log: (text: string, kind?: 'info' | 'error') => log(kind === 'error' ? 'error' : 'info', String(text)),
       send: (text: string) => (chat.busy ? setQueued((q) => [...q, text]) : void chat.send(text).then(bump)),
-      window: (title: string, lines: string[]) => (windowed ? setOverlay({name: 'text', title, lines}) : log('info', [title, ...lines].join('\n'))),
+      window: (title: string, lines: string[]) => (win ? setOverlay({name: 'text', title, lines}) : log('info', [title, ...lines].join('\n'))),
     };
     void Promise.resolve()
       .then(() => cmd.run(parsed.args, ctx))
@@ -236,7 +238,7 @@ export function runCommand(raw: string, ui: CommandUi): void {
   const opensWindow = ['goal:plan', 'login', 'usage', 'context', 'help', 'update', 'shells', 'btw', 'resume', 'agents', 'agent'].includes(parsed.name) || (parsed.name === 'settings' && !parsed.args.trim()) || (parsed.name === 'marketplace' && !parsed.args.trim()) || (parsed.name === 'model' && !parsed.args);
   // A value typed after `/vault set NAME` stays off the screen and out of the transcript.
   // The web UI has windows for these whatever the arguments (/settings safety opens on a tab).
-  const webWindow = ui.surface === 'web' && (['settings', 'model', 'goal:plan', 'mcp', 'agents', 'shells', 'rewind', 'login'].includes(parsed.name) && (parsed.name !== 'model' || !parsed.args.trim()));
+  const webWindow = ui.surface === 'web' && ((['settings', 'goal:plan', 'mcp', 'agents', 'shells', 'rewind', 'login', 'help', 'update', 'btw'].includes(parsed.name)) || (['model', 'marketplace'].includes(parsed.name) && !parsed.args.trim()) || (parsed.name === 'goal' && !parsed.args.trim() && !!runtime.goals.goal));
   if (!(windowed && opensWindow) && !webWindow) log('user', parsed.name === 'vault' ? raw.trim().replace(/^(\/vault\s+set\s+\S+)\s+.*$/s, '$1 ••••') : raw.trim());
   switch (parsed.name) {
     case 'mcp':
@@ -249,7 +251,7 @@ export function runCommand(raw: string, ui: CommandUi): void {
       void (async () => {
         const m = await mk();
         if (!sub) {
-          if (windowed) return setOverlay({name: 'marketplace'});
+          if (win) return setOverlay({name: 'marketplace'});
           const markets = await m.loadMarketplaces();
           const inst = m.installedItems();
           const {describe} = await import('../marketplace/actions.js');
@@ -281,7 +283,7 @@ export function runCommand(raw: string, ui: CommandUi): void {
             for (const u of want) lines.push(...(await a.installItem(runtime, items, u.id)).lines);
             const unknown = arg === 'all' ? [] : arg.split(/\s+/).filter((id) => !ups.some((u) => u.id === id));
             log('info', [...lines, ...(unknown.length ? [`No update for ${unknown.join(', ')}.`] : [])].join('\n') || 'Nothing to update.');
-          } else if (windowed) setOverlay({name: 'marketplace-updates', items, updates: ups});
+          } else if (win) setOverlay({name: 'marketplace-updates', items, updates: ups});
           else log('info', [`Updates for what you installed:`, ...ups.map((u) => `  ${u.id}  ${u.from} → ${u.to}`), '/marketplace update all, or /marketplace update <id> [<id>…].'].join('\n'));
         } else if (sub === 'install' || sub === 'uninstall') {
           if (!arg) return log('info', `Usage: /marketplace ${sub} <id>`);
@@ -970,7 +972,7 @@ export function runCommand(raw: string, ui: CommandUi): void {
       const sub = arg.toLowerCase();
       if (!arg) {
         if (!g) log('info', 'No goal set. /goal <text> sets one; the agent works until the decision model verifies it is done.');
-        else if (windowed) setOverlay({name: 'goal'});
+        else if (win) setOverlay({name: 'goal'});
         else log('info', goalSummary(g));
         break;
       }
@@ -1016,7 +1018,7 @@ export function runCommand(raw: string, ui: CommandUi): void {
         log('info', 'Usage: /btw <question> — answered from the conversation without interrupting the agent.');
         break;
       }
-      if (windowed) setOverlay({name: 'btw', question});
+      if (win) setOverlay({name: 'btw', question});
       else log('info', `btw: ${question} (answering…)`);
       const patch = (p: Partial<Extract<Overlay, {name: 'btw'}>>) =>
         setOverlay((o) => (o.name === 'btw' && o.question === question ? {...o, ...p} : o));
@@ -1037,15 +1039,15 @@ export function runCommand(raw: string, ui: CommandUi): void {
             if (ev.type === 'mode') info = {mode: ev.mode, model: ev.model};
             else answer += ev.delta;
             // Stream into the window, ~15 updates/s.
-            if (windowed && Date.now() - last > 66) {
+            if (win && Date.now() - last > 66) {
               last = Date.now();
               patch({answer, ...info});
             }
           }
-          if (windowed) patch({answer, ...info, done: true});
+          if (win) patch({answer, ...info, done: true});
           else log('info', `btw → ${answer.trim()}\n(${info.model ?? 'model'} · ${info.mode === 'fork' ? 'forked agent' : 'from conversation'} · not added to the conversation)`);
         } catch (err) {
-          if (windowed) patch({error: (err as Error).message, done: true});
+          if (win) patch({error: (err as Error).message, done: true});
           else log('error', `btw failed: ${(err as Error).message}`);
         }
       })();
@@ -1136,17 +1138,17 @@ export function runCommand(raw: string, ui: CommandUi): void {
     }
     case 'update': {
       if (updating) {
-        if (windowed) setOverlay({name: 'update'});
+        if (win) setOverlay({name: 'update'});
         else log('info', 'An update is already running.');
         break;
       }
       setUpdating(true);
       setUpdateLog([]);
-      if (windowed) setOverlay({name: 'update'});
+      if (win) setOverlay({name: 'update'});
       void (async () => {
         try {
           for await (const line of runUpdate(() => runtime.engine.shutdown())) {
-            if (windowed) setUpdateLog((l) => [...l, line]);
+            if (win) setUpdateLog((l) => [...l, line]);
             else add({kind: 'update', line});
           }
         } catch (err) {
@@ -1285,10 +1287,10 @@ export function runCommand(raw: string, ui: CommandUi): void {
       break;
     }
     case 'help':
-      if (!windowed && skills.length) {
+      if (!win && skills.length) {
         log('info', `Skills (built-in → ${skillDirs().project} → ${skillDirs().global}):\n` + skills.map((s) => `/${s.name.padEnd(12)} ${s.description} (${s.source})`).join('\n'));
       }
-      if (windowed) {
+      if (win) {
         setOverlay({name: 'help'});
         break;
       }

@@ -48,7 +48,8 @@ export function statusView(): {id: string; label: string; value: string; command
   for (const s of out) if (s.id === 'usage') s.tone = 'dim';
   for (const {item, value: seg} of extensions.status) {
     const text = safe(() => seg.render(), '');
-    if (text) out.push({id: `${item}:${seg.id}`, label: item, value: text});
+    // As in the terminal's top bar: the item's own text, no label.
+    if (text) out.push({id: `${item}:${seg.id}`, label: '', value: text});
   }
   return out;
 }

@@ -23,6 +23,8 @@ export type Snapshot = {
   chatModel: string;
   mode: 'ask' | 'auto' | 'bypass' | 'plan';
   busy: boolean;
+  /** The accent of a theme from a marketplace item or your theme setting (a CSS color), if any. */
+  accent?: string;
   /** The status line and sidebar, as /settings lays them out (panels.ts). */
   status: StatusSegment[];
   sidebar: SidebarSection[];
@@ -96,7 +98,32 @@ async function windowView(o: Overlay): Promise<Record<string, unknown> | undefin
     case 'plans':
       return {name: 'plans', plans: o.plans.map((p) => ({file: p.file, title: p.title, done: p.milestones.filter((m) => m.done).length, total: p.milestones.length}))};
     case 'mcp':
-      return {name: 'text', title: 'MCP servers', lines: mcpLines(runtime)};
+      return {name: 'mcp', servers: runtime.mcp.list().map((x) => ({name: x.name, status: x.status, tools: x.tools, transport: x.transport, source: x.source, ...(x.error ? {error: x.error.slice(0, 200)} : {})}))};
+    case 'marketplace':
+      return marketView(false);
+    case 'marketplace-updates':
+      return {name: 'marketplace-updates', updates: o.updates.map((u) => ({...u, name: o.items.find((i) => i.id === u.id)?.name ?? u.id}))};
+    case 'goal': {
+      const g = runtime.goals.goal;
+      const {goalSummary} = await import('../commands/run.js');
+      const p = g?.plan ? runtime.goals.plan() : undefined;
+      return g ? {name: 'goal', text: g.text, status: g.status, rounds: g.rounds, escalations: g.escalations, checks: g.checks.slice(-12).map((c) => ({at: c.at, kind: c.kind, verdict: c.verdict})), ...(p ? {plan: {title: p.title, milestones: p.milestones.map((m) => ({text: m.text, done: m.done}))}} : {}), summary: goalSummary(g)} : {name: 'text', title: 'Goal', lines: ['No goal set. /goal <text> sets one.']};
+    }
+    case 'help': {
+      const {COMMANDS} = await import('../commands/index.js');
+      const {extensions} = await import('../extensions/index.js');
+      const {loadSkills} = await import('../skills/index.js');
+      return {
+        name: 'help',
+        commands: COMMANDS.map((c) => ({name: c.name, usage: c.usage, listed: c.listed !== false})),
+        extensions: extensions.commands.map((c) => ({name: c.value.name, usage: c.value.usage ?? c.value.description, item: c.item})),
+        skills: loadSkills().map((k) => ({name: k.name, description: k.description, source: k.source})),
+      };
+    }
+    case 'btw':
+      return {name: 'btw', question: o.question, answer: o.answer ?? '', model: o.model, mode: o.mode, done: !!o.done, error: o.error};
+    case 'update':
+      return {name: 'update', lines: updateLog.map((l) => (typeof l === 'string' ? l : (l as {text?: string}).text ?? JSON.stringify(l)))};
     case 'agents':
       return {name: 'agents', agents: runtime.agents.list().map((a) => agentView(a))};
     case 'shells':
@@ -147,6 +174,41 @@ function shellView(runtime: typeof import('../runtime.js').runtime, sh: import('
 function skillTag(s: import('../skills/index.js').Skill): string {
   if (s.marketplace) return 'marketplace';
   return s.source === 'builtin' ? 'skill' : s.source === 'plugin' ? `plugin${s.plugin ? ` ${s.plugin}` : ''}` : s.source.replace('-', ' ');
+}
+
+let updateLog: unknown[] = [];
+
+/** The marketplace store: every marketplace's items, what's installed, and updates. */
+async function marketView(refresh: boolean) {
+  const m = await import('../marketplace/index.js');
+  const {describe} = await import('../marketplace/actions.js');
+  const markets = await m.loadMarketplaces({refresh});
+  const installed = m.installedItems();
+  return {
+    name: 'marketplace',
+    categories: m.CATEGORIES,
+    markets: markets.map((x) => ({url: x.url, name: x.name, official: x.official, ...(x.error ? {error: x.error} : {}), updatedAt: x.updatedAt})),
+    items: markets.flatMap((x) =>
+      x.items.map((it) => ({
+        id: it.id,
+        name: it.name,
+        version: it.version,
+        description: it.description,
+        author: it.author,
+        category: it.category,
+        tags: it.tags,
+        icon: it.icon,
+        homepage: it.homepage,
+        requires: it.requires,
+        adds: it.adds,
+        what: describe(it).replace(/^ · /, ''),
+        readme: it.readme?.slice(0, 20_000),
+        marketplace: x.name,
+        installed: installed.find((i) => i.id === it.id)?.version,
+      })),
+    ),
+    updates: m.updatesFor(markets),
+  };
 }
 
 function mcpLines(runtime: typeof import('../runtime.js').runtime): string[] {
@@ -206,6 +268,7 @@ export async function runWorker(): Promise<number> {
       status: panels.statusView(),
       sidebar: panels.sidebarView(),
       queued: queue,
+      accent: accentNow(),
     };
   };
   // The status line and sidebar follow the conversation: sent after each event burst, at most every 250ms.
@@ -215,15 +278,17 @@ export async function runWorker(): Promise<number> {
     chromeTimer = setTimeout(() => {
       chromeTimer = undefined;
       try {
-        send({t: 'event', ev: {type: 'chrome', status: panels.statusView(), sidebar: panels.sidebarView(), queued: queue, mode: mode(), chatModel: runtime.config.chatModel ?? 'auto'}});
+        send({t: 'event', ev: {type: 'chrome', status: panels.statusView(), sidebar: panels.sidebarView(), queued: queue, mode: mode(), chatModel: runtime.config.chatModel ?? 'auto', accent: accentNow()}});
       } catch {}
     }, 250);
   };
   extensions.on('change', chrome);
+  // A theme from a marketplace item, else your theme setting: the page takes its accent, as the terminal does.
+  const accentNow = () => extensions.theme?.accent || runtime.config.theme?.accent || undefined;
   // An open shells or subagents window follows them live (at most every 300ms).
   let liveTimer: NodeJS.Timeout | undefined;
   const live = () => {
-    if (liveTimer || !['shells', 'shell', 'agents'].includes(overlay.name) ) return;
+    if (liveTimer || !['shells', 'shell', 'agents'].includes(overlay.name)) return;
     liveTimer = setTimeout(() => {
       liveTimer = undefined;
       if (['shells', 'shell', 'agents'].includes(overlay.name)) void showWindow(overlay, true);
@@ -232,6 +297,7 @@ export async function runWorker(): Promise<number> {
   runtime.tools.shells.on('change', live);
   runtime.tools.shells.on('data', live);
   runtime.agents.on('change', () => (live(), chrome()));
+  runtime.mcp.on('change', () => overlay.name === 'mcp' && void showWindow(overlay, true));
 
   // A command's echo ('user' through logMain) shows as "> /cost" with its output, not as a message;
   // a message you sent comes through add() and is a 'user' event.
@@ -400,7 +466,10 @@ export async function runWorker(): Promise<number> {
     opts: {renderer: 'classic', onClear: () => {}},
     updating: false,
     setUpdating: () => {},
-    setUpdateLog: () => {},
+    setUpdateLog: (f) => {
+      updateLog = typeof f === 'function' ? f(updateLog as never) : f;
+      if (overlay.name === 'update') void showWindow(overlay, true);
+    },
     compacting: undefined,
     setCompacting: (v) => send({t: 'event', ev: v ? {type: 'compact', phase: 'start', label: v.label} : {type: 'compact', phase: 'end'}}),
     openRewind: () => void showWindow({name: 'rewind', points: rewindPoints()}),
@@ -590,6 +659,85 @@ export async function runWorker(): Promise<number> {
         await deleteJevKey();
         log('info', 'Jev key removed. Decisions fall back to the cheapest model.');
         return loginView();
+      case 'market': {
+        overlay = {name: 'marketplace'};
+        return marketView(!!args.refresh);
+      }
+      case 'market-install':
+      case 'market-uninstall': {
+        const {installItem, uninstallItem} = await import('../marketplace/actions.js');
+        const {loadMarketplaces} = await import('../marketplace/index.js');
+        const id = String(args.id ?? '');
+        let said: string;
+        if (op === 'market-install') {
+          const all = (await loadMarketplaces()).flatMap((x) => x.items);
+          const r = await installItem(runtime, all, id);
+          said = r.lines.join('\n') + (r.restart ? '\nRestart Rein to start its MCP servers and hooks.' : '');
+        } else said = await uninstallItem(runtime, id);
+        log('info', said);
+        skills = loadSkills();
+        chrome();
+        return {said, view: await marketView(false)};
+      }
+      case 'market-update': {
+        const {installItem} = await import('../marketplace/actions.js');
+        const {loadMarketplaces} = await import('../marketplace/index.js');
+        const all = (await loadMarketplaces()).flatMap((x) => x.items);
+        const lines: string[] = [];
+        let restart = false;
+        for (const id of (Array.isArray(args.ids) ? args.ids : []).map(String)) {
+          try {
+            const r = await installItem(runtime, all, id);
+            lines.push(...r.lines);
+            restart ||= r.restart;
+          } catch (err) {
+            lines.push(`${id}: ${(err as Error).message}`);
+          }
+        }
+        const said = lines.join('\n') + (restart ? '\nRestart Rein to start the updated MCP servers and hooks.' : '');
+        log('info', said || 'Nothing to update.');
+        skills = loadSkills();
+        chrome();
+        await showWindow({name: 'none'});
+        return {said};
+      }
+      case 'market-add':
+      case 'market-remove': {
+        const m = await import('../marketplace/index.js');
+        const url = String(args.url ?? '').trim();
+        if (!url) throw new Error('which repo?');
+        if (op === 'market-add') {
+          const added = await m.addMarketplace(url);
+          log('info', `Added ${added.name} (${added.items.length} item${added.items.length === 1 ? '' : 's'}).`);
+        } else log('info', `Removed ${m.removeMarketplace(url)}. Items you installed from it stay installed.`);
+        return marketView(false);
+      }
+      case 'mcp': {
+        const name = String(args.name ?? '');
+        const s = runtime.mcp.list().find((x) => x.name === name);
+        if (!s) throw new Error(`no MCP server ${name}`);
+        if (s.status === 'changed') runtime.mcp.acceptChange(s.name);
+        else if (s.status === 'needs-approval') {
+          const {approveProjectServer} = await import('../mcp/config.js');
+          approveProjectServer(process.cwd(), s.name);
+          await runtime.mcp.start();
+        } else if (s.status === 'needs-auth') {
+          // The server's OAuth page; its redirect comes back to this machine.
+          let url: string | undefined;
+          const done = runtime.mcp.signIn(s.name, (u) => {
+            url = u;
+            send({t: 'event', ev: {type: 'window', window: {name: 'mcp-signin', server: s.name, url: u}, refresh: true}});
+          });
+          void done.then(
+            () => (log('info', `Signed in to ${s.name}.`), void showWindow({name: 'mcp'})),
+            (err) => log('error', `Sign-in to ${s.name} failed: ${(err as Error).message}`),
+          );
+          await new Promise((r) => setTimeout(r, 1500));
+          return {url};
+        } else await runtime.mcp.reconnect(s.name);
+        await showWindow({name: 'mcp'}, true);
+        return {ok: true};
+      }
       case 'unqueue':
         queue = queue.filter((_, i) => i !== Number(args.index));
         chrome();

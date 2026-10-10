@@ -23,6 +23,35 @@ function h(tag, props, ...kids) {
 const $ = (sel, root = document) => root.querySelector(sel);
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'})[c]);
 
+/**
+ * Terminal colors in text (what marketplace items' sidebar sections, status segments and commands
+ * print: \x1b[33m…\x1b[0m) as colored spans, so an item looks the same here as in the terminal.
+ */
+const ANSI_FG = {30: 'k', 31: 'r', 32: 'g', 33: 'y', 34: 'b', 35: 'm', 36: 'c', 37: 'w', 90: 'd', 91: 'r', 92: 'g', 93: 'y', 94: 'b', 95: 'm', 96: 'c', 97: 'w'};
+function ansi(text) {
+  const str = String(text ?? '');
+  if (!str.includes('\x1b[')) return str;
+  const out = [];
+  let fg, bold, dim;
+  const re = /\x1b\[([\d;]*)m/g;
+  let at = 0, m;
+  const push = (t) => t && out.push(fg || bold || dim ? h('span' + (fg ? `.a-${fg}` : '') + (bold ? '.a-bold' : '') + (dim ? '.a-dim' : ''), t) : t);
+  while ((m = re.exec(str))) {
+    push(str.slice(at, m.index));
+    at = re.lastIndex;
+    for (const code of (m[1] || '0').split(';').map(Number)) {
+      if (code === 0) ((fg = undefined), (bold = false), (dim = false));
+      else if (code === 1) bold = true;
+      else if (code === 2) dim = true;
+      else if (code === 22) ((bold = false), (dim = false));
+      else if (code === 39) fg = undefined;
+      else if (ANSI_FG[code]) fg = ANSI_FG[code];
+    }
+  }
+  push(str.slice(at));
+  return out.map((x) => (typeof x === 'string' ? x.replace(/\x1b\[[\d;]*[A-Za-z]/g, '') : x));
+}
+
 const ICONS = {
   plus: 'M12 5v14M5 12h14', send: 'M5 12h14M13 5l7 7-7 7', stop: 'M7 7h10v10H7z', folder: 'M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z', file: 'M6 3h8l4 4v14H6zM14 3v4h4', chat: 'M4 5h16v11H8l-4 4z', gear: 'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z',
   archive: 'M3 5h18v4H3zM5 9v10h14V9M10 13h4', restore: 'M4 12a8 8 0 1 0 2.3-5.7M4 4v5h5', back: 'M19 12H5M11 5l-7 7 7 7', forward: 'M5 12h14M13 5l7 7-7 7', home: 'M3 11l9-7 9 7v9H5v-9', drive: 'M3 15h18v5H3zM6 17.5h.01M3 15l3-10h12l3 10',
@@ -139,6 +168,15 @@ async function boot() {
   if (state.me) await afterSignIn();
   route();
   render();
+}
+
+/** A theme from a marketplace item (or your theme setting) colors the page's accent, as it does the terminal's. */
+function applyAccent(color) {
+  const root = document.documentElement.style;
+  if (color && CSS.supports('color', color)) {
+    root.setProperty('--accent', color);
+    root.setProperty('--accent-soft', `color-mix(in srgb, ${color} 16%, transparent)`);
+  } else ((root.removeProperty('--accent')), root.removeProperty('--accent-soft'));
 }
 
 function applyTheme() {
@@ -558,6 +596,7 @@ function onEvent(c, ev) {
   switch (ev.type) {
     case 'snapshot':
       c.snapshot = ev.snapshot;
+      applyAccent(ev.snapshot.accent);
       renderChrome(c);
       c.busy = ev.snapshot.busy;
       if (!c.busy) Object.assign(c, {live: '', tools: [], notes: [], model: undefined});
@@ -620,7 +659,8 @@ function onEvent(c, ev) {
       renderWindow(c);
       return;
     case 'chrome':
-      if (c.snapshot) Object.assign(c.snapshot, {status: ev.status, sidebar: ev.sidebar, queued: ev.queued, mode: ev.mode, chatModel: ev.chatModel});
+      if (c.snapshot) Object.assign(c.snapshot, {status: ev.status, sidebar: ev.sidebar, queued: ev.queued, mode: ev.mode, chatModel: ev.chatModel, accent: ev.accent});
+      applyAccent(ev.accent);
       renderChrome(c);
       updateComposer(c);
       return;
@@ -810,7 +850,7 @@ function threadEl() {
 /** A command's echo, its output, and the /usage and /context reports. */
 function feedEl(f) {
   if (f.type === 'cmd') return h('div.cmd', h('span.p', '›'), f.text);
-  if (f.type === 'log') return h('div.out' + (f.kind === 'error' ? '.error' : ''), f.text);
+  if (f.type === 'log') return h('div.out' + (f.kind === 'error' ? '.error' : ''), ansi(f.text));
   if (f.type === 'usage')
     return h('div.out.report', !f.rows.length ? 'No accounts. Sign in from a terminal: rein, then /login.' : f.rows.map((r) => h('div.acct',
       h('div', h('b', r.provider), ' ', r.account, r.plan ? h('span.muted', ` · ${r.plan}`) : null, r.cooldownUntil ? h('span.bad', ` · limited until ${new Date(r.cooldownUntil).toLocaleTimeString()}`) : null),
@@ -1003,7 +1043,7 @@ function statusEl(c) {
   const items = [];
   segs.forEach((g, i) => {
     if (i) items.push(h('span.sep', '│'));
-    items.push(h(g.command ? 'button.seg' : 'span.seg', {title: g.command ? `${g.label}: ${g.command}` : g.label, on: g.command ? {click: () => runInChat(c, g.command)} : undefined}, h('span.k', g.label), ' ', h('span.v' + (g.tone ? '.' + g.tone : ''), g.value)));
+    items.push(h(g.command ? 'button.seg' : 'span.seg', {title: g.command ? `${g.label}: ${g.command}` : g.label, on: g.command ? {click: () => runInChat(c, g.command)} : undefined}, g.label ? [h('span.k', g.label), ' '] : null, h('span.v' + (g.tone ? '.' + g.tone : ''), ansi(g.value))));
   });
   return h('div.statusline#statusline', h('span.brandmark', '▁▃▅▇ Rein'), items.length ? h('span.sep', '│') : null, items);
 }
@@ -1016,7 +1056,7 @@ function panelEl(c) {
     sec.rows.map((r) => {
       const mark = /^([✓▸○●])\s/.exec(r.text ?? '');
       const tone = mark ? {'✓': '.done', '▸': '.next', '○': '.later', '●': '.on'}[mark[1]] : '';
-      const kids = [r.text ? h('span.t', r.text) : null, r.pct !== undefined ? h('span.n', `${r.pct}%`) : null];
+      const kids = [r.text ? h('span.t', ansi(r.text)) : null, r.pct !== undefined ? h('span.n', `${r.pct}%`) : null];
       const cls = (r.dim ? '.dim' : '') + (r.bold ? '.bold' : '') + (r.active ? '.active' : '') + tone;
       const row = r.command ? h('button.row' + cls, {on: {click: () => runInChat(c, r.command)}}, kids) : h('div.row' + cls, kids);
       const fill = r.progress ? (r.pct >= 100 ? '.done' : '.prog') : r.pct >= 90 ? '.hot' : r.pct >= 70 ? '.warm' : '';
@@ -1080,9 +1120,9 @@ function renderWindow(c) {
   document.querySelector('.overlay.cmd-window')?.remove();
   if (state.chat !== c || !c.window) return;
   const w = c.window;
-  const panels = {login: loginPanel, settings: settingsPanel, model: modelPanel, plans: plansPanel, rewind: rewindPanel, shells: shellsPanel, agents: agentsPanel};
-  const body = panels[w.name] ? panels[w.name](c, w) : h('pre.text', (w.lines ?? []).join('\n'));
-  const title = {login: 'Accounts', settings: 'Settings', model: 'Models', plans: 'Start a plan as a goal', rewind: 'Rewind', shells: 'Shells', agents: 'Subagents'}[w.name] ?? w.title;
+  const panels = {marketplace: marketPanel, 'marketplace-updates': updatesPanel, mcp: mcpPanel, 'mcp-signin': mcpPanel, goal: goalPanel, help: helpPanel, btw: btwPanel, update: updatePanel, login: loginPanel, settings: settingsPanel, model: modelPanel, plans: plansPanel, rewind: rewindPanel, shells: shellsPanel, agents: agentsPanel};
+  const body = panels[w.name] ? panels[w.name](c, w) : h('pre.text', ansi((w.lines ?? []).join('\n')));
+  const title = {marketplace: 'Marketplace', 'marketplace-updates': 'Updates', mcp: 'MCP servers', 'mcp-signin': 'MCP servers', goal: 'Goal', help: 'Commands and skills', btw: 'btw', update: 'Update', login: 'Accounts', settings: 'Settings', model: 'Models', plans: 'Start a plan as a goal', rewind: 'Rewind', shells: 'Shells', agents: 'Subagents'}[w.name] ?? w.title;
   const o = h('div.overlay.cmd-window', {on: {click: (e) => e.target === o && closeWindow(c)}},
     h('div.dialog.wide', h('header', title, h('button.icon-btn', {style: {float: 'right'}, title: 'Close (Esc)', on: {click: () => closeWindow(c)}}, icon('x'))), h('div.body', body)));
   o.tabIndex = -1;
@@ -1317,6 +1357,145 @@ function agentsPanel(c, w) {
       h('div', h('b', a.name), h('small', `#${a.id} · ${a.model} · ${a.mode} · ${a.status}${a.background ? ' · background' : ''}`))))),
     chosen ? h('div.split-main', view, h('div.agent-send', msg, h('button.btn.primary', {on: {click: sendMsg}}, 'Send'), chosen.status === 'running' ? h('button.btn.danger', {on: {click: () => ask(c, 'agent-stop', {id: chosen.id}).catch((e) => toast(e.message, 'error'))}}, 'Stop') : null)) : h('div.split-main', view),
   );
+}
+
+/** /marketplace: the store, as in the terminal: categories, search, an item's page, install, update. */
+function marketPanel(c, w) {
+  const u = (c.winUi ??= {});
+  u.tab ??= 'All';
+  const tabs = ['All', ...w.categories.map((x) => x.label), 'Installed'];
+  const q = (u.q ?? '').toLowerCase();
+  const shown = w.items.filter((it) => (u.tab === 'Installed' ? it.installed : u.tab === 'All' || w.categories.find((x) => x.label === u.tab)?.id === it.category) && (!q || `${it.name} ${it.id} ${it.description} ${(it.tags ?? []).join(' ')} ${it.author ?? ''}`.toLowerCase().includes(q)));
+  const sel = shown.find((it) => it.id === u.sel) ?? shown[0];
+  const act = async (op, args) => {
+    if (u.busy) return;
+    u.busy = op;
+    renderWindow(c);
+    try {
+      const r = await ask(c, op, args);
+      if (r?.view) c.window = {...r.view};
+      else if (r?.name === 'marketplace') c.window = r;
+      if (r?.said) toast(r.said.split('\n')[0]);
+    } catch (err) {
+      toast(err.message, 'error');
+    }
+    u.busy = undefined;
+    renderWindow(c);
+  };
+  const upd = (id) => w.updates.find((x) => x.id === id);
+  const page = sel ? h('div.mk-page',
+    h('div.mk-title', h('span.mk-icon', sel.icon ?? '◆'), h('div', h('h2', sel.name), h('div.muted', `${sel.id} · ${sel.version}${sel.author ? ` · ${sel.author}` : ''} · ${w.categories.find((x) => x.id === sel.category)?.label ?? sel.category} · ${sel.marketplace}`))),
+    h('p', sel.description),
+    sel.what ? h('div.mk-adds', sel.what) : null,
+    sel.requires?.length ? h('div.muted', `Installs with it: ${sel.requires.join(', ')}`) : null,
+    (sel.adds?.mcp?.length || sel.adds?.hooks?.length || sel.adds?.code) ? h('div.note.warn', 'Runs code on this machine (', [sel.adds.code ? 'its own code' : null, sel.adds.mcp?.length ? 'MCP servers' : null, sel.adds.hooks?.length ? 'hooks' : null].filter(Boolean).join(', '), '): install it only from a source you trust.') : null,
+    h('div.actions',
+      sel.installed
+        ? [upd(sel.id) ? h('button.btn.primary', {disabled: !!u.busy, on: {click: () => act('market-install', {id: sel.id})}}, `Update to ${upd(sel.id).to}`) : h('span.chip', `Installed ${sel.installed}`), h('button.btn.danger', {disabled: !!u.busy, on: {click: () => act('market-uninstall', {id: sel.id})}}, 'Uninstall')]
+        : h('button.btn.primary', {disabled: !!u.busy, on: {click: () => act('market-install', {id: sel.id})}}, u.busy === 'market-install' ? 'Installing…' : 'Install'),
+      sel.homepage ? h('a.btn', {href: sel.homepage, target: '_blank', rel: 'noopener noreferrer'}, 'Homepage') : null,
+    ),
+    sel.readme ? md(sel.readme.replace(/^#.*\n+/, '')) : null,
+  ) : h('div.mk-page', h('p.muted', w.items.length ? 'Nothing matches.' : 'Loading the marketplaces…'));
+  return h('div.mk',
+    h('div.mk-top',
+      h('div.tabs', tabs.map((t) => h('button.tab' + (t === u.tab ? '.on' : ''), {on: {click: () => ((u.tab = t), (u.sel = undefined), renderWindow(c))}}, t, t === 'Installed' && w.updates.length ? h('span.badge', String(w.updates.length)) : null))),
+      h('input.search', {type: 'search', placeholder: `Search ${w.items.length} items`, value: u.q ?? '', on: {input: (e) => ((u.q = e.target.value), renderWindow(c), document.querySelector('.mk .search')?.focus())}}),
+    ),
+    h('div.mk-body',
+      h('div.mk-list', shown.map((it) => h('button.mk-item' + (sel && it.id === sel.id ? '.on' : ''), {on: {click: () => ((u.sel = it.id), renderWindow(c))}},
+        h('span.mk-icon', it.icon ?? '◆'),
+        h('div', h('b', it.name), h('small', it.description)),
+        it.installed ? h('span.mk-state' + (upd(it.id) ? '.upd' : ''), upd(it.id) ? 'update' : '✓') : null))),
+      page,
+    ),
+    h('div.mk-foot',
+      w.updates.length ? h('button.btn', {on: {click: () => runInChat(c, '/marketplace update')}}, `Update… (${w.updates.length})`) : null,
+      h('button.btn', {disabled: !!u.busy, on: {click: () => act('market', {refresh: true})}}, icon('refresh', 15), 'Refresh'),
+      h('span.grow'),
+      h('details.mk-markets', h('summary', `${w.markets.length} marketplace${w.markets.length === 1 ? '' : 's'}`),
+        w.markets.map((m) => h('div.mk-market', h('span', m.name, m.official ? h('span.muted', ' · official') : null, m.error ? h('span.bad', ` · ${m.error}`) : null), m.official ? null : h('button.btn.small', {on: {click: () => act('market-remove', {url: m.url})}}, 'Remove'))),
+        h('div.codein', h('input', {type: 'text', placeholder: 'https://github.com/owner/repo', on: {input: (e) => (u.repo = e.target.value)}}), h('button.btn.small', {on: {click: () => act('market-add', {url: u.repo})}}, 'Add marketplace')),
+      ),
+    ),
+  );
+}
+
+/** /marketplace update: pick All or any of the items with updates. */
+function updatesPanel(c, w) {
+  const u = (c.winUi ??= {});
+  u.picked ??= new Set(w.updates.map((x) => x.id));
+  const all = u.picked.size === w.updates.length;
+  return h('div',
+    h('p.muted', `${w.updates.length} update${w.updates.length === 1 ? '' : 's'} for what you installed.`),
+    h('label.opt', h('input', {type: 'checkbox', checked: all, on: {change: () => ((u.picked = all ? new Set() : new Set(w.updates.map((x) => x.id))), renderWindow(c))}}), h('b', 'All')),
+    w.updates.map((x) => h('label.opt', h('input', {type: 'checkbox', checked: u.picked.has(x.id), on: {change: (e) => (e.target.checked ? u.picked.add(x.id) : u.picked.delete(x.id), renderWindow(c))}}), h('span', h('b', x.name), h('small', `${x.from} → ${x.to}`)))),
+    h('div.actions', h('button.btn.primary', {disabled: !u.picked.size || u.busy, on: {click: async () => {
+      u.busy = true;
+      renderWindow(c);
+      await ask(c, 'market-update', {ids: [...u.picked]}).catch((e) => toast(e.message, 'error'));
+    }}}, u.busy ? 'Updating…' : `Update ${u.picked.size}`)),
+  );
+}
+
+/** /mcp: each server and what to do with it, as in the terminal. */
+function mcpPanel(c, w) {
+  const u = (c.winUi ??= {});
+  if (w.name === 'mcp-signin') u.signin = {server: w.server, url: w.url};
+  const servers = w.servers ?? c.mcpServers ?? [];
+  if (w.servers) c.mcpServers = w.servers;
+  const tone = {connected: '.ok', failed: '.bad', changed: '.bad', connecting: '.busy', 'needs-approval': '.wait', 'needs-auth': '.wait'};
+  const label = (s) => (s.status === 'changed' ? 'Accept as it is now' : s.status === 'needs-approval' ? 'Approve (runs its command)' : s.status === 'needs-auth' ? 'Sign in' : 'Reconnect');
+  const SRC = {project: '.mcp.json', rein: '~/.rein/mcp.json', claude: '~/.claude.json', plugin: 'plugin'};
+  if (!servers.length) return h('div', h('p', 'No MCP servers configured.'), h('p.muted', 'Add them to .mcp.json in the project, ~/.rein/mcp.json, or with `claude mcp add`.'));
+  return h('div',
+    u.signin ? h('section.setting.flow', h('h3', `Sign in to ${u.signin.server}`), u.signin.url ? h('p', h('a.btn.primary', {href: u.signin.url, target: '_blank', rel: 'noopener noreferrer'}, 'Open the sign-in page')) : h('p.muted', 'Starting…'), h('p.muted', 'The page sends you back to the computer Rein runs on, so finish it in a browser there.')) : null,
+    servers.map((s) => h('div.acctrow',
+      h('span.dot' + (tone[s.status] ?? '')),
+      h('div.grow', h('b', s.name), h('small', `${s.status === 'connected' ? `${s.tools} tool${s.tools === 1 ? '' : 's'}` : s.status} · ${s.transport} · ${SRC[s.source] ?? s.source}${s.error ? ` · ${s.error}` : ''}`)),
+      h('button.btn.small', {on: {click: async () => {
+        const r = await ask(c, 'mcp', {name: s.name}).catch((e) => toast(e.message, 'error'));
+        if (r?.url) ((u.signin = {server: s.name, url: r.url}), renderWindow(c));
+      }}}, label(s)),
+    )),
+  );
+}
+
+function goalPanel(c, w) {
+  const done = w.plan ? w.plan.milestones.filter((m) => m.done).length : 0;
+  return h('div',
+    h('h3', `◎ ${w.text}`),
+    h('p.muted', `${w.status} · ${w.rounds} continuation${w.rounds === 1 ? '' : 's'} · ${w.escalations} escalation${w.escalations === 1 ? '' : 's'}`),
+    w.plan ? h('section.setting', h('h3', `${w.plan.title} · ${done}/${w.plan.milestones.length}`), h('div.meter', h('i' + (done === w.plan.milestones.length ? '.done' : '.prog'), {style: {width: `${(done / Math.max(1, w.plan.milestones.length)) * 100}%`}})), w.plan.milestones.map((m, i) => h('div.ms' + (m.done ? '.done' : i === w.plan.milestones.findIndex((x) => !x.done) ? '.next' : ''), `${m.done ? '✓' : i === w.plan.milestones.findIndex((x) => !x.done) ? '▸' : '○'} ${m.text}`))) : null,
+    w.checks.length ? h('div', h('h3', 'Checks'), w.checks.map((k) => h('div.out', `${new Date(k.at).toLocaleTimeString()} ${k.kind === 'claim' ? 'done claim' : 'turn'}: ${k.verdict}`))) : null,
+    h('div.actions', ...['pause', 'resume', 'clear'].map((x) => h('button.btn', {on: {click: () => (closeWindow(c), runInChat(c, `/goal ${x}`))}}, x[0].toUpperCase() + x.slice(1)))),
+  );
+}
+
+function helpPanel(c, w) {
+  const u = (c.winUi ??= {});
+  const q = (u.q ?? '').toLowerCase();
+  const row = (name, text, tag) => (!q || `${name} ${text}`.toLowerCase().includes(q) ? h('button.help-row', {on: {click: () => (closeWindow(c), (c.ui.ta.value = `/${name} `), c.ui.ta.focus())}}, h('code', `/${name}`), h('span', text), tag ? h('span.tag', tag) : null) : null);
+  return h('div',
+    h('input.search', {type: 'search', placeholder: 'Search commands and skills', value: u.q ?? '', on: {input: (e) => ((u.q = e.target.value), renderWindow(c), document.querySelector('.cmd-window .search')?.focus())}}),
+    h('h3', 'Commands'), w.commands.map((x) => row(x.name, x.usage)),
+    w.extensions.length ? [h('h3', 'From the marketplace'), w.extensions.map((x) => row(x.name, x.usage, x.item))] : null,
+    w.skills.length ? [h('h3', 'Skills'), w.skills.map((x) => row(x.name, x.description, x.source))] : null,
+    h('p.muted', 'Esc stops the agent · Enter sends, Shift+Enter is a new line · / opens the command list'),
+  );
+}
+
+/** /btw: the answer streams in; it's never added to the conversation. */
+function btwPanel(c, w) {
+  return h('div.btw',
+    h('div.btw-q', `btw · ${w.question}`),
+    w.error ? h('div.note.error', w.error) : w.answer ? md(w.answer) : h('div.working', h('span.spin', '▁▃▅▇'), h('span.rainbow', 'Answering…')),
+    w.model || w.done ? h('div.muted', `${w.model ?? ''}${w.mode ? ` · ${w.mode === 'fork' ? 'forked agent' : 'from the conversation'}` : ''} · not added to the conversation`) : null,
+  );
+}
+
+function updatePanel(c, w) {
+  return h('pre.text.shell-out', w.lines.length ? w.lines.join('\n') : 'Starting the update…');
 }
 
 function plansPanel(c, v) {

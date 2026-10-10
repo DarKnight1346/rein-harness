@@ -78,7 +78,7 @@ export class Chat extends EventEmitter {
       else r?.resolve(m.value);
     } else if (m.t === 'event' && (m.ev.type === 'chrome' || m.ev.type === 'window')) {
       // Not part of the turn's backlog: the latest one is all a page needs.
-      if (m.ev.type === 'chrome' && this.snapshot) Object.assign(this.snapshot, {status: m.ev.status, sidebar: m.ev.sidebar, queued: m.ev.queued, mode: m.ev.mode, chatModel: m.ev.chatModel});
+      if (m.ev.type === 'chrome' && this.snapshot) Object.assign(this.snapshot, {status: m.ev.status, sidebar: m.ev.sidebar, queued: m.ev.queued, mode: m.ev.mode, chatModel: m.ev.chatModel, accent: m.ev.accent});
       if (m.ev.type === 'window') this.window = m.ev.close ? undefined : m.ev.window;
       this.broadcast(m.ev);
     } else if (m.t === 'event') {

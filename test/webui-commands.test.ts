@@ -12,18 +12,29 @@ const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const worker = () => ({command: process.execPath, args: [path.join(root, 'node_modules/tsx/dist/cli.mjs'), path.join(root, 'src/cli.ts'), '--ui-worker']});
 
 let home: string;
+let market: string;
+const savedMarket = process.env.REIN_OFFICIAL_MARKETPLACE;
 let server: Awaited<ReturnType<typeof startServer>> | undefined;
 const saved = process.env.REIN_HOME;
 beforeEach(() => {
   home = mkdtempSync(path.join(os.tmpdir(), 'rein-webcmd-'));
   process.env.REIN_HOME = home;
   writeFileSync(path.join(home, 'accounts.json'), JSON.stringify({version: 1, importOffered: true, accounts: []}));
+  // A small official marketplace (a folder), so /marketplace works without the network.
+  market = path.join(home, 'market');
+  mkdirSync(path.join(market, 'items', 'hello-skill', 'skills', 'hi'), {recursive: true});
+  writeFileSync(path.join(market, 'marketplace.json'), JSON.stringify({name: 'Test Market'}));
+  writeFileSync(path.join(market, 'items', 'hello-skill', 'rein.json'), JSON.stringify({id: 'hello-skill', name: 'Hello skill', version: '1.0.0', description: 'Says hi', category: 'skills'}));
+  writeFileSync(path.join(market, 'items', 'hello-skill', 'skills', 'hi', 'SKILL.md'), '---\nname: hi\ndescription: Say hi\n---\nSay hi.');
+  process.env.REIN_OFFICIAL_MARKETPLACE = market;
 });
 afterEach(async () => {
   await server?.close();
   server = undefined;
   if (saved === undefined) delete process.env.REIN_HOME;
   else process.env.REIN_HOME = saved;
+  if (savedMarket === undefined) delete process.env.REIN_OFFICIAL_MARKETPLACE;
+  else process.env.REIN_OFFICIAL_MARKETPLACE = savedMarket;
 });
 
 const call = async (p: string, body?: unknown) => {
@@ -123,6 +134,15 @@ describe('web UI commands (the real worker)', () => {
     expect((await evs).at(-1).window).toMatchObject({name: 'rewind', points: [], modes: [{mode: 'both'}, {mode: 'conversation'}, {mode: 'code'}]});
     expect((await call(`/api/chats/${id}/request`, {op: 'agent', args: {id: 99}})).json.error).toBe('that subagent is gone');
     expect((await call(`/api/chats/${id}/request`, {op: 'rewind', args: {index: 0, mode: 'both'}})).json.error).toMatch(/pick one of your messages/);
+
+    // /marketplace opens the store; installing from it works as in the terminal.
+    evs = events(id, (ev) => ev.type === 'window' && ev.window?.name === 'marketplace');
+    await call(`/api/chats/${id}/send`, {text: '/marketplace'});
+    const store = (await evs).at(-1).window;
+    expect(store.items.map((i: any) => i.id)).toEqual(['hello-skill']);
+    const inst = (await call(`/api/chats/${id}/request`, {op: 'market-install', args: {id: 'hello-skill'}})).json.value;
+    expect(inst.said).toMatch(/^Installed Hello skill 1\.0\.0/);
+    expect(inst.view.items[0].installed).toBe('1.0.0');
 
     // /clear empties the conversation on the page too: a fresh snapshot follows the clear.
     let sawClear = false;

@@ -67,7 +67,13 @@ What a command prints shows in the thread under `› /command`, and `/usage` and
 | `/rewind` | Your messages, newest first: pick one, then restore code and conversation, the conversation only, or the code only. The message comes back into the box to edit and resend |
 | `/shells`, `/shell <id>` | The commands you and the agent started, with their status; open one for its output (it follows a running command) and **Stop it** |
 | `/agents` | The conversation's subagents: open one to follow what it does, message it, or **Stop** it (clicking one in the sidebar opens this too) |
-| `/mcp` | The MCP servers and their state |
+| `/mcp` | The MCP servers and their state, each with what to do: approve a project server, accept a changed one, sign in (the server's OAuth page; it returns to the computer Rein runs on, so finish it in a browser there), or reconnect |
+| `/marketplace` | The store, as in the terminal: categories, search, each item's page (what it adds, its README, a warning when it runs code), **Install**, **Update**, **Uninstall**, **Refresh**, and the marketplaces themselves (add a repo, remove one; the official one stays) |
+| `/marketplace update` | The items with updates: **All** or any of them |
+| `/goal` | The goal, its plan's milestones, and the checks so far, with Pause, Resume and Clear |
+| `/btw <question>` | The answer streaming in; it's never added to the conversation |
+| `/help` | Every command, marketplace items' commands and every skill, searchable; click one to start typing it |
+| `/update` | The update's output as it runs |
 | `/vault set NAME` | A hidden field for the value |
 | `/login` | The accounts Rein uses and whether each is signed in: re-authenticate or remove one, add any kind (Claude subscription or Console API key, Claude on Bedrock or Vertex, Codex with ChatGPT or an OpenAI API key), and the Jev key. See [Signing in from the browser](#signing-in-from-the-browser) |
 
@@ -89,6 +95,10 @@ A few commands are for the terminal, and say what to use instead:
 - **API keys** (Anthropic Console, OpenAI) and the **Jev** key go into a hidden field. **Bedrock** and **Vertex** use the AWS or Google Cloud credentials already on the machine; the window asks for the region and profile or project and checks them.
 
 A new account is used by new chats right away; a chat that's already open picks it up when its model list next refreshes.
+
+### Marketplace items
+
+Items you install from the [marketplace](../marketplace/) work in the web UI as in the terminal: their commands are in the `/` list and `/help`, their skills too, and what their code draws shows up here, with the same terminal colors: sidebar sections in the right sidebar, status segments in the status line. A theme item colors the page's accent (as does `theme.accent` in your settings), and uninstalling it brings back the one you had.
 
 ### Status line and sidebar
 
