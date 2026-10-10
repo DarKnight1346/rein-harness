@@ -1,4 +1,3 @@
-import {setEnabledPacks} from '../src/commands/packs.js';
 import {mkdtemp, mkdir, writeFile} from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -37,14 +36,7 @@ describe('skills', () => {
     await mk(g, 'git-sync', 'unused default', {'config.json': JSON.stringify({name: 'git:sync', main: 'PROMPT.md', aliases: ['gs', 'help'], description: 'Sync with origin'}), 'PROMPT.md': 'Fetch and rebase.'});
     const skills = loadSkills(proj);
     const by = Object.fromEntries(skills.map((s) => [s.name, s]));
-    // Built-in skills of packs that are off (the tour) aren't loaded.
     expect(Object.keys(by).sort()).toEqual(['audit', 'deploy', 'git:sync', 'help', 'init', 'plan', 'plan:deep', 'review', 'review:deep', 'skill:create', 'skill:edit']);
-    setEnabledPacks(() => ['insight']);
-    try {
-      expect(loadSkills(proj).map((s) => s.name)).toEqual(expect.arrayContaining(['tour']));
-    } finally {
-      setEnabledPacks(() => []);
-    }
     expect([by['git:sync']!.body, by['git:sync']!.description, by['git:sync']!.files[0]]).toEqual(['Fetch and rebase.', 'Sync with origin', 'PROMPT.md']);
     expect(parseInput('/gs now', skills)).toMatchObject({kind: 'skill', skill: {name: 'git:sync'}}); // alias
     expect(parseInput('/help', skills)).toMatchObject({kind: 'command', name: 'help'}); // alias can't beat a command

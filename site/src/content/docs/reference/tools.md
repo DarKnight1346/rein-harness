@@ -352,7 +352,7 @@ With an [editor connected](../../features/ide/), returns the errors and warnings
 
 ### `affected`
 
-Label `Affected`. Approval: none (read-only). Only listed with the `affected-tool` [experiment](../configuration/#experiments) on, in an Nx, Turborepo, Bazel or Pants workspace.
+Label `Affected`. Approval: none (read-only). From the Test quality [marketplace](../../features/marketplace/) item, with its tool turned on (`/affected tool on`); it answers only in an Nx, Turborepo, Bazel or Pants workspace.
 
 | Parameter | Type | Notes |
 | --- | --- | --- |

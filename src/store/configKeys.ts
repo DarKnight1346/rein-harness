@@ -61,7 +61,6 @@ export const CONFIG_KEYS: KeyInfo[] = [
   k('contextWarnings', "Say when the context passes 50%, 70% and 85% full, and what's taking the space", bool),
   k('autoCompactPct', 'Compact when the context is this % full (0 = off)', num(0, 100)),
   k('experiments', 'Efficiency experiments to turn on, or -name to turn a default one off', list),
-  k('packs', 'Command packs to turn on (specialist commands and skills, all off by default): ci, specs, migrations, system, codebase, insight', list),
   k('prices', 'USD per million tokens for models without a built-in price: {"codex:my-model": {"input": 1.5, "cached": 0.15, "output": 6}}', json),
   k('budget', 'Spending caps in USD at API prices: {"requestUsd": 2, "goalUsd": 20, "conversationUsd": 50}', json),
   k('goalConfirmUsd', '/goal asks before starting when goals here typically cost more than this many USD (0 = never asks)', num(0)),

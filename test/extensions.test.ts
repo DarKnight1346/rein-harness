@@ -37,6 +37,7 @@ const host = () => {
     config: () => ({chatModel: 'auto'}),
     registerTool: (item, t) => tools.push({item, name: t.name, run: t.run}),
     exec: async (cmd, args) => ({code: 0, stdout: `${cmd} ${args.join(' ')}`, stderr: ''}),
+    shell: async (command) => ({ok: true, text: `ran ${command}`}),
     ripgrep: async () => '/usr/bin/rg',
     workspace: () => undefined,
   };
@@ -90,6 +91,17 @@ describe('extensions', () => {
       nothing: 'index.mjs has no activate(rein) export',
     });
     expect(ext.commands).toEqual([]); // what the broken one registered before failing is gone
+  });
+
+  it("runs an item's command lines through Rein's shell (approvals and sandbox), not on its own", async () => {
+    item('runner', `export function activate(rein) { rein.registerCommand({name: 'runit', description: '', run: async (a, ctx) => ctx.log((await rein.shell('npm test')).text)}); }`, {api: 3});
+    const ext = new Extensions();
+    const ran: string[] = [];
+    const h = {...host(), shell: async (command: string) => (ran.push(command), {ok: false, text: 'denied'})};
+    await ext.loadAll(h, plugins);
+    const lines: string[] = [];
+    await ext.command('runit')!.run('', {cwd: home, log: (t) => lines.push(t), send() {}, window() {}});
+    expect([ran, lines]).toEqual([['npm test'], ['denied']]);
   });
 
   it('loads fresh code after an update, and forgets an uninstalled item', async () => {

@@ -52,7 +52,6 @@ export function describe(it: Item): string {
     a.hooks.length && `hooks on ${a.hooks.join(', ')}`,
     a.code && 'its own code',
     it.theme && 'a theme',
-    it.config?.packs?.length && `packs ${it.config.packs.join(', ')}`,
     it.config?.experiments?.length && `experiments ${it.config.experiments.join(', ')}`,
     (it.config?.statusLine || it.config?.sidebarSections) && 'a layout',
     it.requires.length && `with ${it.requires.join(', ')}`,

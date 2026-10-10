@@ -34,7 +34,7 @@ The official **Rein Marketplace** ([github.com/rein-harness/rein-marketplace](ht
 | Ctrl+R | Fetches every marketplace again |
 | Esc | Closes the store |
 
-Each page says what the item adds: skills, commands, subagents, tools from MCP servers, hooks, a theme, a layout or packs. An item that runs code on your machine (MCP servers or hooks) says so in yellow. Install those only from a source you trust, as with any plugin.
+Each page says what the item adds: skills, commands, subagents, tools from MCP servers, hooks, a theme, a layout, its own code, or experiments it turns on. An item that runs code on your machine (MCP servers or hooks) says so in yellow. Install those only from a source you trust, as with any plugin.
 
 In the classic renderer, `/marketplace` prints the catalog instead.
 
@@ -62,12 +62,12 @@ Rein refreshes a marketplace's copy in the background when you open the store an
 | **Commands** | Slash commands (`commands/*.md`), as `/<item>:<name>` |
 | **Skills** | Skills (`skills/<name>/SKILL.md`), as `/<item>:<name>` and for the agent |
 | **UI** | Code that draws: sidebar sections, status-line segments, windows, or a theme (the accent colour of the input box, window frames and selections) |
-| **Features** | Settings: [packs](../../reference/commands/#packs) or [experiments](../../reference/configuration/#experiments) it turns on |
+| **Features** | Its own code (commands, tools, checks), or [experiments](../../reference/configuration/#experiments) it turns on |
 | **Bundles** | Other items, installed together |
 
 An item can also bring subagents (`agents/*.md`), [hooks](../hooks/) (`hooks/hooks.json`) and **its own code** (below). Installed items live in `~/.rein/plugins/<id>/` and load exactly like [plugins](../plugins/): commands, skills and subagents right away; MCP servers and hooks the next time Rein starts. Skills from items you install show in the bare `/` list (other plugins' show once you type).
 
-Uninstalling removes the item and undoes what it changed: the packs and experiments it turned on, and the theme or layout it set. If you changed those yourself since, yours stay.
+Uninstalling removes the item and undoes what it changed: the experiments it turned on, and the theme or layout it set. If you changed those yourself since, yours stay.
 
 ## Making a marketplace
 
@@ -88,8 +88,8 @@ items/<id>/skills/<name>/SKILL.md, commands/*.md, agents/*.md, hooks/hooks.json,
 | `author`, `icon`, `tags`, `homepage` | Shown in the store. `icon` is one or two characters, like `✦` |
 | `category` | `tools`, `commands`, `skills`, `ui`, `feature` or `bundle`. Left out, Rein picks one from what the item adds |
 | `requires` | Other items (same marketplace) installed with this one, so a bundle is an item with `requires` |
-| `config` | Settings it turns on: `{"packs": ["ci"], "experiments": ["…"]}`, or a layout: `{"statusLine": [...], "sidebarSections": [...]}` |
-| `main`, `api` | Its code: `"main": "index.mjs"`, and the extension API version it needs (`1`, or `2` for `checks` and `requestStart`) |
+| `config` | Settings it turns on: `{"experiments": ["…"]}`, or a layout: `{"statusLine": [...], "sidebarSections": [...]}` |
+| `main`, `api` | Its code: `"main": "index.mjs"`, and the extension API version it needs (`1`; `2` for `checks` and `requestStart`; `3` for `shell`) |
 | `theme` | `{"accent": "#a78bfa"}` (a theme with no code; a theme item can also set it from its code) |
 
 ```json title="items/theme-midnight/rein.json"
@@ -116,6 +116,7 @@ export function activate(rein) {
 | `ui.statusSegment({id, render()})` | A segment at the end of the status line (nothing returned: hidden) |
 | `ui.theme({accent})`, `ui.redraw()` | The UI's accent colour; ask Rein to draw again after what you show changed |
 | `exec(cmd, args, {cwd?, timeoutMs?})`, `git(args, cwd?)`, `ripgrep()` | Run programs (no shell), git, and the ripgrep that ships with Rein |
+| `shell(command, {timeoutMs?})` | A command line run as the agent's own are, through the `shell` tool: your approval mode, permission rules and sandbox apply (API 3) |
 | `workspace()`, `config()` | The [workspace](../workspaces/) Rein is in, and Rein's settings (read-only) |
 | `settings.get(key)`, `settings.set(key, value)` | The item's own settings (`~/.rein/plugin-data/<id>/settings.json`) |
 | `checks.endOfTurn({id, run(changed)})` | A check when the agent ends a turn, over the files this request changed (`{path, before, after}`): a note returned goes back to the agent, which carries on to address it. Once per request |

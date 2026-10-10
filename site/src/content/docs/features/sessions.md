@@ -65,8 +65,8 @@ Here's what you can do from it:
 - **m** sends the selected session a message. It arrives as if you'd typed it there, and is queued if that session is busy. This works for every session, background or not.
 - **k** stops a session, after you confirm with `y`.
 
-:::note[Insight and automation pack]
-`/sessions` is in the **Insight and automation** pack, which is off by default: turn it on in `/settings` → **Packs** ([Packs](../../reference/commands/#packs)). `rein sessions` works without it.
+:::note
+`/sessions` is a specialist command: it works as always, and shows in the `/` list once you start typing its name ([Specialist commands](../../reference/commands/#specialist-commands)).
 :::
 
 Inside Rein, `/sessions` lists the others, and `/sessions send <pid> <message>` sends one a message.

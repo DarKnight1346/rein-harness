@@ -5,7 +5,7 @@ description: Every built-in Rein slash command, its arguments and aliases, plus 
 
 Type `/` in the input to see the list. A bare `/` shows the everyday commands, most-used first (`/model`, `/goal`, `/plan`, `/review`…), then your own skills. Typing searches everything, fuzzily and best match first, including the variants and diagnostics left out of the bare list (`/plan:deep`, `/review:deep`, `/skill:edit`, `/goal:plan`, `/agent`, `/tui`, `/voice`, `/lsp`, `/plugins`) and skills from Claude Code and Codex plugins. **Tab** or **Enter** fills in the highlighted entry so you can add arguments, and a command typed out in full runs right away. You can also click an entry in fullscreen. `/help` shows every command with its arguments.
 
-Rein has **33 built-in commands** and **7 built-in skills**, plus **25 commands and 1 skill in [packs](#packs)** that are off until you turn them on. More come from the [marketplace](../../features/marketplace/): `/contracts`, `/migrations`, `/deadcode`, `/flags` and the migration playbooks moved there (the **Contracts and migrations** item), and `/services`, `/symbols`, `/refs`, `/impact`, `/changeset`, `/codemap`, `/stack` (the **Multi-repo systems** item). Commands are handled by Rein itself. Skills are prompts sent to the agent (see [Built-in skills](#built-in-skills)).
+Rein has **54 built-in commands** and **7 built-in skills**. 21 of the commands are [specialist commands](#specialist-commands), which the bare `/` list leaves out. More come from [marketplace items](#from-the-marketplace), which ship their own code. Commands are handled by Rein itself. Skills are prompts sent to the agent (see [Built-in skills](#built-in-skills)).
 
 ## While the agent is working
 
@@ -92,7 +92,7 @@ See [Goals](../../features/goals/) and [Plan mode](../../features/plans/).
 
 | Command | Arguments | What it does |
 |---|---|---|
-| `/settings` | `[<tab>]` | Settings in eight tabs: Status line, Sidebar, General, Agents, Accounts, Safety, Packs and Advanced. `/settings safety` opens on that tab. See [Configuration](../configuration/#the-settings-tabs). |
+| `/settings` | `[<tab>]` | Settings in seven tabs: Status line, Sidebar, General, Agents, Accounts, Safety and Advanced. `/settings safety` opens on that tab. See [Configuration](../configuration/#the-settings-tabs). |
 | `/settings` | `keys` · `<key> [<value> \| reset]` | Any setting in `~/.rein/config.json` from the prompt: `keys` lists them all, `<key>` explains one (meaning, choices, default), `<key> <value>` sets it (`true`/`false`, a number, a listed choice, a comma-separated list, or JSON), `<key> reset` restores the default. Applies live. See [Configuration](../configuration/). |
 | `/settings` | `export [file]` · `import <file>` | Moves your settings to another machine: `export` writes them to a file, `import` reads one. Accounts, logins, the vault and keys are never included. |
 | `/tui` | `fullscreen` \| `classic` | Switches renderer and carries the conversation over. With no argument, shows which renderer is active. *Waits for idle.* |
@@ -104,28 +104,20 @@ See [Goals](../../features/goals/) and [Plan mode](../../features/plans/).
 
 Rein has no command aliases. An unknown command prints `Unknown command /<name>. Try /help.`
 
-## Packs
+## Specialist commands
 
-Specialist commands and skills come in **packs**, and every pack is **off** until you turn it on in `/settings` → **Packs** (or list it in [`packs`](../configuration/) in `config.json`). A pack that's off keeps its commands out of the `/` list and `/help`, and its skills away from the agent. Typing one of its commands says where it is:
+These commands work like any other, but a bare `/` and `/help` leave them out to keep the list short. Start typing the name and they show up.
 
-```text
-/impact is in the Multi-repo systems pack, which is off. Turn it on in /settings → Packs (or add "system" to packs in config.json).
-```
-
-### CI and pull requests (`ci`)
+### CI and pull requests
 
 | Command | Arguments | What it does |
 |---|---|---|
 | `/ci` | `[watch \| stop]` | The checks on this branch's pull request (GitHub, through `gh`). `watch` checks every minute and hands failures, with their digested logs, to the agent to fix (3 rounds at most; it asks before pushing). See [Watching CI](../../features/build-and-test/#watching-ci). |
 | `/pr` | `[digest [post] \| split \| comments \| queue [yes]]` | This branch's pull request (GitHub, through `gh`): status; a digest for reviewers (`post` adds it as a comment); `split` asks the agent to split the branch into stacked PRs; `comments` hands review comments to the agent; `queue` shows and `queue yes` runs the merge-queue command. See [Pull requests](../../features/pull-requests/#pr). |
-| `/affected` | — | What your working tree's changes affect, from the monorepo's build graph (Nx, Turborepo, Bazel, Pants), and the command that tests just that. See [Build & test](../../features/build-and-test/#what-a-change-affects). |
 | `/flaky` | `[clear]` | The tests known to be flaky in this project (they failed and passed on the same code), recorded with the `flaky-quarantine` experiment. `clear` forgets them. See [Flaky tests](../../features/build-and-test/#flaky-tests). |
-| `/build` | — | The build system here (Nx, Turborepo, Bazel, Pants), the build caches it's set up with, and whether the sandbox lets agent builds use them. See [Build caches](../../features/build-and-test/#build-caches). |
-| `/coverage` | `[tests]` | Lines your changes add that no test ran, from the newest coverage report (lcov, Istanbul, Cobertura, Go). `tests` asks the agent to write tests for them. See [Tests for what you changed](../../features/build-and-test/#tests-for-what-you-changed). |
-| `/mutate` | `[tests]` | Mutation testing of your changed files (Stryker, mutmut, go-mutesting): which planted bugs the tests miss. `tests` asks the agent to tighten the tests. See [Do the tests catch bugs?](../../features/build-and-test/#do-the-tests-catch-bugs). |
 | `/trackers` | `check` · `retry <ref>` | Issue trackers handing work to Rein (GitHub, Linear, GitLab, Azure DevOps, Jira): what's set up and what's been taken; `check` looks now; `retry` lets an issue be taken again. → [Issue trackers](../../features/trackers/) |
 
-### Specs and planning (`specs`)
+### Specs and planning
 
 | Command | Arguments | What it does |
 |---|---|---|
@@ -135,7 +127,7 @@ Specialist commands and skills come in **packs**, and every pack is **off** unti
 | `/risk` | `[<plan file> \| <spec name>]` | What a plan touches: the files it names, and across how many services, repos and owners, with any contracts (OpenAPI, protobuf, GraphQL…) and migrations among them, scored low, medium or high. Defaults to the newest saved plan. See [How risky is it](../../features/plans/#how-risky-is-it) |
 | `/bestof` | `[--test "<command>"] <task>` | Runs the task on the best available Claude model and the best Codex model at once, each in its own worktree, then runs the tests in both and keeps the result that passes (the smaller change if both do). See [Best of both providers](../../features/subagents/#best-of-both-providers) |
 
-### Large codebases (`codebase`)
+### Large codebases
 
 | Command | Arguments | What it does |
 |---|---|---|
@@ -146,7 +138,7 @@ Specialist commands and skills come in **packs**, and every pack is **off** unti
 | `/map` | `[send]` | A map of the repo: each source file's top-level declarations, within about 4,000 tokens. `send` gives it to the agent. See [A map of the repo](../../features/large-codebases/#a-map-of-the-repo). |
 | `/pack` | `[<name> [message] \| save <name> <globs…>]` | Context packs (`.rein/packs.yaml`): no argument lists them; `<name>` attaches a pack's files (like `@path`, up to 40) with your message; `save` makes one. See [Context packs](../../features/large-codebases/#context-packs). |
 
-### Insight and automation (`insight`)
+### Insight and automation
 
 | Command | Arguments | What it does |
 |---|---|---|
@@ -157,11 +149,20 @@ Specialist commands and skills come in **packs**, and every pack is **off** unti
 | `/sessions` | `[send <pid> <message>]` | Every other Rein running on this machine, across repos, with its state (idle, working, waiting for you), folder, title and goal. `send` sends one a message, as if typed there. See [Every session at a glance](../../features/sessions/#every-session-at-a-glance) |
 | `/policy` | — | Shows the policy in force (`.rein/policy.yaml`, `~/.rein/policy.yaml`): its deny and ask rules, allowed and denied models, and mistakes in the files. See [Policy as code](../../features/safety/#policy-as-code-reinpolicyyaml). |
 
-Skills in this pack:
+## From the marketplace
 
-| Skill | Arguments | What it does |
+Some commands come with items from the [marketplace](../../features/marketplace/), code and all. Typing one before you've installed its item says which item to install:
+
+```text
+/coverage moved to the marketplace, in the Test quality item: /marketplace install quality brings it back.
+```
+
+| Item | Install | Commands and skills |
 |---|---|---|
-| `/tour` | `[what]` | Writes a guided onboarding tour of the repo (or the service or feature you name): 8–20 stops in reading order, each a real file and line, as a [CodeTour](https://github.com/microsoft/codetour) in `.tours/` and a markdown page. See [Onboarding tours](../../features/insight/#onboarding-tours) |
+| [Contracts and migrations](../../features/contracts/) | `/marketplace install contracts` | `/contracts`, `/migrations`, `/deadcode`, `/flags`, and the migration playbook skills (`/contracts:codemod`, `/contracts:migrate-java21`…) |
+| [Multi-repo systems](../../features/system/) | `/marketplace install system` | `/services`, `/symbols`, `/refs`, `/impact`, `/changeset`, `/codemap`, `/stack` |
+| [Test quality](../../features/build-and-test/) | `/marketplace install quality` | `/affected`, `/build`, `/coverage`, `/mutate` |
+| [Onboarding tours](../../features/insight/#onboarding-tours) | `/marketplace install tour` | `/tour [what]`: writes a guided tour of the repo, 8–20 stops in reading order, as a [CodeTour](https://github.com/microsoft/codetour) in `.tours/` and a markdown page |
 
 ## Shell commands with `!`
 

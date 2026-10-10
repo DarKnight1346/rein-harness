@@ -28,7 +28,7 @@ export const CATEGORIES: {id: Category; label: string}[] = [
 ];
 
 /** What an item changes in Rein's settings and look (applied on install, undone on uninstall). */
-export type ItemConfig = {packs?: string[]; experiments?: string[]; statusLine?: string[]; sidebarSections?: string[]};
+export type ItemConfig = {experiments?: string[]; statusLine?: string[]; sidebarSections?: string[]};
 export type Theme = {accent?: string};
 
 export type Item = {
@@ -53,10 +53,10 @@ export type Item = {
 };
 
 export type Marketplace = {url: string; name: string; description?: string; official: boolean; dir: string; items: Item[]; error?: string; updatedAt?: number};
-/** What installing changed, so uninstalling undoes only that: packs and experiments it turned on, and the layout and theme it replaced. */
-export type Applied = {packs?: string[]; experiments?: string[]; previous?: {statusLine?: string[]; sidebarSections?: string[]; theme?: Theme}; set?: {statusLine?: string[]; sidebarSections?: string[]; theme?: Theme}};
+/** What installing changed, so uninstalling undoes only that: the experiments it turned on, and the layout and theme it replaced. */
+export type Applied = {experiments?: string[]; previous?: {statusLine?: string[]; sidebarSections?: string[]; theme?: Theme}; set?: {statusLine?: string[]; sidebarSections?: string[]; theme?: Theme}};
 export type Installed = {id: string; marketplace: string; version: string; installedAt: number; applied?: Applied};
-type Settings = {packs?: string[]; experiments?: string[]; statusLine?: string[]; sidebarSections?: string[]; theme?: Theme};
+type Settings = {experiments?: string[]; statusLine?: string[]; sidebarSections?: string[]; theme?: Theme};
 
 const root = () => path.join(reinHome(), 'marketplaces');
 const reposFile = () => path.join(reinHome(), 'marketplaces.json');
@@ -299,7 +299,7 @@ export function applyItem(cfg: Settings, it: Pick<Item, 'config' | 'theme'>): {p
   const c = it.config ?? {};
   const patch: Settings = {};
   const applied: Applied = {};
-  const add = (key: 'packs' | 'experiments') => {
+  const add = (key: 'experiments') => {
     const now = cfg[key] ?? [];
     const extra = (c[key] ?? []).filter((x) => !now.includes(x));
     if (extra.length) {
@@ -307,7 +307,6 @@ export function applyItem(cfg: Settings, it: Pick<Item, 'config' | 'theme'>): {p
       applied[key] = extra;
     }
   };
-  add('packs');
   add('experiments');
   for (const key of ['statusLine', 'sidebarSections'] as const)
     if (c[key]) {
@@ -327,7 +326,7 @@ export function applyItem(cfg: Settings, it: Pick<Item, 'config' | 'theme'>): {p
 export function unapplyItem(cfg: Settings, a: Applied | undefined): Settings | undefined {
   if (!a) return undefined;
   const patch: Settings = {};
-  for (const key of ['packs', 'experiments'] as const) if (a[key]?.length && cfg[key]) patch[key] = cfg[key]!.filter((x) => !a[key]!.includes(x));
+  for (const key of ['experiments'] as const) if (a[key]?.length && cfg[key]) patch[key] = cfg[key]!.filter((x) => !a[key]!.includes(x));
   const same = (x: unknown, y: unknown) => JSON.stringify(x) === JSON.stringify(y);
   for (const key of ['statusLine', 'sidebarSections', 'theme'] as const)
     if (a.set && key in a.set && same(cfg[key], a.set[key])) (patch as any)[key] = a.previous?.[key];

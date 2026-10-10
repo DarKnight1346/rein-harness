@@ -135,7 +135,7 @@ Fix issue #$1 with priority $2. Recent changes: !`git log --oneline -5`
 
 ## Built-in skills
 
-`/tour` is in the **Insight and automation** pack, off by default: turn it on in `/settings` → **Packs** ([Packs](../../reference/commands/#packs)); while it's off, the agent isn't offered it either. The migration playbooks (`/contracts:codemod`, `/contracts:migrate-java21` and the rest) come with the [Contracts and migrations](../contracts/) marketplace item. `/plan:deep`, `/review:deep` and `/skill:edit` don't show in a bare `/` list; type part of the name to find them.
+`/tour` comes with the **Onboarding tours** [marketplace](../marketplace/) item (`/marketplace install tour`). The migration playbooks (`/contracts:codemod`, `/contracts:migrate-java21` and the rest) come with the [Contracts and migrations](../contracts/) marketplace item. `/plan:deep`, `/review:deep` and `/skill:edit` don't show in a bare `/` list; type part of the name to find them.
 
 | Skill | What it does |
 |---|---|

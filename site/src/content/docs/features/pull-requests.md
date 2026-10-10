@@ -5,8 +5,8 @@ description: From a change to a merged pull request. Provenance on agent commits
 
 Agents write code faster than people review it. These features make agent PRs easier to review and easier to land.
 
-:::note[CI and pull requests pack]
-`/pr` is in the **CI and pull requests** pack, which is off by default: turn it on in `/settings` → **Packs** ([Packs](../../reference/commands/#packs)). What Rein does on its own here works without it.
+:::note
+`/pr` is a specialist command: it works as always, and shows in the `/` list once you start typing its name ([Specialist commands](../../reference/commands/#specialist-commands)).
 :::
 
 ## Provenance on agent commits
