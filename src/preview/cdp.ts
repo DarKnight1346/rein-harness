@@ -57,6 +57,7 @@ export class BrowserView extends EventEmitter {
     let timer: NodeJS.Timeout | undefined;
     const limit = new Promise<never>((_, reject) => (timer = setTimeout(() => reject(new Error(`the browser didn't come up in 30 s${this.stderr ? `: ${tail(this.stderr)}` : ''}`)), 30_000)));
     try {
+      this.startUrl = url;
       await Promise.race([this.launch(url, size), limit]);
     } catch (err) {
       this.close();
@@ -68,17 +69,20 @@ export class BrowserView extends EventEmitter {
 
   private stderr = '';
 
-  private async launch(url: string, size: {width: number; height: number}): Promise<void> {
+  private startUrl = '';
+  private recovered = false;
+
+  private async launch(url: string, size: {width: number; height: number}, forceNoSandbox = false): Promise<void> {
     const bin = await findBrowser();
     if (!bin) throw new Error('no Chrome, Chromium or Edge found on this machine (set REIN_BROWSER to one)');
     this.size = clampSize(size);
-    this.profile = await mkdtemp(path.join(os.tmpdir(), 'rein-preview-'));
+    this.profile ??= await mkdtemp(path.join(os.tmpdir(), 'rein-preview-'));
     // Chrome's sandbox can't run as root, and newer Linux kernels (Ubuntu 23.10+) may refuse the user
     // namespaces it needs: then it's started again without it (the page is still a separate process).
     const asRoot = process.platform === 'linux' && process.getuid?.() === 0;
     let wsBase: string;
     try {
-      wsBase = await this.spawnBrowser(bin, asRoot);
+      wsBase = await this.spawnBrowser(bin, forceNoSandbox || asRoot || (await sandboxBlocked()));
     } catch (err) {
       if (process.platform !== 'linux' || asRoot || !/sandbox|namespace|zygote/i.test(String((err as Error).message) + this.stderr)) throw err;
       wsBase = await this.spawnBrowser(bin, true);
@@ -100,6 +104,7 @@ export class BrowserView extends EventEmitter {
     this.ws.onmessage = (m) => this.onMessage(JSON.parse(String(m.data)));
     this.ws.onclose = () => this.close();
     await this.call('Page.enable');
+    await this.call('Inspector.enable').catch(() => {});
     await this.call('Runtime.enable').catch(() => {});
     // file:// and the like never load: the page asked for them, not you.
     await this.call('Fetch.enable', {patterns: [{urlPattern: 'file://*'}, {urlPattern: 'chrome://*'}, {urlPattern: 'devtools://*'}, {urlPattern: 'chrome-extension://*'}]});
@@ -189,6 +194,9 @@ export class BrowserView extends EventEmitter {
           this.emit('navigated', this.url);
         }
         break;
+      case 'Inspector.targetCrashed':
+        void this.recover();
+        break;
       case 'Page.loadEventFired':
         // A screencast sends frames on paints; a page that's done painting gets one frame now.
         void this.call('Page.captureScreenshot', {format: 'jpeg', quality: 70}).then((r) => this.emit('frame', {data: r.data, width: this.size.width, height: this.size.height} satisfies Frame), () => {});
@@ -245,6 +253,33 @@ export class BrowserView extends EventEmitter {
     }
   }
 
+  /**
+   * The page's process died. On Linux that's usually the sandbox (a kernel that won't give it the
+   * namespaces it needs, in a way Rein couldn't see beforehand): start again without it, once.
+   */
+  private async recover(): Promise<void> {
+    if (this.recovered || process.platform !== 'linux' || this.closed) return void this.emit('notice', 'The preview’s page crashed.');
+    this.recovered = true;
+    const url = /^https?:/i.test(this.url) ? this.url : this.startUrl;
+    const old = this.ws;
+    this.ws = undefined;
+    old && (old.onclose = null);
+    old?.close();
+    this.proc?.kill();
+    this.streaming = false;
+    try {
+      await this.launch(url, this.size, true);
+    } catch (err) {
+      this.emit('notice', `The preview’s page crashed and couldn’t restart: ${(err as Error).message}`);
+      this.close();
+    }
+  }
+
+  /** The browser's last words, for an error message. */
+  diag(): string {
+    return tail(this.stderr);
+  }
+
   close(): void {
     if (this.closed) return;
     this.closed = true;
@@ -258,6 +293,17 @@ export class BrowserView extends EventEmitter {
     if (dir) setTimeout(() => void rm(dir, {recursive: true, force: true}).catch(() => {}), 1500).unref();
     this.emit('closed');
   }
+}
+
+/**
+ * Linux kernels that won't give Chrome's sandbox the user namespaces it needs: Ubuntu 23.10+ (AppArmor's
+ * apparmor_restrict_unprivileged_userns, also on GitHub's runners) or unprivileged_userns_clone off.
+ * The browser itself starts, but every page process dies, so Rein starts it without the sandbox there.
+ */
+export async function sandboxBlocked(): Promise<boolean> {
+  if (process.platform !== 'linux') return false;
+  const read = (f: string) => readFile(f, 'utf8').then((x) => x.trim(), () => '');
+  return (await read('/proc/sys/kernel/apparmor_restrict_unprivileged_userns')) === '1' || (await read('/proc/sys/kernel/unprivileged_userns_clone')) === '0';
 }
 
 const tail = (s: string) => s.trim().split('\n').filter((l) => l.trim()).slice(-2).join(' ').slice(0, 300);

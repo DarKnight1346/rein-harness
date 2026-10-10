@@ -2,7 +2,7 @@ import http from 'node:http';
 import net from 'node:net';
 import {inflateSync} from 'node:zlib';
 import {afterEach, describe, expect, it} from 'vitest';
-import {BrowserView, findBrowser} from '../src/preview/cdp.js';
+import {BrowserView, findBrowser, sandboxBlocked} from '../src/preview/cdp.js';
 import {encodePng} from '../src/preview/png.js';
 import {localUrls, Previews, vncTarget} from '../src/preview/registry.js';
 import {previewTool} from '../src/preview/tool.js';
@@ -120,16 +120,22 @@ describe('the web preview', async () => {
     await new Promise<void>((r) => page.listen(0, '127.0.0.1', () => r()));
     const url = `http://127.0.0.1:${(page.address() as net.AddressInfo).port}/`;
     const v = new BrowserView();
+    // Each step with its own limit, and the browser's own words if one fails (CI can't be watched).
+    let step = 'start';
+    const within = <T,>(p: Promise<T>, what: string, ms = 15_000) =>
+      Promise.race([p, new Promise<never>((_, reject) => setTimeout(() => reject(new Error(`${what} took over ${ms / 1000} s (sandbox blocked: ${blocked}; browser: ${v.diag() || 'said nothing'})`)), ms))]);
+    const blocked = await sandboxBlocked();
     try {
       const frame = new Promise<any>((r) => v.once('frame', r));
-      await v.start(url, {width: 640, height: 480});
-      const f = await frame;
+      await within(v.start(url, {width: 640, height: 480}), (step = 'starting the browser'), 35_000);
+      const f = await within(frame, (step = 'the first frame'));
       expect([f.width, f.height]).toEqual([640, 480]);
       const went = new Promise<string>((r) => v.on('navigated', (u) => u.endsWith('/two') && r(u)));
       await v.input({type: 'mouse', action: 'down', x: 30, y: 30});
       await v.input({type: 'mouse', action: 'up', x: 30, y: 30});
-      expect(await went).toBe(`${url}two`);
+      expect(await within(went, (step = 'following a click'))).toBe(`${url}two`);
       await expect(v.navigate('file:///etc/hosts')).rejects.toThrow(/http\(s\) pages only/);
+      void step;
     } finally {
       v.close();
       page.close();
