@@ -64,7 +64,7 @@
     "string-width": "^8.3.0",
     "strip-ansi": "^7.2.0",
     "turndown": "^7.2.4",
-    "undici": "^7.30.0",
+    "undici": "^8.11.2",
     "unpdf": "^1.8.1",
     "wrap-ansi": "^10.0.2",
     "yaml": "^2.9.0"
