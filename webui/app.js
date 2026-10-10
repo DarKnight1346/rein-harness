@@ -1582,6 +1582,16 @@ async function startRemote(c, pv) {
   const base = `/api/chats/${c.id}/previews/${pv.id}`;
   const t0 = Date.now();
   try {
+    // A web page: the browser starts at the pane's size first (its frames are what's streamed).
+    const p = c.snapshot?.previews?.find((x) => x.id === pv.id);
+    if (p?.kind === 'url') {
+      // After layout, so the page lays out to the pane as it does on the frames path.
+      await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+      const screen = $('#pscreen');
+      const r = await ask(c, 'preview-open', {id: pv.id, width: Math.round(screen?.clientWidth || 1280), height: Math.round(screen?.clientHeight || 800)});
+      if (!r?.remote) return remoteFallback(c, pv);
+      if (r.url) ((pv.url = r.url), updatePreviewBar(c));
+    }
     const {connect} = await import(`${base}/rein-remote.js`);
     if (!pv.rcanvas) return; // closed while loading
     pv.session = connect(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}${base}/stream`, pv.rcanvas, {name: 'Rein web UI'});
@@ -1608,6 +1618,8 @@ function stopRemote(pv) {
 function remoteFallback(c, pv) {
   stopRemote(pv);
   pv.fallback = true;
+  // A web page's browser was started for the stream: started again for frames.
+  if (c.snapshot?.previews?.find((x) => x.id === pv.id)?.kind === 'url') ask(c, 'preview-close', {id: pv.id}).catch(() => {});
   if (state.chat === c && c.pvOpen === pv.id) render();
 }
 
@@ -1677,7 +1689,7 @@ function fitPreview(c) {
     try {
       if (!pv.started) {
         pv.started = true;
-        const r = await ask(c, 'preview-open', {id: pv.id, ...size, ...(pv.password ? {password: pv.password} : {})});
+        const r = await ask(c, 'preview-open', {id: pv.id, ...size, ...(pv.password ? {password: pv.password} : {}), ...(pv.fallback ? {frames: true} : {})});
         pv.password = undefined;
         if (r?.needsPassword) {
           // The display wants a password: ask here, then open it again with it.

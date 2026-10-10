@@ -144,4 +144,29 @@ describe('the web preview', async () => {
       page.close();
     }
   }, 60_000);
+
+  it.skipIf(!browser)('lands a click where it shows on a phone-size page laid out wider and scaled down', async () => {
+    // No mobile viewport: on a phone-size screen the page lays out at 980 and is shown scaled to fit.
+    const page = http.createServer((_req, res) => {
+      res.setHeader('content-type', 'text/html');
+      res.end('<body style="margin:0"><button id="b" style="position:absolute;left:400px;top:400px;width:400px;height:200px" onclick="window.n=(window.n||0)+1">hit</button></body>');
+    });
+    await new Promise<void>((r) => page.listen(0, '127.0.0.1', () => r()));
+    const url = `http://127.0.0.1:${(page.address() as net.AddressInfo).port}/`;
+    const v = new BrowserView();
+    try {
+      const loaded = new Promise<void>((r) => v.on('loaded', (u) => u === url && r()));
+      await v.start(url, {width: 490, height: 700});
+      await loaded;
+      await new Promise((r) => setTimeout(r, 500));
+      // On screen the button's middle is at (600, 500) × 0.5 (980 shown in 490).
+      for (const action of ['down', 'up'] as const) await v.input({type: 'mouse', action, x: 300, y: 250, button: 'left'});
+      await new Promise((r) => setTimeout(r, 300));
+      const r = await (v as unknown as {call(m: string, p: object): Promise<{result?: {value?: unknown}}>}).call('Runtime.evaluate', {expression: 'window.n', returnByValue: true});
+      expect(r?.result?.value).toBe(1);
+    } finally {
+      v.close();
+      page.close();
+    }
+  }, 60_000);
 });

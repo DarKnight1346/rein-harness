@@ -162,3 +162,50 @@ export async function remoteForVnc(p: {target: string; password?: string; remote
   p.remote = {port: r.port, token: r.token};
   p.stop = () => (r.stop(), before?.());
 }
+
+/**
+ * A web preview as video: the headless browser's screencast frames (JPEG) piped into rein-remote
+ * (`serve --pipe`), which encodes them as H.264; what the viewer does comes back as the browser
+ * view's own input events. A frame that can't be written at once (rein-remote is behind) is dropped.
+ */
+export async function startPipe(bin: string, size: {width: number; height: number}, onInput: (ev: Record<string, unknown>) => void): Promise<RemoteStream & {frame(jpeg: Buffer): void}> {
+  const token = randomBytes(24).toString('base64url');
+  const w = Math.max(2, Math.round(size.width)) & ~1, h = Math.max(2, Math.round(size.height)) & ~1;
+  const p = spawn(bin, ['serve', '--pipe', `${w}x${h}`, '--listen', '127.0.0.1:0', '--webtransport', 'off'], {stdio: ['pipe', 'pipe', 'pipe'], env: {...process.env, REIN_REMOTE_TOKEN: token}});
+  p.stdin!.on('error', () => {});
+  let busy = false;
+  p.stdin!.on('drain', () => (busy = false));
+  let line = '';
+  p.stdout!.setEncoding('utf8');
+  p.stdout!.on('data', (chunk: string) => {
+    line += chunk;
+    for (let i; (i = line.indexOf('\n')) >= 0; line = line.slice(i + 1)) {
+      try {
+        onInput(JSON.parse(line.slice(0, i)));
+      } catch {}
+    }
+  });
+  const stop = () => p.kill();
+  const port = await new Promise<number>((resolve, reject) => {
+    let err = '';
+    const timer = setTimeout(() => (stop(), reject(new Error('rein-remote didn\'t start'))), 10_000);
+    p.on('error', (e) => (clearTimeout(timer), reject(e)));
+    p.stderr!.setEncoding('utf8');
+    p.stderr!.on('data', (c: string) => {
+      err = (err + c).slice(-4000);
+      const m = err.match(/on http:\/\/127\.0\.0\.1:(\d+)/);
+      if (m) (clearTimeout(timer), resolve(Number(m[1])));
+    });
+  });
+  return {
+    port,
+    token,
+    stop,
+    frame(jpeg) {
+      if (busy || !p.stdin!.writable) return;
+      const len = Buffer.alloc(4);
+      len.writeUInt32LE(jpeg.length);
+      busy = !p.stdin!.write(Buffer.concat([len, jpeg]));
+    },
+  };
+}

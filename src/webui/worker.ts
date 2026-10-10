@@ -432,14 +432,18 @@ export async function runWorker(): Promise<number> {
   };
 
   // Previews (preview/): a streamed browser or display per open preview, while the page looks at it.
+  const {remoteBinary, startPipe} = await import('../preview/remote.js');
+  const remoteBin = () => remoteBinary(runtime.config.reinRemote);
   const views = new Map<number, InstanceType<typeof BrowserView> | InstanceType<typeof VncView>>();
   let watching = true;
   const previewList = () =>
     runtime.previews.list().map((p) => {
       const v = views.get(p.id);
-      return {id: p.id, kind: p.kind, target: p.target, title: p.title, source: p.source, open: !!v, ...(v instanceof BrowserView && v.url ? {url: v.url} : {}), ...(p.remote ? {remote: true} : {})};
+      // A web preview can stream as video when Rein Remote is installed (the page asks at open).
+      const remote = !!p.remote || (p.kind === 'url' && !!remoteBin());
+      return {id: p.id, kind: p.kind, target: p.target, title: p.title, source: p.source, open: !!v, ...(v instanceof BrowserView && v.url ? {url: v.url} : {}), ...(remote ? {remote: true} : {})};
     });
-  const openView = async (id: number, size: {width: number; height: number}, password?: string) => {
+  const openView = async (id: number, size: {width: number; height: number}, password?: string, framesOnly = false) => {
     const p = runtime.previews.get(id);
     if (!p) throw new Error('that preview is gone');
     const had = views.get(id);
@@ -453,7 +457,14 @@ export async function runWorker(): Promise<number> {
     if (p.kind === 'url') {
       const v = new BrowserView();
       views.set(id, v);
-      v.on('frame', (f) => frame({format: 'jpeg', data: f.data, width: f.width, height: f.height}));
+      // As video when Rein Remote is there: the browser's frames go into it, its input comes back.
+      const bin = framesOnly ? undefined : remoteBin();
+      const pipe = bin ? await startPipe(bin, size, (ev) => void v.input(ev as never).catch(() => {})).catch(() => undefined) : undefined;
+      if (pipe) {
+        p.remote = {port: pipe.port, token: pipe.token};
+        v.on('frame', (f) => pipe.frame(Buffer.from(f.data, 'base64')));
+        v.on('closed', () => (pipe.stop(), (p.remote = undefined)));
+      } else v.on('frame', (f) => frame({format: 'jpeg', data: f.data, width: f.width, height: f.height}));
       v.on('navigated', (url) => send({t: 'event', ev: {type: 'preview-url', id, url}}));
       v.on('notice', (text) => log('info', text));
       v.on('closed', () => (views.delete(id), chrome()));
@@ -464,6 +475,10 @@ export async function runWorker(): Promise<number> {
         throw err;
       }
       if (!watching) await v.stream(false);
+      if (p.remote) {
+        chrome();
+        return {id, url: v.url, remote: true};
+      }
     } else if (p.kind === 'window') {
       // Only Rein Remote streams a window: no frames to fall back on.
       throw new Error("the window's video stream didn't connect: if the web UI is behind a reverse proxy, let it pass WebSockets (see the Web UI docs)");
@@ -824,7 +839,7 @@ export async function runWorker(): Promise<number> {
         return p.remote;
       }
       case 'preview-open':
-        return openView(Number(args.id), {width: Number(args.width) || 1280, height: Number(args.height) || 800}, typeof args.password === 'string' && args.password ? args.password : undefined);
+        return openView(Number(args.id), {width: Number(args.width) || 1280, height: Number(args.height) || 800}, typeof args.password === 'string' && args.password ? args.password : undefined, args.frames === true);
       case 'preview-input': {
         const v = views.get(Number(args.id));
         const ev = args.ev as {type?: string};
