@@ -122,6 +122,10 @@ Copies live in `~/.rein/worktrees/`, never in your project. Outside a git reposi
 
 ## Best of both providers
 
+:::note[Specs and planning pack]
+`/bestof` is in the **Specs and planning** pack, which is off by default: turn it on in `/settings` → **Packs** ([Packs](../../reference/commands/#packs)).
+:::
+
 For a task where you'd rather pay twice than get it wrong, `/bestof` runs it on **Claude and Codex at once** and keeps the one that works:
 
 ```text title="rein"

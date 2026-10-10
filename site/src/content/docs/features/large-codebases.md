@@ -5,6 +5,10 @@ description: Getting an agent the right context in a codebase too big to read. C
 
 In a codebase of millions of lines, the hard part isn't writing the change: it's finding the twenty files that matter. These features get the agent to them without reading everything.
 
+:::note[Large codebases pack]
+`/owners`, `/index`, `/map`, `/pack` are in the **Large codebases** pack, which is off by default: turn it on in `/settings` → **Packs** ([Packs](../../reference/commands/#packs)). What Rein does on its own here works without it.
+:::
+
 ## Context packs
 
 You probably hand the agent the same files again and again: "the payments flow" is these services, this schema and that doc. Save them once as a **context pack**:

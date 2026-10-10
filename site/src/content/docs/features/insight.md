@@ -5,6 +5,10 @@ description: What your own history says about how the agent works for you. Reque
 
 Rein keeps every conversation on your machine. That's enough to answer practical questions: how long a request usually takes, how often the tests pass at the end, which model does better on your code, and what each request costs. Nothing on this page sends anything anywhere.
 
+:::note[Insight and automation pack]
+`/stats`, `/cache`, `/tour` are in the **Insight and automation** pack, which is off by default: turn it on in `/settings` → **Packs** ([Packs](../../reference/commands/#packs)).
+:::
+
 ## How your requests go
 
 `/stats` reads the conversations saved for this project over the last 30 days:

@@ -69,6 +69,7 @@ How these play together is covered in [load balancing](../../internals/load-bala
 | `budget` | object | unset (no caps) | Spending caps in USD at API list prices: `{"requestUsd": 2, "goalUsd": 20, "conversationUsd": 50}`. A repo's `.rein/settings.json` `budget` can set lower ones. See [Cost & budgets](../../features/cost/#budgets). | `/settings budget {…}`, `/settings` → Advanced |
 | `otel` | object | unset (off) | OpenTelemetry export of turns, tool calls, tokens and cost: `{"endpoint": "http://localhost:4318", "headers": {…}, "serviceName": "rein"}`. Metadata only. See [Observability](../../features/observability/). | `/settings <key>`, `/settings` → Advanced |
 | `experiments` | string[] | `[]` | Efficiency experiments to turn on by name, or `-name` to turn a default one off; see [Experiments](#experiments). | `/settings <key>`, `/settings` → Advanced |
+| `packs` | string[] | `[]` | [Command packs](../commands/#packs) to turn on: `ci`, `specs`, `migrations`, `system`, `codebase`, `insight`. A pack that's off keeps its commands out of the `/` list and `/help` and its skills from the agent. | `/settings` → Packs, `/settings <key>` |
 | `lspServers` | object | — | Use your own server command instead of Rein's, per server id: `{"python": {"command": "/path/to/server", "args": ["--stdio"]}}`. | `/settings <key>`, `/settings` → Advanced |
 | `waitForLimits` | boolean | `true` | When every account for the model is at its limit and no other model can take over, wait for the earliest reset (up to 12 hours) and continue the turn. `false` stops with `Every account for … is at its limit`. | `/settings` → Accounts → Limits |
 | `secretScan` | `"off"` \| `"warn"` \| `"block"` | `"off"` | A `write` or `edit` that adds something that looks like a credential: tell the agent (`warn`) or refuse the change (`block`). When on, credentials are also masked in saved conversations. See [Secret scanning](../../features/permissions/#secret-scanning). | `/settings secretScan`, `/settings` → Advanced |
@@ -141,7 +142,7 @@ Valid `sidebarSections` ids: `agents`, `accounts`, `models` (chat model picker),
 
 ## The `/settings` tabs
 
-`/settings` opens a window with seven tabs. Switch with click, `←` `→` or `Tab`; close with `Esc`. `/settings <tab>` (`/settings safety`) opens on that tab.
+`/settings` opens a window with eight tabs. Switch with click, `←` `→` or `Tab`; close with `Esc`. `/settings <tab>` (`/settings safety`) opens on that tab.
 
 | Tab | What's in it |
 | --- | --- |
@@ -151,6 +152,7 @@ Valid `sidebarSections` ids: `agents`, `accounts`, `models` (chat model picker),
 | **Agents** | Subagents (`subagentLimit`), Goals (`goalMaxRounds`), Worktrees (`worktrees`), Compaction (`autoCompactPct`), Plan review (`planReview`) |
 | **Accounts** | Load balancing (`loadBalancing`), Limits (`waitForLimits`), API accounts (`apiAccounts`) |
 | **Safety** | Secrets (`secretScan`), Semgrep (`sast`), Planted instructions (`injectionScan`), Data leaving (`exfilGuard`), MCP pinning (`mcpPinning`), Dependencies (`depCheck`) |
+| **Packs** | `packs`: the [command packs](../commands/#packs) that are on (all off by default). Click or `Space` toggles one; the line below lists its commands and skills |
 | **Advanced** | Every key in the file as a list: `Enter` cycles a choice or on/off, or opens an editor for text, numbers, lists (comma-separated) and JSON; `r` resets the key to its default |
 
 In General, Agents, Accounts and Safety, `↑` `↓` pick a setting, and `Enter`, `Space` or a click cycles its value. The focused setting's explanation and all its choices show below the list; click a choice to pick it.

@@ -150,7 +150,7 @@ export function ClassicApp({resume}: {resume: Resume}) {
               <Text key={c.name} color={c === r.selected ? 'cyan' : undefined} dimColor={c !== r.selected}>
                 {nameCol(c.name)}
                 {c.description}
-                {c.skill ? <Text dimColor> · {c.skill.plugin ? `plugin ${c.skill.plugin}` : skillSourceLabel(c.skill.source)}{c.skill.argumentHint ? ` · ${c.skill.argumentHint}` : ''}</Text> : null}
+                {c.skill && c.skill.source !== 'builtin' ? <Text dimColor> · {c.skill.plugin ? `plugin ${c.skill.plugin}` : skillSourceLabel(c.skill.source)}{c.skill.argumentHint ? ` · ${c.skill.argumentHint}` : ''}</Text> : null}
               </Text>
             ))}
             {win.below ? <Text dimColor>↓ {win.below} more</Text> : null}

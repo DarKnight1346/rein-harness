@@ -135,6 +135,8 @@ Fix issue #$1 with priority $2. Recent changes: !`git log --oneline -5`
 
 ## Built-in skills
 
+The migration skills (`/expand-contract`, `/contract-tests`, `/codemod`, `/migrate:java21`, `/migrate:python3`, `/migrate:react-hooks`) are in the **Contracts and migrations** pack and `/tour` in **Insight and automation**. Both packs are off by default: turn them on in `/settings` → **Packs** ([Packs](../../reference/commands/#packs)). While a pack is off, the agent isn't offered its skills either. `/plan:deep`, `/review:deep` and `/skill:edit` don't show in a bare `/` list; type part of the name to find them.
+
 | Skill | What it does |
 |---|---|
 | `/init [guidance]` | The agent studies the project and writes or improves `AGENTS.md` (commands that actually exist, a map, conventions, gotchas), then reads it back to check every command and path. |

@@ -76,6 +76,7 @@ import {isMilestoneCopy, todoTool} from './tools/todo.js';
 import {imageGenRef, imageTool} from './tools/image.js';
 import {newTranscript, saveTranscript, setSaveFilter} from './session/transcript.js';
 import {setPromptCacheTtl} from './providers/claude/session.js';
+import {setEnabledPacks} from './commands/packs.js';
 import {setAttribution, setBriefFinal, setCheapExplore, setExtraWorkingDirs, setInScope, setProvenance, setScopeDir, setLazyTools, setManyCalls, setNoTodo, setSelfTest, setVaultNames, systemPrompt} from './session/prompt.js';
 import {Vault} from './vault/vault.js';
 import {parseRef, refKey, type Account, type ModelRef, type TokenCount, type ToolBinding} from './providers/types.js';
@@ -1116,6 +1117,7 @@ Drop superseded reads of the same file, routine listings, and output that no lon
     setInScope(() => activeExperiments(this.config).includes('in-scope'));
     setManyCalls(() => activeExperiments(this.config).includes('many-calls'));
     setSelfTest(() => activeExperiments(this.config).includes('self-test'));
+    setEnabledPacks(() => this.config.packs ?? []);
     setPromptCacheTtl(() => (activeExperiments(this.config).includes('cache-5m') ? '5m' : undefined));
     setCacheWriteTtl(() => (activeExperiments(this.config).includes('cache-5m') ? '5m' : '1h'));
     setPriceOverrides(() => this.config.prices);

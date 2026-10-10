@@ -107,7 +107,12 @@ describe('splitLiveTail', () => {
 describe('suggestCommands', () => {
   it('filters until a space is typed, prefix matches first', async () => {
     const {suggestCommands, COMMANDS} = await import('../src/commands/index.js');
-    expect(suggestCommands('/')).toHaveLength(COMMANDS.length);
+    const {commandEnabled} = await import('../src/commands/packs.js');
+    // A bare `/`: everyday commands only (no pack commands, variants or diagnostics).
+    expect(suggestCommands('/')).toHaveLength(COMMANDS.filter((c) => c.listed !== false && commandEnabled(c.name)).length);
+    expect(suggestCommands('/').map((c) => c.name).slice(0, 3)).toEqual(['model', 'goal', 'btw']);
+    expect(suggestCommands('/').map((c) => c.name)).not.toContain('tui');
+    expect(suggestCommands('/tu').map((c) => c.name)[0]).toBe('tui'); // typed: found
     expect(suggestCommands('/u').map((c) => c.name).slice(0, 2)).toEqual(['usage', 'update']);
     expect(suggestCommands('/model ')).toEqual([]);
     expect(suggestCommands('hello')).toEqual([]);
@@ -121,8 +126,21 @@ describe('suggestCommands', () => {
     expect(names('/plan')[0]).toBe('goal:plan'); // the start of a word
     expect(names('/sett')[0]).toBe('settings');
     expect(names('/model')[0]).toBe('model'); // exact beats everything
-    expect(names('/stat')).toEqual(expect.arrayContaining(['stats']));
-    expect(names('/stat')[0]).toBe('stats');
+  });
+
+  it("leaves out the commands of packs that are off, and says where they are", async () => {
+    const {suggestCommands} = await import('../src/commands/index.js');
+    const {packOffMessage, setEnabledPacks} = await import('../src/commands/packs.js');
+    expect(suggestCommands('/stats').map((c) => c.name)).not.toContain('stats');
+    expect(packOffMessage('stats')).toMatch(/Insight and automation pack, which is off.*\/settings → Packs.*"insight"/);
+    expect(packOffMessage('model')).toBeUndefined();
+    setEnabledPacks(() => ['insight']);
+    try {
+      expect(suggestCommands('/stat').map((c) => c.name)[0]).toBe('stats');
+      expect(packOffMessage('stats')).toBeUndefined();
+    } finally {
+      setEnabledPacks(() => []);
+    }
   });
 
   it('ranks skills with commands, and matches their aliases', async () => {

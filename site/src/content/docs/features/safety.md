@@ -74,6 +74,10 @@ Pins are kept as hashes plus tool names in `~/.rein/state/mcp-pins.json`; delete
 
 ## Policy as code (`.rein/policy.yaml`)
 
+:::note[Insight and automation pack]
+`/policy` is in the **Insight and automation** pack, which is off by default: turn it on in `/settings` → **Packs** ([Packs](../../reference/commands/#packs)). The policy applies whether or not the pack is on.
+:::
+
 Permission rules say what's allowed without asking. A policy says what's **never** allowed, what always needs a human, and which models may work on the code, with a reason the agent is told. Put it in `.rein/policy.yaml` (commit it, and it applies to everyone working in the repo with Rein) or `~/.rein/policy.yaml` (every project); both apply.
 
 ```yaml title=".rein/policy.yaml"

@@ -42,6 +42,7 @@ import {kTokens, rainbow, useBlink, Working} from '../Working.js';
 import {agentLines, assistantLines, entryLines, pendingToolLines, wrap} from './lines.js';
 import {InfoWindow, Window} from './Window.js';
 import {COMMANDS} from '../../commands/index.js';
+import {commandEnabled, packsHint} from '../../commands/packs.js';
 import {skillDirs, skillSourceLabel, type Skill} from '../../skills/index.js';
 import chalk from 'chalk';
 import {isEmpty, lineRange, selectedText, type Selection} from './selection.js';
@@ -347,7 +348,7 @@ export function FullscreenApp({resume}: {resume: Resume}) {
                 {c === r.selected ? '❯ ' : '  '}
                 {nameCol(c.name)}
                 {c.description}
-                {c.skill ? <Text dimColor> · {c.skill.plugin ? `plugin ${c.skill.plugin}` : skillSourceLabel(c.skill.source)}{c.skill.argumentHint ? ` · ${c.skill.argumentHint}` : ''}</Text> : null}
+                {c.skill && c.skill.source !== 'builtin' ? <Text dimColor> · {c.skill.plugin ? `plugin ${c.skill.plugin}` : skillSourceLabel(c.skill.source)}{c.skill.argumentHint ? ` · ${c.skill.argumentHint}` : ''}</Text> : null}
               </Text>
             </Clickable>
           ))}
@@ -447,13 +448,21 @@ export function FullscreenApp({resume}: {resume: Resume}) {
 
 function helpLines(width: number, skills: Skill[]): string[] {
   const dirs = skillDirs();
+  const commands = COMMANDS.filter((c) => commandEnabled(c.name));
+  const col = commandColumn(commands.map((c) => c.name));
+  // Skills from Claude Code / Codex plugins come last, one sentence each (theirs run to paragraphs).
+  const fromPlugin = (s: Skill) => s.source === 'plugin' || s.source === 'codex';
+  const own = skills.filter((s) => !fromPlugin(s));
+  const plugins = skills.filter(fromPlugin);
+  const skillCol = commandColumn(skills.map((s) => s.name));
+  const firstSentence = (t: string) => t.match(/^.*?[.!?](?=\s|$)/)?.[0] ?? t;
   return [
-    ...COMMANDS.flatMap((c) => wrap(c.description, width, chalk.cyan(`/${c.name}`.padEnd(10)))),
+    ...commands.flatMap((c) => wrap(c.usage, width, chalk.cyan(col(c.name)))),
+    ...wrap(chalk.dim(packsHint()), width),
     '',
     chalk.bold('Skills') + chalk.dim(`  name clashes: built-in → ${dirs.project} (project) → ${dirs.global} (global)`),
-    ...(skills.length
-      ? skills.flatMap((s) => wrap(`${s.description} ${chalk.dim(`(${s.source})`)}`, width, chalk.magenta(`/${s.name}`.padEnd(10))))
-      : [chalk.dim('  none yet — /skill:create makes one')]),
+    ...(own.length ? own.flatMap((s) => wrap(`${s.description}${s.source === 'builtin' ? '' : ` ${chalk.dim(`(${s.source})`)}`}`, width, chalk.magenta(skillCol(s.name)))) : [chalk.dim('  none yet — /skill:create makes one')]),
+    ...(plugins.length ? ['', chalk.bold('From plugins'), ...plugins.flatMap((s) => wrap(firstSentence(s.description), width, chalk.magenta(skillCol(s.name))))] : []),
     '',
     ...wrap('esc interrupts a reply (or closes a window) · wheel / PgUp / PgDn scroll · drag to select & copy · ctrl+b sidebar · shift/option+enter or \\+enter for a new line · rein --continue picks a conversation', width).map((l) => chalk.dim(l)),
   ];

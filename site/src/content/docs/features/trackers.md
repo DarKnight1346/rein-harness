@@ -5,6 +5,10 @@ description: Hand an issue to Rein by labelling it. Rein works on it on its own 
 
 Label an issue `rein` and assign it to yourself. The Rein you have running picks it up within a couple of minutes, works on it **on a new branch in its own copy of the project**, and comments on the issue with its report. Nothing is merged, pushed or deployed: you review the branch.
 
+:::note[CI and pull requests pack]
+`/trackers` is in the **CI and pull requests** pack, which is off by default: turn it on in `/settings` → **Packs** ([Packs](../../reference/commands/#packs)).
+:::
+
 ```text title="rein"
   ⎿ ⇢ github #2 "Add a multiply function": started (it's labelled "rein" and assigned to you).
   ⎿ ⇢ github #2: done (branch rein/issue-2); the report is on the issue.

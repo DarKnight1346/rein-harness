@@ -53,6 +53,10 @@ Entries Rein can't use (no path or name, a name used twice, invalid YAML) are sk
 
 ## `/workspace`
 
+:::note[Large codebases pack]
+`/workspace` is in the **Large codebases** pack, which is off by default: turn it on in `/settings` → **Packs** ([Packs](../../reference/commands/#packs)). The manifest and everything it sets up work without it.
+:::
+
 ```text title="rein"
 > /workspace
   ⎿ Workspace shop: /Users/you/code/shop/rein.workspace.yaml
@@ -124,6 +128,10 @@ A change that spans repos ends up as one pull request per repo, and reviewers ne
 - `/workspace link-prs` shows what it would do; `/workspace link-prs yes` adds a **Related pull requests** section to each description, listing the others and saying to merge them together. The section sits between `<!-- rein:linked-prs -->` markers, so running it again updates it instead of adding another.
 
 ## One package of a monorepo
+
+:::note[Large codebases pack]
+`/scope` is in the **Large codebases** pack, which is off by default: turn it on in `/settings` → **Packs** ([Packs](../../reference/commands/#packs)). `rein --scope <dir>` works without it.
+:::
 
 The opposite problem: one huge repo where you only work on one package. `rein --scope packages/api` (or `/scope packages/api` in a session) focuses the agent there:
 

@@ -3,6 +3,8 @@ import {useApp, useInput} from 'ink';
 import {detectImports, importAccounts, skipImport, type AccountRow} from '../accounts/service.js';
 import {collectUsage, type UsageRow} from '../accounts/usage.js';
 import {COMMANDS, parseInput, shadowedSkills, suggestCommands} from '../commands/index.js';
+import {commandEnabled, packOffMessage, packsHint} from '../commands/packs.js';
+import {commandColumn} from './format.js';
 import {loadSkills, skillDirs, skillPrompt, type Skill} from '../skills/index.js';
 import {autoUpdate, reinVersion, runUpdate, type UpdateLine} from '../commands/update.js';
 import {runtime, type Resume} from '../runtime.js';
@@ -1100,6 +1102,11 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
     }
     if (parsed.kind === 'unknown') {
       log('error', `Unknown command /${parsed.name}. Try /help.`);
+      return;
+    }
+    const packOff = packOffMessage(parsed.name);
+    if (packOff) {
+      log('info', packOff);
       return;
     }
     // Commands about the main conversation itself: say so instead of silently acting on main while
@@ -2318,7 +2325,7 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
           setOverlay({name: 'help'});
           break;
         }
-        log('info', COMMANDS.map((c) => `/${c.name.padEnd(8)} ${c.description}`).join('\n') + '\nesc interrupts a reply · rein --continue picks a conversation to continue');
+        log('info', ((cs) => cs.map((c) => `${commandColumn(cs.map((x) => x.name))(c.name)}${c.usage}`))(COMMANDS.filter((c) => commandEnabled(c.name))).join('\n') + `\n${packsHint()}\nesc interrupts a reply · rein --continue picks a conversation to continue`);
         break;
       case 'clear':
         runtime.agents.closeAll();

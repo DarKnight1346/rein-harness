@@ -5,6 +5,10 @@ description: Spec mode writes requirements, a design and tasks, each approved by
 
 A [plan](../plans/) is enough for most changes. For a feature that several people will review, or one big enough to split across subagents, write a **spec**: what it must do, how it will be built, and the tasks to get there. You approve each part before the next one is written, and before any code changes.
 
+:::note[Specs and planning pack]
+`/spec`, `/adr`, `/arch` are in the **Specs and planning** pack, which is off by default: turn it on in `/settings` → **Packs** ([Packs](../../reference/commands/#packs)).
+:::
+
 ```text title="rein"
 > /spec retry failed card charges with backoff, and count the retries
   ⎿ Spec mode on: retry-failed-card-charges-with-backoff (.rein/specs/retry-failed-card-charges-with-backoff/).

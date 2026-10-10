@@ -6,6 +6,7 @@ import type {Config} from '../store/config.js';
 import {DEFAULT_SIDEBAR, DEFAULT_STATUS, enabledItems, SIDEBAR_ITEMS, STATUS_ITEMS, type LayoutItem} from './layout.js';
 import {Clickable} from './terminal/clicks.js';
 import {TextInput} from './TextInput.js';
+import {PACKS} from '../commands/packs.js';
 import {CONFIG_KEYS, defaultValue, formatValue, parseValue, type KeyInfo} from '../store/configKeys.js';
 
 type Tab = {id: 'status' | 'sidebar'; title: string; items: LayoutItem[]; defaults: string[]; key: 'statusLine' | 'sidebarSections'};
@@ -253,7 +254,7 @@ export const CHOICE_TABS: ChoiceTabDef[] = [
   },
 ];
 const GROUPS: Group[] = ['General', 'Agents', 'Accounts', 'Safety'];
-export const TAB_TITLES = [...TABS.map((t) => t.title), ...GROUPS, 'Advanced'];
+export const TAB_TITLES = [...TABS.map((t) => t.title), ...GROUPS, 'Packs', 'Advanced'];
 
 /**
  * `/settings`: choose and order what the status line and sidebar show. Changes save immediately
@@ -269,7 +270,8 @@ export function ConfigureScreen({onClose, onChange, bare, initialTab}: {onClose(
   const tabs = <TabBar titles={TAB_TITLES} active={tabIndex} onSelect={switchTab} />;
   const frame = bare ? {} : {borderStyle: 'round' as const, borderColor: 'cyan', paddingX: 1};
   if (tabIndex === TAB_TITLES.length - 1) return <AdvancedTab tabs={tabs} frame={frame} onClose={onClose} onChange={onChange} switchTab={(d) => switchTab(tabIndex + d)} />;
-  if (tabIndex >= TABS.length) {
+  if (tabIndex === TAB_TITLES.length - 2) return <PacksTab tabs={tabs} frame={frame} onClose={onClose} onChange={onChange} switchTab={(d) => switchTab(tabIndex + d)} />;
+  if (tabIndex >= TABS.length && tabIndex < TABS.length + GROUPS.length) {
     const group = GROUPS[tabIndex - TABS.length]!;
     return <GroupTab key={group} defs={CHOICE_TABS.filter((d) => d.group === group)} tabs={tabs} frame={frame} onClose={onClose} onChange={onChange} switchTab={(d) => switchTab(tabIndex + d)} />;
   }
@@ -405,6 +407,52 @@ function LayoutTab({tab, tabs, frame, cursor, setCursor, onClose, onChange, swit
         })}
       </Box>
       <Text dimColor>click/space toggle · ▲▼ or shift+↑↓ / [ ] reorder · r reset · ←→ tab · esc close</Text>
+    </Box>
+  );
+}
+
+/** Packs (commands/packs.ts): specialist commands and skills, each pack off until turned on here. */
+function PacksTab({tabs, frame, onClose, onChange, switchTab}: TabProps) {
+  const [cursor, setCursor] = useState(0);
+  const on = runtime.config.packs ?? [];
+  const toggle = (i: number) => {
+    const p = PACKS[i];
+    if (!p) return;
+    void runtime.setConfig({packs: on.includes(p.id) ? on.filter((id) => id !== p.id) : [...on, p.id]}).then(onChange);
+  };
+  useInput((input, key) => {
+    if (key.escape || input === 'q') onClose();
+    else if (key.tab || key.rightArrow) switchTab(1);
+    else if (key.leftArrow) switchTab(-1);
+    else if (key.upArrow) setCursor((c) => Math.max(0, c - 1));
+    else if (key.downArrow) setCursor((c) => Math.min(PACKS.length - 1, c + 1));
+    else if (key.return || input === ' ') toggle(cursor);
+  });
+  const p = PACKS[cursor]!;
+  const names = [...p.commands.map((c) => `/${c}`), ...p.skills.map((sk) => `/${sk}`)];
+  return (
+    <Box flexDirection="column" {...frame}>
+      {tabs}
+      <Text dimColor>Specialist commands and skills, in packs. A pack that's off keeps them out of the / list, /help and the agent's skills.</Text>
+      <Box flexDirection="column" marginY={1}>
+        {PACKS.map((pk, i) => (
+          <Clickable key={pk.id} onHover={() => setCursor(i)} onClick={() => toggle(i)}>
+            <Text color={i === cursor ? 'cyan' : undefined} dimColor={!on.includes(pk.id) && i !== cursor} wrap="truncate">
+              {i === cursor ? '❯ ' : '  '}
+              {on.includes(pk.id) ? '[✓] ' : '[ ] '}
+              {pk.label.padEnd(26)}
+              <Text dimColor>{pk.description}</Text>
+            </Text>
+          </Clickable>
+        ))}
+      </Box>
+      <Text wrap="wrap">
+        <Text dimColor>{p.label}: </Text>
+        {names.join('  ')}
+      </Text>
+      <Box marginTop={1}>
+        <Text dimColor>click/space toggle · ←→ tab · esc close</Text>
+      </Box>
     </Box>
   );
 }

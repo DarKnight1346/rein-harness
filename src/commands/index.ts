@@ -1,75 +1,82 @@
 import type {Skill} from '../skills/index.js';
+import {commandEnabled} from './packs.js';
 
 export type CommandName = 'trackers' | 'remote' | 'voice' | 'vault' | 'lsp' | 'plugins' | 'export' | 'ide' | 'memory' | 'mcp' | 'rewind' | 'permissions' | 'add-dir' | 'workspace' | 'owners' | 'stack' | 'codemap' | 'changeset' | 'impact' | 'refs' | 'symbols' | 'services' | 'sessions' | 'env' | 'schedule' | 'cache' | 'stats' | 'deadcode' | 'flags' | 'migrations' | 'contracts' | 'bestof' | 'risk' | 'arch' | 'adr' | 'spec' | 'index' | 'map' | 'pack' | 'pr' | 'mutate' | 'coverage' | 'ci' | 'build' | 'flaky' | 'affected' | 'policy' | 'cost' | 'scope' | 'goal' | 'goal:plan' | 'btw' | 'agents' | 'agent' | 'resume' | 'login' | 'usage' | 'model' | 'context' | 'compact' | 'shells' | 'settings' | 'update' | 'tui' | 'clear' | 'help' | 'exit';
 
-export const COMMANDS: {name: CommandName; description: string}[] = [
-  {name: 'remote', description: 'Use this session from your phone or another computer: a page Rein serves (pairing code); /remote pair · status · unpair · off'},
-  {name: 'trackers', description: 'Issue trackers handing work to Rein (GitHub, Linear, GitLab, Azure DevOps, Jira): status · check · retry <ref>'},
-  {name: 'voice', description: 'Voice input, on your machine (whisper.cpp): hold Ctrl+Space to talk. /voice shows status or starts/stops recording; /voice setup installs what it needs'},
-  {name: 'vault', description: 'Secrets the agent can use in shell commands as $NAME without seeing them: list, /vault set NAME, /vault rm NAME'},
-  {name: 'lsp', description: "Built-in code intelligence: the language servers Rein runs, their memory, what's installed (/lsp stop stops them)"},
-  {name: 'plugins', description: 'Installed Claude Code and Codex plugins Rein loaded: their commands, skills, agents, hooks and MCP servers'},
-  {name: 'export', description: 'Save the conversation as Markdown and copy it to the clipboard: /export [file] (default ~/.rein/exports/<id>.md); /export html [file] for a page with tool calls and diffs'},
-  {name: 'ide', description: 'Editor integration (VS Code, Cursor, Windsurf, JetBrains with the Claude Code extension): connect, or show the connection'},
-  {name: 'memory', description: "This project's memory (.rein/MEMORY.md) — what Rein has learned here"},
-  {name: 'mcp', description: 'MCP servers: status and tools; approve project servers, reconnect'},
-  {name: 'rewind', description: 'Undo: restore files and/or the conversation to before one of your messages (also esc twice)'},
-  {name: 'permissions', description: 'Show the allow/deny rules in effect and where they come from'},
-  {name: 'cost', description: 'What this conversation, the latest request and the goal cost at API list prices'},
-  {name: 'policy', description: 'The policy in force here (.rein/policy.yaml, ~/.rein/policy.yaml): its rules, allowed models and any mistakes in the files'},
-  {name: 'affected', description: "What your changes affect, from the monorepo's build graph (Nx, Turborepo, Bazel, Pants), and the command that tests just that"},
-  {name: 'flaky', description: 'Tests known to be flaky here (they failed and passed on the same code): /flaky lists them, /flaky clear forgets them'},
-  {name: 'build', description: 'The build system here (Nx, Turborepo, Bazel, Pants), its caches, and whether the sandbox lets agent builds use them'},
-  {name: 'ci', description: "This branch's pull request checks: /ci shows them, /ci watch fixes failures as they come (asks before pushing), /ci stop"},
-  {name: 'coverage', description: 'Lines your changes add that no test covers, from the last coverage report; /coverage tests asks the agent to write tests for them'},
-  {name: 'mutate', description: 'Mutation testing of your changed files (Stryker, mutmut, go-mutesting): do the tests catch planted bugs? /mutate tests asks the agent to close the gaps'},
-  {name: 'pr', description: "This branch's pull request: /pr (status), /pr digest [post], /pr split, /pr comments, /pr queue [yes]"},
-  {name: 'pack', description: 'Context packs (.rein/packs.yaml): /pack lists them, /pack <name> [message] attaches one, /pack save <name> <globs…> makes one'},
-  {name: 'stack', description: 'Run the services a change needs locally (Docker Compose), wait for health checks: /stack up [services | --helm <chart>], status, logs <service>, down'},
-  {name: 'codemap', description: 'Architecture map in docs/codemap/: a page per service, kept fresh. /codemap writes or refreshes it, /codemap status, /codemap annotate'},
-  {name: 'changeset', description: 'One change across several repos: /changeset start <name> [repos], status, test (in dependency order), pr [yes] (linked PRs)'},
-  {name: 'impact', description: 'Every caller, in every repo, of the endpoints, RPCs and exported symbols this branch changes, breaking changes first'},
-  {name: 'refs', description: 'Follow an endpoint (POST /orders/{id}) or RPC (Ledger.Post) across repos: gateway, the service that serves it, every caller'},
-  {name: 'symbols', description: 'Symbols across repos from their SCIP indexes: /symbols <name> (definition and every use), /symbols cross (used outside their repo), /symbols index'},
-  {name: 'services', description: 'Which service calls which, from compose, Kubernetes, URLs, gRPC clients and packages: /services, /services mermaid'},
-  {name: 'sessions', description: 'Every running Rein on this machine, across repos: state, folder, goal. /sessions send <pid> <message> steers one; rein sessions is the full dashboard'},
-  {name: 'env', description: "The dev environment the agent's commands run in (dev container, Nix, devbox): /env shows it, /env up starts it now"},
-  {name: 'schedule', description: 'Scheduled jobs in .rein/schedule.yaml: when each runs next and how the last run went (rein schedule install runs them on time)'},
-  {name: 'cache', description: 'Prompt-cache hit rates per model, and what made the cache cold: /cache [days] [all]'},
-  {name: 'stats', description: 'How your requests go, from saved conversations: time, tool calls, failures, retries, tests passed and cost, per model: /stats [days] [all]'},
-  {name: 'deadcode', description: 'Definitions nothing refers to (JS/TS, Python, Go): /deadcode lists them, /deadcode remove has the agent delete them'},
-  {name: 'flags', description: 'Feature flags the code reads, and the stale ones (fully on or off, or older than 90 days): /flags, /flags remove <key>'},
-  {name: 'migrations', description: "Risks in this branch's database migrations: locks, missing backfills, irreversible steps, renames that break running code"},
-  {name: 'contracts', description: 'Breaking and safe changes to API contracts (OpenAPI, protobuf, GraphQL, Avro) on this branch'},
-  {name: 'bestof', description: 'Run a task on Claude and Codex at once, each in its own worktree; keep the result that passes the tests: /bestof [--test "<command>"] <task>'},
-  {name: 'risk', description: "What a plan touches: files, services, owners, contracts and migrations. /risk [plan file or spec name] (default: the newest plan)"},
-  {name: 'arch', description: 'Architecture rules (.rein/architecture.yaml): /arch checks every file against them'},
-  {name: 'adr', description: 'Architecture decision records: /adr lists them, /adr new <title> starts the next one'},
-  {name: 'spec', description: 'Spec mode: requirements, design, then tasks, each approved; /spec <what>, /spec resume <name>, /spec trace <name>, /spec lists them'},
-  {name: 'index', description: 'Build or update the local semantic index (Ollama) for search by meaning: /index, /index <query> to search it, /index status'},
-  {name: 'map', description: "A map of the repo's declarations, file by file: /map shows it, /map send gives it to the agent"},
-  {name: 'owners', description: 'Who owns your changed files (or a path): CODEOWNERS, Backstage, then git history'},
-  {name: 'workspace', description: 'The repos of this workspace (rein.workspace.yaml): /workspace lists them, /workspace clone clones the missing ones, /workspace prs and link-prs link the PRs of one change'},
-  {name: 'scope', description: 'Work in one package of a monorepo: /scope <dir> (search, list, shell and instructions start there), /scope off, or no argument to show it'},
-  {name: 'add-dir', description: 'Add a working directory the agent can use without asking: /add-dir <path> (no path: list them)'},
-  {name: 'goal:plan', description: 'Start a saved plan as a goal (milestones tracked in the sidebar), or start planning a new one'},
-  {name: 'goal', description: 'Keep the agent on a goal until verified done: /goal <text> · pause · resume · clear'},
-  {name: 'btw', description: 'Ask a side question without interrupting the agent (/btw <question>)'},
-  {name: 'agents', description: 'Subagents the agent spawned; pick one to view and message it'},
-  {name: 'agent', description: 'Switch the view: /agent <id> or /agent main (classic: /agent <id> <message>)'},
-  {name: 'resume', description: 'Continue a saved conversation from this project'},
-  {name: 'login', description: 'List signed-in accounts, add or remove accounts'},
-  {name: 'usage', description: 'Usage windows (5h / weekly / …) and resets per account (/usage refresh)'},
-  {name: 'model', description: 'Chat, decision and compaction models (/model auto, /model <name>)'},
-  {name: 'context', description: 'Show what the current context holds and how full it is'},
-  {name: 'compact', description: 'Summarize the conversation with the compaction model; /compact <what to keep> focuses the summary'},
-  {name: 'shells', description: 'Shell commands the agent started; open one to see its logs (/shells <id>)'},
-  {name: 'settings', description: 'Settings in tabs (General, Agents, Accounts, Safety, layout, Advanced): /settings [tab]; /settings <key> [value] for any key'},
-  {name: 'update', description: 'Update the claude and codex CLIs and Rein'},
-  {name: 'tui', description: 'Switch renderer: /tui fullscreen or /tui classic'},
-  {name: 'clear', description: 'Clear the conversation'},
-  {name: 'help', description: 'Show commands'},
-  {name: 'exit', description: 'Quit'},
+/**
+ * Built-in commands, in the order the `/` list shows them (everyday ones first). `description` is
+ * the short line in that list; `usage` the full line with arguments, in /help. `listed: false`:
+ * variants and diagnostics, left out of a bare `/` and found by typing part of the name.
+ */
+export type Command = {name: CommandName; description: string; usage: string; listed?: false};
+export const COMMANDS: Command[] = [
+  {name: 'model', description: 'Pick the chat model, or auto', usage: 'Chat, decision and compaction models (/model auto, /model <name>)'},
+  {name: 'goal', description: "Keep working on a goal until it's verified done", usage: 'Keep the agent on a goal until verified done: /goal <text> · pause · resume · clear'},
+  {name: 'btw', description: 'Ask a side question without interrupting', usage: 'Ask a side question without interrupting the agent (/btw <question>)'},
+  {name: 'compact', description: 'Summarize the conversation to free up context', usage: 'Summarize the conversation with the compaction model; /compact <what to keep> focuses the summary'},
+  {name: 'context', description: "What's in the context and how full it is", usage: 'Show what the current context holds and how full it is'},
+  {name: 'cost', description: 'What this conversation has cost', usage: 'What this conversation, the latest request and the goal cost at API list prices'},
+  {name: 'usage', description: 'Usage limits and resets, per account', usage: 'Usage windows (5h / weekly / …) and resets per account (/usage refresh)'},
+  {name: 'resume', description: 'Continue a saved conversation', usage: 'Continue a saved conversation from this project'},
+  {name: 'rewind', description: 'Undo back to before one of your messages', usage: 'Undo: restore files and/or the conversation to before one of your messages (also esc twice)'},
+  {name: 'clear', description: 'Start a new conversation', usage: 'Clear the conversation'},
+  {name: 'agents', description: 'Subagents: watch and message them', usage: 'Subagents the agent spawned; pick one to view and message it'},
+  {name: 'shells', description: 'Commands the agent started, and their output', usage: 'Shell commands the agent started; open one to see its logs (/shells <id>)'},
+  {name: 'memory', description: 'What Rein has learned about this project', usage: "This project's memory (.rein/MEMORY.md) — what Rein has learned here"},
+  {name: 'mcp', description: 'MCP servers and their tools', usage: 'MCP servers: status and tools; approve project servers, reconnect'},
+  {name: 'export', description: 'Save the conversation as Markdown or HTML', usage: 'Save the conversation as Markdown and copy it to the clipboard: /export [file] (default ~/.rein/exports/<id>.md); /export html [file] for a page with tool calls and diffs'},
+  {name: 'ide', description: 'Connect to your editor', usage: 'Editor integration (VS Code, Cursor, Windsurf, JetBrains with the Claude Code extension): connect, or show the connection'},
+  {name: 'remote', description: 'Use this session from your phone', usage: 'Use this session from your phone or another computer: a page Rein serves (pairing code); /remote pair · status · unpair · off'},
+  {name: 'add-dir', description: 'Let the agent work in another folder', usage: 'Add a working directory the agent can use without asking: /add-dir <path> (no path: list them)'},
+  {name: 'permissions', description: 'The allow and deny rules in effect', usage: 'Show the allow/deny rules in effect and where they come from'},
+  {name: 'vault', description: 'Secrets the agent can use without seeing them', usage: 'Secrets the agent can use in shell commands as $NAME without seeing them: list, /vault set NAME, /vault rm NAME'},
+  {name: 'login', description: 'Add or remove accounts', usage: 'List signed-in accounts, add or remove accounts'},
+  {name: 'settings', description: 'Settings', usage: 'Settings in tabs (Status line, Sidebar, General, Agents, Accounts, Safety, Packs, Advanced): /settings [tab]; /settings <key> [value] for any key'},
+  {name: 'update', description: 'Update Rein and the claude and codex CLIs', usage: 'Update the claude and codex CLIs and Rein'},
+  {name: 'help', description: 'Every command, and the keys', usage: 'Show commands'},
+  {name: 'exit', description: 'Quit', usage: 'Quit'},
+  {name: 'goal:plan', description: 'Start a saved plan as a goal', usage: 'Start a saved plan as a goal (milestones tracked in the sidebar), or start planning a new one', listed: false},
+  {name: 'agent', description: 'Switch the view to a subagent, or back to main', usage: 'Switch the view: /agent <id> or /agent main (classic: /agent <id> <message>)', listed: false},
+  {name: 'tui', description: 'Switch between fullscreen and classic', usage: 'Switch renderer: /tui fullscreen or /tui classic', listed: false},
+  {name: 'voice', description: 'Voice input, on your machine', usage: 'Voice input, on your machine (whisper.cpp): hold Ctrl+Space to talk. /voice shows status or starts/stops recording; /voice setup installs what it needs', listed: false},
+  {name: 'lsp', description: 'The language servers Rein runs', usage: "Built-in code intelligence: the language servers Rein runs, their memory, what's installed (/lsp stop stops them)", listed: false},
+  {name: 'plugins', description: 'Claude Code and Codex plugins Rein loaded', usage: 'Installed Claude Code and Codex plugins Rein loaded: their commands, skills, agents, hooks and MCP servers', listed: false},
+  {name: 'ci', description: 'Pull request checks, and fixing failures as they come', usage: "This branch's pull request checks: /ci shows them, /ci watch fixes failures as they come (asks before pushing), /ci stop"},
+  {name: 'pr', description: "This branch's pull request: status, digest, split, comments", usage: "This branch's pull request: /pr (status), /pr digest [post], /pr split, /pr comments, /pr queue [yes]"},
+  {name: 'affected', description: 'What your changes affect, and the command that tests just that', usage: "What your changes affect, from the monorepo's build graph (Nx, Turborepo, Bazel, Pants), and the command that tests just that"},
+  {name: 'flaky', description: 'Tests known to be flaky here', usage: 'Tests known to be flaky here (they failed and passed on the same code): /flaky lists them, /flaky clear forgets them'},
+  {name: 'build', description: 'The build system here and its caches', usage: 'The build system here (Nx, Turborepo, Bazel, Pants), its caches, and whether the sandbox lets agent builds use them'},
+  {name: 'coverage', description: 'Lines your changes add that no test covers', usage: 'Lines your changes add that no test covers, from the last coverage report; /coverage tests asks the agent to write tests for them'},
+  {name: 'mutate', description: 'Mutation testing of your changed files', usage: 'Mutation testing of your changed files (Stryker, mutmut, go-mutesting): do the tests catch planted bugs? /mutate tests asks the agent to close the gaps'},
+  {name: 'trackers', description: 'Issue trackers handing work to Rein', usage: 'Issue trackers handing work to Rein (GitHub, Linear, GitLab, Azure DevOps, Jira): status · check · retry <ref>'},
+  {name: 'spec', description: 'Spec mode: requirements, design, then tasks', usage: 'Spec mode: requirements, design, then tasks, each approved; /spec <what>, /spec resume <name>, /spec trace <name>, /spec lists them'},
+  {name: 'adr', description: 'Architecture decision records', usage: 'Architecture decision records: /adr lists them, /adr new <title> starts the next one'},
+  {name: 'arch', description: 'Check the code against the architecture rules', usage: 'Architecture rules (.rein/architecture.yaml): /arch checks every file against them'},
+  {name: 'risk', description: 'What a plan touches, and how risky it is', usage: "What a plan touches: files, services, owners, contracts and migrations. /risk [plan file or spec name] (default: the newest plan)"},
+  {name: 'bestof', description: 'Run a task on Claude and Codex at once; keep what passes', usage: 'Run a task on Claude and Codex at once, each in its own worktree; keep the result that passes the tests: /bestof [--test "<command>"] <task>'},
+  {name: 'contracts', description: 'Breaking changes to API contracts on this branch', usage: 'Breaking and safe changes to API contracts (OpenAPI, protobuf, GraphQL, Avro) on this branch'},
+  {name: 'migrations', description: "Risks in this branch's database migrations", usage: "Risks in this branch's database migrations: locks, missing backfills, irreversible steps, renames that break running code"},
+  {name: 'deadcode', description: 'Definitions nothing refers to', usage: 'Definitions nothing refers to (JS/TS, Python, Go): /deadcode lists them, /deadcode remove has the agent delete them'},
+  {name: 'flags', description: 'Feature flags, and the stale ones', usage: 'Feature flags the code reads, and the stale ones (fully on or off, or older than 90 days): /flags, /flags remove <key>'},
+  {name: 'services', description: 'Which service calls which', usage: 'Which service calls which, from compose, Kubernetes, URLs, gRPC clients and packages: /services, /services mermaid'},
+  {name: 'symbols', description: 'Symbols across repos, from their SCIP indexes', usage: 'Symbols across repos from their SCIP indexes: /symbols <name> (definition and every use), /symbols cross (used outside their repo), /symbols index'},
+  {name: 'refs', description: 'Follow an endpoint or RPC across repos', usage: 'Follow an endpoint (POST /orders/{id}) or RPC (Ledger.Post) across repos: gateway, the service that serves it, every caller'},
+  {name: 'impact', description: 'Every caller, in every repo, of what this branch changes', usage: 'Every caller, in every repo, of the endpoints, RPCs and exported symbols this branch changes, breaking changes first'},
+  {name: 'changeset', description: 'One change across several repos', usage: 'One change across several repos: /changeset start <name> [repos], status, test (in dependency order), pr [yes] (linked PRs)'},
+  {name: 'codemap', description: 'Architecture maps of the services', usage: 'Architecture map in docs/codemap/: a page per service, kept fresh. /codemap writes or refreshes it, /codemap status, /codemap annotate'},
+  {name: 'stack', description: 'Run the services a change needs locally', usage: 'Run the services a change needs locally (Docker Compose), wait for health checks: /stack up [services | --helm <chart>], status, logs <service>, down'},
+  {name: 'workspace', description: 'The repos of this workspace', usage: 'The repos of this workspace (rein.workspace.yaml): /workspace lists them, /workspace clone clones the missing ones, /workspace prs and link-prs link the PRs of one change'},
+  {name: 'scope', description: 'Work in one package of a monorepo', usage: 'Work in one package of a monorepo: /scope <dir> (search, list, shell and instructions start there), /scope off, or no argument to show it'},
+  {name: 'owners', description: 'Who owns your changed files', usage: 'Who owns your changed files (or a path): CODEOWNERS, Backstage, then git history'},
+  {name: 'index', description: 'The semantic index, for search by meaning', usage: 'Build or update the local semantic index (Ollama) for search by meaning: /index, /index <query> to search it, /index status'},
+  {name: 'map', description: "A map of the repo's declarations", usage: "A map of the repo's declarations, file by file: /map shows it, /map send gives it to the agent"},
+  {name: 'pack', description: 'Context packs to attach to a message', usage: 'Context packs (.rein/packs.yaml): /pack lists them, /pack <name> [message] attaches one, /pack save <name> <globs…> makes one'},
+  {name: 'stats', description: 'How your requests go: time, tools, failures and cost', usage: 'How your requests go, from saved conversations: time, tool calls, failures, retries, tests passed and cost, per model: /stats [days] [all]'},
+  {name: 'cache', description: 'Prompt-cache hit rates, and what made it cold', usage: 'Prompt-cache hit rates per model, and what made the cache cold: /cache [days] [all]'},
+  {name: 'schedule', description: 'Scheduled jobs', usage: 'Scheduled jobs in .rein/schedule.yaml: when each runs next and how the last run went (rein schedule install runs them on time)'},
+  {name: 'env', description: "The dev environment the agent's commands run in", usage: "The dev environment the agent's commands run in (dev container, Nix, devbox): /env shows it, /env up starts it now"},
+  {name: 'sessions', description: 'Every Rein running on this machine', usage: 'Every running Rein on this machine, across repos: state, folder, goal. /sessions send <pid> <message> steers one; rein sessions is the full dashboard'},
+  {name: 'policy', description: 'The policy in force here', usage: 'The policy in force here (.rein/policy.yaml, ~/.rein/policy.yaml): its rules, allowed models and any mistakes in the files'},
 ];
 
 export type Parsed =
@@ -143,12 +150,22 @@ export function suggestCommands(input: string, skills: Skill[] = []): Suggestion
   const q = input.slice(1).toLowerCase();
   const shadowed = new Set(shadowedSkills(skills).map((s) => s.name));
   const all: (Suggestion & {names: string[]})[] = [
-    ...COMMANDS.map((c) => ({...c, names: [c.name, ...Object.keys(ALIASES).filter((a) => ALIASES[a] === c.name)]})),
+    ...COMMANDS.filter((c) => commandEnabled(c.name)).map((c) => ({...c, names: [c.name, ...Object.keys(ALIASES).filter((a) => ALIASES[a] === c.name)]})),
     ...skills
       .filter((s) => !shadowed.has(s.name))
       .map((s) => ({name: s.name, description: s.description + (s.aliases.length ? ` (alias: ${s.aliases.map((a) => `/${a}`).join(', ')})` : ''), skill: s, names: [s.name, ...s.aliases]})),
   ];
-  if (!q) return all.map(({names: _, ...c}) => c);
+  if (!q) {
+    // A bare `/`: listed commands, with Rein's own everyday skills (/plan, /review, /init) after
+    // /goal, then the project's and your own. Variants, and skills from Codex and other tools'
+    // plugins, wait until you type part of their name.
+    const listed = all.filter((c) => (c.skill ? c.skill.listed !== false && c.skill.source !== 'plugin' && c.skill.source !== 'codex' : (c as {listed?: false}).listed !== false));
+    const rank = (n: string) => ((i) => (i < 0 ? 99 : i))(['plan', 'review', 'init'].indexOf(n));
+    const builtin = listed.filter((c) => c.skill?.source === 'builtin').sort((a, b) => rank(a.name) - rank(b.name));
+    const commands = listed.filter((c) => !c.skill);
+    const at = commands.findIndex((c) => c.name === 'goal') + 1;
+    return [...commands.slice(0, at), ...builtin, ...commands.slice(at), ...listed.filter((c) => c.skill && c.skill.source !== 'builtin')].map(({names: _, ...c}) => c);
+  }
   const scored = all
     .map((c, order) => {
       const names = c.names.map((n) => fuzzyScore(q, n.toLowerCase())).filter((x): x is number => x !== undefined);

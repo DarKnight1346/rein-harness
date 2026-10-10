@@ -1,4 +1,5 @@
 import {existsSync, readdirSync, readFileSync, statSync} from 'node:fs';
+import {builtinSkillEnabled} from '../commands/packs.js';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import os from 'node:os';
@@ -28,6 +29,8 @@ export type Skill = {
   aliases: string[];
   /** config.json "planMode": true — running the skill turns plan mode on (/plan, /plan:deep). */
   planMode?: boolean;
+  /** config.json "listed": false — left out of a bare `/` list (a variant like /plan:deep); typing finds it. */
+  listed?: false;
   /** Claude Code command frontmatter `argument-hint` (shown in the command list). */
   argumentHint?: string;
   /** A Claude Code-style command (`$ARGUMENTS`, `!`cmd``), not a skill folder. */
@@ -41,7 +44,7 @@ export type Skill = {
  * Each field falls back: config.json → the main file's frontmatter → defaults (main `SKILL.md`, the
  * folder name, the first line of the instructions). A missing `main` file falls back to SKILL.md.
  */
-type SkillConfig = {name?: string; description?: string; main?: string; aliases?: string[]; planMode?: boolean};
+type SkillConfig = {name?: string; description?: string; main?: string; aliases?: string[]; planMode?: boolean; listed?: boolean};
 
 /** Rein's own skills ship in `<install>/skills` (works from src/ via tsx and from dist/). */
 export const builtinSkillsDir = () => path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', 'skills');
@@ -119,6 +122,7 @@ function scan(root: string, source: SkillSource): Skill[] {
       files: [main, ...listFiles(dir).filter((f) => f !== main)].slice(0, MAX_FILES),
       aliases: (Array.isArray(config.aliases) ? config.aliases : []).map((a) => skillName(String(a))).filter((a) => a && a !== name),
       ...(config.planMode === true ? {planMode: true} : {}),
+      ...(config.listed === false ? {listed: false as const} : {}),
     });
   }
   return out;
@@ -213,7 +217,8 @@ export function loadSkills(cwd = process.cwd()): Skill[] {
   for (const s of scanCommands(commands.project, 'claude-project')) byName.set(s.name, s);
   for (const s of scan(dirs.global, 'global')) byName.set(s.name, s);
   for (const s of scan(dirs.project, 'project')) byName.set(s.name, s);
-  for (const s of scan(dirs.builtin, 'builtin')) byName.set(s.name, s);
+  // Built-in skills of a pack that's off (migration playbooks…) aren't offered at all.
+  for (const s of scan(dirs.builtin, 'builtin')) if (builtinSkillEnabled(s.name)) byName.set(s.name, s);
   return [...byName.values()].sort((a, b) => a.name.localeCompare(b.name));
 }
 

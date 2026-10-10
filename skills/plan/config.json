@@ -1,5 +1,5 @@
 {
   "name": "plan",
-  "description": "Plan a change before making it: explore read-only, clarify with you, then present a plan for approval",
+  "description": "Plan a change before making it, and approve the plan",
   "planMode": true
 }
