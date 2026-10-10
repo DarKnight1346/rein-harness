@@ -1,6 +1,6 @@
 import type {Skill} from '../skills/index.js';
 
-export type CommandName = 'trackers' | 'remote' | 'voice' | 'vault' | 'lsp' | 'plugins' | 'export' | 'ide' | 'memory' | 'mcp' | 'rewind' | 'permissions' | 'add-dir' | 'workspace' | 'owners' | 'sessions' | 'env' | 'schedule' | 'cache' | 'stats' | 'deadcode' | 'flags' | 'migrations' | 'contracts' | 'bestof' | 'risk' | 'arch' | 'adr' | 'spec' | 'index' | 'map' | 'pack' | 'pr' | 'mutate' | 'coverage' | 'ci' | 'build' | 'flaky' | 'affected' | 'policy' | 'cost' | 'scope' | 'goal' | 'goal:plan' | 'btw' | 'agents' | 'agent' | 'resume' | 'login' | 'usage' | 'model' | 'context' | 'compact' | 'shells' | 'settings' | 'update' | 'tui' | 'clear' | 'help' | 'exit';
+export type CommandName = 'trackers' | 'remote' | 'voice' | 'vault' | 'lsp' | 'plugins' | 'export' | 'ide' | 'memory' | 'mcp' | 'rewind' | 'permissions' | 'add-dir' | 'workspace' | 'owners' | 'stack' | 'codemap' | 'changeset' | 'impact' | 'refs' | 'symbols' | 'services' | 'sessions' | 'env' | 'schedule' | 'cache' | 'stats' | 'deadcode' | 'flags' | 'migrations' | 'contracts' | 'bestof' | 'risk' | 'arch' | 'adr' | 'spec' | 'index' | 'map' | 'pack' | 'pr' | 'mutate' | 'coverage' | 'ci' | 'build' | 'flaky' | 'affected' | 'policy' | 'cost' | 'scope' | 'goal' | 'goal:plan' | 'btw' | 'agents' | 'agent' | 'resume' | 'login' | 'usage' | 'model' | 'context' | 'compact' | 'shells' | 'settings' | 'update' | 'tui' | 'clear' | 'help' | 'exit';
 
 export const COMMANDS: {name: CommandName; description: string}[] = [
   {name: 'remote', description: 'Use this session from your phone or another computer: a page Rein serves (pairing code); /remote pair · status · unpair · off'},
@@ -25,6 +25,13 @@ export const COMMANDS: {name: CommandName; description: string}[] = [
   {name: 'mutate', description: 'Mutation testing of your changed files (Stryker, mutmut, go-mutesting): do the tests catch planted bugs? /mutate tests asks the agent to close the gaps'},
   {name: 'pr', description: "This branch's pull request: /pr (status), /pr digest [post], /pr split, /pr comments, /pr queue [yes]"},
   {name: 'pack', description: 'Context packs (.rein/packs.yaml): /pack lists them, /pack <name> [message] attaches one, /pack save <name> <globs…> makes one'},
+  {name: 'stack', description: 'Run the services a change needs locally (Docker Compose), wait for health checks: /stack up [services | --helm <chart>], status, logs <service>, down'},
+  {name: 'codemap', description: 'Architecture map in docs/codemap/: a page per service, kept fresh. /codemap writes or refreshes it, /codemap status, /codemap annotate'},
+  {name: 'changeset', description: 'One change across several repos: /changeset start <name> [repos], status, test (in dependency order), pr [yes] (linked PRs)'},
+  {name: 'impact', description: 'Every caller, in every repo, of the endpoints, RPCs and exported symbols this branch changes, breaking changes first'},
+  {name: 'refs', description: 'Follow an endpoint (POST /orders/{id}) or RPC (Ledger.Post) across repos: gateway, the service that serves it, every caller'},
+  {name: 'symbols', description: 'Symbols across repos from their SCIP indexes: /symbols <name> (definition and every use), /symbols cross (used outside their repo), /symbols index'},
+  {name: 'services', description: 'Which service calls which, from compose, Kubernetes, URLs, gRPC clients and packages: /services, /services mermaid'},
   {name: 'sessions', description: 'Every running Rein on this machine, across repos: state, folder, goal. /sessions send <pid> <message> steers one; rein sessions is the full dashboard'},
   {name: 'env', description: "The dev environment the agent's commands run in (dev container, Nix, devbox): /env shows it, /env up starts it now"},
   {name: 'schedule', description: 'Scheduled jobs in .rein/schedule.yaml: when each runs next and how the last run went (rein schedule install runs them on time)'},

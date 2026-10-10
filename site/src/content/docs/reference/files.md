@@ -86,6 +86,9 @@ When Rein imports your existing `claude` and `codex` logins on first run, it reg
 | `.rein/MEMORY.md` in a workspace folder | [Workspace memory](../../features/workspaces/#workspace-memory): facts shared by every repo of the workspace (`remember` with `scope: "workspace"`) | Usually |
 | `.rein/plans/` | Saved plans, `YYYY-MM-DD-<slug>.md`, with `## Milestones` checkboxes | Yes |
 | `.rein/bench/` | [`rein bench`](../../features/insight/#benchmark-on-your-own-repo): `tasks.json` (tasks from the repo's commits) and `results/` (each run's results) | Optional |
+| `index.scip` or `.rein/index.scip` | A repo's [SCIP index](../../features/system/#symbols-across-repos), read by `/symbols` and `symbol_refs` (written by `/symbols index` or your own indexer) | Usually not |
+| `.rein/changesets/<name>.json` (workspace folder) | [Change sets](../../features/system/#one-change-several-repos): the branch and the repos it spans | Optional |
+| `docs/codemap/` | [Codemaps](../../features/system/#codemaps): `README.md` (the index), a page per service, and `.codemap.json` (what each page was built from) | Yes |
 | `.rein/schedule.yaml` | [Scheduled jobs](../../features/headless/#scheduled-jobs): a cron time and a prompt each | Yes |
 | `.rein/architecture.yaml` | [Architecture rules](../../features/specs/#architecture-guardrails): layers, and which may import which. Checked on every edit | Yes |
 | `.rein/specs/<name>/` | [Specs](../../features/specs/): `requirements.md`, `design.md`, `tasks.md` (an approved stage starts with `<!-- approved YYYY-MM-DD -->`), and `trace.json` / `trace.md` linking requirements to code | Yes |

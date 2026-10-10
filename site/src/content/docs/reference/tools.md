@@ -393,6 +393,48 @@ Label `SemanticSearch`. Approval: none (read-only). Only listed once `semanticIn
 
 The chunks (about 60 lines each) closest in meaning to the query, with `file:start-end`, a similarity score and their first lines. See [Search by meaning](../../features/large-codebases/#search-by-meaning).
 
+### `service_graph`
+
+Label `Services`. Approval: none (read-only). Only listed with the `system-graph` [experiment](../configuration/#experiments) on.
+
+| Parameter | Type | Notes |
+| --- | --- | --- |
+| `service` | string | A service (repo or folder) name. Omit for the whole graph |
+
+The service's callers and what it calls, each with the evidence (file and line). See [Which service calls which](../../features/system/#which-service-calls-which).
+
+### `symbol_refs`
+
+Label `SymbolRefs`. Approval: none (read-only). Only listed with the `system-graph` [experiment](../configuration/#experiments) on.
+
+| Parameter | Type | Notes |
+| --- | --- | --- |
+| `name` **(required)** | string | The symbol's name, e.g. `formatMoney` |
+
+Where it's defined and every use, across repos, from their SCIP indexes. See [Symbols across repos](../../features/system/#symbols-across-repos).
+
+### `api_refs`
+
+Label `ApiRefs`. Approval: none (read-only). Only listed with the `system-graph` [experiment](../configuration/#experiments) on.
+
+| Parameter | Type | Notes |
+| --- | --- | --- |
+| `target` **(required)** | string | An endpoint (`GET /users/{id}`) or an RPC (`Service.Method`) |
+
+The gateway route, the places it's served, and every call site across repos. See [Follow a call across repos](../../features/system/#follow-a-call-across-repos).
+
+### `stack`
+
+Label `Stack`. Approval: **mutating**. Only listed with the `stack-tool` [experiment](../configuration/#experiments) on.
+
+| Parameter | Type | Notes |
+| --- | --- | --- |
+| `action` **(required)** | `up` \| `status` \| `logs` \| `down` | |
+| `services` | string[] | For `up`: the compose services. Omit for the ones the change touches |
+| `service` | string | For `logs` |
+
+`up` runs `docker compose up -d --wait` and reports each service's state, health and ports. See [The services a change needs](../../features/system/#the-services-a-change-needs).
+
 ### `lsp_install`
 
 Label `InstallLanguageServer`. Approval: **always asks, even in bypass mode.**

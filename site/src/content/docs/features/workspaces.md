@@ -115,6 +115,9 @@ Some things are true of the system, not of one repo: "api releases before web", 
 
 ## Pull requests across repos
 
+For a change you plan across several repos from the start, a [change set](../system/#one-change-several-repos) creates the branches, tests them together and opens the linked PRs.
+
+
 A change that spans repos ends up as one pull request per repo, and reviewers need to know they belong together. With the same branch name in each repo:
 
 - `/workspace prs` lists the pull request for the current branch in every cloned repo of the workspace (through `gh`).

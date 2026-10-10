@@ -16,7 +16,7 @@ import {buildOutputDirs} from '../build/caches.js';
  * files that could run code outside the sandbox later (git hooks and config, editor/agent settings)
  * stay read-only. Only the agent's commands are sandboxed: not `!` commands, hooks or MCP servers.
  */
-export type SandboxMode = 'write' | 'strict' | 'off';
+export type SandboxMode = 'write' | 'strict' | 'off' | 'container';
 export type SandboxSpec = {mode: SandboxMode; roots: string[]};
 
 /** Files inside the project the sandboxed agent can't change (they'd run code unsandboxed later). */

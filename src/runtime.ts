@@ -15,6 +15,7 @@ import {affectedTool} from './build/tool.js';
 import {repoMapTool} from './context/repoMap.js';
 import {orgSearchTool} from './context/orgSearch.js';
 import {semanticSearchTool} from './context/semantic.js';
+import {apiRefsTool, serviceGraphTool, symbolRefsTool} from './system/tools.js';
 import {affected, changedFiles} from './build/affected.js';
 import {CiWatcher} from './build/ci.js';
 import {branchSize} from './pr/github.js';
@@ -52,6 +53,9 @@ import {GoalManager} from './goals/manager.js';
 import {Checkpoints} from './session/checkpoints.js';
 import {WorkspaceSnapshots} from './session/snapshots.js';
 import {DevEnv} from './env/devenv.js';
+import {ContainerBox} from './env/container.js';
+import {LocalStack, servicesForChange, stackTool} from './env/stack.js';
+import {findServices} from './system/services.js';
 import {SPEC_MODE_CONTEXT, specTools} from './specs/tools.js';
 import {specSection} from './specs/pr.js';
 import {adrContext} from './specs/adr.js';
@@ -103,6 +107,8 @@ export class Runtime {
   /** A line for you (not the agent) in the conversation view, set by the UI. */
   uiLog: (text: string, kind?: 'info' | 'error') => void = () => {};
   /** devEnvironment: the repo's dev container or Nix/devbox shell for the agent's commands. */
+  /** sandbox "container": a Docker/Podman container per conversation for the agent's commands. */
+  readonly box = new ContainerBox(() => [process.cwd(), ...workspaceDirs(this.workspace)], () => this.config?.containerSandbox ?? {}, undefined, (t) => this.uiLog(t));
   readonly devEnv = new DevEnv(process.cwd(), () => this.config?.devEnvironment ?? 'off', undefined, (t) => this.uiLog(t));
   readonly ci = new CiWatcher({log: (t, k) => this.uiLog(t, k), submit: (t) => this.ciSubmit(t)});
   /** OpenTelemetry export (config `otel`). */
@@ -958,6 +964,7 @@ Drop superseded reads of the same file, routine listings, and output that no lon
     await this.vault.load();
     this.tools.shells.vault = this.vault;
     this.tools.shells.devEnv = this.devEnv;
+    this.tools.shells.box = this.box;
     // provenance: what the trailers say, current at the moment of each command.
     this.tools.shells.extraEnv = (): Record<string, string> => {
       if (!this.config.provenance) return {};
@@ -984,6 +991,10 @@ Drop superseded reads of the same file, routine listings, and output that no lon
       repoMapTool(() => activeExperiments(this.config)),
       orgSearchTool(() => this.config),
       semanticSearchTool(() => this.config, () => process.cwd()),
+      serviceGraphTool(() => activeExperiments(this.config), () => process.cwd()),
+      symbolRefsTool(() => activeExperiments(this.config), () => process.cwd()),
+      apiRefsTool(() => activeExperiments(this.config), () => process.cwd()),
+      stackTool(() => activeExperiments(this.config), () => new LocalStack(this.workspace?.root ?? process.cwd()), async () => servicesForChange(this.workspace?.root ?? process.cwd(), findServices(process.cwd()))),
       skillTool(() => process.cwd(), () => (this.planMode = true)),
       ...memoryTools(() => process.cwd()),
       askUserTool(() => this.askPresenter),
@@ -1216,6 +1227,7 @@ Drop superseded reads of the same file, routine listings, and output that no lon
 
   shutdown(): void {
     this.ci.stop();
+    void this.box.stop();
     void this.mcp.closeAll();
     void this.ide?.close();
     void this.lsp.closeAll();

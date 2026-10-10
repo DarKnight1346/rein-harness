@@ -36,6 +36,7 @@ export const CHOICE_TABS: ChoiceTabDef[] = [
     choices: [
       {value: 'write', label: 'On — commands can only write inside the project, scratchpad, temp folders and package caches  (default)'},
       {value: 'strict', label: 'Strict — the same, and no network except localhost'},
+      {value: 'container', label: 'Container — a Docker or Podman container per conversation, network only to the hosts in containerSandbox'},
       {value: 'off', label: 'Off — no sandbox; approvals are the only guard'},
     ],
   },

@@ -125,11 +125,11 @@ agent works by default ships as an experiment (`experiments` in config) until it
 
 | # | Feature | Spec | Docs | Status |
 |---|---|---|---|---|
-| 105 | Service dependency graph | Which service calls which, from manifests, OpenAPI, protobuf and Kubernetes config. |  | todo |
-| 106 | Cross-repo symbol graph | Join language-server and SCIP indexes across repos. |  | todo |
-| 107 | API-aware find references | Follow a call from gateway to service to consumer across repos. Builds on #105, #106. |  | todo |
-| 108 | Consumer impact report | Every caller of an endpoint or type a change touches, in every repo. Builds on #107. |  | todo |
-| 109 | Coordinated change sets | One task becomes linked branches and PRs in N repos, built and tested together. Builds on #29, #39. |  | todo |
-| 110 | Codemaps | Browsable, annotated architecture maps, generated and kept fresh. |  | todo |
-| 111 | Container sandbox per task | Each task in Docker or Podman with an egress allowlist. |  | todo |
-| 112 | Multi-service local stack | Bring up the services a change needs (compose or Helm) with health checks, and test against them. |  | todo |
+| 105 | Service dependency graph | Which service calls which, from manifests, OpenAPI, protobuf and Kubernetes config. | features/system/#which-service-calls-which | done |
+| 106 | Cross-repo symbol graph | Join the repos' SCIP indexes: definitions in one repo, uses in the others (language servers stay per repo). | features/system/#symbols-across-repos | done |
+| 107 | API-aware find references | Follow a call from gateway to service to consumer across repos. Builds on #105, #106. | features/system/#follow-a-call-across-repos | done |
+| 108 | Consumer impact report | Every caller of an endpoint or type a change touches, in every repo. Builds on #107. | features/system/#who-a-change-affects | done |
+| 109 | Coordinated change sets | One task becomes linked branches and PRs in N repos, built and tested together. Builds on #29, #39. | features/system/#one-change-several-repos | done |
+| 110 | Codemaps | Browsable, annotated architecture maps, generated and kept fresh. | features/system/#codemaps | done |
+| 111 | Container sandbox per task | Each task in Docker or Podman with an egress allowlist. | features/system/#a-container-per-task | done |
+| 112 | Multi-service local stack | Bring up the services a change needs (compose or Helm) with health checks, and test against them. | features/system/#the-services-a-change-needs | done |

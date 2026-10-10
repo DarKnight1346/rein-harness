@@ -147,7 +147,9 @@ export type Config = {
   /** Big pastes (more than 3 lines or 800 characters) become a `[Pasted text #1 +40 lines]` placeholder in the input; false pastes the text as-is. */
   collapsePastes: boolean;
   /** OS sandbox for the agent's shell commands: 'write' (default: writes limited to the project), 'strict' (also no network), 'off'. */
-  sandbox: 'write' | 'strict' | 'off';
+  sandbox: 'write' | 'strict' | 'off' | 'container';
+  /** sandbox "container": the image, the runtime (docker / podman), and the hosts commands may reach (none by default). */
+  containerSandbox?: import('../env/container.js').ContainerConfig;
   /** Every this many minutes of a background command's life, a fork of the agent checks it's still needed and stops it if not; 0 = off. */
   backgroundCheckMinutes: number;
 };
