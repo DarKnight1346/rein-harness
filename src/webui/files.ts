@@ -1,5 +1,5 @@
 import {createReadStream, createWriteStream, existsSync} from 'node:fs';
-import {copyFile, cp, mkdir, readdir, readFile, rename, rm, stat, writeFile} from 'node:fs/promises';
+import {copyFile, cp, mkdir, open, readdir, rename, rm, stat, writeFile} from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import {pipeline} from 'node:stream/promises';
@@ -60,11 +60,21 @@ export async function roots(): Promise<{name: string; path: string}[]> {
 
 /** A text file's contents (up to 2 MB), or what it is when it isn't text. */
 export async function readText(file: string): Promise<{text?: string; size: number; binary?: boolean; tooBig?: boolean}> {
-  const s = await stat(file).catch(() => undefined);
-  if (!s) throw new FileError(`${file} doesn't exist`, 404);
-  if (s.isDirectory()) throw new FileError(`${file} is a folder`);
-  if (s.size > TEXT_MAX) return {size: s.size, tooBig: true};
-  const buf = await readFile(file);
+  // One open file: its size and its bytes can't come from two different files.
+  const fh = await open(file, 'r').catch(() => undefined);
+  if (!fh) throw new FileError(`${file} doesn't exist`, 404);
+  try {
+    const s = await fh.stat();
+    if (s.isDirectory()) throw new FileError(`${file} is a folder`);
+    if (s.size > TEXT_MAX) return {size: s.size, tooBig: true};
+    return textOf(await fh.readFile(), s.size);
+  } finally {
+    await fh.close();
+  }
+}
+
+function textOf(buf: Buffer, size: number): {text?: string; size: number; binary?: boolean} {
+  const s = {size};
   // NUL bytes in the first 8 KB: not text.
   if (buf.subarray(0, 8192).includes(0)) return {size: s.size, binary: true};
   return {text: buf.toString('utf8'), size: s.size};

@@ -68,7 +68,10 @@ function toast(text, kind) {
   setTimeout(() => t.remove(), kind === 'error' ? 6000 : 3000);
 }
 
+/** Only Rein's own API: a chat id or path from the address bar can't send a request anywhere else. */
+const API_PATH = /^\/api\/[\w\/.~%!*'()-]*(\?[\w=&%.~+!*'()-]*)?$/;
 async function api(path, opts = {}) {
+  if (!API_PATH.test(path) || path.includes('..')) throw new Error(`not a Rein API path: ${path}`);
   const res = await fetch(path, {
     method: opts.method ?? (opts.body !== undefined ? 'POST' : 'GET'),
     headers: {'X-Rein': '1', ...(opts.raw ? {} : {'content-type': 'application/json'})},
@@ -227,7 +230,7 @@ function route() {
     const p = new URLSearchParams(query).get('path');
     void openFolder(p || state.files.path || state.project || state.home);
   }
-  if (state.view === 'chat' && arg && state.chat?.id !== arg) void attachChat(arg);
+  if (state.view === 'chat' && arg && /^[\da-f]{16}$/.test(arg) && state.chat?.id !== arg) void attachChat(arg);
 }
 window.addEventListener('hashchange', () => {
   route();
@@ -371,6 +374,7 @@ async function openSaved(session) {
 
 /** Watch a chat: a snapshot, then live events (server-sent). */
 function attachChat(id) {
+  if (!/^[\da-f]{16}$/.test(id)) return;
   state.chat?.es?.close();
   const c = {id, snapshot: undefined, live: '', tools: [], asks: new Map(), busy: false, notes: [], model: undefined, es: undefined, stick: true};
   state.chat = c;
