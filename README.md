@@ -46,7 +46,8 @@ and a compaction model. No OAuth tokens are extracted: all traffic goes through 
   the services a change needs.
 - **Web UI:** `rein --ui` puts Rein in the browser on any of your devices: chats in your projects, approvals,
   and a file manager for the machine. Local only, over Tailscale, or with a login on your own server;
-  `rein service --install` starts it with the system.
+  `rein service --install` starts it with the system. Previews show what the agent builds live, from any
+  device: web apps, VMs, and any app's window as video with [Rein Remote](https://github.com/rein-harness/rein-remote).
 - **Marketplace:** `/marketplace` is a store of tools, commands, skills, themes and bundles from git repos,
   the official [Rein Marketplace](https://github.com/rein-harness/rein-marketplace) first. Items ship
   their own code: contracts and migrations, multi-repo systems, test quality and onboarding tours live there.
