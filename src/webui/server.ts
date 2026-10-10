@@ -64,6 +64,17 @@ async function body(req: IncomingMessage, max = 4 * 1024 * 1024): Promise<any> {
   }
 }
 
+/** One-off chats (no project) each get a folder here, for what they make. */
+export const oneOffRoot = () => path.join(reinHome(), 'chats');
+const isOneOff = (dir: string) => path.resolve(dir).startsWith(path.resolve(oneOffRoot()) + path.sep);
+async function newOneOff(): Promise<string> {
+  const {mkdir} = await import('node:fs/promises');
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+  const dir = path.join(oneOffRoot(), `${stamp}-${Math.random().toString(36).slice(2, 6)}`);
+  await mkdir(dir, {recursive: true});
+  return dir;
+}
+
 export async function startServer(opts: ServerOptions = {}): Promise<{url: string; port: number; close(): Promise<void>; setupCode?: string}> {
   const log = opts.log ?? ((l: string) => console.log(l));
   let config: WebConfig | undefined = loadWebConfig();
@@ -85,12 +96,23 @@ export async function startServer(opts: ServerOptions = {}): Promise<{url: strin
   };
 
   const recents = async (): Promise<string[]> => (await readJson<{projects?: string[]}>(recentsFile(), {}).catch((): {projects?: string[]} => ({}))).projects ?? [];
-  const remember = async (dir: string) => writeJson(recentsFile(), {projects: [dir, ...(await recents()).filter((p) => p !== dir)].slice(0, 30)});
+  const remember = async (dir: string) => {
+    if (isOneOff(dir)) return; // a one-off chat's folder isn't a project
+    await writeJson(recentsFile(), {projects: [dir, ...(await recents()).filter((p) => p !== dir)].slice(0, 30)});
+  };
+  /** Closing a project takes it off the sidebar; its conversations stay saved (open it again to see them). */
+  const forget = async (dir: string) => writeJson(recentsFile(), {projects: (await recents()).filter((p) => p !== dir)});
+  // Archived conversations: hidden from the sidebar, kept on disk, listed under Archived to restore.
+  const archiveFile = () => path.join(reinHome(), 'webui-archived.json');
+  const archived = async (): Promise<string[]> => (await readJson<{sessions?: string[]}>(archiveFile(), {}).catch((): {sessions?: string[]} => ({}))).sessions ?? [];
+  const setArchived = async (session: string, on: boolean) => writeJson(archiveFile(), {sessions: [...(await archived()).filter((x) => x !== session), ...(on ? [session] : [])]});
+
+  const chatView = (c: ReturnType<typeof chats.list>[number]) => ({id: c.id, cwd: c.cwd, session: c.snapshot?.session, title: c.snapshot?.title ?? 'New chat', busy: c.busy, waiting: c.asks.size > 0});
 
   async function api(req: IncomingMessage, res: ServerResponse, url: URL): Promise<void> {
     const p = url.pathname;
     const m = req.method ?? 'GET';
-    if (p === '/api/state' && m === 'GET') return json(res, 200, {version: reinVersion(), setup: !config, mode: config?.mode, user: userOf(req), home: os.homedir(), platform: process.platform});
+    if (p === '/api/state' && m === 'GET') return json(res, 200, {version: reinVersion(), setup: !config, mode: config?.mode, user: userOf(req), home: os.homedir(), platform: process.platform, oneOffRoot: oneOffRoot()});
     if (p === '/api/setup' && m === 'POST') {
       if (config) throw new HttpError(409, 'already set up');
       const b = await body(req);
@@ -163,6 +185,38 @@ export async function startServer(opts: ServerOptions = {}): Promise<{url: strin
       await remember(dir);
       return json(res, 200, {ok: true, path: dir});
     }
+    // The sidebar: projects you opened, each with its chats; one-off chats; what's archived.
+    if (p === '/api/sidebar' && m === 'GET') {
+      const saved = await listTranscripts({limit: 600});
+      const hidden = new Set(await archived());
+      const open = chats.list();
+      const openSessions = new Set(open.map((c) => c.snapshot?.session).filter(Boolean));
+      const savedView = (x: (typeof saved)[number]) => ({session: x.id, cwd: x.cwd, title: x.title, updatedAt: x.updatedAt, messages: x.messages});
+      const chatsIn = (match: (cwd: string) => boolean) => ({
+        open: open.filter((c) => match(c.cwd)).map(chatView),
+        saved: saved.filter((x) => x.cwd && match(x.cwd) && !hidden.has(x.id) && !openSessions.has(x.id)).slice(0, 40).map(savedView),
+      });
+      const projects = (await recents()).filter((d) => existsSync(d));
+      return json(res, 200, {
+        projects: projects.map((d) => ({path: d, name: path.basename(d) || d, ...chatsIn((cwd) => cwd === d)})),
+        oneoff: chatsIn(isOneOff),
+        archived: saved.filter((x) => hidden.has(x.id)).slice(0, 100).map(savedView),
+      });
+    }
+    if (p === '/api/projects/close' && m === 'POST') {
+      const b = await body(req);
+      const dir = fm.resolvePath(b.path);
+      for (const c of chats.list()) if (c.cwd === dir && !c.busy) chats.close(c.id);
+      await forget(dir);
+      return json(res, 200, {ok: true});
+    }
+    if (p === '/api/chats/archive' && m === 'POST') {
+      const b = await body(req);
+      if (typeof b.session !== 'string' || !/^[\w-]{1,80}$/.test(b.session)) throw new HttpError(400, 'which conversation?');
+      if (b.archived !== false) for (const c of chats.list()) if (c.snapshot?.session === b.session) chats.close(c.id);
+      await setArchived(b.session, b.archived !== false);
+      return json(res, 200, {ok: true});
+    }
     if (p === '/api/chats' && m === 'GET') {
       const cwd = url.searchParams.get('project');
       const saved = await listTranscripts({...(cwd ? {cwd} : {}), limit: 200});
@@ -174,7 +228,8 @@ export async function startServer(opts: ServerOptions = {}): Promise<{url: strin
     }
     if (p === '/api/chats' && m === 'POST') {
       const b = await body(req);
-      const cwd = fm.resolvePath(b.project);
+      // A one-off chat: no project, its own folder for whatever it makes.
+      const cwd = b.oneoff === true ? await newOneOff() : fm.resolvePath(b.project);
       if (!statSync(cwd, {throwIfNoEntry: false})?.isDirectory()) throw new HttpError(400, `${cwd} isn't a folder`);
       await remember(cwd);
       const c = chats.open(cwd, typeof b.resume === 'string' ? b.resume : undefined);
@@ -182,7 +237,7 @@ export async function startServer(opts: ServerOptions = {}): Promise<{url: strin
       if (c.error) throw new HttpError(500, c.error);
       return json(res, 200, {id: c.id});
     }
-    const chatRoute = p.match(/^\/api\/chats\/([\da-f]+)(?:\/(events|send|interrupt|answer|model|mode|compact))?$/);
+    const chatRoute = p.match(/^\/api\/chats\/([\da-f]+)(?:\/(events|send|interrupt|answer|model|mode|compact|request|window))?$/);
     if (chatRoute) {
       const c = chats.get(chatRoute[1]!);
       if (!c) throw new HttpError(404, 'that chat is closed: open it again from the list');
@@ -199,6 +254,7 @@ export async function startServer(opts: ServerOptions = {}): Promise<{url: strin
         write({type: 'busy', busy: c.busy, ...(c.busy && c.phrase ? {phrase: c.phrase} : {})});
         for (const ev of c.backlog) write(ev);
         for (const a of c.asks.values()) write({type: 'ask', ...a});
+        if (c.window) write({type: 'window', window: c.window});
         c.watchers++;
         const on = (ev: unknown) => write(ev);
         c.on('event', on);
@@ -217,7 +273,7 @@ export async function startServer(opts: ServerOptions = {}): Promise<{url: strin
       const b = await body(req);
       if (action === 'send') {
         if (typeof b.text !== 'string' || !b.text.trim()) throw new HttpError(400, 'nothing to send');
-        if (c.busy) throw new HttpError(409, 'the agent is still working: wait, or stop it first');
+        // While the agent works, a message is queued and a command (/btw, /cost…) runs now, as in the terminal.
         c.send(b.text);
       } else if (action === 'interrupt') c.interrupt();
       else if (action === 'answer') {
@@ -225,6 +281,16 @@ export async function startServer(opts: ServerOptions = {}): Promise<{url: strin
       } else if (action === 'model') c.setModel(String(b.model ?? 'auto'));
       else if (action === 'mode') c.setMode(String(b.mode ?? 'ask'));
       else if (action === 'compact') c.compact();
+      else if (action === 'window') {
+        c.window = undefined;
+        return json(res, 200, {ok: true});
+      } else if (action === 'request') {
+        if (typeof b.op !== 'string' || !/^[a-z-]{1,32}$/.test(b.op)) throw new HttpError(400, 'which request?');
+        const value = await c.request(b.op, b.args && typeof b.args === 'object' ? b.args : {}).catch((err: Error) => {
+          throw new HttpError(400, err.message);
+        });
+        return json(res, 200, {value});
+      }
       return json(res, 200, {ok: true});
     }
 

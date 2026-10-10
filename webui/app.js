@@ -23,9 +23,39 @@ function h(tag, props, ...kids) {
 const $ = (sel, root = document) => root.querySelector(sel);
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'})[c]);
 
+/**
+ * Terminal colors in text (what marketplace items' sidebar sections, status segments and commands
+ * print: \x1b[33m…\x1b[0m) as colored spans, so an item looks the same here as in the terminal.
+ */
+const ANSI_FG = {30: 'k', 31: 'r', 32: 'g', 33: 'y', 34: 'b', 35: 'm', 36: 'c', 37: 'w', 90: 'd', 91: 'r', 92: 'g', 93: 'y', 94: 'b', 95: 'm', 96: 'c', 97: 'w'};
+function ansi(text) {
+  const str = String(text ?? '');
+  if (!str.includes('\x1b[')) return str;
+  const out = [];
+  let fg, bold, dim;
+  const re = /\x1b\[([\d;]*)m/g;
+  let at = 0, m;
+  const push = (t) => t && out.push(fg || bold || dim ? h('span' + (fg ? `.a-${fg}` : '') + (bold ? '.a-bold' : '') + (dim ? '.a-dim' : ''), t) : t);
+  while ((m = re.exec(str))) {
+    push(str.slice(at, m.index));
+    at = re.lastIndex;
+    for (const code of (m[1] || '0').split(';').map(Number)) {
+      if (code === 0) ((fg = undefined), (bold = false), (dim = false));
+      else if (code === 1) bold = true;
+      else if (code === 2) dim = true;
+      else if (code === 22) ((bold = false), (dim = false));
+      else if (code === 39) fg = undefined;
+      else if (ANSI_FG[code]) fg = ANSI_FG[code];
+    }
+  }
+  push(str.slice(at));
+  return out.map((x) => (typeof x === 'string' ? x.replace(/\x1b\[[\d;]*[A-Za-z]/g, '') : x));
+}
+
 const ICONS = {
   plus: 'M12 5v14M5 12h14', send: 'M5 12h14M13 5l7 7-7 7', stop: 'M7 7h10v10H7z', folder: 'M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z', file: 'M6 3h8l4 4v14H6zM14 3v4h4', chat: 'M4 5h16v11H8l-4 4z', gear: 'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z',
-  menu: 'M4 6h16M4 12h16M4 18h16', up: 'M12 19V5M5 12l7-7 7 7', upload: 'M12 16V4M6 10l6-6 6 6M4 20h16', refresh: 'M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7', search: 'M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14zM21 21l-5-5', more: 'M5 12h.01M12 12h.01M19 12h.01', x: 'M6 6l12 12M18 6L6 18', eye: 'M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12zM12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z', download: 'M12 4v12M6 10l6 6 6-6M4 20h16', newfolder: 'M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2zM12 10v6M9 13h6',
+  archive: 'M3 5h18v4H3zM5 9v10h14V9M10 13h4', restore: 'M4 12a8 8 0 1 0 2.3-5.7M4 4v5h5', back: 'M19 12H5M11 5l-7 7 7 7', forward: 'M5 12h14M13 5l7 7-7 7', home: 'M3 11l9-7 9 7v9H5v-9', drive: 'M3 15h18v5H3zM6 17.5h.01M3 15l3-10h12l3 10',
+  menu: 'M4 6h16M4 12h16M4 18h16', panel: 'M4 5h16v14H4zM15 5v14', up: 'M12 19V5M5 12l7-7 7 7', upload: 'M12 16V4M6 10l6-6 6 6M4 20h16', refresh: 'M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7', search: 'M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14zM21 21l-5-5', more: 'M5 12h.01M12 12h.01M19 12h.01', x: 'M6 6l12 12M18 6L6 18', eye: 'M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12zM12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z', download: 'M12 4v12M6 10l6 6 6-6M4 20h16', newfolder: 'M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2zM12 10v6M9 13h6',
 };
 const icon = (name, size = 18) => {
   const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
@@ -99,6 +129,8 @@ const ago = (ms) => {
 const base = (p) => p.replace(/[\\/]+$/, '').split(/[\\/]/).pop() || p;
 const sep = () => (state.platform === 'win32' ? '\\' : '/');
 const join = (dir, name) => (dir.endsWith('/') || dir.endsWith('\\') ? dir + name : dir + sep() + name);
+/** A one-off chat's own folder (no project): don't show its name as if it were one. */
+const isOneOff = (p) => !!state.oneOffRoot && !!p && p.startsWith(state.oneOffRoot);
 const tilde = (p) => (state.home && p.startsWith(state.home) ? '~' + p.slice(state.home.length) : p);
 
 // ---------- state ----------
@@ -127,7 +159,7 @@ async function boot() {
   applyTheme();
   try {
     const s = await api('/api/state', {quiet: true});
-    Object.assign(state, {setup: s.setup, mode: s.mode, me: s.user, home: s.home, platform: s.platform, version: s.version});
+    Object.assign(state, {setup: s.setup, mode: s.mode, me: s.user, home: s.home, platform: s.platform, version: s.version, oneOffRoot: s.oneOffRoot});
   } catch (err) {
     document.getElementById('app').replaceChildren(h('div.center', h('div.card', h('h1', "Can't reach Rein"), h('p.lead', String(err.message)))));
     return;
@@ -138,6 +170,15 @@ async function boot() {
   render();
 }
 
+/** A theme from a marketplace item (or your theme setting) colors the page's accent, as it does the terminal's. */
+function applyAccent(color) {
+  const root = document.documentElement.style;
+  if (color && CSS.supports('color', color)) {
+    root.setProperty('--accent', color);
+    root.setProperty('--accent-soft', `color-mix(in srgb, ${color} 16%, transparent)`);
+  } else ((root.removeProperty('--accent')), root.removeProperty('--accent-soft'));
+}
+
 function applyTheme() {
   const t = localStorage.getItem('rein.theme');
   if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t;
@@ -145,9 +186,8 @@ function applyTheme() {
 }
 
 async function afterSignIn() {
-  await loadProjects();
+  await loadSidebar();
   if (!state.project && state.projects[0]) state.project = state.projects[0].path;
-  await loadChats();
 }
 
 function setupView() {
@@ -244,17 +284,25 @@ const go = (hash) => {
 
 // ---------- data ----------
 
-async function loadProjects() {
-  state.projects = (await api('/api/projects')).projects;
+/** The sidebar's data: projects you opened with their chats, one-off chats, archived ones. */
+async function loadSidebar() {
+  state.side = await api('/api/sidebar');
+  state.projects = state.side.projects.map((p) => ({path: p.path, name: p.name}));
+  if (state.project && !state.projects.some((p) => p.path === state.project)) state.project = state.projects[0]?.path ?? '';
 }
-async function loadChats() {
-  state.chats = await api(`/api/chats${state.project ? `?project=${encodeURIComponent(state.project)}` : ''}`);
-}
+const loadProjects = loadSidebar;
+const loadChats = loadSidebar;
 function setProject(p) {
   state.project = p;
   localStorage.setItem('rein.project', p);
-  void loadChats().then(render);
+  void loadSidebar().then(render);
 }
+const collapsed = new Set(JSON.parse(localStorage.getItem('rein.collapsed') ?? '[]'));
+const toggleCollapsed = (key) => {
+  collapsed.has(key) ? collapsed.delete(key) : collapsed.add(key);
+  localStorage.setItem('rein.collapsed', JSON.stringify([...collapsed]));
+  renderSide();
+};
 
 // ---------- the shell ----------
 
@@ -269,24 +317,65 @@ function render() {
 }
 
 function sidebar() {
-  const proj = state.projects.find((p) => p.path === state.project);
-  const openIds = new Set(state.chats.open.map((c) => c.session).filter(Boolean));
-  const chatBtn = (c, saved) =>
-    h('button.side-item' + (state.view === 'chat' && state.chat && (state.chat.id === c.id || state.chat.snapshot?.session === c.session) ? '.active' : ''), {
-      on: {click: () => (saved ? void openSaved(c.session) : go(`#/chat/${c.id}`))},
-      title: c.title,
-    }, h('span.dot' + (c.waiting ? '.wait' : c.busy ? '.busy' : '')), h('span.t', c.title || 'New chat'), saved ? h('span.meta', ago(c.updatedAt)) : null);
+  const side = state.side ?? {projects: [], oneoff: {open: [], saved: []}, archived: []};
+  const active = (c) => state.view === 'chat' && state.chat && (state.chat.id === c.id || (c.session && state.chat.snapshot?.session === c.session));
+  const archive = async (session, on = true) => {
+    try {
+      await api('/api/chats/archive', {body: {session, archived: on}});
+      if (on && state.chat?.snapshot?.session === session) ((state.chat.es?.close(), (state.chat = undefined)), go('#/chat'));
+      await loadSidebar();
+      renderSide();
+      toast(on ? 'Archived. Restore it from Archived at the bottom.' : 'Restored.');
+    } catch (err) {
+      toast(err.message, 'error');
+    }
+  };
+  const chatRow = (c, saved, cwd) => {
+    const session = saved ? c.session : c.session;
+    return h('div.chat-row' + (active(c) ? '.active' : ''),
+      h('button.side-item', {on: {click: () => (saved ? void openSaved(c.session, cwd) : go(`#/chat/${c.id}`))}, title: c.title},
+        h('span.dot' + (c.waiting ? '.wait' : c.busy ? '.busy' : saved ? '' : '.ok')), h('span.t', c.title || 'New chat'), saved && c.updatedAt ? h('span.meta', ago(c.updatedAt)) : null),
+      session ? h('button.row-act', {title: 'Archive', on: {click: (e) => (e.stopPropagation(), archive(session))}}, icon('archive', 15)) : null,
+    );
+  };
+  const chatsOf = (g, cwd) => [...g.open.map((c) => chatRow(c, false, cwd)), ...g.saved.map((c) => chatRow(c, true, cwd))];
+  const project = (p) => {
+    const key = `p:${p.path}`;
+    const closed = collapsed.has(key);
+    const n = p.open.length + p.saved.length;
+    return h('div.proj' + (state.project === p.path ? '.current' : ''),
+      h('div.proj-head',
+        h('button.proj-toggle', {title: closed ? 'Expand' : 'Collapse', on: {click: () => toggleCollapsed(key)}}, h('span.chev' + (closed ? '' : '.open'), '›'), icon('folder', 15), h('span.t', p.name), closed && n ? h('span.meta', String(n)) : null),
+        h('button.row-act', {title: `New chat in ${p.name}`, on: {click: () => newChat(p.path)}}, icon('plus', 15)),
+        h('button.row-act', {title: 'More', on: {click: (e) => menu(e, [
+          ['New chat here', () => newChat(p.path)],
+          ['Show the files', () => go(`#/files?path=${encodeURIComponent(p.path)}`)],
+          null,
+          ['Close the project', () => closeProject(p)],
+        ])}}, icon('more', 15)),
+      ),
+      closed ? null : h('div.proj-chats', n ? chatsOf(p, p.path) : h('div.empty-row', 'No chats yet')),
+    );
+  };
+  const oneoffN = side.oneoff.open.length + side.oneoff.saved.length;
   return h('aside.side',
     h('div.side-top',
-      h('div.brand', h('img', {src: '/icon.svg', alt: ''}), 'Rein'),
-      h('button.project-btn', {on: {click: pickProject}, title: state.project}, icon('folder', 16), h('span.t', proj?.name ?? (state.project ? base(state.project) : 'Open a project…'), state.project ? h('span.p', tilde(state.project)) : null)),
-      h('button.btn.primary', {disabled: !state.project, on: {click: newChat}}, icon('plus', 16), 'New chat'),
+      h('div.brand', h('span.brandmark', '▁▃▅▇'), h('span', 'Rein')),
+      h('div.side-actions',
+        h('button.btn.primary', {title: 'A chat without a project', on: {click: () => newChat()}}, icon('plus', 16), 'New chat'),
+        h('button.btn', {title: 'Open a folder as a project', on: {click: pickProject}}, icon('folder', 16), 'Open project'),
+      ),
     ),
     h('div.side-scroll',
-      state.chats.open.length ? [h('div.side-label', 'Open'), state.chats.open.map((c) => chatBtn(c, false))] : null,
-      h('div.side-label', 'Recent'),
-      state.chats.saved.filter((s) => !openIds.has(s.session)).slice(0, 60).map((s) => chatBtn(s, true)),
-      !state.chats.saved.length && !state.chats.open.length ? h('div.muted', {style: {padding: '6px 9px', fontSize: '13px'}}, state.project ? 'No conversations here yet.' : 'Open a project to start.') : null,
+      oneoffN ? [h('div.side-label', 'Chats'), chatsOf(side.oneoff)] : null,
+      h('div.side-label', 'Projects'),
+      side.projects.length ? side.projects.map(project) : h('div.empty-row', 'Open a folder to work in it.'),
+      side.archived.length ? [
+        h('button.side-label.toggle', {on: {click: () => toggleCollapsed('archived')}}, h('span', `Archived (${side.archived.length})`), h('span.chev' + (collapsed.has('archived') ? '' : '.open'), '›')),
+        collapsed.has('archived') ? null : side.archived.map((c) => h('div.chat-row.archived',
+          h('button.side-item', {title: c.cwd ? tilde(c.cwd) : '', on: {click: () => openSaved(c.session, c.cwd)}}, h('span.dot'), h('span.t', c.title || 'Chat'), c.updatedAt ? h('span.meta', ago(c.updatedAt)) : null),
+          h('button.row-act', {title: 'Restore', on: {click: () => archive(c.session, false)}}, icon('restore', 15)))),
+      ] : null,
     ),
     h('div.side-bottom',
       h('button.side-item' + (state.view === 'files' ? '.active' : ''), {on: {click: () => go(`#/files?path=${encodeURIComponent(state.project || state.home)}`)}}, icon('folder', 16), h('span.t', 'Files')),
@@ -295,88 +384,199 @@ function sidebar() {
   );
 }
 
+async function closeProject(p) {
+  try {
+    await api('/api/projects/close', {body: {path: p.path}});
+    if (state.chat && state.chat.snapshot?.cwd === p.path && !state.chat.busy) ((state.chat.es?.close(), (state.chat = undefined)), go('#/chat'));
+    if (state.project === p.path) state.project = '';
+    await loadSidebar();
+    render();
+    toast(`Closed ${p.name}. Its chats are kept: open the folder again to see them.`);
+  } catch (err) {
+    toast(err.message, 'error');
+  }
+}
+
 const topbar = (title, extra = []) => h('div.topbar', h('button.icon-btn.menu-btn', {on: {click: () => ((state.sideOpen = true), render())}, 'aria-label': 'Menu'}, icon('menu')), h('div.title', title), ...extra);
 
 // ---------- projects ----------
 
 function pickProject() {
-  folderPicker({title: 'Open a project', start: state.project || state.home, recent: state.projects, onPick: async (dir) => {
+  openDialog({title: 'Open a project', start: state.project || state.home, action: 'Open', onPick: async (dir) => {
     await api('/api/projects', {body: {path: dir}});
-    await loadProjects();
+    collapsed.delete(`p:${dir}`);
     setProject(dir);
     go('#/chat');
   }});
 }
+/** Move to… / Copy to…: the same dialog. */
+const folderPicker = ({title, start, onPick, action = 'Choose'}) => openDialog({title, start, onPick, action});
 
-/** A dialog to choose a folder: recent projects, then a browser of this machine. */
-function folderPicker({title, start, recent = [], onPick, action = 'Open'}) {
-  let cwd = start;
-  let entries = [];
-  const list = h('div', {style: {maxHeight: '46vh', overflow: 'auto', border: '1px solid var(--line)', borderRadius: '10px'}});
-  const pathInput = h('input', {type: 'text', value: tilde(cwd), on: {keydown: (e) => e.key === 'Enter' && load(e.target.value)}});
-  const load = async (dir) => {
+/**
+ * A folder chooser like an operating system's File → Open: quick access and drives on the left,
+ * back / forward / up and an address bar, the folder's contents with sortable columns (files are
+ * shown dimmed: you're choosing a folder), a filter, New folder, and the chosen folder at the bottom.
+ */
+function openDialog({title, start, action, onPick}) {
+  const st = {dir: '', parent: undefined, entries: [], sel: undefined, back: [], fwd: [], sort: 'name', asc: true, filter: '', hidden: false, editing: false};
+  const ov = h('div.overlay.open-dialog');
+  const close = () => (ov.remove(), document.removeEventListener('keydown', keys));
+  const done = (dir) => (close(), onPick(dir));
+  const nav = h('nav.od-nav');
+  const crumbs = h('div.od-crumbs');
+  const filter = h('input.od-filter', {type: 'search', placeholder: 'Filter', on: {input: (e) => ((st.filter = e.target.value.toLowerCase()), draw())}});
+  const body = h('div.od-list');
+  const chosen = h('input.od-chosen', {type: 'text', on: {keydown: (e) => e.key === 'Enter' && go2(e.target.value, true)}});
+  const btn = (ic, tip, fn) => h('button.icon-btn', {title: tip, on: {click: fn}}, icon(ic, 16));
+  const backB = btn('back', 'Back', () => st.back.length && load(st.back.pop(), 'back'));
+  const fwdB = btn('forward', 'Forward', () => st.fwd.length && load(st.fwd.pop(), 'fwd'));
+  const upB = btn('up', 'Up', () => st.parent && load(st.parent));
+  const load = async (dir, how) => {
     try {
-      const r = await api(`/api/fs/list?path=${encodeURIComponent(dir)}`);
-      cwd = r.path;
-      entries = r.entries.filter((e) => e.dir);
-      pathInput.value = tilde(cwd);
-      list.replaceChildren(
-        r.parent ? h('button.side-item', {on: {click: () => load(r.parent)}}, icon('up', 16), h('span.t', '..')) : null,
-        entries.map((e) => h('button.side-item', {on: {click: () => load(e.path), dblclick: () => done(e.path)}}, icon('folder', 16), h('span.t', e.name))),
-        !entries.length ? h('div.muted', {style: {padding: '10px'}}, 'No folders here.') : null,
-      );
+      const r = await api(`/api/fs/list?path=${encodeURIComponent(dir)}${st.hidden ? '&hidden=1' : ''}`);
+      if (st.dir && r.path !== st.dir) {
+        if (how === 'back') st.fwd.push(st.dir);
+        else if (how === 'fwd') st.back.push(st.dir);
+        else ((st.back.push(st.dir)), (st.fwd = []));
+      }
+      Object.assign(st, {dir: r.path, parent: r.parent, entries: r.entries, sel: undefined, filter: ''});
+      filter.value = '';
+      draw();
     } catch (err) {
       toast(err.message, 'error');
     }
   };
-  const ov = h('div.overlay', {on: {click: (e) => e.target === ov && ov.remove()}});
-  const done = (dir) => {
-    ov.remove();
-    onPick(dir);
+  // Typed into the address bar or the folder box: a path (~ allowed), absolute or relative to here.
+  const go2 = (text, choose) => {
+    const t = text.trim();
+    if (!t) return choose && done(st.dir);
+    const target = /^(~|\/|[A-Za-z]:[\\/])/.test(t) ? t : join(st.dir, t);
+    if (choose) api(`/api/fs/list?path=${encodeURIComponent(target)}`).then((r) => done(r.path), (e) => toast(e.message, 'error'));
+    else load(target);
   };
-  ov.append(h('div.dialog',
-    h('header', title),
-    h('div.body',
-      recent.length ? [h('div.side-label', 'Recent projects'), recent.slice(0, 8).map((p) => h('button.side-item', {on: {click: () => done(p.path)}}, icon('folder', 16), h('span.t', p.name), h('span.meta', tilde(p.path))))] : null,
-      h('div.side-label', 'Browse'),
-      pathInput,
-      h('div', {style: {height: '8px'}}),
-      list,
+  const segs = (p) => {
+    const win = /^[A-Za-z]:/.test(p);
+    const parts = p.split(/[\\/]+/).filter(Boolean);
+    const out = [];
+    let acc = win ? '' : '/';
+    if (!win) out.push(['/', '/']);
+    for (const part of parts) {
+      acc = win && !acc ? `${part}\\` : join(acc, part);
+      out.push([part, acc]);
+    }
+    return out;
+  };
+  const sortBy = (k) => ((st.asc = st.sort === k ? !st.asc : true), (st.sort = k), draw());
+  const kindOf = (e) => (e.dir ? 'Folder' : (e.name.includes('.') ? e.name.split('.').pop().toUpperCase() + ' file' : 'File'));
+  const draw = () => {
+    backB.disabled = !st.back.length;
+    fwdB.disabled = !st.fwd.length;
+    upB.disabled = !st.parent;
+    crumbs.replaceChildren(...(st.editing
+      ? [h('input.od-addr', {type: 'text', value: tilde(st.dir), on: {keydown: (e) => (e.key === 'Enter' ? ((st.editing = false), go2(e.target.value)) : e.key === 'Escape' && ((st.editing = false), draw())), blur: () => ((st.editing = false), draw())}})]
+      : [...segs(st.dir).flatMap(([name, p], i, all) => [h('button.crumb', {on: {click: () => load(p)}}, i === 0 && name === '/' ? icon('drive', 14) : name), ...(i < all.length - 1 ? [h('span.crumb-sep', '›')] : [])]), h('button.crumb-edit', {title: 'Type a path', on: {click: () => ((st.editing = true), draw(), crumbs.querySelector('input')?.select())}})]));
+    crumbs.querySelector('input')?.focus();
+    const rows = st.entries.filter((e) => !st.filter || e.name.toLowerCase().includes(st.filter));
+    const dirFirst = (a, b) => (a.dir === b.dir ? 0 : a.dir ? -1 : 1);
+    const cmp = {name: (a, b) => a.name.localeCompare(b.name, undefined, {numeric: true, sensitivity: 'base'}), modified: (a, b) => a.modified - b.modified, kind: (a, b) => kindOf(a).localeCompare(kindOf(b)), size: (a, b) => a.size - b.size}[st.sort];
+    rows.sort((a, b) => dirFirst(a, b) || (st.asc ? 1 : -1) * cmp(a, b));
+    const col = (k, label) => h('button.od-col' + (st.sort === k ? '.on' : ''), {on: {click: () => sortBy(k)}}, label, st.sort === k ? (st.asc ? ' ▲' : ' ▼') : '');
+    body.replaceChildren(
+      h('div.od-row.od-head', col('name', 'Name'), col('modified', 'Date modified'), col('kind', 'Type'), col('size', 'Size')),
+      ...rows.map((e) => h('div.od-row' + (e.dir ? '' : '.file') + (st.sel === e.path ? '.sel' : ''), {
+        tabIndex: e.dir ? 0 : -1,
+        on: e.dir ? {click: () => ((st.sel = e.path), (chosen.value = e.name), draw()), dblclick: () => load(e.path)} : {},
+      }, h('span.od-name', icon(e.dir ? 'folder' : 'file', 16), h('span', e.name)), h('span', e.modified ? new Date(e.modified).toLocaleString([], {dateStyle: 'short', timeStyle: 'short'}) : ''), h('span', kindOf(e)), h('span', e.dir ? '' : fmtSize(e.size)))),
+      !rows.length ? h('div.od-empty', st.filter ? 'Nothing matches.' : 'This folder is empty.') : null,
+    );
+    if (!st.sel) chosen.value = '';
+    chosen.placeholder = base(st.dir) || st.dir;
+    for (const b of nav.querySelectorAll('button')) b.classList.toggle('on', b.dataset.path === st.dir);
+    body.querySelector('.sel')?.scrollIntoView({block: 'nearest'});
+  };
+  const keys = (e) => {
+    if (!document.body.contains(ov)) return;
+    if (e.target.tagName === 'INPUT' && e.target !== chosen) return;
+    const dirs = st.entries.filter((x) => x.dir && (!st.filter || x.name.toLowerCase().includes(st.filter)));
+    if (e.key === 'Escape') close();
+    else if (e.key === 'Backspace' && e.target !== chosen) (e.preventDefault(), st.parent && load(st.parent));
+    else if ((e.key === 'ArrowDown' || e.key === 'ArrowUp') && dirs.length) {
+      e.preventDefault();
+      const i = dirs.findIndex((x) => x.path === st.sel);
+      const next = dirs[Math.max(0, Math.min(dirs.length - 1, i + (e.key === 'ArrowDown' ? 1 : -1)))];
+      Object.assign(st, {sel: next.path});
+      chosen.value = next.name;
+      draw();
+    } else if (e.key === 'Enter' && e.target !== chosen && st.sel) (e.preventDefault(), load(st.sel));
+  };
+  document.addEventListener('keydown', keys);
+  const newFolder = async () => {
+    const name = prompt('New folder name');
+    if (!name) return;
+    try {
+      await api('/api/fs/mkdir', {body: {path: join(st.dir, name)}});
+      await load(st.dir);
+      const made = st.entries.find((x) => x.name === name);
+      if (made) ((st.sel = made.path), (chosen.value = name), draw());
+    } catch (err) {
+      toast(err.message, 'error');
+    }
+  };
+  ov.append(h('div.dialog.od',
+    h('header', title, h('button.icon-btn', {style: {float: 'right'}, title: 'Cancel', on: {click: close}}, icon('x'))),
+    h('div.od-bar', backB, fwdB, upB, crumbs, filter),
+    h('div.od-main', nav, body),
+    h('div.od-foot',
+      h('label', 'Folder:'), chosen,
+      h('label.od-hidden', h('input', {type: 'checkbox', on: {change: (e) => ((st.hidden = e.target.checked), load(st.dir))}}), ' Hidden'),
+      h('button.btn', {on: {click: newFolder}}, icon('newfolder', 15), 'New folder'),
+      h('span.grow'),
+      h('button.btn', {on: {click: close}}, 'Cancel'),
+      h('button.btn.primary', {on: {click: () => (st.sel ? done(st.sel) : go2(chosen.value, true))}}, action),
     ),
-    h('footer', h('button.btn', {on: {click: () => ov.remove()}}, 'Cancel'), h('button.btn.primary', {on: {click: () => done(cwd)}}, `${action} this folder`)),
   ));
   document.body.append(ov);
-  void load(cwd);
+  // Quick access, recent projects, then drives.
+  api('/api/fs/roots').then(({roots}) => {
+    const item = (r, ic) => h('button.od-place', {'data-path': r.path, title: r.path, on: {click: () => load(r.path)}}, icon(ic, 15), h('span', r.name));
+    nav.replaceChildren(
+      h('div.od-group', 'Quick access'), ...roots.filter((r) => r.kind !== 'drive').map((r) => item(r, r.name === 'Home' ? 'home' : 'folder')),
+      state.projects.length ? h('div.od-group', 'Projects') : null, ...state.projects.slice(0, 8).map((p) => item(p, 'folder')),
+      h('div.od-group', 'This computer'), ...roots.filter((r) => r.kind === 'drive').map((r) => item(r, 'drive')),
+    );
+    draw();
+  }, () => {});
+  void load(start || state.home);
 }
 
 // ---------- chats ----------
 
-async function newChat() {
-  if (!state.project) return pickProject();
+/** A new chat: in a project, or (no project given) a one-off chat with its own folder. */
+async function newChat(project) {
   try {
     toast('Starting a chat…');
-    const r = await api('/api/chats', {body: {project: state.project}});
-    await loadChats();
+    const r = await api('/api/chats', {body: project ? {project} : {oneoff: true}});
+    if (project) ((state.project = project), localStorage.setItem('rein.project', project));
+    await loadSidebar();
     go(`#/chat/${r.id}`);
   } catch (err) {
     toast(err.message, 'error');
   }
 }
-async function openSaved(session) {
+async function openSaved(session, cwd) {
   try {
-    const r = await api('/api/chats', {body: {project: state.project, resume: session}});
-    await loadChats();
+    const r = await api('/api/chats', {body: {project: cwd || state.project, resume: session}});
+    await loadSidebar();
     go(`#/chat/${r.id}`);
   } catch (err) {
     toast(err.message, 'error');
   }
 }
 
-/** Watch a chat: a snapshot, then live events (server-sent). */
 function attachChat(id) {
   if (!/^[\da-f]{16}$/.test(id)) return;
   state.chat?.es?.close();
-  const c = {id, snapshot: undefined, live: '', tools: [], asks: new Map(), busy: false, notes: [], model: undefined, es: undefined, stick: true};
+  const c = {id, snapshot: undefined, live: '', tools: [], asks: new Map(), busy: false, notes: [], model: undefined, es: undefined, stick: true, feed: [], window: undefined, ui: undefined};
   state.chat = c;
   const es = new EventSource(`/api/chats/${id}/events`);
   c.es = es;
@@ -396,6 +596,8 @@ function onEvent(c, ev) {
   switch (ev.type) {
     case 'snapshot':
       c.snapshot = ev.snapshot;
+      applyAccent(ev.snapshot.accent);
+      renderChrome(c);
       c.busy = ev.snapshot.busy;
       if (!c.busy) Object.assign(c, {live: '', tools: [], notes: [], model: undefined});
       void loadChats().then(() => state.view === 'chat' && renderSide());
@@ -403,7 +605,7 @@ function onEvent(c, ev) {
     case 'busy':
       c.busy = ev.busy;
       if (ev.phrase) c.phrase = ev.phrase;
-      if (ev.busy) Object.assign(c, {live: '', tools: [], notes: [], model: undefined});
+      if (ev.busy) Object.assign(c, {live: '', tools: [], notes: [], model: undefined, route: undefined});
       void loadChats().then(() => state.view === 'chat' && renderSide());
       break;
     case 'user': {
@@ -425,6 +627,7 @@ function onEvent(c, ev) {
       break;
     case 'route':
       c.model = ev.model;
+      if (ev.line) c.route = ev.line;
       break;
     case 'notice':
       c.notes.push({text: ev.text});
@@ -438,6 +641,29 @@ function onEvent(c, ev) {
     case 'waiting':
       c.notes.push({text: `Every account is at its limit: continuing at ${new Date(ev.until).toLocaleTimeString()}.`});
       break;
+    case 'cmd':
+    case 'log':
+    case 'usage':
+    case 'context':
+      // What commands print, in the thread where they were typed (after the messages so far).
+      c.feed.push({...ev, at: c.snapshot?.messages.length ?? 0});
+      break;
+    case 'clear':
+      c.feed = [];
+      break;
+    case 'window':
+      // A live refresh (shells, subagents) keeps what's open in the window; a new window starts fresh.
+      if (!ev.refresh) c.winUi = {};
+      c.window = ev.close ? undefined : ev.window;
+      if (ev.refresh && document.activeElement?.closest?.('.cmd-window textarea, .cmd-window input')) return void (c.windowStale = true);
+      renderWindow(c);
+      return;
+    case 'chrome':
+      if (c.snapshot) Object.assign(c.snapshot, {status: ev.status, sidebar: ev.sidebar, queued: ev.queued, mode: ev.mode, chatModel: ev.chatModel, accent: ev.accent});
+      applyAccent(ev.accent);
+      renderChrome(c);
+      updateComposer(c);
+      return;
     case 'ask':
       c.asks.set(ev.id, ev);
       break;
@@ -459,8 +685,7 @@ function scheduleThread() {
     if (!thread) return render();
     const stick = scroll ? scroll.scrollHeight - scroll.scrollTop - scroll.clientHeight < 120 : true;
     thread.replaceWith(threadEl());
-    const bar = $('#composer-wrap');
-    if (bar) bar.replaceWith(composer());
+    if (state.chat) updateComposer(state.chat);
     const title = $('.topbar .title');
     if (title && state.chat?.snapshot) title.textContent = state.chat.snapshot.title;
     if (scroll && stick) scroll.scrollTop = scroll.scrollHeight;
@@ -471,18 +696,65 @@ function renderSide() {
   if (side) side.replaceWith(sidebar());
 }
 
+/** A tool call as the terminal shows it: ● Shell(npm test) · allowed by rule, then ⎿ its result in a line. Click for all of it. */
 function toolEl(t) {
-  const status = t.pending ? 'busy' : t.ok === false ? 'bad' : 'ok';
-  const d = h('details.tool', h('summary', h('span.dot.' + status), h('span.name', t.label), h('span.arg', t.summary)));
-  if (t.diff?.length) d.append(h('div.diff', t.diff.map((l) => h('div.' + l.kind, (l.kind === 'add' ? '+ ' : l.kind === 'del' ? '- ' : '  ') + l.text))));
-  if (t.result) d.append(h('pre.out', t.result));
-  if (t.warning) d.append(h('div.note', {style: {padding: '0 12px 8px'}}, '⚠ ' + t.warning));
-  return d;
+  const status = t.pending ? 'run' : t.ok === false ? 'bad' : t.label === 'Agent' ? 'agent' : 'ok';
+  const stats = t.diff?.length ? diffStats(t.diff) : undefined;
+  const head = h('summary.tl',
+    h('span.td.' + status, '●'),
+    h('b', t.label), h('span.ta', `(${t.summary})`),
+    stats ? [h('span.plus', ` +${stats.added}`), h('span.minus', ` −${stats.removed}`)] : null,
+    t.note ? h('span.tn', ` · ${t.note}`) : null,
+  );
+  const brief = !t.pending && t.brief && !t.diff?.length ? h('div.tb' + (t.ok === false ? '.bad' : ''), (t.ok === false ? '✗ ' : '') + t.brief) : null;
+  const d = h('details.tool', head);
+  if (t.diff?.length) d.append(diffEl(t.diff));
+  if (t.result && (t.result.includes('\n') || t.result.length > 120)) d.append(h('pre.out', t.result));
+  if (t.warning) d.append(h('div.tw', '⚠ ' + t.warning));
+  if (t.diff?.length) d.open = true; // edits show their diff, as in the terminal
+  return h('div.toolrow', d, brief);
+}
+
+function diffStats(diff) {
+  let added = 0, removed = 0;
+  for (const l of diff) l.kind === 'add' ? added++ : l.kind === 'del' && removed++;
+  return {added, removed};
+}
+
+/** Words that differ between a removed line and the added line after it, marked (as the terminal does). */
+function wordDiff(a, b) {
+  const A = a.split(/(\s+|[^\w\s])/).filter(Boolean), B = b.split(/(\s+|[^\w\s])/).filter(Boolean);
+  if (A.length * B.length > 40000) return [[a, true], [b, true]].map(([x]) => [[x, true]]);
+  const L = Array.from({length: A.length + 1}, () => new Uint16Array(B.length + 1));
+  for (let i = A.length - 1; i >= 0; i--) for (let j = B.length - 1; j >= 0; j--) L[i][j] = A[i] === B[j] ? L[i + 1][j + 1] + 1 : Math.max(L[i + 1][j], L[i][j + 1]);
+  const da = [], db = [];
+  let i = 0, j = 0;
+  while (i < A.length || j < B.length) {
+    if (i < A.length && j < B.length && A[i] === B[j]) da.push([A[i++], false]), db.push([B[j++], false]);
+    else if (j < B.length && (i >= A.length || L[i][j + 1] >= L[i + 1][j])) db.push([B[j++], true]);
+    else da.push([A[i++], true]);
+  }
+  return [da, db];
+}
+
+function diffEl(diff) {
+  const rows = [];
+  for (let k = 0; k < diff.length; k++) {
+    const l = diff[k];
+    if (l.kind === 'gap') { rows.push(h('div.gap', '⋯')); continue; }
+    if (l.kind === 'note') { rows.push(h('div.dnote', l.text)); continue; }
+    const pair = l.kind === 'del' && diff[k + 1]?.kind === 'add' ? diff[k + 1] : undefined;
+    const parts = pair ? wordDiff(l.text, pair.text) : undefined;
+    const line = (x, segs) => h('div.' + x.kind, h('span.no', x.n ?? ''), h('span.sg', x.kind === 'add' ? '+' : x.kind === 'del' ? '-' : ' '), h('span.tx', segs ? segs.map(([w, ch]) => (ch ? h('mark', w) : w)) : x.text));
+    rows.push(line(l, parts?.[0]));
+    if (pair) rows.push(line(pair, parts[1])), k++;
+  }
+  return h('div.diff', rows);
 }
 
 function messageEl(m) {
   if (m.role === 'user') return h('div.msg.user', h('div.bubble', m.text));
-  return h('div.msg.assistant', (m.tools ?? []).map(toolEl), m.text ? md(m.text) : null, m.interrupted ? h('div.note', 'Interrupted.') : null);
+  return h('div.msg.assistant', (m.tools ?? []).map(toolEl), m.text ? h('div.reply', md(m.text)) : null, m.interrupted ? h('div.note', 'Interrupted.') : null, m.model ? h('div.model-tag', m.model.split(':').pop()) : null);
 }
 
 function askEl(c, a) {
@@ -529,6 +801,15 @@ function askEl(c, a) {
       h('div.actions', h('button.btn.primary', {on: {click: () => answer('implement')}}, 'Implement it now'), h('button.btn', {on: {click: () => answer('goal')}}, 'Start as a goal'), h('button.btn', {on: {click: () => answer('save')}}, 'Save for later'), h('button.btn.ghost', {on: {click: () => answer('revise')}}, 'Keep planning')),
     );
   }
+  if (a.kind === 'vault') {
+    const v = {value: ''};
+    return h('div.ask',
+      h('h3', `Value for ${a.payload.secret}`),
+      h('div.sub', 'Saved in the vault on the computer Rein runs on, never in the conversation. The agent\'s shell commands get it as an environment variable.'),
+      h('input', {type: 'password', autocomplete: 'off', on: {input: (e) => (v.value = e.target.value)}}),
+      h('div.actions', h('button.btn.primary', {on: {click: () => answer(v.value)}}, 'Save'), h('button.btn', {on: {click: () => answer(undefined)}}, 'Cancel')),
+    );
+  }
   return h('div.ask', h('h3', 'Rein needs you'), h('pre', JSON.stringify(a.payload, null, 2)));
 }
 
@@ -536,13 +817,14 @@ function threadEl() {
   const c = state.chat;
   const s = c?.snapshot;
   if (!s) return h('div.thread#thread', h('div.note', 'Starting…'));
-  if (!s.messages.length && !c.busy && !c.live) {
+  if (!s.messages.length && !c.busy && !c.live && !c.feed.length && !c.asks.size) {
     const hour = new Date().getHours();
-    return h('div.thread#thread', h('div.empty', h('h1', hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening'), h('p', `What should we do in ${base(s.cwd)}?`)));
+    return h('div.thread#thread', h('div.empty', h('h1', hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening'), h('p', isOneOff(s.cwd) ? 'What should we do?' : `What should we do in ${base(s.cwd)}?`)));
   }
   // The turn in progress: the reply so far with its tool calls where they happened.
   const live = [];
   if (c.busy || c.live || c.tools.length) {
+    if (c.route) live.push(h('div.route', `→ ${c.route}`));
     let at = 0;
     for (const t of c.tools) {
       if (t.after > at) live.push(md(c.live.slice(at, t.after)));
@@ -551,39 +833,103 @@ function threadEl() {
     }
     if (c.live.length > at) live.push(md(c.live.slice(at)));
   }
+  // Messages, with what commands printed after the message they were typed after.
+  const rows = [];
+  const feedAt = (i) => c.feed.filter((f) => f.at === i).map(feedEl);
+  rows.push(feedAt(0));
+  s.messages.forEach((m, i) => rows.push(messageEl(m), feedAt(i + 1)));
+  rows.push(c.feed.filter((f) => f.at > s.messages.length).map(feedEl));
   return h('div.thread#thread',
-    s.messages.map(messageEl),
+    rows,
     live.length ? h('div.msg.assistant', live) : null,
-    c.notes.map((n) => h('div.note' + (n.error ? '.error' : ''), n.text)),
+    c.notes.map((n) => h('div.note' + (n.error ? '.error' : /^(Load balancing|Failover|Every account)/.test(n.text) ? '.warn' : ''), n.text)),
     [...c.asks.values()].map((a) => askEl(c, a)),
   );
 }
 
+/** A command's echo, its output, and the /usage and /context reports. */
+function feedEl(f) {
+  if (f.type === 'cmd') return h('div.cmd', h('span.p', '›'), f.text);
+  if (f.type === 'log') return h('div.out' + (f.kind === 'error' ? '.error' : ''), ansi(f.text));
+  if (f.type === 'usage')
+    return h('div.out.report', !f.rows.length ? 'No accounts. Sign in from a terminal: rein, then /login.' : f.rows.map((r) => h('div.acct',
+      h('div', h('b', r.provider), ' ', r.account, r.plan ? h('span.muted', ` · ${r.plan}`) : null, r.cooldownUntil ? h('span.bad', ` · limited until ${new Date(r.cooldownUntil).toLocaleTimeString()}`) : null),
+      r.error ? h('div.bad', r.error) : null,
+      r.windows.map((w) => h('div.meter', h('span.l', w.label), bar(w.usedPct), h('span.n', `${w.usedPct}%`), w.resetsAt ? h('span.muted', ` resets ${new Date(w.resetsAt).toLocaleString()}`) : null)),
+    )));
+  if (f.type === 'context') {
+    const r = f.report;
+    const k = (n) => (n >= 1000 ? `${(n / 1000).toFixed(n >= 10_000 ? 0 : 1)}k` : String(n));
+    const used = r.measured ?? r.used;
+    return h('div.out.report',
+      h('div', h('b', r.modelLabel), ` · ${k(used)}/${k(r.window)} tokens (${((used / r.window) * 100).toFixed(1)}%${r.measured !== undefined ? ', measured' : ', est.'})`),
+      h('div.ctxbar', r.categories.map((cat) => h('i.' + cat.key, {style: {width: `${(cat.tokens / r.window) * 100}%`}, title: `${cat.label}: ${k(cat.tokens)}`}))),
+      r.categories.map((cat) => h('div.legend', h('i.' + cat.key), `${cat.label}: `, h('b', k(cat.tokens)), h('span.muted', ` (${((cat.tokens / r.window) * 100).toFixed(1)}%)`))),
+      h('div.legend', h('i.free'), `Free space: ${k(Math.max(0, r.window - used))}`),
+      h('div.muted', `${r.messageCount} messages${r.summarizedCount ? ` · ${r.summarizedCount} summarized` : ''} · compacts at ${k(r.autoCompactAt)}`),
+      r.largest?.length ? h('div.muted', 'Largest: ' + r.largest.slice(0, 5).map((x) => `${x.what} (${k(x.tokens)})`).join(' · ')) : null,
+    );
+  }
+  return null;
+}
+const bar = (pct) => h('span.mbar' + (pct >= 90 ? '.hot' : pct >= 70 ? '.warm' : ''), h('i', {style: {width: `${Math.min(100, pct)}%`}}));
+
+/** The request helper for a chat's worker: the / list, settings, model choices. */
+const ask = (c, op, args = {}) => api(`/api/chats/${c.id}/request`, {body: {op, args}}).then((r) => r.value);
+
+/** The input: built once per chat (typing never loses focus mid-reply); updateComposer refreshes the rest. */
 function composer() {
   const c = state.chat;
-  const s = c?.snapshot;
-  const ta = h('textarea', {rows: 1, placeholder: c?.busy ? 'The agent is working…' : 'Message Rein', on: {
-    input: (e) => {
-      e.target.style.height = 'auto';
-      e.target.style.height = `${e.target.scrollHeight}px`;
-      sendBtn.disabled = !e.target.value.trim() || c?.busy;
-    },
-    keydown: (e) => {
-      if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
-        e.preventDefault();
-        void send();
-      }
-    },
-  }});
-  if (c?.draft) ta.value = c.draft;
-  ta.addEventListener('input', () => c && (c.draft = ta.value));
-  const send = async () => {
-    const text = ta.value.trim();
-    if (!text || !c || c.busy) return;
+  if (c?.ui) return c.ui.wrap;
+  const ta = h('textarea', {rows: 1, placeholder: 'Message Rein, / for commands'});
+  const list = h('div.cmdlist.hidden');
+  const sug = {items: [], index: 0, text: undefined};
+  const fit = () => {
+    ta.style.height = 'auto';
+    ta.style.height = `${ta.scrollHeight}px`;
+  };
+  const showList = () => {
+    list.classList.toggle('hidden', !sug.items.length);
+    list.replaceChildren(...sug.items.map((it, i) => h('button.cmd-item' + (i === sug.index ? '.on' : ''), {on: {mousedown: (e) => (e.preventDefault(), pick(i))}},
+      h('span.name', `/${it.name}`), h('span.desc', it.description), it.tag ? h('span.tag', it.tag) : null)));
+    list.querySelector('.on')?.scrollIntoView({block: 'nearest'});
+  };
+  let timer = 0;
+  const suggest = () => {
+    const text = ta.value;
+    clearTimeout(timer);
+    if (!/^\/[^\s]*$/.test(text)) {
+      sug.items = [];
+      return showList();
+    }
+    timer = setTimeout(async () => {
+      const items = await ask(c, 'suggest', {text}).then((r) => (Array.isArray(r) ? r : []), () => []);
+      if (ta.value !== text) return;
+      Object.assign(sug, {items, index: 0, text});
+      showList();
+    }, 40);
+  };
+  const pick = (i) => {
+    const it = sug.items[i];
+    if (!it) return;
+    ta.value = `/${it.name} `;
+    sug.items = [];
+    showList();
+    ta.focus();
+    fit();
+  };
+  const send = async (text = ta.value.trim()) => {
+    if (!text || !c) return;
     c.draft = '';
     ta.value = '';
-    c.snapshot = {...c.snapshot, messages: [...c.snapshot.messages, {role: 'user', text, at: Date.now()}]};
-    c.busy = true;
+    fit();
+    sug.items = [];
+    showList();
+    // A message shows right away; a command's echo comes back from the worker.
+    if (!/^[\/!]/.test(text) && !c.busy) {
+      c.snapshot = {...c.snapshot, messages: [...c.snapshot.messages, {role: 'user', text, at: Date.now()}]};
+      c.busy = true;
+    }
     scheduleThread();
     try {
       await api(`/api/chats/${c.id}/send`, {body: {text}});
@@ -591,34 +937,146 @@ function composer() {
       toast(err.message, 'error');
     }
   };
-  const sendBtn = h('button.send', {disabled: true, title: 'Send (Enter)', on: {click: send}}, icon('send', 17));
-  const stopBtn = h('button.send.stop', {title: 'Stop', on: {click: () => api(`/api/chats/${c.id}/interrupt`, {body: {}}).catch((e) => toast(e.message, 'error'))}}, icon('stop', 15));
-  const model = h('select', {title: 'Model', disabled: !s, on: {change: (e) => api(`/api/chats/${c.id}/model`, {body: {model: e.target.value}}).catch((x) => toast(x.message, 'error'))}},
-    h('option', {value: 'auto', selected: s?.chatModel === 'auto'}, 'Auto'),
-    (s?.models ?? []).map((m) => h('option', {value: m.ref, selected: s.chatModel === m.ref}, `${m.label} · ${m.provider === 'claude' ? 'Claude' : 'Codex'}`)),
+  ta.addEventListener('input', () => {
+    fit();
+    if (c) c.draft = ta.value;
+    sendBtn.disabled = !ta.value.trim();
+    suggest();
+  });
+  ta.addEventListener('keydown', (e) => {
+    // A list for what was typed a moment ago is stale: Enter sends what's in the box.
+    if (sug.items.length && sug.text === ta.value) {
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        e.preventDefault();
+        sug.index = (sug.index + (e.key === 'ArrowDown' ? 1 : -1) + sug.items.length) % sug.items.length;
+        return showList();
+      }
+      if (e.key === 'Tab') {
+        e.preventDefault();
+        return pick(sug.index);
+      }
+      if (e.key === 'Escape') {
+        sug.items = [];
+        return showList();
+      }
+      // Enter fills in the highlighted command; typed out in full, it runs (as in the terminal).
+      if (e.key === 'Enter' && !e.shiftKey && !e.isComposing && !(sug.index === 0 && `/${sug.items[0].name}` === ta.value.trim().toLowerCase())) {
+        e.preventDefault();
+        return pick(sug.index);
+      }
+    }
+    if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
+      e.preventDefault();
+      void send();
+    }
+    if (e.key === 'Escape' && c?.busy) void api(`/api/chats/${c.id}/interrupt`, {body: {}}).catch(() => {});
+  });
+  ta.addEventListener('blur', () => setTimeout(() => ((sug.items = []), showList()), 120));
+  if (c?.draft) ta.value = c.draft;
+  const sendBtn = h('button.send', {disabled: !ta.value.trim(), title: 'Send (Enter)', on: {click: () => send()}}, icon('send', 17));
+  const stopBtn = h('button.send.stop', {title: 'Stop (Esc)', on: {click: () => api(`/api/chats/${c.id}/interrupt`, {body: {}}).catch((e) => toast(e.message, 'error'))}}, icon('stop', 15));
+  const model = h('select', {title: 'Model', on: {change: (e) => api(`/api/chats/${c.id}/model`, {body: {model: e.target.value}}).catch((x) => toast(x.message, 'error'))}});
+  const mode = h('select', {title: 'Approvals', on: {change: (e) => api(`/api/chats/${c.id}/mode`, {body: {mode: e.target.value}}).catch((x) => toast(x.message, 'error'))}},
+    [['ask', 'Ask before changes'], ['auto', 'Auto-approve'], ['bypass', 'Allow everything'], ['plan', 'Plan only']].map(([v, l]) => h('option', {value: v}, l)),
   );
-  const mode = h('select', {title: 'Approvals', disabled: !s, on: {change: (e) => api(`/api/chats/${c.id}/mode`, {body: {mode: e.target.value}}).catch((x) => toast(x.message, 'error'))}},
-    [['ask', 'Ask before changes'], ['auto', 'Auto-approve'], ['bypass', 'Allow everything'], ['plan', 'Plan only']].map(([v, l]) => h('option', {value: v, selected: s?.mode === v}, l)),
-  );
-  return h('div.composer-wrap#composer-wrap',
-    c?.busy ? h('div.working', h('span.dot.busy'), c.asks.size ? 'Waiting for you' : `${c.phrase ?? 'Thinking'}…${c.model ? ` · ${c.model}` : ''}`) : null,
-    h('div.composer', ta, h('div.row', model, mode, h('span.spacer'), c?.busy ? stopBtn : sendBtn)),
-  );
+  const working = h('div.working.hidden');
+  const queued = h('div.queued.hidden');
+  const action = h('span.action');
+  const wrap = h('div.composer-wrap#composer-wrap', working, queued, h('div.composer-box', list, h('div.composer', ta, h('div.row', model, mode, h('span.spacer'), action))));
+  if (c) c.ui = {wrap, ta, sendBtn, stopBtn, model, mode, working, queued, action};
+  updateComposer(c);
+  return wrap;
+}
+
+function updateComposer(c) {
+  const u = c?.ui;
+  if (!u) return;
+  const s = c.snapshot;
+  u.ta.placeholder = c.busy ? 'Queue a message, or /btw <question>' : 'Message Rein, / for commands';
+  u.working.classList.toggle('hidden', !c.busy);
+  u.working.replaceChildren(h('span.spin', '▁▃▅▇'), c.asks.size ? h('span.wait', 'Waiting for you') : h('span.rainbow', `${c.phrase ?? 'Thinking'}…`), c.model && !c.asks.size ? h('span.dimtxt', ` · ${c.model}`) : null);
+  const q = s?.queued ?? [];
+  u.queued.classList.toggle('hidden', !q.length);
+  u.queued.replaceChildren(...q.map((t, i) => h('span.chip', {title: t}, `Queued: ${t.length > 60 ? t.slice(0, 60) + '…' : t}`, h('button', {title: 'Remove', on: {click: () => ask(c, 'unqueue', {index: i}).catch((e) => toast(e.message, 'error'))}}, '×'))));
+  u.action.replaceChildren(c.busy && !u.ta.value.trim() ? u.stopBtn : u.sendBtn);
+  u.model.disabled = u.mode.disabled = !s;
+  const opts = [h('option', {value: 'auto'}, 'Auto'), ...(s?.models ?? []).map((m) => h('option', {value: m.ref}, `${m.label} · ${m.provider === 'claude' ? 'Claude' : 'Codex'}`))];
+  if (u.model.options.length !== opts.length) u.model.replaceChildren(...opts);
+  u.model.value = s?.chatModel ?? 'auto';
+  u.mode.value = s?.mode ?? 'ask';
 }
 
 function chatView() {
   const c = state.chat;
   if (!c) {
-    return h('main.main', topbar(state.project ? base(state.project) : 'Rein', state.project ? [h('span.path', tilde(state.project))] : []), h('div.scroll', h('div.empty', h('h1', 'Rein'), h('p', state.project ? `Start a chat in ${base(state.project)}, or pick one on the left.` : 'Open a project folder to start.'), h('button.btn.primary', {on: {click: state.project ? newChat : pickProject}}, state.project ? 'New chat' : 'Open a project'))));
+    const hour = new Date().getHours();
+    return h('main.main', topbar('Rein'), h('div.scroll', h('div.empty',
+      h('div.big-mark.brandmark', '▁▃▅▇'),
+      h('h1', hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening'),
+      h('p', 'Start a chat, or work in a project folder.'),
+      h('div.empty-actions',
+        h('button.btn.primary', {on: {click: () => newChat()}}, icon('plus', 16), 'New chat'),
+        state.project ? h('button.btn', {on: {click: () => newChat(state.project)}}, icon('folder', 16), `Chat in ${base(state.project)}`) : null,
+        h('button.btn', {on: {click: pickProject}}, icon('folder', 16), 'Open a project'),
+      ),
+    )));
   }
   const s = c.snapshot;
-  return h('main.main',
-    topbar(s?.title ?? 'Chat', [s ? h('span.path', tilde(s.cwd)) : null, h('button.icon-btn', {title: 'More', on: {click: (e) => chatMenu(e, c)}}, icon('more'))]),
-    h('div.scroll', threadEl()),
-    composer(),
+  // Wide screens: the sidebar sits beside the chat (on unless you turned it off). Narrow ones: it slides over, when asked.
+  const wide = innerWidth >= 1100;
+  const panelOpen = wide ? localStorage.getItem('rein.panel') !== 'off' : !!state.panelShow;
+  const togglePanel = () => {
+    if (wide) localStorage.setItem('rein.panel', panelOpen ? 'off' : 'on');
+    else state.panelShow = !panelOpen;
+    render();
+  };
+  return h('main.main.chat' + (panelOpen ? '.with-panel' : ''),
+    topbar(s?.title ?? 'Chat', [s && !isOneOff(s.cwd) ? h('span.path', tilde(s.cwd)) : null, h('button.icon-btn', {title: 'Sidebar', on: {click: togglePanel}}, icon('panel')), h('button.icon-btn', {title: 'More', on: {click: (e) => chatMenu(e, c)}}, icon('more'))]),
+    statusEl(c),
+    h('div.chat-body', h('div.chat-col', h('div.scroll', threadEl()), composer()), panelOpen ? panelEl(c) : null, panelOpen && !wide ? h('div.rpanel-backdrop', {on: {click: togglePanel}}) : null),
   );
 }
+
+/** The status line: the segments set in /settings → Status line, then marketplace items'. Click one for its command. */
+function statusEl(c) {
+  const segs = c.snapshot?.status ?? [];
+  const items = [];
+  segs.forEach((g, i) => {
+    if (i) items.push(h('span.sep', '│'));
+    items.push(h(g.command ? 'button.seg' : 'span.seg', {title: g.command ? `${g.label}: ${g.command}` : g.label, on: g.command ? {click: () => runInChat(c, g.command)} : undefined}, g.label ? [h('span.k', g.label), ' '] : null, h('span.v' + (g.tone ? '.' + g.tone : ''), ansi(g.value))));
+  });
+  return h('div.statusline#statusline', h('span.brandmark', '▁▃▅▇ Rein'), items.length ? h('span.sep', '│') : null, items);
+}
+
+/** The right sidebar: the goal's plan and tasks, the sections set in /settings → Sidebar, then items' sections. */
+function panelEl(c) {
+  const secs = c.snapshot?.sidebar ?? [];
+  return h('aside.rpanel#rpanel', secs.map((sec) => h('section',
+    h('h4', sec.title.toUpperCase()),
+    sec.rows.map((r) => {
+      const mark = /^([✓▸○●])\s/.exec(r.text ?? '');
+      const tone = mark ? {'✓': '.done', '▸': '.next', '○': '.later', '●': '.on'}[mark[1]] : '';
+      const kids = [r.text ? h('span.t', ansi(r.text)) : null, r.pct !== undefined ? h('span.n', `${r.pct}%`) : null];
+      const cls = (r.dim ? '.dim' : '') + (r.bold ? '.bold' : '') + (r.active ? '.active' : '') + tone;
+      const row = r.command ? h('button.row' + cls, {on: {click: () => runInChat(c, r.command)}}, kids) : h('div.row' + cls, kids);
+      const fill = r.progress ? (r.pct >= 100 ? '.done' : '.prog') : r.pct >= 90 ? '.hot' : r.pct >= 70 ? '.warm' : '';
+      return r.pct !== undefined ? [row, h('div.meter', h('i' + fill, {style: {width: `${Math.min(100, r.pct)}%`}}))] : row;
+    }),
+  )), !secs.length ? h('div.muted', {style: {padding: '12px'}}, 'Nothing here: choose sections in /settings → Sidebar.') : null);
+}
+
+function renderChrome(c) {
+  if (state.chat !== c || state.view !== 'chat') return;
+  $('#statusline')?.replaceWith(statusEl(c));
+  $('#rpanel')?.replaceWith(panelEl(c));
+}
+
+/** Run a command in the chat, as if typed. */
+function runInChat(c, text) {
+  return api(`/api/chats/${c.id}/send`, {body: {text}}).catch((e) => toast(e.message, 'error'));
+}
 function afterChatRender() {
+  if (state.chat?.window) renderWindow(state.chat);
   const scroll = $('.scroll');
   if (scroll) scroll.scrollTop = scroll.scrollHeight;
   $('.composer textarea')?.focus();
@@ -648,6 +1106,404 @@ function menu(e, items) {
   const y = Math.min(e.clientY ?? r.bottom, innerHeight - m.offsetHeight - 8);
   Object.assign(m.style, {left: `${x}px`, top: `${y}px`});
   setTimeout(() => document.addEventListener('click', () => m.remove(), {once: true}));
+}
+
+// ---------- windows a command opens (/settings, /model, /goal:plan, /mcp…) ----------
+
+function closeWindow(c) {
+  c.window = undefined;
+  renderWindow(c);
+  void api(`/api/chats/${c.id}/window`, {body: {}}).catch(() => {});
+}
+
+function renderWindow(c) {
+  document.querySelector('.overlay.cmd-window')?.remove();
+  if (state.chat !== c || !c.window) return;
+  const w = c.window;
+  const panels = {marketplace: marketPanel, 'marketplace-updates': updatesPanel, mcp: mcpPanel, 'mcp-signin': mcpPanel, goal: goalPanel, help: helpPanel, btw: btwPanel, update: updatePanel, login: loginPanel, settings: settingsPanel, model: modelPanel, plans: plansPanel, rewind: rewindPanel, shells: shellsPanel, agents: agentsPanel};
+  const body = panels[w.name] ? panels[w.name](c, w) : h('pre.text', ansi((w.lines ?? []).join('\n')));
+  const title = {marketplace: 'Marketplace', 'marketplace-updates': 'Updates', mcp: 'MCP servers', 'mcp-signin': 'MCP servers', goal: 'Goal', help: 'Commands and skills', btw: 'btw', update: 'Update', login: 'Accounts', settings: 'Settings', model: 'Models', plans: 'Start a plan as a goal', rewind: 'Rewind', shells: 'Shells', agents: 'Subagents'}[w.name] ?? w.title;
+  const o = h('div.overlay.cmd-window', {on: {click: (e) => e.target === o && closeWindow(c)}},
+    h('div.dialog.wide', h('header', title, h('button.icon-btn', {style: {float: 'right'}, title: 'Close (Esc)', on: {click: () => closeWindow(c)}}, icon('x'))), h('div.body', body)));
+  o.tabIndex = -1;
+  o.addEventListener('keydown', (e) => e.key === 'Escape' && closeWindow(c));
+  document.body.append(o);
+  o.focus();
+}
+
+/** Every /settings tab, as in the terminal: the status line and sidebar layout, the choices, and every key (Advanced). */
+function settingsPanel(c, v) {
+  const tab = v.tab;
+  const set = (patch) => {
+    c.window = {...c.window, ...patch, name: 'settings'};
+    renderWindow(c);
+  };
+  const apply = async (op, args) => {
+    try {
+      set(await ask(c, op, {...args, tab}));
+    } catch (err) {
+      toast(err.message, 'error');
+    }
+  };
+  const tabs = h('div.tabs', v.tabs.map((t) => h('button.tab' + (t === tab ? '.on' : ''), {on: {click: () => set({tab: t})}}, t)));
+  let body;
+  const layout = v.layouts.find((l) => l.title === tab);
+  const group = v.groups.find((g) => g.group === tab);
+  if (layout) {
+    const on = layout.items.filter((i) => i.on).map((i) => i.id);
+    const save = (ids) => apply('layout', {key: layout.key, ids});
+    body = h('div.layout',
+      h('p.muted', layout.key === 'statusLine' ? 'Segments of the status line, left to right. Check to show; arrows reorder.' : 'Sections of the sidebar, top to bottom. Check to show; arrows reorder.'),
+      layout.items.map((it) => {
+        const i = on.indexOf(it.id);
+        return h('div.lrow',
+          h('label', h('input', {type: 'checkbox', checked: it.on, on: {change: (e) => save(e.target.checked ? [...on, it.id] : on.filter((x) => x !== it.id))}}), h('b', it.label), h('span.muted', it.description)),
+          it.on ? h('span.move', h('button.icon-btn', {disabled: i === 0, title: 'Up', on: {click: () => save(on.map((x, j) => (j === i - 1 ? it.id : j === i ? on[i - 1] : x)))}}, '↑'), h('button.icon-btn', {disabled: i === on.length - 1, title: 'Down', on: {click: () => save(on.map((x, j) => (j === i + 1 ? it.id : j === i ? on[i + 1] : x)))}}, '↓')) : null,
+        );
+      }),
+    );
+  } else if (group) {
+    body = h('div', group.settings.map((st) => h('section.setting',
+      h('h3', st.title), h('p.muted', st.description),
+      st.choices.map((ch) => h('label.opt', h('input', {type: 'radio', name: `set-${st.key}`, checked: JSON.stringify(ch.value) === JSON.stringify(st.value ?? st.choices[0].value), on: {change: () => apply('setting', {key: st.key, value: ch.value})}}), h('span', ch.label))),
+    )));
+  } else {
+    const q = {text: ''};
+    const rows = h('div.adv');
+    const draw = () => rows.replaceChildren(...v.advanced.filter((k) => !q.text || k.key.toLowerCase().includes(q.text) || k.description.toLowerCase().includes(q.text)).map((k) => {
+      const input =
+        k.kind === 'boolean' ? h('select', {on: {change: (e) => apply('setting', {key: k.key, value: e.target.value, typed: true})}}, ['', 'true', 'false'].map((x) => h('option', {value: x, selected: k.value === x}, x || `default (${k.default})`)))
+        : k.kind === 'enum' ? h('select', {on: {change: (e) => apply('setting', {key: k.key, value: e.target.value, typed: true})}}, ['', ...k.choices].map((x) => h('option', {value: x, selected: k.value === x}, x || `default (${k.default})`)))
+        : h('input', {type: k.kind === 'number' ? 'number' : 'text', value: k.value, placeholder: k.default === '(not set)' ? '' : `default: ${k.default}`, on: {change: (e) => apply('setting', {key: k.key, value: e.target.value, typed: true})}});
+      return h('div.krow', h('div', h('code', k.key), k.set ? h('span.set', 'set') : null, h('div.muted', k.description)), input);
+    }));
+    draw();
+    body = h('div', h('input.search', {type: 'search', placeholder: `Search ${v.advanced.length} settings`, on: {input: (e) => ((q.text = e.target.value.toLowerCase()), draw())}}), h('p.muted', 'Every key in ~/.rein/config.json. Lists are comma-separated; JSON values are written as JSON; empty means the default.'), rows);
+  }
+  return h('div', tabs, body);
+}
+
+/** /model: each section's choices, and the effort for the chat model. */
+function modelPanel(c, v) {
+  const sec = v.section ?? v.sections[0].id;
+  const set = (patch) => {
+    c.window = {...c.window, ...patch, name: 'model'};
+    renderWindow(c);
+  };
+  const choose = async (section, value) => {
+    try {
+      const r = await ask(c, 'model', {section, value});
+      toast(r.said);
+      set({...r.view, section: sec});
+    } catch (err) {
+      toast(err.message, 'error');
+    }
+  };
+  const s = v.sections.find((x) => x.id === sec);
+  return h('div',
+    h('div.tabs', v.sections.map((x) => h('button.tab' + (x.id === sec ? '.on' : ''), {on: {click: () => set({section: x.id})}}, x.title))),
+    h('p.muted', s.description),
+    h('div.options', s.options.map((o) => h('label.opt' + (o.disabled ? '.disabled' : ''), h('input', {type: 'radio', name: `model-${s.id}`, disabled: o.disabled, checked: o.value === s.value, on: {change: () => choose(s.id, o.value)}}), h('span', h('b', o.label), o.hint ? h('small', o.hint) : null)))),
+    s.id === 'chat' ? h('div', h('h3', 'Effort'), h('div.options', v.effort.options.map((o) => h('label.opt', h('input', {type: 'radio', name: 'effort', checked: o.value === v.effort.value, on: {change: () => choose('effort', o.value)}}), h('span', h('b', o.label), o.hint ? h('small', o.hint) : null))))) : null,
+  );
+}
+
+const ADD = [
+  ['claude', '', 'Claude subscription', 'Pro / Max'],
+  ['claude', 'console', 'Claude API key', 'Anthropic Console, pay per use'],
+  ['claude', 'bedrock', 'Claude on Amazon Bedrock', 'your AWS credentials on this machine'],
+  ['claude', 'vertex', 'Claude on Google Vertex AI', 'your Google Cloud credentials on this machine'],
+  ['codex', '', 'Codex with ChatGPT', 'Plus / Pro / Business'],
+  ['codex', 'openai', 'Codex with an OpenAI API key', 'pay per use'],
+];
+const CLOUD = {
+  bedrock: [['region', 'AWS region', 'us-east-1'], ['profile', 'AWS profile (optional)', 'default']],
+  vertex: [['projectId', 'Google Cloud project', 'my-project'], ['region', 'Region', 'us-east5']],
+};
+
+/** /login: the accounts Rein uses, and adding one through the official CLI's own sign-in, from any device. */
+function loginPanel(c, w) {
+  const u = (c.winUi ??= {});
+  const act = async (op, args = {}) => {
+    try {
+      const r = await ask(c, op, args);
+      if (r && r.name === 'login') ((c.window = r), renderWindow(c));
+    } catch (err) {
+      toast(err.message, 'error');
+    }
+  };
+  const f = w.flow;
+  const flow = f ? h('section.setting.flow',
+    h('h3', `Signing in: ${f.provider}${f.name ? ` · ${f.name}` : ''}`),
+    f.code ? h('div', h('p.muted', 'Open the page below on any device, sign in, and enter this code:'), h('div.devcode', f.code, h('button.btn.small', {on: {click: () => navigator.clipboard?.writeText(f.code).then(() => toast('Code copied'))}}, 'Copy'))) : null,
+    f.url ? h('p', h('a.btn.primary', {href: f.url, target: '_blank', rel: 'noopener noreferrer'}, f.code ? 'Open the sign-in page' : 'Sign in'), h('span.muted', {style: {marginLeft: '10px', fontSize: '12.5px'}}, new URL(f.url).host)) : !f.error ? h('p.muted', 'Starting…') : null,
+    f.needsCode ? h('div.codein',
+      h('p.muted', f.url ? 'After signing in, the page shows a code: paste it here.' : 'Paste the key:'),
+      h('input', {type: f.url ? 'text' : 'password', autocomplete: 'off', placeholder: f.url ? 'code' : 'key', on: {input: (e) => (u.code = e.target.value), keydown: (e) => e.key === 'Enter' && act('login-code', {code: u.code})}}),
+      h('button.btn.primary', {on: {click: () => act('login-code', {code: u.code})}}, 'Continue'),
+    ) : null,
+    f.error ? h('div.note.error', f.error) : null,
+    h('div.actions', h('button.btn', {on: {click: () => act('login-cancel')}}, f.error ? 'Close' : 'Cancel')),
+  ) : null;
+  const list = h('div.options', w.accounts.length ? w.accounts.map((a) => h('div.acctrow',
+    h('span.dot' + (a.signedIn ? '.ok' : '.bad')),
+    h('div.grow', h('b', `${a.provider} `), a.name.startsWith(a.provider) ? a.name.slice(a.provider.length) : a.name, a.plan ? h('span.muted', ` · ${a.plan}`) : null, a.imported ? h('span.muted', ' · imported') : null,
+      h('small', a.signedIn ? 'signed in' : `signed out${a.error ? ` (${a.error})` : ''}`)),
+    h('button.btn.small', {on: {click: () => act('login-reauth', {id: a.id})}}, 'Re-authenticate'),
+    u.remove === a.id
+      ? [h('button.btn.small.danger', {on: {click: () => ((u.remove = undefined), act('account-remove', {id: a.id}))}}, a.imported ? 'Unregister' : 'Remove'), h('button.btn.small', {on: {click: () => ((u.remove = undefined), renderWindow(c))}}, 'Keep')]
+      : h('button.btn.small', {on: {click: () => ((u.remove = a.id), renderWindow(c))}}, 'Remove'),
+  )) : h('p.muted', 'No accounts yet. Add one below.'));
+  const add = h('div.addgrid', ADD.map(([provider, api, label, hint]) => {
+    const key = `${provider}:${api}`;
+    if (u.cloud === key) {
+      const vals = (u.cloudVals ??= {});
+      return h('div.choice.on.cloud', h('div', h('b', label),
+        CLOUD[api].map(([k, l, ph]) => h('label.field', l, h('input', {type: 'text', placeholder: ph, value: vals[k] ?? '', on: {input: (e) => (vals[k] = e.target.value)}}))),
+        h('div.actions', h('button.btn.primary', {on: {click: () => ((u.cloud = undefined), act('login-start', {provider, api, apiConfig: vals}))}}, 'Check and add'), h('button.btn', {on: {click: () => ((u.cloud = undefined), renderWindow(c))}}, 'Cancel'))));
+    }
+    return h('button.choice', {disabled: !!f && !f.error, on: {click: () => (CLOUD[api] ? ((u.cloud = key), (u.cloudVals = {}), renderWindow(c)) : act('login-start', {provider, ...(api ? {api} : {})}))}}, h('div', h('b', `+ ${label}`), h('small', hint)));
+  }));
+  const jev = h('section.setting',
+    h('h3', 'Jev API key'), h('p.muted', w.jev ? 'Set. Jev is a fast, nearly free decision model for auto routing (pick it in /model).' : 'Optional: a fast, nearly free decision model for auto routing, from typesafe.ai.'),
+    w.jev ? h('button.btn.small.danger', {on: {click: () => act('jev-remove')}}, 'Remove key') : h('div.codein', h('input', {type: 'password', autocomplete: 'off', placeholder: 'paste key from typesafe.ai', on: {input: (e) => (u.jev = e.target.value)}}), h('button.btn', {on: {click: () => act('jev-set', {key: u.jev})}}, 'Save')),
+  );
+  return h('div', flow, list, h('h3', 'Add an account'), h('p.muted', 'Sign-in goes through the official claude and codex CLIs on the computer Rein runs on; Rein never sees the tokens.'), add, jev);
+}
+
+const when = (ms) => new Date(ms).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'});
+
+/** /rewind: your messages, newest first; pick one, then what to restore. Its text comes back into the box. */
+function rewindPanel(c, w) {
+  const u = (c.winUi ??= {});
+  if (!w.points.length) return h('p.muted', 'Nothing to rewind to yet: rewind goes back to before one of your messages.');
+  const pick = async (p, mode) => {
+    try {
+      const r = await ask(c, 'rewind', {index: p.index, mode});
+      if (r.draft !== undefined && c.ui) {
+        c.ui.ta.value = r.draft;
+        c.ui.ta.dispatchEvent(new Event('input'));
+        c.ui.ta.focus();
+      }
+    } catch (err) {
+      toast(err.message, 'error');
+    }
+  };
+  return h('div.options', w.points.map((p) => {
+    const open = u.point === p.index;
+    const modes = p.files === 0 && !p.whole ? w.modes.filter((m) => m.mode === 'conversation') : w.modes;
+    return h('div.rw' + (open ? '.on' : ''),
+      h('button.choice', {on: {click: () => ((u.point = open ? undefined : p.index), renderWindow(c))}}, h('div', h('b', p.text.split('\n')[0].slice(0, 140) || '(empty)'), h('small', `${when(p.at)} · ${p.files ? `${p.files} file${p.files === 1 ? '' : 's'} changed since` : 'no file changes since'}${p.whole ? ' · project snapshot' : ''}`))),
+      open ? h('div.rw-modes', modes.map((m) => h('button.btn' + (m.mode === 'both' ? '.primary' : ''), {title: m.hint, on: {click: () => pick(p, m.mode)}}, m.label))) : null,
+    );
+  }));
+}
+
+const shellState = (s) => (s.status === 'running' ? 'running' : s.status === 'exited' ? `exit ${s.exitCode ?? '?'}` : s.status);
+
+/** /shells: the commands you and the agent started; open one for its output (live), stop a running one. */
+function shellsPanel(c, w) {
+  const u = (c.winUi ??= {});
+  if (u.shell === undefined && w.open !== undefined) u.shell = w.open;
+  if (!w.shells.length) return h('p.muted', 'No shells yet: commands the agent runs (and your !commands) show here.');
+  const out = h('pre.text.shell-out', '…');
+  if (u.shell !== undefined)
+    ask(c, 'shell', {id: u.shell}).then((sh) => {
+      out.textContent = sh.output || '(no output)';
+      out.scrollTop = out.scrollHeight;
+    }, (err) => (out.textContent = err.message));
+  return h('div.split',
+    h('div.split-list', w.shells.slice().reverse().map((sh) => h('button.choice' + (u.shell === sh.id ? '.on' : ''), {on: {click: () => ((u.shell = sh.id), renderWindow(c))}},
+      h('span.dot' + (sh.status === 'running' ? '.busy' : sh.status === 'exited' && sh.exitCode === 0 ? '.ok' : '.bad')),
+      h('div', h('code', sh.command.length > 80 ? sh.command.slice(0, 80) + '…' : sh.command), h('small', `#${sh.id} · ${shellState(sh)} · ${sh.origin === 'agent' ? 'the agent' : 'you'}${sh.background ? ' · background' : ''} · ${when(sh.startedAt)}`))))),
+    u.shell !== undefined ? h('div.split-main',
+      out,
+      w.shells.find((x) => x.id === u.shell)?.status === 'running' ? h('div.actions', h('button.btn.danger', {on: {click: () => ask(c, 'shell-kill', {id: u.shell}).catch((e) => toast(e.message, 'error'))}}, 'Stop it')) : null,
+    ) : h('div.split-main', h('p.muted', 'Pick a shell to see its output.')),
+  );
+}
+
+/** /agents: the conversation's subagents; open one to follow it, message it, or stop it. */
+function agentsPanel(c, w) {
+  const u = (c.winUi ??= {});
+  if (!w.agents.length) return h('p.muted', 'No subagents yet: the agent starts them with its agent tool.');
+  const view = h('div.agent-log', h('p.muted', 'Pick a subagent to follow it.'));
+  const draw = (a) => view.replaceChildren(
+    h('div.muted', a.task),
+    ...a.events.map((e) => e.kind === 'text' ? md(e.text) : e.kind === 'tool' ? toolEl({...e, pending: e.ok === undefined}) : e.kind === 'user' ? h('div.msg.user', h('div.bubble', e.text)) : h('div.note', e.kind === 'check' ? `${e.complete ? '✓' : '…'} ${e.note}` : e.text)),
+    ...(a.error ? [h('div.note.error', a.error)] : []),
+  );
+  if (u.agent !== undefined) ask(c, 'agent', {id: u.agent}).then(draw, (err) => view.replaceChildren(h('div.note.error', err.message)));
+  const chosen = w.agents.find((a) => a.id === u.agent);
+  const msg = h('textarea', {rows: 2, placeholder: chosen ? `Message ${chosen.name}` : ''});
+  if (u.draft) msg.value = u.draft;
+  msg.addEventListener('input', () => (u.draft = msg.value));
+  const sendMsg = async () => {
+    const text = msg.value.trim();
+    if (!text) return;
+    try {
+      u.draft = '';
+      msg.value = '';
+      draw(await ask(c, 'agent-message', {id: u.agent, text}));
+    } catch (err) {
+      toast(err.message, 'error');
+    }
+  };
+  msg.addEventListener('keydown', (e) => e.key === 'Enter' && !e.shiftKey && (e.preventDefault(), void sendMsg()));
+  msg.addEventListener('blur', () => c.windowStale && ((c.windowStale = false), renderWindow(c)));
+  return h('div.split',
+    h('div.split-list', w.agents.map((a) => h('button.choice' + (u.agent === a.id ? '.on' : ''), {on: {click: () => ((u.agent = a.id), renderWindow(c))}},
+      h('span.dot' + (a.status === 'running' ? '.busy' : a.status === 'done' ? '.ok' : a.status === 'failed' ? '.bad' : '')),
+      h('div', h('b', a.name), h('small', `#${a.id} · ${a.model} · ${a.mode} · ${a.status}${a.background ? ' · background' : ''}`))))),
+    chosen ? h('div.split-main', view, h('div.agent-send', msg, h('button.btn.primary', {on: {click: sendMsg}}, 'Send'), chosen.status === 'running' ? h('button.btn.danger', {on: {click: () => ask(c, 'agent-stop', {id: chosen.id}).catch((e) => toast(e.message, 'error'))}}, 'Stop') : null)) : h('div.split-main', view),
+  );
+}
+
+/** /marketplace: the store, as in the terminal: categories, search, an item's page, install, update. */
+function marketPanel(c, w) {
+  const u = (c.winUi ??= {});
+  u.tab ??= 'All';
+  const tabs = ['All', ...w.categories.map((x) => x.label), 'Installed'];
+  const q = (u.q ?? '').toLowerCase();
+  const shown = w.items.filter((it) => (u.tab === 'Installed' ? it.installed : u.tab === 'All' || w.categories.find((x) => x.label === u.tab)?.id === it.category) && (!q || `${it.name} ${it.id} ${it.description} ${(it.tags ?? []).join(' ')} ${it.author ?? ''}`.toLowerCase().includes(q)));
+  const sel = shown.find((it) => it.id === u.sel) ?? shown[0];
+  const act = async (op, args) => {
+    if (u.busy) return;
+    u.busy = op;
+    renderWindow(c);
+    try {
+      const r = await ask(c, op, args);
+      if (r?.view) c.window = {...r.view};
+      else if (r?.name === 'marketplace') c.window = r;
+      if (r?.said) toast(r.said.split('\n')[0]);
+    } catch (err) {
+      toast(err.message, 'error');
+    }
+    u.busy = undefined;
+    renderWindow(c);
+  };
+  const upd = (id) => w.updates.find((x) => x.id === id);
+  const page = sel ? h('div.mk-page',
+    h('div.mk-title', h('span.mk-icon', sel.icon ?? '◆'), h('div', h('h2', sel.name), h('div.muted', `${sel.id} · ${sel.version}${sel.author ? ` · ${sel.author}` : ''} · ${w.categories.find((x) => x.id === sel.category)?.label ?? sel.category} · ${sel.marketplace}`))),
+    h('p', sel.description),
+    sel.what ? h('div.mk-adds', sel.what) : null,
+    sel.requires?.length ? h('div.muted', `Installs with it: ${sel.requires.join(', ')}`) : null,
+    (sel.adds?.mcp?.length || sel.adds?.hooks?.length || sel.adds?.code) ? h('div.note.warn', 'Runs code on this machine (', [sel.adds.code ? 'its own code' : null, sel.adds.mcp?.length ? 'MCP servers' : null, sel.adds.hooks?.length ? 'hooks' : null].filter(Boolean).join(', '), '): install it only from a source you trust.') : null,
+    h('div.actions',
+      sel.installed
+        ? [upd(sel.id) ? h('button.btn.primary', {disabled: !!u.busy, on: {click: () => act('market-install', {id: sel.id})}}, `Update to ${upd(sel.id).to}`) : h('span.chip', `Installed ${sel.installed}`), h('button.btn.danger', {disabled: !!u.busy, on: {click: () => act('market-uninstall', {id: sel.id})}}, 'Uninstall')]
+        : h('button.btn.primary', {disabled: !!u.busy, on: {click: () => act('market-install', {id: sel.id})}}, u.busy === 'market-install' ? 'Installing…' : 'Install'),
+      sel.homepage ? h('a.btn', {href: sel.homepage, target: '_blank', rel: 'noopener noreferrer'}, 'Homepage') : null,
+    ),
+    sel.readme ? md(sel.readme.replace(/^#.*\n+/, '')) : null,
+  ) : h('div.mk-page', h('p.muted', w.items.length ? 'Nothing matches.' : 'Loading the marketplaces…'));
+  return h('div.mk',
+    h('div.mk-top',
+      h('div.tabs', tabs.map((t) => h('button.tab' + (t === u.tab ? '.on' : ''), {on: {click: () => ((u.tab = t), (u.sel = undefined), renderWindow(c))}}, t, t === 'Installed' && w.updates.length ? h('span.badge', String(w.updates.length)) : null))),
+      h('input.search', {type: 'search', placeholder: `Search ${w.items.length} items`, value: u.q ?? '', on: {input: (e) => ((u.q = e.target.value), renderWindow(c), document.querySelector('.mk .search')?.focus())}}),
+    ),
+    h('div.mk-body',
+      h('div.mk-list', shown.map((it) => h('button.mk-item' + (sel && it.id === sel.id ? '.on' : ''), {on: {click: () => ((u.sel = it.id), renderWindow(c))}},
+        h('span.mk-icon', it.icon ?? '◆'),
+        h('div', h('b', it.name), h('small', it.description)),
+        it.installed ? h('span.mk-state' + (upd(it.id) ? '.upd' : ''), upd(it.id) ? 'update' : '✓') : null))),
+      page,
+    ),
+    h('div.mk-foot',
+      w.updates.length ? h('button.btn', {on: {click: () => runInChat(c, '/marketplace update')}}, `Update… (${w.updates.length})`) : null,
+      h('button.btn', {disabled: !!u.busy, on: {click: () => act('market', {refresh: true})}}, icon('refresh', 15), 'Refresh'),
+      h('span.grow'),
+      h('details.mk-markets', h('summary', `${w.markets.length} marketplace${w.markets.length === 1 ? '' : 's'}`),
+        w.markets.map((m) => h('div.mk-market', h('span', m.name, m.official ? h('span.muted', ' · official') : null, m.error ? h('span.bad', ` · ${m.error}`) : null), m.official ? null : h('button.btn.small', {on: {click: () => act('market-remove', {url: m.url})}}, 'Remove'))),
+        h('div.codein', h('input', {type: 'text', placeholder: 'https://github.com/owner/repo', on: {input: (e) => (u.repo = e.target.value)}}), h('button.btn.small', {on: {click: () => act('market-add', {url: u.repo})}}, 'Add marketplace')),
+      ),
+    ),
+  );
+}
+
+/** /marketplace update: pick All or any of the items with updates. */
+function updatesPanel(c, w) {
+  const u = (c.winUi ??= {});
+  u.picked ??= new Set(w.updates.map((x) => x.id));
+  const all = u.picked.size === w.updates.length;
+  return h('div',
+    h('p.muted', `${w.updates.length} update${w.updates.length === 1 ? '' : 's'} for what you installed.`),
+    h('label.opt', h('input', {type: 'checkbox', checked: all, on: {change: () => ((u.picked = all ? new Set() : new Set(w.updates.map((x) => x.id))), renderWindow(c))}}), h('b', 'All')),
+    w.updates.map((x) => h('label.opt', h('input', {type: 'checkbox', checked: u.picked.has(x.id), on: {change: (e) => (e.target.checked ? u.picked.add(x.id) : u.picked.delete(x.id), renderWindow(c))}}), h('span', h('b', x.name), h('small', `${x.from} → ${x.to}`)))),
+    h('div.actions', h('button.btn.primary', {disabled: !u.picked.size || u.busy, on: {click: async () => {
+      u.busy = true;
+      renderWindow(c);
+      await ask(c, 'market-update', {ids: [...u.picked]}).catch((e) => toast(e.message, 'error'));
+    }}}, u.busy ? 'Updating…' : `Update ${u.picked.size}`)),
+  );
+}
+
+/** /mcp: each server and what to do with it, as in the terminal. */
+function mcpPanel(c, w) {
+  const u = (c.winUi ??= {});
+  if (w.name === 'mcp-signin') u.signin = {server: w.server, url: w.url};
+  const servers = w.servers ?? c.mcpServers ?? [];
+  if (w.servers) c.mcpServers = w.servers;
+  const tone = {connected: '.ok', failed: '.bad', changed: '.bad', connecting: '.busy', 'needs-approval': '.wait', 'needs-auth': '.wait'};
+  const label = (s) => (s.status === 'changed' ? 'Accept as it is now' : s.status === 'needs-approval' ? 'Approve (runs its command)' : s.status === 'needs-auth' ? 'Sign in' : 'Reconnect');
+  const SRC = {project: '.mcp.json', rein: '~/.rein/mcp.json', claude: '~/.claude.json', plugin: 'plugin'};
+  if (!servers.length) return h('div', h('p', 'No MCP servers configured.'), h('p.muted', 'Add them to .mcp.json in the project, ~/.rein/mcp.json, or with `claude mcp add`.'));
+  return h('div',
+    u.signin ? h('section.setting.flow', h('h3', `Sign in to ${u.signin.server}`), u.signin.url ? h('p', h('a.btn.primary', {href: u.signin.url, target: '_blank', rel: 'noopener noreferrer'}, 'Open the sign-in page')) : h('p.muted', 'Starting…'), h('p.muted', 'The page sends you back to the computer Rein runs on, so finish it in a browser there.')) : null,
+    servers.map((s) => h('div.acctrow',
+      h('span.dot' + (tone[s.status] ?? '')),
+      h('div.grow', h('b', s.name), h('small', `${s.status === 'connected' ? `${s.tools} tool${s.tools === 1 ? '' : 's'}` : s.status} · ${s.transport} · ${SRC[s.source] ?? s.source}${s.error ? ` · ${s.error}` : ''}`)),
+      h('button.btn.small', {on: {click: async () => {
+        const r = await ask(c, 'mcp', {name: s.name}).catch((e) => toast(e.message, 'error'));
+        if (r?.url) ((u.signin = {server: s.name, url: r.url}), renderWindow(c));
+      }}}, label(s)),
+    )),
+  );
+}
+
+function goalPanel(c, w) {
+  const done = w.plan ? w.plan.milestones.filter((m) => m.done).length : 0;
+  return h('div',
+    h('h3', `◎ ${w.text}`),
+    h('p.muted', `${w.status} · ${w.rounds} continuation${w.rounds === 1 ? '' : 's'} · ${w.escalations} escalation${w.escalations === 1 ? '' : 's'}`),
+    w.plan ? h('section.setting', h('h3', `${w.plan.title} · ${done}/${w.plan.milestones.length}`), h('div.meter', h('i' + (done === w.plan.milestones.length ? '.done' : '.prog'), {style: {width: `${(done / Math.max(1, w.plan.milestones.length)) * 100}%`}})), w.plan.milestones.map((m, i) => h('div.ms' + (m.done ? '.done' : i === w.plan.milestones.findIndex((x) => !x.done) ? '.next' : ''), `${m.done ? '✓' : i === w.plan.milestones.findIndex((x) => !x.done) ? '▸' : '○'} ${m.text}`))) : null,
+    w.checks.length ? h('div', h('h3', 'Checks'), w.checks.map((k) => h('div.out', `${new Date(k.at).toLocaleTimeString()} ${k.kind === 'claim' ? 'done claim' : 'turn'}: ${k.verdict}`))) : null,
+    h('div.actions', ...['pause', 'resume', 'clear'].map((x) => h('button.btn', {on: {click: () => (closeWindow(c), runInChat(c, `/goal ${x}`))}}, x[0].toUpperCase() + x.slice(1)))),
+  );
+}
+
+function helpPanel(c, w) {
+  const u = (c.winUi ??= {});
+  const q = (u.q ?? '').toLowerCase();
+  const row = (name, text, tag) => (!q || `${name} ${text}`.toLowerCase().includes(q) ? h('button.help-row', {on: {click: () => (closeWindow(c), (c.ui.ta.value = `/${name} `), c.ui.ta.focus())}}, h('code', `/${name}`), h('span', text), tag ? h('span.tag', tag) : null) : null);
+  return h('div',
+    h('input.search', {type: 'search', placeholder: 'Search commands and skills', value: u.q ?? '', on: {input: (e) => ((u.q = e.target.value), renderWindow(c), document.querySelector('.cmd-window .search')?.focus())}}),
+    h('h3', 'Commands'), w.commands.map((x) => row(x.name, x.usage)),
+    w.extensions.length ? [h('h3', 'From the marketplace'), w.extensions.map((x) => row(x.name, x.usage, x.item))] : null,
+    w.skills.length ? [h('h3', 'Skills'), w.skills.map((x) => row(x.name, x.description, x.source))] : null,
+    h('p.muted', 'Esc stops the agent · Enter sends, Shift+Enter is a new line · / opens the command list'),
+  );
+}
+
+/** /btw: the answer streams in; it's never added to the conversation. */
+function btwPanel(c, w) {
+  return h('div.btw',
+    h('div.btw-q', `btw · ${w.question}`),
+    w.error ? h('div.note.error', w.error) : w.answer ? md(w.answer) : h('div.working', h('span.spin', '▁▃▅▇'), h('span.rainbow', 'Answering…')),
+    w.model || w.done ? h('div.muted', `${w.model ?? ''}${w.mode ? ` · ${w.mode === 'fork' ? 'forked agent' : 'from the conversation'}` : ''} · not added to the conversation`) : null,
+  );
+}
+
+function updatePanel(c, w) {
+  return h('pre.text.shell-out', w.lines.length ? w.lines.join('\n') : 'Starting the update…');
+}
+
+function plansPanel(c, v) {
+  if (!v.plans.length) return h('div', h('p.muted', 'No unfinished plans in .rein/plans yet.'), h('button.btn', {on: {click: () => (closeWindow(c), (c.ui.ta.value = '/plan '), c.ui.ta.focus())}}, 'Write a new plan'));
+  return h('div.options', v.plans.map((p) => h('button.choice', {on: {click: async () => {
+    closeWindow(c);
+    await ask(c, 'plan-goal', {file: p.file}).catch((e) => toast(e.message, 'error'));
+  }}}, h('div', h('b', p.title), h('small', `${p.done}/${p.total} milestones done`)))), h('button.btn', {on: {click: () => (closeWindow(c), (c.ui.ta.value = '/plan '), c.ui.ta.focus())}}, 'Write a new plan'));
 }
 
 // ---------- files ----------
@@ -771,7 +1627,7 @@ async function act(kind, entries) {
       await api('/api/projects', {body: {path: entries[0].path}});
       await loadProjects();
       setProject(entries[0].path);
-      return newChat();
+      return newChat(entries[0].path);
     }
   } catch (err) {
     toast(err.message, 'error');
@@ -937,8 +1793,23 @@ function settingsView() {
       ) : null,
       h('p.muted', {style: {fontSize: '13px'}}, 'To change how Rein is reached, delete ~/.rein/webui.json on this computer and restart rein --ui: the setup runs again.'),
     ),
-    h('section', h('h2', 'About'), h('p.muted', `Rein ${state.version}. Accounts and models are managed in Rein's terminal (rein, then /login and /model); the web UI uses the same ones.`)),
+    h('section', h('h2', 'Rein'),
+      h('p.muted', 'Models, approvals, the status line and sidebar, and every other setting: the same window as /settings and /model in a chat.'),
+      h('div', {style: {display: 'flex', gap: '8px'}},
+        h('button.btn.primary', {disabled: !state.chat, on: {click: () => (go(`#/chat/${state.chat.id}`), runInChat(state.chat, '/settings'))}}, 'Open settings'),
+        h('button.btn', {disabled: !state.chat, on: {click: () => (go(`#/chat/${state.chat.id}`), runInChat(state.chat, '/model'))}}, 'Models'),
+      ),
+      !state.chat ? h('p.muted', {style: {fontSize: '13px'}}, 'Open a chat first: settings are read and saved by Rein in that chat.') : null,
+    ),
+    h('section', h('h2', 'About'), h('p.muted', `Rein ${state.version}. Accounts are signed in from Rein's terminal (rein, then /login); the web UI uses the same ones.`)),
   )));
 }
+
+// Crossing the wide/narrow line moves the chat's sidebar between beside and over the chat.
+let wasWide = innerWidth >= 1100;
+addEventListener('resize', () => {
+  const wide = innerWidth >= 1100;
+  if (wide !== wasWide && state.view === 'chat') ((wasWide = wide), (state.panelShow = false), render());
+});
 
 void boot();

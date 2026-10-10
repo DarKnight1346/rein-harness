@@ -39,6 +39,8 @@ An existing `~/.rein` keeps being used as it is, and so does `REIN_HOME`. To swi
 | `state/mcp-pins.json` | With `mcpPinning`: each MCP server's launch config and tool list as first approved (hashes and tool names). Delete it to start over |
 | `webui.json` | The [web UI](../../features/web-ui/)'s setup: its mode (`local`, `tailscale`, `password`), users (scrypt hashes), listen address, optional `tls`. Delete it to run setup again |
 | `webui-setup-code` | The one-time setup code, until setup is done |
+| `webui-archived.json` | The web UI's archived conversations (hidden from its sidebar; the conversations themselves stay in `sessions/`) |
+| `chats/<date>-<id>/` | The folder of a one-off web UI chat (a chat without a project) |
 | `webui-sessions.json` | Web UI sign-ins (hashes of their tokens), kept for 30 days |
 | `webui-projects.json` | The web UI's recent projects |
 | `logs/webui.log` | The web UI service's output |

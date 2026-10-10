@@ -45,7 +45,9 @@ node scripts/check-docs.mjs   # docs drift check, also runs in CI
 | `src/agents/`, `src/goals/`, `src/plans/` | Subagents and advisor, `/goal`, saved plans |
 | `src/mcp/`, `src/hooks.ts`, `src/skills/` | MCP client, Claude Code-compatible hooks, skills |
 | `src/ide/` | Editor integration over the Claude Code IDE extension protocol (selection, diffs, diagnostics) |
+| `src/commands/` | Slash commands: the list (`index.ts`) and what each does (`run.ts`), shared by the terminal and the web UI |
 | `src/ui/` | Ink UI: fullscreen and classic renderers, windows, input |
+| `src/webui/`, `webui/` | Web UI (`rein --ui`): server, a worker per chat, and the page |
 | `skills/` | Built-in skills shipped with the package (`/plan`, `/plan:deep`, `/skill:create`, `/skill:edit`) |
 | `test/` | vitest suites, `test/fixtures/fake-{claude,codex}.mjs` |
 | `site/` | Documentation site (Astro + Starlight), deployed to GitHub Pages |
@@ -76,7 +78,7 @@ update the docs in the same PR.
 
 | If you change… | Update |
 |---|---|
-| A slash command (`src/commands/index.ts`, `src/ui/useRein.ts`) | `reference/commands.md` and the feature page |
+| A slash command (`src/commands/index.ts`, `src/commands/run.ts`) | `reference/commands.md` and the feature page |
 | A CLI flag or env var (`src/app.tsx`, `src/headless.ts`) | `reference/cli.md`, `reference/files.md` (env), `features/headless.md` |
 | A config key or default (`src/store/config.ts`) or a `/settings` / `/model` tab | `reference/configuration.md` and the feature page |
 | A tool, its parameters or approval behaviour (`src/tools/`, `src/agents/tools.ts`, …) | `reference/tools.md`, `features/tools.md`, `features/permissions.md` if approvals change |

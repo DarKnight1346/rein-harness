@@ -1,5 +1,6 @@
 import type {Account, AccountStatus, LoginEvent, LoginFlow, ProviderAuth} from '../types.js';
 import {EventQueue, openBrowser} from '../../util/proc.js';
+import {deviceLoginSupported} from './compat.js';
 import {AppServerClient} from './appServer.js';
 
 type GetAccountResponse = {
@@ -38,7 +39,7 @@ export const codexAuth: ProviderAuth = {
     }
   },
 
-  login(account): LoginFlow {
+  login(account, opts): LoginFlow {
     const events = new EventQueue<LoginEvent>();
     let client: AppServerClient | undefined;
     let loginId: string | undefined;
@@ -66,10 +67,19 @@ export const codexAuth: ProviderAuth = {
           return;
         }
         const completed = client.waitFor('account/login/completed');
-        const res = await client.request<{loginId: string; authUrl: string}>('account/login/start', {type: 'chatgpt'});
-        loginId = res.loginId;
-        events.push({type: 'url', url: res.authUrl});
-        openBrowser(res.authUrl);
+        if (opts?.remote) {
+          // Away from this machine, ChatGPT's localhost callback can't reach it: a device code instead,
+          // entered on OpenAI's page from any device. Codex completes and stores the login itself.
+          if (!(await deviceLoginSupported())) throw new Error('this codex has no device-code login: update Codex (/update), or sign in from a terminal on this machine (rein, then /login)');
+          const res = await client.request<{loginId: string; userCode: string; verificationUrl: string}>('account/login/start', {type: 'chatgptDeviceCode'});
+          loginId = res.loginId;
+          events.push({type: 'deviceCode', url: res.verificationUrl, code: res.userCode});
+        } else {
+          const res = await client.request<{loginId: string; authUrl: string}>('account/login/start', {type: 'chatgpt'});
+          loginId = res.loginId;
+          events.push({type: 'url', url: res.authUrl});
+          openBrowser(res.authUrl);
+        }
         const done = await completed;
         if (cancelled) return;
         if (!done.success) {

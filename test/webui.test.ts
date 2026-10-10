@@ -1,4 +1,5 @@
 import {existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync} from 'node:fs';
+import {execFileSync} from 'node:child_process';
 import os from 'node:os';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
@@ -58,6 +59,13 @@ async function events(id: string, until: (ev: any) => boolean): Promise<any[]> {
   await reader.cancel();
   return out;
 }
+
+describe('the web UI page', () => {
+  it('is valid JavaScript (a syntax error would leave the page blank)', () => {
+    const page = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'webui', 'app.js');
+    expect(() => execFileSync(process.execPath, ['--check', page], {stdio: 'pipe'})).not.toThrow();
+  });
+});
 
 describe('web UI access', () => {
   it('hashes passwords, keeps sessions, and limits failed sign-ins', () => {
@@ -156,6 +164,40 @@ describe('web UI chats', () => {
     expect(list.open[0]).toMatchObject({id, title: 'hello'});
     await call(`/api/chats/${id}`, {method: 'DELETE'});
     expect((await call(`/api/chats/${id}/send`, {body: {text: 'x'}})).status).toBe(404);
+  });
+
+  it('lists projects with their chats, closes projects, archives chats, and starts one-off chats', async () => {
+    saveWebConfig({mode: 'local', createdAt: 0});
+    await start();
+    const a = path.join(home, 'alpha');
+    mkdirSync(a);
+    expect((await call('/api/projects', {body: {path: a}})).status).toBe(200);
+    // A saved conversation in the project (as Rein writes them).
+    mkdirSync(path.join(home, 'sessions'), {recursive: true});
+    writeFileSync(path.join(home, 'sessions', 's-1.meta.json'), JSON.stringify({id: 's-1', cwd: a, title: 'first', createdAt: 1, updatedAt: 2, messages: 2}));
+    let side = await (await call('/api/sidebar')).json();
+    expect(side.projects.map((p: any) => p.name)).toEqual(['alpha']);
+    const saved = side.projects[0].saved;
+    expect(saved.length).toBe(1);
+    {
+      expect((await call('/api/chats/archive', {body: {session: saved[0].session}})).status).toBe(200);
+      side = await (await call('/api/sidebar')).json();
+      expect(side.projects[0].saved).toEqual([]);
+      expect(side.archived.map((x: any) => x.session)).toEqual([saved[0].session]);
+      await call('/api/chats/archive', {body: {session: saved[0].session, archived: false}});
+      expect((await (await call('/api/sidebar')).json()).archived).toEqual([]);
+    }
+    expect((await call('/api/chats/archive', {body: {session: '../etc'}})).status).toBe(400);
+    // A one-off chat: its own folder under ~/.rein/chats, listed under Chats, never as a project.
+    const {id} = await (await call('/api/chats', {body: {oneoff: true}})).json();
+    side = await (await call('/api/sidebar')).json();
+    expect(side.oneoff.open.map((c: any) => c.id)).toEqual([id]);
+    expect(side.oneoff.open[0].cwd.startsWith(path.join(home, 'chats') + path.sep)).toBe(true);
+    expect(side.projects.map((p: any) => p.name)).toEqual(['alpha']);
+    // Closing a project takes it off the sidebar; its folder and conversations stay.
+    expect((await call('/api/projects/close', {body: {path: a}})).status).toBe(200);
+    expect((await (await call('/api/sidebar')).json()).projects).toEqual([]);
+    expect(existsSync(a)).toBe(true);
   });
 
   it('turns engine events and messages into what the page shows', () => {
