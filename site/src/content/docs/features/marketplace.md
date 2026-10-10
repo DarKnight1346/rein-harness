@@ -89,7 +89,7 @@ items/<id>/skills/<name>/SKILL.md, commands/*.md, agents/*.md, hooks/hooks.json,
 | `category` | `tools`, `commands`, `skills`, `ui`, `feature` or `bundle`. Left out, Rein picks one from what the item adds |
 | `requires` | Other items (same marketplace) installed with this one, so a bundle is an item with `requires` |
 | `config` | Settings it turns on: `{"packs": ["ci"], "experiments": ["…"]}`, or a layout: `{"statusLine": [...], "sidebarSections": [...]}` |
-| `main`, `api` | Its code: `"main": "index.mjs"`, and the extension API version it needs (`1`) |
+| `main`, `api` | Its code: `"main": "index.mjs"`, and the extension API version it needs (`1`, or `2` for `checks` and `requestStart`) |
 | `theme` | `{"accent": "#a78bfa"}` (a theme with no code; a theme item can also set it from its code) |
 
 ```json title="items/theme-midnight/rein.json"
@@ -98,7 +98,7 @@ items/<id>/skills/<name>/SKILL.md, commands/*.md, agents/*.md, hooks/hooks.json,
 
 ## Items with code
 
-An item can ship JavaScript that Rein runs: `"main": "index.mjs"` and `"api": 1` in its `rein.json`, and a module exporting `activate(rein)`. Rein calls it at startup, and right after you install the item; an update loads the new code without a restart. Everything the code does goes through the `rein` object: it can't reach into Rein's own modules.
+An item can ship JavaScript that Rein runs: `"main": "index.mjs"` and `"api": 2` (the extension API version it needs) in its `rein.json`, and a module exporting `activate(rein)`. Rein calls it at startup, and right after you install the item; an update loads the new code without a restart. Everything the code does goes through the `rein` object: it can't reach into Rein's own modules.
 
 ```js title="items/hello/index.mjs"
 /** @param {import('rein-harness/api').Rein} rein */

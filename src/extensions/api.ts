@@ -6,7 +6,8 @@
  *
  * Item authors: `import type {Rein} from 'rein-harness/api'` for the types.
  */
-export const API_VERSION = 1;
+/** 1: commands, tools, UI, services. 2: checks (endOfTurn, afterEdit) and the requestStart event. */
+export const API_VERSION = 2;
 
 export type LogKind = 'info' | 'error';
 
