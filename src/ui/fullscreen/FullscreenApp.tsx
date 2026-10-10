@@ -43,6 +43,7 @@ import {agentLines, assistantLines, entryLines, pendingToolLines, wrap} from './
 import {InfoWindow, Window} from './Window.js';
 import {COMMANDS} from '../../commands/index.js';
 import {PetView} from '../Pet.js';
+import {MarketplaceScreen} from '../MarketplaceScreen.js';
 import {commandEnabled, packsHint} from '../../commands/packs.js';
 import {skillDirs, skillSourceLabel, type Skill} from '../../skills/index.js';
 import chalk from 'chalk';
@@ -51,6 +52,7 @@ import {copyToClipboard} from '../terminal/clipboard.js';
 import stripAnsi from 'strip-ansi';
 import stringWidth from 'string-width';
 import cliTruncate from 'cli-truncate';
+import {accent} from '../theme.js';
 
 const SIDEBAR_WIDTH = 32;
 const SIDEBAR_MIN_COLS = 96;
@@ -244,6 +246,12 @@ export function FullscreenApp({resume}: {resume: Resume}) {
             <PlanScreen plan={overlay.plan} width={windowText} onDecide={overlay.resolve} />
           </Window>
         );
+      case 'marketplace':
+        return (
+          <Window title="Marketplace" width={Math.min(140, cols - 4)} height={Math.min(rows - 4, 40)} onClose={r.closeOverlay}>
+            <MarketplaceScreen width={Math.min(140, cols - 4) - 4} height={Math.min(rows - 4, 40) - 3} onClose={r.closeOverlay} log={r.log} />
+          </Window>
+        );
       case 'mcp':
         return (
           <Window title="MCP servers" width={windowWidth} onClose={r.closeOverlay}>
@@ -345,7 +353,7 @@ export function FullscreenApp({resume}: {resume: Resume}) {
               }}
               onHover={() => r.setSuggestIndex(win.start + j)}
             >
-              <Text color={c === r.selected ? 'cyan' : undefined} dimColor={c !== r.selected} wrap="truncate">
+              <Text color={c === r.selected ? accent() : undefined} dimColor={c !== r.selected} wrap="truncate">
                 {c === r.selected ? '❯ ' : '  '}
                 {nameCol(c.name)}
                 {c.description}
@@ -362,7 +370,7 @@ export function FullscreenApp({resume}: {resume: Resume}) {
         <Box flexDirection="column" borderStyle="round" borderColor="gray" paddingX={1} width={panelWidth}>
           {r.fileSuggestions.map((f) => (
             <Clickable key={f} onClick={() => r.acceptFile(f)}>
-              <Text color={f === r.fileSelected ? 'cyan' : undefined} dimColor={f !== r.fileSelected} wrap="truncate">
+              <Text color={f === r.fileSelected ? accent() : undefined} dimColor={f !== r.fileSelected} wrap="truncate">
                 {f === r.fileSelected ? '❯ ' : '  '}@{f}
               </Text>
             </Clickable>
@@ -408,7 +416,7 @@ export function FullscreenApp({resume}: {resume: Resume}) {
             />
           ) : (
             <Text dimColor>
-              {viewing.name} {subagentStatusText(viewing)} · type to message it · <Text color="cyan">◂ main</Text> in the sidebar or /agent main to go back
+              {viewing.name} {subagentStatusText(viewing)} · type to message it · <Text color={accent()}>◂ main</Text> in the sidebar or /agent main to go back
             </Text>
           )
         ) : chat.busy ? (
@@ -425,8 +433,8 @@ export function FullscreenApp({resume}: {resume: Resume}) {
           <Text> </Text>
         )}
       </Box>
-      <Box borderStyle="round" borderColor={r.inputActive ? 'cyan' : 'gray'} paddingX={1} width={cols} height={draftLines + 2} flexShrink={0} overflow="hidden">
-        <Text color="cyan">{'> '}</Text>
+      <Box borderStyle="round" borderColor={r.inputActive ? accent() : 'gray'} paddingX={1} width={cols} height={draftLines + 2} flexShrink={0} overflow="hidden">
+        <Text color={accent()}>{'> '}</Text>
         <Box flexDirection="column" width={inputWidth} justifyContent="flex-end" overflow="hidden">
           <TextInput width={inputWidth} maxLines={MAX_INPUT_LINES} isActive={r.inputActive} value={r.draft} onChange={r.onDraft} onPaste={r.onPaste} onImagePaste={r.onImagePaste} onHistory={r.onHistory} onExternalEdit={r.onExternalEdit} placeholder={!r.ready ? 'starting…' : viewing ? `message ${viewing.name} (subagent)…` : chat.busy ? 'queue a message, or /btw <question>' : 'message, / for commands'} onSubmit={r.onSubmit} />
         </Box>
@@ -435,7 +443,7 @@ export function FullscreenApp({resume}: {resume: Resume}) {
         {r.exitArmed ? (
           <Text color="yellow">Press Ctrl+C again to exit</Text>
         ) : r.voice !== 'idle' ? (
-          <Text color={r.voice === 'recording' ? 'red' : 'cyan'}>{voiceNote(r.voice)}</Text>
+          <Text color={r.voice === 'recording' ? 'red' : accent()}>{voiceNote(r.voice)}</Text>
         ) : (
           <Text dimColor wrap="truncate">
             esc interrupt · ctrl+c stop (twice to exit) · wheel/PgUp scroll · ⇧↵ / ⌥↵ / \↵ newline · ctrl+b sidebar
@@ -600,7 +608,7 @@ function TopBar(props: {cols: number; tick: number; sidebarOpen: boolean; onTogg
       case 'model':
         return (
           <Seg key={id} onClick={props.openModel}>
-            <Text color="cyan">{info.model}</Text>
+            <Text color={accent()}>{info.model}</Text>
           </Seg>
         );
       case 'account':
@@ -665,7 +673,7 @@ function TopBar(props: {cols: number; tick: number; sidebarOpen: boolean; onTogg
       drop: 1000,
       node: (
         <Seg key="viewing" onClick={() => props.setView('main')}>
-          <Text color="cyan">◂ main</Text>
+          <Text color={accent()}>◂ main</Text>
           <Text dimColor> · viewing </Text>
           <Text color="magenta" bold>
             {props.viewing.name}
@@ -702,7 +710,7 @@ function TopBar(props: {cols: number; tick: number; sidebarOpen: boolean; onTogg
       drop: 850,
       node: (
         <Seg key="ide" onClick={() => props.run('/ide')}>
-          <Text color="cyan">{ideText}</Text>
+          <Text color={accent()}>{ideText}</Text>
         </Seg>
       ),
     });
@@ -717,7 +725,7 @@ function TopBar(props: {cols: number; tick: number; sidebarOpen: boolean; onTogg
       drop: 800,
       node: (
         <Seg key="goal" onClick={() => props.run('/goal')}>
-          <Text color={goal.status === 'active' ? 'cyan' : goal.status === 'done' ? 'green' : 'yellow'}>{goalText}</Text>
+          <Text color={goal.status === 'active' ? accent() : goal.status === 'done' ? 'green' : 'yellow'}>{goalText}</Text>
         </Seg>
       ),
     });
@@ -770,7 +778,7 @@ function TopBar(props: {cols: number; tick: number; sidebarOpen: boolean; onTogg
       <Box flexGrow={1} />
       {toggle ? (
         <Clickable onClick={props.onToggleSidebar}>
-          <Text color={props.sidebarOpen ? 'cyan' : 'gray'}> [≡]</Text>
+          <Text color={props.sidebarOpen ? accent() : 'gray'}> [≡]</Text>
         </Clickable>
       ) : null}
     </Box>
@@ -867,7 +875,7 @@ function AgentsSection({inner, view, setView}: {inner: number; view: 'main' | nu
     <>
       <Heading>AGENTS</Heading>
       <Clickable onClick={() => setView('main')}>
-        <Text color={view === 'main' ? 'cyan' : undefined} wrap="truncate">
+        <Text color={view === 'main' ? accent() : undefined} wrap="truncate">
           {view === 'main' ? '▸ ' : '  '}
           <Text bold={view === 'main'}>main</Text>
           {runtime.engine?.isBusy ? <Text color="yellow"> ●</Text> : null}
@@ -877,7 +885,7 @@ function AgentsSection({inner, view, setView}: {inner: number; view: 'main' | nu
         const g = agentGlyph(a);
         return (
           <Clickable key={a.id} onClick={() => setView(a.id)}>
-            <Text color={view === a.id ? 'cyan' : undefined} wrap="truncate">
+            <Text color={view === a.id ? accent() : undefined} wrap="truncate">
               {view === a.id ? '▸ ' : '  '}
               <Text color={g.color}>{g.g} </Text>
               <Text bold={view === a.id}>{truncate(a.name, Math.max(6, inner - 14))}</Text>
@@ -937,7 +945,7 @@ function ModelsSection({inner, run}: {inner: number; run(cmd: string): void}) {
       <Heading>CHAT MODEL</Heading>
       {models.map((m) => (
         <Clickable key={m.value} onClick={() => run(`/model ${m.value}`)}>
-          <Text color={m.value === selected ? 'cyan' : undefined} dimColor={m.value !== selected} wrap="truncate">
+          <Text color={m.value === selected ? accent() : undefined} dimColor={m.value !== selected} wrap="truncate">
             {m.value === selected ? '● ' : '○ '}
             {truncate(m.label + (m.value === 'auto' ? '' : ` · ${PROVIDERS[parseRef(m.value)!.provider].name}`), inner - 2)}
           </Text>
@@ -993,11 +1001,11 @@ function PlanSection({inner, run}: {inner: number; run(cmd: string): void}) {
         {truncate(p.title, inner)}
       </Text>
       <Text>
-        <Text color={pct === 100 ? 'green' : 'cyan'}>{b.fill}</Text>
+        <Text color={pct === 100 ? 'green' : accent()}>{b.fill}</Text>
         <Text dimColor>{b.rest}</Text> {`${pct}%`.padStart(4)}
       </Text>
       {p.milestones.slice(0, 12).map((m, i) => (
-        <Text key={i} wrap="truncate" color={i === next ? 'cyan' : m.done ? 'green' : undefined} dimColor={!m.done && i !== next}>
+        <Text key={i} wrap="truncate" color={i === next ? accent() : m.done ? 'green' : undefined} dimColor={!m.done && i !== next}>
           {truncate(`${m.done ? '✓' : i === next ? '▸' : '○'} ${m.text}`, inner)}
         </Text>
       ))}
@@ -1020,7 +1028,7 @@ function TasksSection({inner}: {inner: number}) {
     <>
       <Heading>{`TASKS ${done}/${todos.length}`}</Heading>
       {todos.slice(0, 12).map((t, i) => (
-        <Text key={i} wrap="truncate" color={t.status === 'in_progress' ? 'cyan' : undefined} dimColor={t.status === 'completed'} strikethrough={t.status === 'completed'}>
+        <Text key={i} wrap="truncate" color={t.status === 'in_progress' ? accent() : undefined} dimColor={t.status === 'completed'} strikethrough={t.status === 'completed'}>
           {truncate(todoLine(t), inner)}
         </Text>
       ))}
@@ -1079,7 +1087,7 @@ function ShortcutsSection() {
         ['/', 'commands'],
       ].map(([k, v]) => (
         <Text key={k} wrap="truncate">
-          <Text color="cyan">{k!.padEnd(8)}</Text>
+          <Text color={accent()}>{k!.padEnd(8)}</Text>
           <Text dimColor>{v}</Text>
         </Text>
       ))}

@@ -2,6 +2,7 @@ import React, {useEffect, useRef, useState, type ReactNode} from 'react';
 import {Box, Text, useBoxMetrics, useInput, useWindowSize} from 'ink';
 import {Clickable, useClickable} from '../terminal/clicks.js';
 import {redact} from '../privacy.js';
+import {accent} from '../theme.js';
 
 /** Window background: masks whatever is underneath (Ink paints later siblings over earlier ones). */
 // Pure grey (equal RGB) so 256-color terminals map it onto the grey ramp (235), not a blue cube color.
@@ -12,7 +13,7 @@ export const WINDOW_BG = '#262626';
  * conversation keeps streaming underneath. Its size is stable: with `height` (tabbed windows) it is
  * fixed; otherwise it fits the content but never shrinks while open (no jumping as content changes).
  */
-export function Window({title, width, height: fixed, children, onClose, footer, dismissable = true, color = 'cyan'}: {title: string; width?: number; height?: number; children: ReactNode; onClose(): void; footer?: string; dismissable?: boolean; color?: string}) {
+export function Window({title, width, height: fixed, children, onClose, footer, dismissable = true, color = accent()}: {title: string; width?: number; height?: number; children: ReactNode; onClose(): void; footer?: string; dismissable?: boolean; color?: string}) {
   const {columns, rows} = useWindowSize();
   const ref = useRef(null);
   const {height, hasMeasured} = useBoxMetrics(ref);

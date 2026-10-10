@@ -5,7 +5,7 @@ description: Every built-in Rein slash command, its arguments and aliases, plus 
 
 Type `/` in the input to see the list. A bare `/` shows the everyday commands, most-used first (`/model`, `/goal`, `/plan`, `/review`…), then your own skills. Typing searches everything, fuzzily and best match first, including the variants and diagnostics left out of the bare list (`/plan:deep`, `/review:deep`, `/skill:edit`, `/goal:plan`, `/agent`, `/tui`, `/voice`, `/lsp`, `/plugins`, `/pet`) and skills from Claude Code and Codex plugins. **Tab** or **Enter** fills in the highlighted entry so you can add arguments, and a command typed out in full runs right away. You can also click an entry in fullscreen. `/help` shows every command with its arguments.
 
-Rein has **32 built-in commands** and **7 built-in skills**, plus **36 commands and 7 skills in [packs](#packs)** that are off until you turn them on. Commands are handled by Rein itself. Skills are prompts sent to the agent (see [Built-in skills](#built-in-skills)).
+Rein has **33 built-in commands** and **7 built-in skills**, plus **36 commands and 7 skills in [packs](#packs)** that are off until you turn them on. Commands are handled by Rein itself. Skills are prompts sent to the agent (see [Built-in skills](#built-in-skills)).
 
 ## While the agent is working
 
@@ -85,6 +85,7 @@ See [Goals](../../features/goals/) and [Plan mode](../../features/plans/).
 | `/permissions` | — | Lists the allow/deny rules in effect, grouped by the settings file they come from. |
 | `/ide` | `reconnect` | Editor integration: shows the connected editor (VS Code, Cursor, Windsurf or JetBrains, through the Claude Code extension) and what's selected, or connects to one. → [Editor integration](../../features/ide/) |
 | `/memory` | — | Shows the project's memory (`.rein/MEMORY.md`): the facts Rein has learned here. |
+| `/marketplace` | `[add <gitRepoUrl> \| list \| remove <gitRepoUrl> \| update \| install <id> \| uninstall <id>]` | The [marketplace](../../features/marketplace/): no argument opens the store (tools, commands, skills, themes, features, bundles); the rest manage your marketplace repos and installed items. The official Rein Marketplace can't be removed. |
 | `/mcp` | — | MCP servers with status and tools. Enter approves a waiting project server or reconnects one. |
 
 ### Rein itself

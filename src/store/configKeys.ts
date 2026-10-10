@@ -81,6 +81,7 @@ export const CONFIG_KEYS: KeyInfo[] = [
   k('rtl', 'Right-to-left text display: auto, on or off', oneOf('auto', 'on', 'off')),
   k('collapsePastes', 'Show long pastes as a placeholder instead of the full text', bool),
   k('hidePersonalInfo', 'Privacy mode: hide emails and paths on screen', bool),
+  k('theme', 'The look of the UI: {"accent": "magenta"} (a colour name or #hex) for the input box, window frames and selections', json),
   k('pet', 'Your pet from the ChatGPT and Codex apps, in the sidebar (needs a Codex account): auto or off', oneOf('auto', 'off')),
   k('notifications', 'When Rein needs you: terminal, system (desktop too) or off', oneOf('terminal', 'system', 'off')),
   k('notifyUrl', 'URL Rein POSTs notifications to (ntfy, Slack or Discord webhook, or JSON); empty for none', str),

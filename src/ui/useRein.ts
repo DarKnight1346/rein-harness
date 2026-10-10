@@ -145,6 +145,7 @@ export type Overlay =
   | {name: 'resume'; sessions: SessionInfo[]}
   | {name: 'rewind'; points: RewindPoint[]}
   | {name: 'mcp'}
+  | {name: 'marketplace'}
   | {name: 'plan'; plan: PresentedPlan; resolve(d: PlanDecision): void}
   | {name: 'plans'; plans: SavedPlan[]}
   | {name: 'ask'; questions: AskQuestion[]; resolve(a: AskAnswer[] | undefined): void}
@@ -1137,13 +1138,53 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
       return;
     }
     // In fullscreen, commands that open a window don't echo into the history.
-    const opensWindow = ['goal:plan', 'login', 'usage', 'context', 'help', 'update', 'shells', 'btw', 'resume', 'agents', 'agent'].includes(parsed.name) || (parsed.name === 'settings' && !parsed.args.trim()) || (parsed.name === 'model' && !parsed.args);
+    const opensWindow = ['goal:plan', 'login', 'usage', 'context', 'help', 'update', 'shells', 'btw', 'resume', 'agents', 'agent'].includes(parsed.name) || (parsed.name === 'settings' && !parsed.args.trim()) || (parsed.name === 'marketplace' && !parsed.args.trim()) || (parsed.name === 'model' && !parsed.args);
     // A value typed after `/vault set NAME` stays off the screen and out of the transcript.
     if (!(windowed && opensWindow)) log('user', parsed.name === 'vault' ? raw.trim().replace(/^(\/vault\s+set\s+\S+)\s+.*$/s, '$1 ••••') : raw.trim());
     switch (parsed.name) {
       case 'mcp':
         setOverlay({name: 'mcp'});
         break;
+      case 'marketplace': {
+        const [sub = '', ...rest] = parsed.args.trim().split(/\s+/);
+        const arg = rest.join(' ');
+        const mk = () => import('../marketplace/index.js');
+        void (async () => {
+          const m = await mk();
+          if (!sub) {
+            if (windowed) return setOverlay({name: 'marketplace'});
+            const markets = await m.loadMarketplaces();
+            const inst = m.installedItems();
+            const {describe} = await import('../marketplace/actions.js');
+            log('info', markets.map((x) => [`${x.name}${x.official ? ' (official)' : ''} · ${x.url}${x.error ? ` · ${x.error}` : ''}`, ...x.items.map((it) => `  ${inst.some((i) => i.id === it.id) ? '✓' : ' '} ${it.id.padEnd(22)} ${it.version.padEnd(8)} ${it.description}${describe(it)}`)].join('\n')).join('\n\n') + '\n/marketplace install <id> · uninstall <id> · add <repo> · list · remove <repo> · update');
+          } else if (sub === 'list') {
+            log('info', ['Marketplaces:', ...m.repoUrls().map((u) => `  ${u}${m.normalizeUrl(u) === m.normalizeUrl(m.official()) ? '  (official, always on)' : ''}`), '/marketplace add <repo> adds one, /marketplace remove <repo> removes it.'].join('\n'));
+          } else if (sub === 'add') {
+            if (!arg) return log('info', 'Usage: /marketplace add <gitRepoUrl>  (like https://github.com/owner/repo)');
+            log('info', `Fetching ${arg}…`);
+            const added = await m.addMarketplace(arg);
+            log('info', `Added ${added.name} (${added.items.length} item${added.items.length === 1 ? '' : 's'}). /marketplace to browse.`);
+          } else if (sub === 'remove') {
+            if (!arg) return log('info', 'Usage: /marketplace remove <gitRepoUrl>');
+            log('info', `Removed ${m.removeMarketplace(arg)}. Items you installed from it stay installed (/marketplace uninstall <id>).`);
+          } else if (sub === 'update') {
+            const markets = await m.loadMarketplaces({refresh: true});
+            const ups = m.updatesFor(markets);
+            const errs = markets.filter((x) => x.error).map((x) => `${x.name}: ${x.error}`);
+            log('info', [`Refreshed ${markets.length} marketplace${markets.length === 1 ? '' : 's'}.`, ...errs, ups.length ? `Updates: ${ups.map((u) => `${u.id} ${u.from} → ${u.to}`).join(', ')} (/marketplace install <id>)` : 'Everything installed is up to date.'].join('\n'));
+          } else if (sub === 'install' || sub === 'uninstall') {
+            if (!arg) return log('info', `Usage: /marketplace ${sub} <id>`);
+            const a = await import('../marketplace/actions.js');
+            if (sub === 'uninstall') return log('info', await a.uninstallItem(runtime, arg));
+            const all = (await m.loadMarketplaces()).flatMap((x) => x.items);
+            const r = await a.installItem(runtime, all, arg);
+            log('info', r.lines.join('\n') + (r.restart ? '\nRestart Rein to start its MCP servers and hooks.' : ''));
+          } else log('info', 'Usage: /marketplace [add <repo> | list | remove <repo> | update | install <id> | uninstall <id>]');
+          setSkills(loadSkills());
+          bump();
+        })().catch((err) => log('error', `/marketplace: ${(err as Error).message}`));
+        break;
+      }
       case 'pet': {
         const arg = parsed.args.trim();
         const p = runtime.pets;
@@ -1284,7 +1325,7 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
         const lines = plugins.map((p) => {
           const own = skills.filter((s) => s.plugin === p.name).map((s) => `/${s.name}`);
           const parts = [count(own.length, 'command'), count(p.agents.length, 'agent'), count(Object.keys(p.hooks ?? {}).length, 'hook event'), count(Object.keys(p.mcpServers ?? {}).length, 'MCP server')].filter(Boolean);
-          return `${p.name} ${p.version ?? ''} · ${p.from === 'claude' ? 'Claude Code' : 'Codex'}${parts.length ? ` · ${parts.join(', ')}` : ''}${own.length ? `\n  ${own.join('  ')}` : ''}`;
+          return `${p.name} ${p.version ?? ''} · ${p.from === 'claude' ? 'Claude Code' : p.from === 'rein' ? 'Marketplace' : 'Codex'}${parts.length ? ` · ${parts.join(', ')}` : ''}${own.length ? `\n  ${own.join('  ')}` : ''}`;
         });
         log('info', [...lines, ...(codexSkills.length ? [`Codex skills: ${codexSkills.join('  ')}`] : [])].join('\n'));
         return;

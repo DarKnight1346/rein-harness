@@ -28,6 +28,8 @@ export type Config = {
   hidePersonalInfo: boolean;
   /** Your pet from the ChatGPT and Codex apps in the sidebar (needs a Codex account): auto shows it, off hides it. */
   pet?: 'auto' | 'off';
+  /** The UI's look: `accent` is the colour of the input box, window frames and selections (name or #hex). Marketplace themes set it. */
+  theme?: {accent?: string};
   /**
    * Effort for the chat model: 'auto' = the decision model picks (only when the prompt cache is
    * cold — changing effort invalidates it), 'default' = the model's own default, or a level.

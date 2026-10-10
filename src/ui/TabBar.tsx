@@ -2,6 +2,7 @@ import React, {useRef} from 'react';
 import {Box, Text, useBoxMetrics} from 'ink';
 import stringWidth from 'string-width';
 import {Clickable} from './terminal/clicks.js';
+import {accent} from './theme.js';
 
 const GAP = 2;
 const ARROW = 2; // "‹ " / " ›"
@@ -47,7 +48,7 @@ export function TabBar({titles, active, onSelect}: {titles: string[]; active: nu
         return (
           <Box key={title} flexShrink={0}>
             <Clickable onClick={() => onSelect(i)}>
-              <Text wrap="truncate" color={i === active ? 'cyan' : undefined} bold={i === active} dimColor={i !== active}>
+              <Text wrap="truncate" color={i === active ? accent() : undefined} bold={i === active} dimColor={i !== active}>
                 {label(title, i === active)}
                 {' '.repeat(GAP)}
               </Text>

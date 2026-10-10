@@ -31,6 +31,8 @@ export type Skill = {
   planMode?: boolean;
   /** config.json "listed": false — left out of a bare `/` list (a variant like /plan:deep); typing finds it. */
   listed?: false;
+  /** From an item you installed from the marketplace (shown in a bare `/` list, unlike other plugins'). */
+  marketplace?: true;
   /** Claude Code command frontmatter `argument-hint` (shown in the command list). */
   argumentHint?: string;
   /** A Claude Code-style command (`$ARGUMENTS`, `!`cmd``), not a skill folder. */
@@ -141,10 +143,10 @@ function pluginSkills(cwd: string): Skill[] {
       }
       const {fields, body} = parseSkillFile(pluginVars(text, p));
       const name = skillName(`${p.name}:${path.basename(file, '.md')}`);
-      if (name && body) out.push({name, description: fields.description || firstLine(body), source: 'plugin', plugin: p.name, dir: path.dirname(file), path: file, body, files: [path.basename(file)], aliases: [], command: true, ...(fields['argument-hint'] ? {argumentHint: fields['argument-hint']} : {})});
+      if (name && body) out.push({name, description: fields.description || firstLine(body), source: 'plugin', plugin: p.name, ...(p.from === 'rein' ? {marketplace: true as const} : {}), dir: path.dirname(file), path: file, body, files: [path.basename(file)], aliases: [], command: true, ...(fields['argument-hint'] ? {argumentHint: fields['argument-hint']} : {})});
     }
     for (const dir of p.skills) {
-      for (const s of scan(path.dirname(dir), 'plugin').filter((x) => x.dir === dir)) out.push({...s, name: skillName(`${p.name}:${s.name.replace(/^.*:/, '')}`), plugin: p.name, body: pluginVars(s.body, p)});
+      for (const s of scan(path.dirname(dir), 'plugin').filter((x) => x.dir === dir)) out.push({...s, name: skillName(`${p.name}:${s.name.replace(/^.*:/, '')}`), plugin: p.name, ...(p.from === 'rein' ? {marketplace: true as const} : {}), body: pluginVars(s.body, p)});
     }
   }
   return out;

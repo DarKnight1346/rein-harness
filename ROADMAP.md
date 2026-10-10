@@ -134,7 +134,15 @@ agent works by default ships as an experiment (`experiments` in config) until it
 | 111 | Container sandbox per task | Each task in Docker or Podman with an egress allowlist. | features/system/#a-container-per-task | done |
 | 112 | Multi-service local stack | Bring up the services a change needs (compose or Helm) with health checks, and test against them. | features/system/#the-services-a-change-needs | done |
 
-## Wave 10: Web UI
+## Wave 10: Marketplace
+
+| # | Feature | Spec | Docs | Status |
+|---|---|---|---|---|
+| 118 | Marketplace repos | A GitHub repo laid out as a marketplace (Rein's `rein.json` items, or a Claude Code `marketplace.json`) becomes a catalog. `/marketplace add <gitRepoUrl>`, `/marketplace list`, `/marketplace remove <gitRepoUrl>`, `/marketplace update`. The official Rein Marketplace (github.com/rein-harness/rein-marketplace) is always there and can't be removed. | features/marketplace/#commands | done |
+| 119 | Marketplace store | `/marketplace` opens the full catalog in a window like a store: categories (tools, commands, skills, UI, features, bundles), search, a page per item with what it adds, install, update and uninstall. Builds on #118. | features/marketplace/#the-store | done |
+| 120 | Marketplace items | An item adds tools (MCP servers), commands, skills, subagents, hooks, UI customization (theme, status line, sidebar) or settings, or is a bundle of other items. Installed items live in `~/.rein/plugins/` and load like plugins. Builds on #118. | features/marketplace/#what-an-item-can-be | done |
+
+## Wave 11: Web UI
 
 | # | Feature | Spec | Docs | Status |
 |---|---|---|---|---|

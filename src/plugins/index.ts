@@ -20,7 +20,7 @@ export type Plugin = {
   /** `name@marketplace`. */
   id: string;
   name: string;
-  from: 'claude' | 'codex';
+  from: 'claude' | 'codex' | 'rein';
   root: string;
   version?: string;
   description?: string;
@@ -158,13 +158,25 @@ function codexPlugins(): Plugin[] {
   return out;
 }
 
+/** Items installed from a marketplace (~/.rein/plugins/<id>/, see marketplace/index.ts). */
+function reinPlugins(): Plugin[] {
+  const dir = path.join(reinHome(), 'plugins');
+  if (!isDir(dir)) return [];
+  return readdirSync(dir)
+    .filter((d) => !d.startsWith('.') && isDir(path.join(dir, d)))
+    .map((d) => readPlugin(path.join(dir, d), `${d}@rein`, 'rein'))
+    .filter((p): p is Plugin => !!p);
+}
+
 let cached: {key: string; at: number; plugins: Plugin[]} | undefined;
-/** Every enabled plugin (Claude Code's first on a name clash). Cached for a few seconds. */
+/** Forget the cached list (after a marketplace install or uninstall). */
+export const resetPluginCache = () => void (cached = undefined);
+/** Every enabled plugin (marketplace items first, then Claude Code's, on a name clash). Cached for a few seconds. */
 export function loadPlugins(cwd = process.cwd()): Plugin[] {
-  const key = `${cwd}|${home()}`;
+  const key = `${cwd}|${home()}|${reinHome()}`;
   if (cached && cached.key === key && Date.now() - cached.at < 5000) return cached.plugins;
   const seen = new Set<string>();
-  const plugins = [...claudePlugins(cwd), ...codexPlugins()].filter((p) => !seen.has(p.name) && (seen.add(p.name), true));
+  const plugins = [...reinPlugins(), ...claudePlugins(cwd), ...codexPlugins()].filter((p) => !seen.has(p.name) && (seen.add(p.name), true));
   cached = {key, at: Date.now(), plugins};
   return plugins;
 }

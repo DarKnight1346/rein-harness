@@ -5,6 +5,8 @@ description: Plugins you installed with Claude Code or Codex work in Rein as the
 
 Install a plugin with Claude Code (`claude plugin install …`) or Codex (`codex plugin add …`) and Rein picks it up. There's nothing to configure and nothing is copied: Rein reads the plugin where the CLI installed it.
 
+Items you install from the [marketplace](../marketplace/) are plugins too (`~/.rein/plugins/`), listed as `Marketplace` and loaded the same way; on a name clash they win over Claude Code's and Codex's.
+
 ```text title="rein"
 › /plugins
 

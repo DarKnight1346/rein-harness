@@ -1,7 +1,7 @@
 import type {Skill} from '../skills/index.js';
 import {commandEnabled} from './packs.js';
 
-export type CommandName = 'pet' | 'trackers' | 'remote' | 'voice' | 'vault' | 'lsp' | 'plugins' | 'export' | 'ide' | 'memory' | 'mcp' | 'rewind' | 'permissions' | 'add-dir' | 'workspace' | 'owners' | 'stack' | 'codemap' | 'changeset' | 'impact' | 'refs' | 'symbols' | 'services' | 'sessions' | 'env' | 'schedule' | 'cache' | 'stats' | 'deadcode' | 'flags' | 'migrations' | 'contracts' | 'bestof' | 'risk' | 'arch' | 'adr' | 'spec' | 'index' | 'map' | 'pack' | 'pr' | 'mutate' | 'coverage' | 'ci' | 'build' | 'flaky' | 'affected' | 'policy' | 'cost' | 'scope' | 'goal' | 'goal:plan' | 'btw' | 'agents' | 'agent' | 'resume' | 'login' | 'usage' | 'model' | 'context' | 'compact' | 'shells' | 'settings' | 'update' | 'tui' | 'clear' | 'help' | 'exit';
+export type CommandName = 'marketplace' | 'pet' | 'trackers' | 'remote' | 'voice' | 'vault' | 'lsp' | 'plugins' | 'export' | 'ide' | 'memory' | 'mcp' | 'rewind' | 'permissions' | 'add-dir' | 'workspace' | 'owners' | 'stack' | 'codemap' | 'changeset' | 'impact' | 'refs' | 'symbols' | 'services' | 'sessions' | 'env' | 'schedule' | 'cache' | 'stats' | 'deadcode' | 'flags' | 'migrations' | 'contracts' | 'bestof' | 'risk' | 'arch' | 'adr' | 'spec' | 'index' | 'map' | 'pack' | 'pr' | 'mutate' | 'coverage' | 'ci' | 'build' | 'flaky' | 'affected' | 'policy' | 'cost' | 'scope' | 'goal' | 'goal:plan' | 'btw' | 'agents' | 'agent' | 'resume' | 'login' | 'usage' | 'model' | 'context' | 'compact' | 'shells' | 'settings' | 'update' | 'tui' | 'clear' | 'help' | 'exit';
 
 /**
  * Built-in commands, in the order the `/` list shows them (everyday ones first). `description` is
@@ -23,6 +23,7 @@ export const COMMANDS: Command[] = [
   {name: 'agents', description: 'Subagents: watch and message them', usage: 'Subagents the agent spawned; pick one to view and message it'},
   {name: 'shells', description: 'Commands the agent started, and their output', usage: 'Shell commands the agent started; open one to see its logs (/shells <id>)'},
   {name: 'memory', description: 'What Rein has learned about this project', usage: "This project's memory (.rein/MEMORY.md) — what Rein has learned here"},
+  {name: 'marketplace', description: 'Add tools, commands, skills and themes', usage: 'The marketplace: /marketplace opens the store; add <gitRepoUrl> · list · remove <gitRepoUrl> · update · install <id> · uninstall <id>'},
   {name: 'mcp', description: 'MCP servers and their tools', usage: 'MCP servers: status and tools; approve project servers, reconnect'},
   {name: 'export', description: 'Save the conversation as Markdown or HTML', usage: 'Save the conversation as Markdown and copy it to the clipboard: /export [file] (default ~/.rein/exports/<id>.md); /export html [file] for a page with tool calls and diffs'},
   {name: 'ide', description: 'Connect to your editor', usage: 'Editor integration (VS Code, Cursor, Windsurf, JetBrains with the Claude Code extension): connect, or show the connection'},
@@ -160,7 +161,7 @@ export function suggestCommands(input: string, skills: Skill[] = []): Suggestion
     // A bare `/`: listed commands, with Rein's own everyday skills (/plan, /review, /init) after
     // /goal, then the project's and your own. Variants, and skills from Codex and other tools'
     // plugins, wait until you type part of their name.
-    const listed = all.filter((c) => (c.skill ? c.skill.listed !== false && c.skill.source !== 'plugin' && c.skill.source !== 'codex' : (c as {listed?: false}).listed !== false));
+    const listed = all.filter((c) => (c.skill ? c.skill.listed !== false && (c.skill.marketplace || (c.skill.source !== 'plugin' && c.skill.source !== 'codex')) : (c as {listed?: false}).listed !== false));
     const rank = (n: string) => ((i) => (i < 0 ? 99 : i))(['plan', 'review', 'init'].indexOf(n));
     const builtin = listed.filter((c) => c.skill?.source === 'builtin').sort((a, b) => rank(a.name) - rank(b.name));
     const commands = listed.filter((c) => !c.skill);
