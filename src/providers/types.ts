@@ -65,6 +65,8 @@ export type ModelInfo = {
   tier: number;
   contextWindow: number;
   isDefault?: boolean;
+  /** The concrete model an alias points at right now (Claude: `haiku` → `claude-haiku-5-5`), when known. */
+  resolved?: string;
   /** Effort levels the model accepts, lowest first, and its default. */
   efforts?: string[];
   defaultEffort?: string;
@@ -173,6 +175,11 @@ export interface ProviderAdapter extends ProviderAuth {
   refreshUsage(account: Account): Promise<UsageSnapshot | undefined>;
   openSession(opts: SessionOpts): Promise<ProviderSession>;
   oneShot(opts: OneShotOpts): Promise<string>;
+  /**
+   * A model's context window, when the provider only reports it in a reply's usage (Claude): one
+   * tiny request. Undefined when the provider lists windows with its models (Codex).
+   */
+  probeContextWindow?(account: Account, model: string): Promise<number | undefined>;
   version(): Promise<string | undefined>;
   /** Run the CLI's self-update; yields output lines. */
   update(): AsyncIterable<string>;

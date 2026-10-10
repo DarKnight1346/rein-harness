@@ -234,6 +234,8 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
   const refresh = useCallback(async () => {
     await runtime.refreshCatalog();
     bump();
+    // Claude models' real context windows, for those never used yet (interactive sessions only).
+    void catalog.probeWindows().then(bump);
   }, [bump]);
 
   useEffect(() => {

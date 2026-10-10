@@ -293,6 +293,20 @@ function limitReset(accountId: string, message: string): number | undefined {
   return parseResetTime(message);
 }
 
+/** A model's context window, from the usage of a minimal reply (the CLI lists models without it). */
+export async function claudeContextWindow(account: Account, model: string): Promise<number | undefined> {
+  const session = new ClaudeSession({account, model, systemPrompt: 'Reply with OK.', persist: false, noThinking: true});
+  const timer = setTimeout(() => session.interrupt(), 60_000);
+  try {
+    let window: number | undefined;
+    for await (const ev of session.send('OK?')) if (ev.type === 'done' && !ev.interrupted) window = ev.contextWindow;
+    return window;
+  } finally {
+    clearTimeout(timer);
+    session.close();
+  }
+}
+
 /** Run one prompt in a throwaway, non-persisted process and return the reply text. */
 export async function claudeOneShot(opts: OneShotOpts): Promise<string> {
   const session = new ClaudeSession({account: opts.account, model: opts.model, systemPrompt: opts.system, persist: false, noThinking: opts.fast, webSearch: opts.webSearch});

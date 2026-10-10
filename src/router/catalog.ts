@@ -9,6 +9,11 @@ import {paths} from '../store/paths.js';
 import path from 'node:path';
 
 const windowsFile = () => path.join(paths.state(), 'context-windows.json');
+/**
+ * Learned windows belong to the concrete model: an alias (`claude:haiku`) can start pointing at a new model
+ * (Haiku 4.5 → 5.5) with a different window, so the key carries what it resolved to when known.
+ */
+const windowKey = (m: {provider: string; id: string; resolved?: string}) => `${m.provider}:${m.id}${m.resolved && m.resolved !== m.id ? `@${m.resolved}` : ''}`;
 import {balanceScore, headroom, usageStore} from '../store/usage.js';
 
 /** Score points per live session already on an account. */
@@ -66,7 +71,7 @@ export class ModelCatalog {
           const key = refKey({provider: m.provider, model: m.id});
           const existing = next.get(key);
           if (existing) existing.accountIds.push(account.id);
-          else next.set(key, {...m, contextWindow: this.learnedWindows.get(key) ?? m.contextWindow, accountIds: [account.id]});
+          else next.set(key, {...m, contextWindow: this.learnedWindows.get(windowKey(m)) ?? m.contextWindow, accountIds: [account.id]});
         }
       }),
     );
@@ -74,11 +79,33 @@ export class ModelCatalog {
     this.loaded = true;
   }
 
+  /** Models already asked for their window this run (a failed probe isn't retried until restart). */
+  private probed = new Set<string>();
+
+  /**
+   * Claude models report their context window only in a reply's usage, so until one was used the
+   * catalog guessed. Ask each unknown one once, in the background, with a tiny request on a
+   * subscription account (never a pay-per-use API account); the answer is remembered.
+   */
+  async probeWindows(): Promise<void> {
+    for (const m of this.all()) {
+      const key = windowKey(m);
+      const probe = adapters[m.provider].probeContextWindow;
+      if (!probe || this.learnedWindows.has(key) || this.probed.has(key)) continue;
+      const account = this.accounts.find((a) => m.accountIds.includes(a.id) && !a.api && !this.authFailed.has(a.id));
+      if (!account) continue;
+      this.probed.add(key);
+      const tokens = await probe.call(adapters[m.provider], account, m.id).catch(() => undefined);
+      if (tokens) this.learnContextWindow({provider: m.provider, model: m.id}, tokens);
+    }
+  }
+
   /** Provider-reported context window (from a request's usage) — remembered across restarts. */
   learnContextWindow(ref: ModelRef, tokens: number): void {
     if (tokens <= 0) return;
-    const changed = this.learnedWindows.get(refKey(ref)) !== tokens;
-    this.learnedWindows.set(refKey(ref), tokens);
+    const k = windowKey(this.models.get(refKey(ref)) ?? {provider: ref.provider, id: ref.model});
+    const changed = this.learnedWindows.get(k) !== tokens;
+    this.learnedWindows.set(k, tokens);
     if (changed) void writeJson(windowsFile(), Object.fromEntries(this.learnedWindows)).catch(() => {});
     const m = this.models.get(refKey(ref));
     if (m) m.contextWindow = tokens;

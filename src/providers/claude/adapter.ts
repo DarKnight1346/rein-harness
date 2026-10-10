@@ -9,7 +9,7 @@ import {paths} from '../../store/paths.js';
 import {tierFrom} from '../tier.js';
 import type {Account, ModelInfo, ProviderAdapter} from '../types.js';
 import {claudeAuth} from './auth.js';
-import {ClaudeSession, claudeBin, claudeOneShot} from './session.js';
+import {ClaudeSession, claudeBin, claudeContextWindow, claudeOneShot} from './session.js';
 
 /** Context window until the real one is learned from a result's `modelUsage.contextWindow`. */
 const UNKNOWN_WINDOW = 200_000;
@@ -62,6 +62,7 @@ export async function fetchClaudeModels(account: Account): Promise<ModelInfo[]> 
           label: m.displayName ?? m.value,
           description: m.description,
           tier: tierFrom(m.description),
+          resolved: m.resolvedModel,
           contextWindow: UNKNOWN_WINDOW,
           isDefault,
           efforts: m.supportedEffortLevels?.length ? m.supportedEffortLevels : undefined,
@@ -125,6 +126,7 @@ export const claudeAdapter: ProviderAdapter = {
   },
 
   oneShot: claudeOneShot,
+  probeContextWindow: claudeContextWindow,
 
   async version() {
     try {

@@ -54,7 +54,7 @@ An existing `~/.rein` keeps being used as it is, and so does `REIN_HOME`. To swi
 | `state/codex-compat.json` | Result of the compatibility check for the installed `codex` version (and its feature flags). Delete it to re-check |
 | `state/trusted-projects.json` | Projects whose hooks you trusted, with a hash of the hooks as reviewed (a change asks again) |
 | `state/input-history.json` | Messages you sent, per project (the last 200), for `↑` recall in the input |
-| `state/context-windows.json` | Context windows learned from real responses (`result.modelUsage` on Claude), remembered across restarts |
+| `state/context-windows.json` | Claude models' context windows, from real responses (`result.modelUsage`): a tiny request once per new model, or its first use. Remembered across restarts |
 | `state/claude-models-<id>.json` | Model list the `claude` CLI reported for that account. Refreshed in the background once a day |
 | `state/codex-catalog/<id>.json` | Rein's rewritten Codex model catalog with the built-in tools stripped. See [drivers](../../internals/drivers/) |
 | `sessions/<id>.jsonl` | Conversation transcripts, append-only: one line per message, plus meta lines (summary, native session refs, tokens, subagents, goal) and `progress` lines that record a running turn's tool calls, so a crash mid-turn loses nothing |

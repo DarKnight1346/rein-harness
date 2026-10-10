@@ -62,7 +62,9 @@ export async function writeReinCatalog(account: Account): Promise<string | undef
 
 export async function contextWindows(account: Account): Promise<Map<string, number>> {
   const cache = await readModelsCache(account);
-  return new Map((cache?.models ?? []).map((m) => [String(m.slug), Number(m.context_window) || 128_000]));
+  // Codex keeps a margin and counts only `effective_context_window_percent` of the window as usable
+  // (272k at 95% → 258.4k, what it reports as model_context_window): Rein's thresholds use the same.
+  return new Map((cache?.models ?? []).map((m) => [String(m.slug), Math.round((Number(m.context_window) || 128_000) * (Number(m.effective_context_window_percent) || 100) / 100)]));
 }
 
 /** Relative cost tier from the model's own description (Codex exposes no prices). */

@@ -134,6 +134,8 @@ export async function runWorker(): Promise<number> {
           if (t) runtime.engine.load(t);
         }
         await runtime.refreshCatalog();
+        // Claude models' real context windows, for those never used yet (as the terminal does).
+        void catalog.probeWindows().catch(() => {});
         return send({t: 'ready', snapshot: snapshot()});
       }
       case 'send':
