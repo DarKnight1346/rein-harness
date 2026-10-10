@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 /**
  * Runs the built dist/cli.js (the bundle), which the test suite never touches (it runs src/): the
- * version, and one `rein -p` turn against a fake claude that also checks the MCP proxy file Rein
- * hands it exists. Run after `npm run build`; CI does, on every OS.
+ * version, one `rein -p` turn against a fake claude that also checks the MCP proxy file Rein hands
+ * it exists, and the TUI in a terminal (node-pty, where it's installed) up to a ready prompt with no
+ * error on screen. Run after `npm run build`; CI does, on every OS.
  */
 import {execFile} from 'node:child_process';
 import {existsSync, mkdirSync, mkdtempSync, writeFileSync} from 'node:fs';
@@ -57,4 +58,32 @@ for await (const line of createInterface({input: process.stdin})) {
 const turn = await run(['-p', 'hello'], {cwd, env: {...process.env, REIN_HOME: home, REIN_KEYCHAIN: '1', REIN_CLAUDE_BIN: fake}});
 if (turn.code !== 0 || !turn.stdout.includes('smoke-ok')) fail('rein -p turn', turn);
 
-console.log(`smoke: dist/cli.js ${version.stdout.trim()} starts and runs a turn`);
+// The TUI, in a terminal: it must reach the ready prompt without an error on screen.
+const pty = await import('@lydell/node-pty').catch(() => undefined);
+let tui = 'TUI skipped (node-pty is not installed)';
+if (pty) {
+  const screen = await new Promise((resolve) => {
+    let out = '';
+    const p = pty.spawn(process.execPath, [cli], {cols: 120, rows: 40, cwd, env: {...process.env, REIN_HOME: home, REIN_KEYCHAIN: '1', REIN_CLAUDE_BIN: fake}});
+    const done = () => {
+      clearTimeout(timer);
+      try {
+        p.kill();
+      } catch {}
+      resolve(out);
+    };
+    const timer = setTimeout(done, 30_000);
+    p.onData((d) => {
+      out += d;
+      const text = out.replace(/\x1b\[[0-9;?]*[A-Za-z]/g, '');
+      if (/\bERROR\b/.test(text) || text.includes('/ for commands')) setTimeout(done, 300);
+    });
+    p.onExit(done);
+  });
+  const text = screen.replace(/\x1b\[[0-9;?]*[A-Za-z]/g, '');
+  if (/\bERROR\b/.test(text) || !text.includes('/ for commands')) fail('the TUI did not reach its prompt', {stdout: text.slice(-3000)});
+  tui = 'the TUI reaches its prompt';
+}
+
+console.log(`smoke: dist/cli.js ${version.stdout.trim()} starts, runs a turn; ${tui}`);
+process.exit(0);

@@ -116,8 +116,9 @@ await build({
   platform: 'node',
   format: 'esm',
   target: 'node22',
-  // Native or binary-locating packages stay in node_modules: ripgrep finds its binary next to itself.
-  external: ['@vscode/ripgrep', 'node-pty'],
+  // Native or binary-locating packages stay in node_modules: ripgrep finds its binary next to itself,
+  // node-pty loads its platform's prebuilt binary.
+  external: ['@vscode/ripgrep', '@lydell/node-pty'],
   // CommonJS packages inside an ES module bundle still need require().
   banner: {js: "import {createRequire as __reinRequire} from 'node:module';\nconst require = __reinRequire(import.meta.url);"},
   plugins: [noDevtools, reactProduction, inkInstances, inkSharedCaches],
