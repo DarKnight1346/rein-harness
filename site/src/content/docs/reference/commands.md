@@ -5,7 +5,7 @@ description: Every built-in Rein slash command, its arguments and aliases, plus 
 
 Type `/` in the input to see the list. A bare `/` shows the everyday commands, most-used first (`/model`, `/goal`, `/plan`, `/review`…), then your own skills. Typing searches everything, fuzzily and best match first, including the variants and diagnostics left out of the bare list (`/plan:deep`, `/review:deep`, `/skill:edit`, `/goal:plan`, `/agent`, `/tui`, `/voice`, `/lsp`, `/plugins`) and skills from Claude Code and Codex plugins. **Tab** or **Enter** fills in the highlighted entry so you can add arguments, and a command typed out in full runs right away. You can also click an entry in fullscreen. `/help` shows every command with its arguments.
 
-Rein has **33 built-in commands** and **7 built-in skills**, plus **32 commands and 1 skill in [packs](#packs)** that are off until you turn them on. More come from the [marketplace](../../features/marketplace/): `/contracts`, `/migrations`, `/deadcode`, `/flags` and the migration playbooks moved there, in the **Contracts and migrations** item. Commands are handled by Rein itself. Skills are prompts sent to the agent (see [Built-in skills](#built-in-skills)).
+Rein has **33 built-in commands** and **7 built-in skills**, plus **25 commands and 1 skill in [packs](#packs)** that are off until you turn them on. More come from the [marketplace](../../features/marketplace/): `/contracts`, `/migrations`, `/deadcode`, `/flags` and the migration playbooks moved there (the **Contracts and migrations** item), and `/services`, `/symbols`, `/refs`, `/impact`, `/changeset`, `/codemap`, `/stack` (the **Multi-repo systems** item). Commands are handled by Rein itself. Skills are prompts sent to the agent (see [Built-in skills](#built-in-skills)).
 
 ## While the agent is working
 
@@ -134,18 +134,6 @@ Specialist commands and skills come in **packs**, and every pack is **off** unti
 | `/arch` | — | Checks every JS/TS, Python and Go file against the [architecture rules](../../features/specs/#architecture-guardrails) in `.rein/architecture.yaml` and lists the imports that break them |
 | `/risk` | `[<plan file> \| <spec name>]` | What a plan touches: the files it names, and across how many services, repos and owners, with any contracts (OpenAPI, protobuf, GraphQL…) and migrations among them, scored low, medium or high. Defaults to the newest saved plan. See [How risky is it](../../features/plans/#how-risky-is-it) |
 | `/bestof` | `[--test "<command>"] <task>` | Runs the task on the best available Claude model and the best Codex model at once, each in its own worktree, then runs the tests in both and keeps the result that passes (the smaller change if both do). See [Best of both providers](../../features/subagents/#best-of-both-providers) |
-
-### Multi-repo systems (`system`)
-
-| Command | Arguments | What it does |
-|---|---|---|
-| `/services` | `[mermaid]` | Which service calls which, with the file and line behind each link: docker-compose, Kubernetes config, URLs and `*_URL` settings, gRPC clients and internal packages. `mermaid` prints it as a diagram. See [Your whole system](../../features/system/#which-service-calls-which) |
-| `/symbols` | `[<name> \| cross \| index]` | Symbols across repos, from their SCIP indexes: `<name>` shows where it's defined and every use; `cross` (the default) lists symbols used outside the repo that defines them; `index` writes each repo's `index.scip` with its language's indexer, where installed. See [Symbols across repos](../../features/system/#symbols-across-repos) |
-| `/refs` | `<endpoint or RPC>` | Follows an endpoint (`POST /orders/{id}`) or gRPC method (`Ledger.Post`) across repos: the gateway route in front of it, where it's served, and every caller. See [Follow a call across repos](../../features/system/#follow-a-call-across-repos) |
-| `/impact` | — | Every caller, in every repo, of what this branch changes: endpoints and RPCs (from the contract changes) and exported functions and types (from the diff), breaking changes first. See [Who a change affects](../../features/system/#who-a-change-affects) |
-| `/changeset` | `start <name> [repo…]` · `status` · `test` · `pr [yes]` `[name]` | One change across several workspace repos: the same branch in each, built and tested together in dependency order, and pull requests that link to each other (`pr` shows what it would do; `pr yes` pushes and opens them). See [One change, several repos](../../features/system/#one-change-several-repos) |
-| `/codemap` | `[status \| annotate \| rebuild]` | Writes or refreshes the architecture map in `docs/codemap/`: an index with the service graph, and a page per service (APIs, calls and callers, owners, entry points, layout, key declarations). Only changed services are rewritten; notes are kept. `status` says what's stale, `annotate` has the agent write the missing notes. See [Codemaps](../../features/system/#codemaps) |
-| `/stack` | `up [services] \| up --helm <chart> \| status \| logs <service> \| down` | Runs the services a change needs locally with Docker Compose (the ones your branch touches, with their `depends_on`), waits for their health checks and lists their ports. Helm charts only go into a local cluster. See [The services a change needs](../../features/system/#the-services-a-change-needs) |
 
 ### Large codebases (`codebase`)
 
