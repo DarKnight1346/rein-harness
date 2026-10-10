@@ -106,15 +106,55 @@ export function parseInput(raw: string, skills: Skill[] = []): Parsed | undefine
   return skill ? {kind: 'skill', skill, args: rest.join(' ')} : {kind: 'unknown', name: head};
 }
 
-/** Commands matching what's typed so far: shown while the input is `/` + a partial name (no space yet). */
+/**
+ * How well `q` matches `name` (higher is better; undefined = no match): exact, then prefix, then the
+ * start of a word (`fork` → `btw:fork`), then anywhere, then the letters in order (`cmpct` →
+ * `compact`), scored by how close together and how near word starts they fall.
+ */
+export function fuzzyScore(q: string, name: string): number | undefined {
+  if (!q) return 0;
+  if (name === q) return 10_000;
+  if (name.startsWith(q)) return 9_000 - name.length;
+  const word = name.search(new RegExp(`[-:_./]${q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`));
+  if (word >= 0) return 8_000 - word - name.length;
+  const at = name.indexOf(q);
+  if (at >= 0) return 7_000 - at * 10 - name.length;
+  let score = 5_000;
+  let from = 0;
+  let last = -1;
+  for (const ch of q) {
+    const i = name.indexOf(ch, from);
+    if (i < 0) return undefined;
+    if (last >= 0) score -= (i - last - 1) * 10; // a gap between matched letters
+    if (i === 0 || /[-:_./]/.test(name[i - 1]!)) score += 15; // a word start
+    last = i;
+    from = i + 1;
+  }
+  return score - name.length;
+}
+
+/**
+ * Commands matching what's typed so far, best match first: shown while the input is `/` + a
+ * partial name (no space yet). Names and aliases match fuzzily; a description only on a whole
+ * substring, below every name match.
+ */
 export function suggestCommands(input: string, skills: Skill[] = []): Suggestion[] {
   if (!input.startsWith('/') || /\s/.test(input)) return [];
   const q = input.slice(1).toLowerCase();
   const shadowed = new Set(shadowedSkills(skills).map((s) => s.name));
-  return [
-    ...COMMANDS.filter((c) => c.name.startsWith(q)),
+  const all: (Suggestion & {names: string[]})[] = [
+    ...COMMANDS.map((c) => ({...c, names: [c.name, ...Object.keys(ALIASES).filter((a) => ALIASES[a] === c.name)]})),
     ...skills
-      .filter((s) => !shadowed.has(s.name) && (s.name.startsWith(q) || s.aliases.some((a) => a.startsWith(q))))
-      .map((s) => ({name: s.name, description: s.description + (s.aliases.length ? ` (alias: ${s.aliases.map((a) => `/${a}`).join(', ')})` : ''), skill: s})),
+      .filter((s) => !shadowed.has(s.name))
+      .map((s) => ({name: s.name, description: s.description + (s.aliases.length ? ` (alias: ${s.aliases.map((a) => `/${a}`).join(', ')})` : ''), skill: s, names: [s.name, ...s.aliases]})),
   ];
+  if (!q) return all.map(({names: _, ...c}) => c);
+  const scored = all
+    .map((c, order) => {
+      const names = c.names.map((n) => fuzzyScore(q, n.toLowerCase())).filter((x): x is number => x !== undefined);
+      const score = names.length ? Math.max(...names) : q.length >= 3 && c.description.toLowerCase().includes(q) ? 1_000 : undefined;
+      return {c, order, score};
+    })
+    .filter((x): x is typeof x & {score: number} => x.score !== undefined);
+  return scored.sort((a, b) => b.score - a.score || a.order - b.order).map(({c: {names: _, ...c}}) => c);
 }

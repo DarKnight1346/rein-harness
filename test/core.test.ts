@@ -105,13 +105,31 @@ describe('splitLiveTail', () => {
 });
 
 describe('suggestCommands', () => {
-  it('filters by prefix until a space is typed', async () => {
+  it('filters until a space is typed, prefix matches first', async () => {
     const {suggestCommands, COMMANDS} = await import('../src/commands/index.js');
     expect(suggestCommands('/')).toHaveLength(COMMANDS.length);
-    expect(suggestCommands('/u').map((c) => c.name)).toEqual(['usage', 'update']);
+    expect(suggestCommands('/u').map((c) => c.name).slice(0, 2)).toEqual(['usage', 'update']);
     expect(suggestCommands('/model ')).toEqual([]);
     expect(suggestCommands('hello')).toEqual([]);
     expect(suggestCommands('/zzz')).toEqual([]);
+  });
+
+  it('matches fuzzily, best match first', async () => {
+    const {suggestCommands} = await import('../src/commands/index.js');
+    const names = (q: string) => suggestCommands(q).map((c) => c.name);
+    expect(names('/cmpct')[0]).toBe('compact'); // letters in order
+    expect(names('/plan')[0]).toBe('goal:plan'); // the start of a word
+    expect(names('/sett')[0]).toBe('settings');
+    expect(names('/model')[0]).toBe('model'); // exact beats everything
+    expect(names('/stat')).toEqual(expect.arrayContaining(['stats']));
+    expect(names('/stat')[0]).toBe('stats');
+  });
+
+  it('ranks skills with commands, and matches their aliases', async () => {
+    const {suggestCommands} = await import('../src/commands/index.js');
+    const skill = {name: 'review-deep', description: 'Deep review', aliases: ['rd'], source: 'builtin'} as any;
+    expect(suggestCommands('/rvwdeep', [skill])[0]?.name).toBe('review-deep');
+    expect(suggestCommands('/rd', [skill])[0]?.name).toBe('review-deep');
   });
 });
 

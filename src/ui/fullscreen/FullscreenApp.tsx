@@ -11,7 +11,7 @@ import {defaultRef} from '../../router/index.js';
 import {estimateTokens, renderMessages} from '../../session/transcript.js';
 import {usageStore, windowLabel} from '../../store/usage.js';
 import type {Entry} from '../entries.js';
-import {accountLabel, modelLabel} from '../format.js';
+import {accountLabel, commandListRows, listWindow, modelLabel} from '../format.js';
 import {ImportPrompt} from '../ImportPrompt.js';
 import {TrustHooksPrompt} from '../TrustHooksPrompt.js';
 import {HistorySearch} from '../HistorySearch.js';
@@ -327,16 +327,18 @@ export function FullscreenApp({resume}: {resume: Resume}) {
 
   const panel = (() => {
     if (r.inputActive && r.suggestions.length > 0) {
+      const win = listWindow(r.suggestions.length, Math.max(0, r.suggestions.indexOf(r.selected!)), commandListRows(rows));
       return (
         <Box flexDirection="column" borderStyle="round" borderColor="gray" paddingX={1}>
-          {r.suggestions.map((c, i) => (
+          {win.above ? <Text dimColor>  ↑ {win.above} more</Text> : null}
+          {r.suggestions.slice(win.start, win.end).map((c, j) => (
             <Clickable
               key={c.name}
               onClick={() => {
                 r.onDraft('');
                 r.runCommand(`/${c.name}`);
               }}
-              onHover={() => r.setSuggestIndex(i)}
+              onHover={() => r.setSuggestIndex(win.start + j)}
             >
               <Text color={c === r.selected ? 'cyan' : undefined} dimColor={c !== r.selected} wrap="truncate">
                 {c === r.selected ? '❯ ' : '  '}
@@ -346,6 +348,7 @@ export function FullscreenApp({resume}: {resume: Resume}) {
               </Text>
             </Clickable>
           ))}
+          {win.below ? <Text dimColor>  ↓ {win.below} more</Text> : null}
         </Box>
       );
     }

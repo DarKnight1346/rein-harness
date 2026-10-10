@@ -5,7 +5,7 @@ import {skillSourceLabel} from '../skills/index.js';
 import {Box, Static, Text, useStdout} from 'ink';
 import {detectGraphics, imagePaths, inlineImage} from './terminal/images.js';
 import {needsBidi, visualOrder} from './bidi.js';
-import {approvalNote, compactText, routeLabel, toolResultSummary} from './format.js';
+import {approvalNote, commandListRows, compactText, listWindow, routeLabel, toolResultSummary} from './format.js';
 import {ImportPrompt} from './ImportPrompt.js';
 import {TrustHooksPrompt} from './TrustHooksPrompt.js';
 import {HistorySearch} from './HistorySearch.js';
@@ -95,6 +95,7 @@ export function ClassicApp({resume}: {resume: Resume}) {
   });
   const {chat, overlay} = r;
   const dotOn = useBlink(chat.running.length > 0);
+  const win = listWindow(r.suggestions.length, Math.max(0, r.suggestions.indexOf(r.selected!)), commandListRows(process.stdout.rows ?? 24));
   useInlineImages(r.transcript);
 
   return (
@@ -143,13 +144,15 @@ export function ClassicApp({resume}: {resume: Resume}) {
         </Box>
         {r.inputActive && r.suggestions.length > 0 ? (
           <Box flexDirection="column" paddingLeft={2}>
-            {r.suggestions.map((c) => (
+            {win.above ? <Text dimColor>↑ {win.above} more</Text> : null}
+            {r.suggestions.slice(win.start, win.end).map((c) => (
               <Text key={c.name} color={c === r.selected ? 'cyan' : undefined} dimColor={c !== r.selected}>
                 {`/${c.name}`.padEnd(12)}
                 {c.description}
                 {c.skill ? <Text dimColor> · {c.skill.plugin ? `plugin ${c.skill.plugin}` : skillSourceLabel(c.skill.source)}{c.skill.argumentHint ? ` · ${c.skill.argumentHint}` : ''}</Text> : null}
               </Text>
             ))}
+            {win.below ? <Text dimColor>↓ {win.below} more</Text> : null}
           </Box>
         ) : r.inputActive && r.fileSuggestions.length > 0 ? (
           <Box flexDirection="column" paddingLeft={2}>

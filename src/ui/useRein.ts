@@ -660,8 +660,8 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
   // idle-compact: a conversation left idle is compacted a little before its prompt cache expires,
   // from the warm cache (Engine.idleCompactAt). A message sent meanwhile waits in the queue.
   useEffect(() => {
-    if (chat.busy || compacting) return;
-    const at = runtime.engine.idleCompactAt();
+    if (!ready || chat.busy || compacting) return;
+    const at = runtime.engine?.idleCompactAt();
     if (at === undefined) return;
     const t = setTimeout(() => {
       if (chatRef.current.busy) return;
@@ -681,7 +681,7 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
     }, Math.max(0, at - Date.now()));
     t.unref?.();
     return () => clearTimeout(t);
-  }, [chat.busy, compacting, statusTick]);
+  }, [ready, chat.busy, compacting, statusTick]);
 
   const working = chat.busy || !!goalNote || queued.length > 0 || !!compacting;
   const workStarted = useRef<number | undefined>(undefined);

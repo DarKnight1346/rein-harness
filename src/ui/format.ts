@@ -83,3 +83,16 @@ export function usageShort(snap: UsageSnapshot | undefined): string {
   if (!snap?.windows.length) return '';
   return snap.windows.map((w) => `${windowLabel(w.windowMins)} ${Math.round(w.usedPct)}%`).join(' · ');
 }
+
+/**
+ * The slice of a list to show in `size` rows, kept around the selected item (the `/` command list:
+ * it outgrew the screen). `above` and `below` count what's hidden, for the "↑ 3 more" lines.
+ */
+export function listWindow(total: number, selected: number, size: number): {start: number; end: number; above: number; below: number} {
+  if (total <= size) return {start: 0, end: total, above: 0, below: 0};
+  const start = Math.max(0, Math.min(total - size, selected - Math.floor(size / 2)));
+  return {start, end: start + size, above: start, below: total - start - size};
+}
+
+/** Rows the `/` command list may take on a terminal this tall. */
+export const commandListRows = (rows: number) => Math.max(3, Math.min(10, rows - 14));
