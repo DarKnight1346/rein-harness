@@ -53,9 +53,14 @@ export function redrawAfterTakeover(stdout: NodeJS.WriteStream, frame: string): 
 
 export async function installResizeFix(stdout: NodeJS.WriteStream): Promise<void> {
   try {
-    const require = createRequire(import.meta.url);
-    const inkDir = path.dirname(require.resolve('ink'));
-    instances = (await import(pathToFileURL(path.join(inkDir, 'instances.js')).href)).default;
+    // The dist/cli.js bundle inlines Ink and hands its map over (scripts/bundle.mjs): Ink's file on
+    // disk would be a second, empty copy.
+    instances = (globalThis as {__reinInkInstances?: typeof instances}).__reinInkInstances;
+    if (!instances) {
+      const require = createRequire(import.meta.url);
+      const inkDir = path.dirname(require.resolve('ink'));
+      instances = (await import(pathToFileURL(path.join(inkDir, 'instances.js')).href)).default;
+    }
   } catch {
     return;
   }

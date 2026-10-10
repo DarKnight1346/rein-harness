@@ -237,6 +237,8 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
     void runtime.sessionStartHooks('startup', true);
   };
 
+  /** The first model listing (startup); messages sent before it finishes wait for it. */
+  const catalogReady = useRef<Promise<void> | undefined>(undefined);
   const refresh = useCallback(async () => {
     await runtime.refreshCatalog();
     bump();
@@ -251,7 +253,12 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
       const rows = await detectImports();
       if (rows?.length) setOverlay({name: 'import', rows});
       else if (rows) await skipImport();
-      await refresh();
+      // Typing starts now: listing the models starts the CLIs (a Codex app-server per account), so it
+      // goes on in the background and a message sent before it's done waits for it (onSubmit).
+      setReady(true);
+      const listed = refresh();
+      catalogReady.current = listed.catch(() => {});
+      await listed;
       // Your pet from the ChatGPT and Codex apps: found in the background (it starts a codex app-server).
       void runtime.loadPets().then(() => runtime.pets.setActivity('hello'), () => {});
       // A codex whose app-server protocol changed under Rein is switched off (see compat.ts).
@@ -260,7 +267,6 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
       else for (const w of compat?.warnings ?? []) log('info', `Codex ${compat!.version}: ${w}`);
       const shadowed = shadowedSkills(loadSkills());
       if (shadowed.length) log('info', `Skill${shadowed.length > 1 ? 's' : ''} ${shadowed.map((s) => `"${s.name}"`).join(', ')} hidden by built-in command${shadowed.length > 1 ? 's' : ''}; rename to use ${shadowed.length > 1 ? 'them' : 'it'}.`);
-      setReady(true);
       // Issue trackers: only an interactive session takes issues (their approvals need someone).
       runtime.trackerLog = (text, kind) => log(kind ?? 'info', text);
       runtime.trackers.start();
@@ -625,7 +631,7 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
       announced.current = g.doneAt;
       log('info', `◎ Goal achieved and verified: ${g.text}\n${g.checks.at(-1)?.verdict ?? ''}`);
     }
-    if (!ready || chat.busy || goalBusy.current || queued.length || overlay.name === 'approval' || g?.status !== 'active') return;
+    if (!ready || !catalog.loaded || chat.busy || goalBusy.current || queued.length || overlay.name === 'approval' || g?.status !== 'active') return;
     // Background subagents still working: wait for their reports instead of nudging the agent.
     if (runtime.agents.running({background: true}).some((a) => !a.collected)) return;
     goalBusy.current = true;
@@ -2483,7 +2489,8 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
     // `/vault set NAME <value>` would leak the value: never keep it (the command refuses it too).
     if (!/^\s*\/vault\s+set\s+\S+\s+\S/.test(typed)) addHistory(process.cwd(), typed);
     history.current.reset(loadHistory(process.cwd()));
-    runCommand(typed);
+    if (catalog.loaded || !catalogReady.current) runCommand(typed);
+    else void catalogReady.current.then(() => runCommand(typed));
   };
 
   const finishImport = (accept: boolean) => {

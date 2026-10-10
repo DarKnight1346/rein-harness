@@ -20,7 +20,8 @@ npm install
 npm run dev          # run from source (tsx src/cli.ts)
 npm run typecheck    # tsc --noEmit
 npm test             # vitest; uses fake CLIs in test/fixtures, no subscription needed
-npm run build        # tsc → dist/
+npm run build        # tsc → dist/, then bundles dist/cli.js (scripts/bundle.mjs)
+npm run smoke        # runs the built dist/cli.js
 
 # docs site (site/)
 cd site && npm ci

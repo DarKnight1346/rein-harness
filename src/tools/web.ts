@@ -1,5 +1,6 @@
 import {isIP} from 'node:net';
-import TurndownService from 'turndown';
+import {createRequire} from 'node:module';
+import type TurndownService from 'turndown';
 import {completeWith, resolveUtilityModel} from '../decider/index.js';
 import {adapters} from '../providers/index.js';
 import {catalog} from '../router/catalog.js';
@@ -38,9 +39,16 @@ Be concise; include relevant details, code examples and exact values as needed. 
 type Page = {url: string; status: number; contentType: string; markdown: string; at: number};
 const cache = new Map<string, Page>();
 
-const turndown = new TurndownService({headingStyle: 'atx', codeBlockStyle: 'fenced', bulletListMarker: '-'});
-turndown.remove(['script', 'style', 'noscript', 'iframe', 'canvas', 'template', 'head']);
-turndown.remove((node) => node.nodeName === 'SVG' || node.nodeName === 'svg');
+/** HTML → Markdown, made at the first page fetched (turndown brings a whole DOM, loaded only then). */
+let td: TurndownService | undefined;
+function turndown(): TurndownService {
+  if (td) return td;
+  const Turndown = createRequire(import.meta.url)('turndown') as typeof TurndownService;
+  td = new Turndown({headingStyle: 'atx', codeBlockStyle: 'fenced', bulletListMarker: '-'});
+  td.remove(['script', 'style', 'noscript', 'iframe', 'canvas', 'template', 'head']);
+  td.remove((node) => node.nodeName === 'SVG' || node.nodeName === 'svg');
+  return td;
+}
 
 function webModel(cfg: Config) {
   const ref = resolveUtilityModel(cfg.webModel, cfg);
@@ -93,7 +101,7 @@ async function fetchPage(url: URL): Promise<Page | {redirect: string; status: nu
     const contentType = (res.headers.get('content-type') ?? '').toLowerCase();
     const body = await readCapped(res);
     let markdown: string;
-    if (contentType.includes('html') || /^\s*<(!doctype html|html)/i.test(body.slice(0, 200))) markdown = turndown.turndown(body).replace(/[ \t\u00a0]+$/gm, '').replace(/\n{3,}/g, '\n\n').trim();
+    if (contentType.includes('html') || /^\s*<(!doctype html|html)/i.test(body.slice(0, 200))) markdown = turndown().turndown(body).replace(/[ \t\u00a0]+$/gm, '').replace(/\n{3,}/g, '\n\n').trim();
     else if (/text\/|json|xml|javascript|markdown|yaml|csv/.test(contentType) || !contentType) markdown = body;
     else throw new ToolError(`unsupported content type ${contentType || 'unknown'} at ${current.href}`);
     const page = {url: current.href, status: res.status, contentType, markdown, at: Date.now()};

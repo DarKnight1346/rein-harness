@@ -1,7 +1,7 @@
 import {existsSync, readdirSync, readFileSync, statSync} from 'node:fs';
 import {builtinSkillEnabled} from '../commands/packs.js';
 import path from 'node:path';
-import {fileURLToPath} from 'node:url';
+import {packageRoot} from '../util/root.js';
 import os from 'node:os';
 import {reinConfigDir} from '../store/paths.js';
 import {codexSkillRoots, loadPlugins, pluginVars} from '../plugins/index.js';
@@ -49,7 +49,7 @@ export type Skill = {
 type SkillConfig = {name?: string; description?: string; main?: string; aliases?: string[]; planMode?: boolean; listed?: boolean};
 
 /** Rein's own skills ship in `<install>/skills` (works from src/ via tsx and from dist/). */
-export const builtinSkillsDir = () => path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', 'skills');
+export const builtinSkillsDir = () => path.join(packageRoot(), 'skills');
 
 export const skillDirs = (cwd = process.cwd()) => ({
   builtin: builtinSkillsDir(),

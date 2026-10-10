@@ -24,6 +24,7 @@ import {isBuildCommand, recordBuildTime} from '../build/times.js';
 import {readOnlyCommand} from './plan.js';
 import {steer} from './steer.js';
 import {ipcPath, isWindows} from '../util/platform.js';
+import {packageRoot} from '../util/root.js';
 import {ShellManager} from './shells.js';
 import type {DiffLine} from './diff.js';
 import {skillDirs} from '../skills/index.js';
@@ -1015,7 +1016,7 @@ export function mcpProxyCommand(): {command: string; args: string[]} {
     const tsx = path.resolve(path.dirname(here), '../../node_modules/.bin/tsx');
     return {command: tsx, args: [path.join(path.dirname(here), 'mcpProxy.ts')]};
   }
-  return {command: process.execPath, args: [path.join(path.dirname(here), 'mcpProxy.js')]};
+  return {command: process.execPath, args: [path.join(packageRoot(), 'dist', 'tools', 'mcpProxy.js')]};
 }
 
 const HOME = os.homedir();

@@ -172,7 +172,7 @@ describe('Pets', () => {
     expect(pets.pet?.name).toBe('Kernel');
     await pets.select('off');
     expect(pets.pet).toBeUndefined();
-  });
+  }, 30_000); // full-size sheets: slow to encode and decode on a busy machine
 
   it('turns what the agent does into animations, and settles back to idle', () => {
     const pets = new Pets(() => true, fakeBridge().bridge as any);

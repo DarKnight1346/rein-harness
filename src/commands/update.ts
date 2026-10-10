@@ -5,20 +5,20 @@ import {spawn} from '../util/platform.js';
 import {existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync} from 'node:fs';
 import {paths, reinHome} from '../store/paths.js';
 import path from 'node:path';
-import {fileURLToPath} from 'node:url';
 import {adapters} from '../providers/index.js';
 import {streamCommand} from '../providers/claude/adapter.js';
 import type {ProviderId} from '../providers/types.js';
 import {PROVIDERS} from '../providers/types.js';
 import {loadAccounts} from '../store/accounts.js';
 import {run} from '../util/proc.js';
+import {packageRoot} from '../util/root.js';
 
 /** Codex app-server is experimental; Rein was verified against this minor line. */
 /** @deprecated kept for callers; see SUPPORTED_CODEX in providers/codex/compat.ts. */
 export const TESTED_CODEX = SUPPORTED_CODEX;
 
 /** Rein's install folder. REIN_INSTALL_ROOT overrides it (tests: self-update must never touch the real install). */
-export const reinRoot = () => process.env.REIN_INSTALL_ROOT ?? path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
+export const reinRoot = () => process.env.REIN_INSTALL_ROOT ?? packageRoot();
 
 let cachedVersion: string | undefined;
 
