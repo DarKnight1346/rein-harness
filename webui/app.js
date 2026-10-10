@@ -1548,7 +1548,7 @@ function renderPreviewChips(c) {
 }
 
 async function addPreview(c) {
-  const t = prompt('Preview what? A URL (localhost:3000) or a VNC display (:1, host:5901)');
+  const t = prompt('Preview what? A URL (localhost:3000), a VNC display (:1, host:5901), or window:<app or title> (window alone lists them)');
   if (!t) return;
   try {
     const p = await ask(c, 'preview-add', {target: t});
@@ -1646,7 +1646,7 @@ function paneBar(c, p, pv) {
   pv.urlIn = urlIn;
   const bar = p?.kind === 'url'
     ? h('div.pbar', h('button.icon-btn', {title: 'Back', on: {click: () => nav('back')}}, icon('back', 15)), h('button.icon-btn', {title: 'Forward', on: {click: () => nav('forward')}}, icon('forward', 15)), h('button.icon-btn', {title: 'Reload', on: {click: () => nav('reload')}}, icon('refresh', 15)), urlIn)
-    : h('div.pbar', h('span.ptarget', p ? `▣ ${p.target}${p.remote && !pv?.fallback ? ' · video' : ''}` : ''), h('span.muted.hide-touch', 'click to focus, then type'));
+    : h('div.pbar', h('span.ptarget', p ? `▣ ${p.kind === 'window' ? p.title : p.target}${p.remote && !pv?.fallback ? ' · video' : ''}` : ''), h('span.muted.hide-touch', 'click to focus, then type'));
   // The device's keyboard, for phones and tablets (a hardware keyboard works straight on the screen).
   bar.append(h('button.icon-btn.pkb', {title: 'Keyboard', 'aria-label': 'Open the keyboard', on: {click: () => (pv?.session ? pv.session.keyboard() : pv?.keyboard?.focus())}}, icon('keyboard', 16)));
   return bar;

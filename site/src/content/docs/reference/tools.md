@@ -555,6 +555,7 @@ Label `Preview`. Approval: none (it opens something for you to see; it doesn't c
 | `vnc` | string | A VNC display: `host:port`, or `:N` for display N (port 5900+N) |
 | `title` | string | A short name for it (default: the address) |
 | `password` | string | The VNC display's password, if it has one (the user is asked otherwise) |
+| `window` | string | Any app's window on this computer (macOS, Windows, Linux), streamed by [Rein Remote](../../features/previews/#any-apps-window) with input: part of its title or app's name, or its id; `list` returns the windows to choose from |
 | `app` | boolean | Linux: start a virtual display for a native app (no VM). Rein starts and shows it; the agent then starts the app on it with its shell tool (`DISPLAY=:N app &`) |
 
 ## Pets

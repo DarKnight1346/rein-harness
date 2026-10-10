@@ -464,6 +464,9 @@ export async function runWorker(): Promise<number> {
         throw err;
       }
       if (!watching) await v.stream(false);
+    } else if (p.kind === 'window') {
+      // Only Rein Remote streams a window: no frames to fall back on.
+      throw new Error("the window's video stream didn't connect: if the web UI is behind a reverse proxy, let it pass WebSockets (see the Web UI docs)");
     } else {
       const v = new VncView();
       views.set(id, v);
@@ -852,9 +855,15 @@ export async function runWorker(): Promise<number> {
         chrome();
         return {ok: true};
       case 'preview-add': {
-        // The user opens one themselves: a URL, or a VNC display, typed into the page.
+        // The user opens one themselves: a URL, a VNC display or a window, typed into the page.
         const {vncTarget} = await import('../preview/registry.js');
         const t = String(args.target ?? '').trim();
+        const win = t.match(/^window(?::\s*(.+))?$/i);
+        if (win) {
+          const r = await previewTool(runtime.previews, () => {}, () => runtime.config.reinRemote).run({} as never, {window: win[1]?.trim() || 'list'});
+          if (!r.ok || !win[1]) throw new Error(r.text);
+          return runtime.previews.list().at(-1);
+        }
         const vnc = /^(vnc:\/\/)?[\w.[\]-]*:\d+$/i.test(t) && !/^https?:/i.test(t) ? vncTarget(t) : undefined;
         if (vnc) return runtime.previews.add({kind: 'vnc', target: vnc, title: vnc, source: 'agent'});
         let u: URL;

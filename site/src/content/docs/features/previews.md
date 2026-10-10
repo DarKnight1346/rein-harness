@@ -45,10 +45,33 @@ For a VM, an emulator or a desktop app, Rein shows a VNC display. Rein itself sp
 |---|---|
 | An OS or anything in QEMU | `qemu-system-x86_64 … -vnc :1`, then preview `:1` |
 | A native Linux app (desktop or headless server), no VM | The agent asks for a virtual display (the `preview` tool's `app`), Rein starts one and shows it, and the agent starts the app on it (`DISPLAY=:20 your-app &`) with its shell tool, so your approvals apply. Rein uses TigerVNC's `Xvnc` if installed, else `Xvfb` with `x11vnc`, and says what to install if neither is there |
-| An Android app | The emulator on a virtual display as above (`-no-window` has no screen to share) |
+| An Android app | The emulator's window, as [any app's window](#any-apps-window) (or the emulator on a virtual display as above) |
+| An iOS app | The iOS Simulator's window, as [any app's window](#any-apps-window) (macOS) |
 | A whole desktop | Its screen sharing (macOS Screen Sharing, a VNC server on Linux or Windows) |
 
 Click into the screen and type: keys, the mouse and the wheel go to it. A display with a VNC password asks for it in the pane (the agent can pass it too); it's kept in the chat, never sent to the page. macOS Screen Sharing works with "VNC viewers may control screen with password" turned on (its macOS-account sign-in isn't supported). A virtual display Rein started stops when its preview closes.
+
+## Any app's window
+
+With [Rein Remote](#video-with-rein-remote) installed, the agent can show you any window on the
+computer Rein runs on, on macOS, Windows or Linux: a desktop app, the iOS Simulator, the Android
+emulator, a game. Nothing in the app needs to support it; the window is captured by the operating
+system, streamed as video and controlled from your device:
+
+- The agent uses the `preview` tool's `window` with part of the window's title or its app's name
+  (`window: "Simulator"`), or asks for `list` first. You can type `window:Calculator` into
+  **+ Preview** (`window` alone lists them).
+- Clicking brings the window to the front first, as Remote Desktop does (a click goes to the window
+  on top where it lands), and moves the computer's pointer. Keys and text go straight to the window's
+  app, so they work while it's behind other windows.
+- On Linux the window streams as it is even when another window covers it (XComposite).
+
+:::note[macOS permissions]
+macOS asks once for the app that runs Rein (your terminal, for example): **Screen Recording** to
+see windows and **Accessibility** to control them, both in System Settings → Privacy & Security.
+Turn them on, then restart that app. Rein Remote asks macOS to show the Accessibility prompt the first
+time.
+:::
 
 ## Video with Rein Remote
 
@@ -89,7 +112,7 @@ When your connection is slow (mobile data, a server far away), frames that can't
 
 ## Not yet
 
-These are on the [roadmap](../../start/whats-new/): native windows on macOS and Windows, Rein Remote video for every preview (web apps, VMs and VNC displays, not only Linux app displays) with hardware encoding (all through [rein-remote](https://github.com/rein-harness/rein-remote)), an Android emulator without a virtual display (over `adb`), and the iOS Simulator (view only: it has no input API).
+These are on the [roadmap](../../start/whats-new/): Rein Remote video for web apps, VMs and VNC displays (they stream as frames today), hardware encoding, and Rein Remote installed with Rein (all through [rein-remote](https://github.com/rein-harness/rein-remote)).
 
 ## Security
 

@@ -1,7 +1,7 @@
 import type {ToolDef} from '../tools/registry.js';
 import {startDisplay} from './display.js';
 import {vncTarget, type Previews} from './registry.js';
-import {remoteBinary, startRemote, type RemoteStream} from './remote.js';
+import {remoteBinary, remoteWindows, startRemote, type RemoteStream} from './remote.js';
 
 /**
  * `preview`: the agent shows the user something with a screen. A web app it started (a URL, local
@@ -22,6 +22,11 @@ export function previewTool(previews: Previews, opened: (id: number) => void, re
         vnc: {type: 'string', description: 'A VNC display: host:port, or :N for display N (port 5900+N)'},
         title: {type: 'string', description: 'A short name for it (default: the address)'},
         password: {type: 'string', description: "The VNC display's password, if it has one (the user is asked otherwise)"},
+        window: {
+          type: 'string',
+          description:
+            "Any app's window on this computer's screen, streamed with Rein Remote, with input (macOS, Windows, Linux; a desktop app, the iOS Simulator, the Android emulator, a game): part of its title or app's name, or its id. 'list' returns the windows to choose from",
+        },
         app: {type: 'boolean', description: 'Linux: start a virtual display for a native (GUI) app, no VM needed. Rein starts the display and shows it; you then start the app on it with your shell tool (DISPLAY=:N your-app &)'},
       },
     },
@@ -41,6 +46,25 @@ export function previewTool(previews: Previews, opened: (id: number) => void, re
         const p = previews.add({kind: 'url', target: u.toString(), title: title ?? u.host, source: 'agent'});
         opened(p.id);
         return {ok: true, text: `Showing ${u} to the user (preview #${p.id}). They can click and type into it; it updates as the page changes.`};
+      }
+      if (typeof args?.window === 'string' && args.window.trim()) {
+        const bin = remoteBinary(reinRemote());
+        if (!bin) return {ok: false, text: "Showing a window needs Rein Remote (rein-remote in ~/.rein/bin or on PATH, from github.com/rein-harness/rein-remote), and the reinRemote setting isn't off."};
+        try {
+          const list = await remoteWindows(bin);
+          const want = args.window.trim();
+          if (want === 'list') return {ok: true, text: list.length ? `Windows on screen:\n${list.map((w) => `  ${w.id}  ${w.app}${w.title ? ` — ${w.title}` : ''}  (${w.width}×${w.height})`).join('\n')}\nShow one with window: its id.` : 'No windows on screen.'};
+          const q = want.toLowerCase();
+          const found = list.find((w) => String(w.id) === want) ?? list.find((w) => w.title.toLowerCase().includes(q) || w.app.toLowerCase().includes(q));
+          if (!found) return {ok: false, text: `No window matches "${want}". Windows on screen: ${list.map((w) => `${w.id} ${w.app}${w.title ? ` — ${w.title}` : ''}`).join('; ') || 'none'}.`};
+          const remote = await startRemote(bin, {window: String(found.id)});
+          const name = found.title || found.app;
+          const p = previews.add({kind: 'window', target: String(found.id), title: title ?? name.slice(0, 60), source: 'agent', stop: remote.stop, remote: {port: remote.port, token: remote.token}});
+          opened(p.id);
+          return {ok: true, text: `Showing ${found.app}'s window "${name}" to the user (preview #${p.id}), streamed with Rein Remote; they can click and type into it. It stops when the preview closes.`};
+        } catch (err) {
+          return {ok: false, text: `Couldn't show the window: ${(err as Error).message}`};
+        }
       }
       if (args?.app === true) {
         // A virtual display for a native app: Rein starts the display (no project code runs); the agent
@@ -71,7 +95,7 @@ export function previewTool(previews: Previews, opened: (id: number) => void, re
         return {ok: true, text: `Showing the display at ${target} to the user (preview #${p.id}).`};
       }
       const known = previews.list();
-      return {ok: false, text: `Give a url or a vnc address.${known.length ? ` Previews now: ${known.map((p) => `#${p.id} ${p.target}`).join(', ')}.` : ''}`};
+      return {ok: false, text: `Give a url, a vnc address or a window.${known.length ? ` Previews now: ${known.map((p) => `#${p.id} ${p.target}`).join(', ')}.` : ''}`};
     },
   };
 }

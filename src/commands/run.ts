@@ -252,6 +252,7 @@ export function runCommand(raw: string, ui: CommandUi): void {
       const all = runtime.previews.list();
       const open = (p: (typeof all)[number]) => {
         if (ui.openPreview) return ui.openPreview(p.id);
+        if (p.kind === 'window') return log('info', `${p.title} is a window on this computer: it shows live in the web UI (rein --ui), from any device.`);
         // The terminal: your own browser, or the system's VNC viewer (macOS Screen Sharing opens vnc://).
         openBrowser(p.kind === 'url' ? p.target : `vnc://${p.target}`);
         log('info', `Opening ${p.kind === 'url' ? p.target : `vnc://${p.target}`}${p.kind === 'vnc' ? ' (in your VNC viewer)' : ''}.`);

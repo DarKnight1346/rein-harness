@@ -8,11 +8,12 @@ import {EventEmitter} from 'node:events';
  * command the agent started prints a local URL. Only previews in this registry can be opened:
  * the page names one by id, never an address.
  */
-export type PreviewKind = 'url' | 'vnc';
+export type PreviewKind = 'url' | 'vnc' | 'window';
 export type Preview = {
   id: number;
   kind: PreviewKind;
-  /** `url`: an http(s) URL. `vnc`: host:port, or `:N` for a display only Rein Remote streams. */
+  /** `url`: an http(s) URL. `vnc`: host:port, or `:N` for a display only Rein Remote streams.
+   * `window`: a window on this computer's screen (its id from Rein Remote), streamed by Rein Remote. */
   target: string;
   title: string;
   /** Who found it: the agent asked to show it, or it appeared in a command's output. */

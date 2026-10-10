@@ -6,7 +6,9 @@ import os from 'node:os';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {afterEach, beforeEach, describe, expect, it} from 'vitest';
-import {remoteBinary, startRemote} from '../src/preview/remote.js';
+import {Previews} from '../src/preview/registry.js';
+import {remoteBinary, remoteWindows, startRemote} from '../src/preview/remote.js';
+import {previewTool} from '../src/preview/tool.js';
 import {saveWebConfig} from '../src/webui/auth.js';
 import {startServer} from '../src/webui/server.js';
 
@@ -125,5 +127,35 @@ describe('previews streamed with Rein Remote', () => {
     writeFileSync(bin, `#!${process.execPath}\nconsole.error("rein-remote: can't open the X display :20: Connection refused");\nprocess.exit(1);\n`);
     chmodSync(bin, 0o755);
     await expect(startRemote(bin, 20)).rejects.toThrow(/can't open the X display/);
+  });
+
+  it("shows any app's window: lists them, picks one by name, streams it", async () => {
+    if (process.platform === 'win32') return;
+    const bin = path.join(home, 'rein-remote-win.mjs');
+    writeFileSync(
+      bin,
+      `#!${process.execPath}
+const [cmd, ...rest] = process.argv.slice(2);
+if (cmd === 'windows') console.log(JSON.stringify([{id: 41, app: 'Simulator', title: 'iPhone 16', width: 400, height: 860}, {id: 7, app: 'Calculator', title: '', width: 232, height: 320}]));
+else if (cmd === 'serve') { console.error('args=' + rest.join(' ')); console.error('rein-remote: streaming a 400×860 screen on http://127.0.0.1:45679 (open it in a browser)'); setInterval(() => {}, 1000); }
+`,
+    );
+    chmodSync(bin, 0o755);
+    expect((await remoteWindows(bin)).map((w) => w.app)).toEqual(['Simulator', 'Calculator']);
+    const previews = new Previews();
+    const opened: number[] = [];
+    const tool = previewTool(previews, (id) => opened.push(id), () => bin);
+    const listed = await tool.run({} as never, {window: 'list'});
+    expect(listed.text).toContain('41  Simulator — iPhone 16');
+    const r = await tool.run({} as never, {window: 'iphone'});
+    expect(r.ok).toBe(true);
+    const p = previews.list()[0]!;
+    closers.push(() => previews.stopAll());
+    expect(p).toMatchObject({kind: 'window', target: '41', title: 'iPhone 16', remote: {port: 45679}});
+    expect(opened).toEqual([p.id]);
+    expect((await tool.run({} as never, {window: 'photoshop'})).text).toMatch(/No window matches "photoshop".*41 Simulator/);
+    // Without rein-remote: says what it needs.
+    const none = previewTool(new Previews(), () => {}, () => 'off');
+    expect((await none.run({} as never, {window: 'iphone'})).text).toMatch(/needs Rein Remote/);
   });
 });
