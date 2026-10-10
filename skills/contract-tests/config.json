@@ -1,4 +1,0 @@
-{
-  "name": "contract-tests",
-  "description": "Write consumer-driven contract tests (Pact) for this service's boundaries: consumer tests that record what it needs, and provider verification"
-}

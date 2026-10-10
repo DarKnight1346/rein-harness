@@ -89,7 +89,7 @@ items/<id>/skills/<name>/SKILL.md, commands/*.md, agents/*.md, hooks/hooks.json,
 | `category` | `tools`, `commands`, `skills`, `ui`, `feature` or `bundle`. Left out, Rein picks one from what the item adds |
 | `requires` | Other items (same marketplace) installed with this one, so a bundle is an item with `requires` |
 | `config` | Settings it turns on: `{"packs": ["ci"], "experiments": ["…"]}`, or a layout: `{"statusLine": [...], "sidebarSections": [...]}` |
-| `main`, `api` | Its code: `"main": "index.mjs"`, and the extension API version it needs (`1`) |
+| `main`, `api` | Its code: `"main": "index.mjs"`, and the extension API version it needs (`1`, or `2` for `checks` and `requestStart`) |
 | `theme` | `{"accent": "#a78bfa"}` (a theme with no code; a theme item can also set it from its code) |
 
 ```json title="items/theme-midnight/rein.json"
@@ -98,7 +98,7 @@ items/<id>/skills/<name>/SKILL.md, commands/*.md, agents/*.md, hooks/hooks.json,
 
 ## Items with code
 
-An item can ship JavaScript that Rein runs: `"main": "index.mjs"` and `"api": 1` in its `rein.json`, and a module exporting `activate(rein)`. Rein calls it at startup, and right after you install the item; an update loads the new code without a restart. Everything the code does goes through the `rein` object: it can't reach into Rein's own modules.
+An item can ship JavaScript that Rein runs: `"main": "index.mjs"` and `"api": 2` (the extension API version it needs) in its `rein.json`, and a module exporting `activate(rein)`. Rein calls it at startup, and right after you install the item; an update loads the new code without a restart. Everything the code does goes through the `rein` object: it can't reach into Rein's own modules.
 
 ```js title="items/hello/index.mjs"
 /** @param {import('rein-harness/api').Rein} rein */
@@ -118,7 +118,9 @@ export function activate(rein) {
 | `exec(cmd, args, {cwd?, timeoutMs?})`, `git(args, cwd?)`, `ripgrep()` | Run programs (no shell), git, and the ripgrep that ships with Rein |
 | `workspace()`, `config()` | The [workspace](../workspaces/) Rein is in, and Rein's settings (read-only) |
 | `settings.get(key)`, `settings.set(key, value)` | The item's own settings (`~/.rein/plugin-data/<id>/settings.json`) |
-| `on('turnEnd', fn)` | When a turn of the agent ends |
+| `checks.endOfTurn({id, run(changed)})` | A check when the agent ends a turn, over the files this request changed (`{path, before, after}`): a note returned goes back to the agent, which carries on to address it. Once per request |
+| `checks.afterEdit({id, run({path, args})})` | After each edit the agent makes: a note returned is added to the edit's result |
+| `on('turnEnd' \| 'requestStart', fn)` | When a turn of the agent ends; when your next message starts a new request |
 | `version`, `item` | The API version, and the item's id, folder and data folder |
 
 Types for editors: `import type {Rein} from 'rein-harness/api'`. An item that needs a newer API than this Rein has isn't loaded, and Rein says to update. An item whose code fails to load is reported at startup, and the rest still load; a sidebar section or segment that throws shows its error in place. The store marks items with code *Runs code on your machine*: install them only from a source you trust. The official marketplace's [Git status](https://github.com/rein-harness/rein-marketplace/tree/main/items/git-status) item is a whole example.

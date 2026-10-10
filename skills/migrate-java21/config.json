@@ -1,5 +1,0 @@
-{
-  "name": "migrate:java21",
-  "description": "Plan a move from Java 8, 11 or 17 to Java 21: build and dependencies first, removed APIs, then the language features worth adopting",
-  "planMode": true
-}

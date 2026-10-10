@@ -5,7 +5,7 @@ description: Every built-in Rein slash command, its arguments and aliases, plus 
 
 Type `/` in the input to see the list. A bare `/` shows the everyday commands, most-used first (`/model`, `/goal`, `/plan`, `/review`…), then your own skills. Typing searches everything, fuzzily and best match first, including the variants and diagnostics left out of the bare list (`/plan:deep`, `/review:deep`, `/skill:edit`, `/goal:plan`, `/agent`, `/tui`, `/voice`, `/lsp`, `/plugins`) and skills from Claude Code and Codex plugins. **Tab** or **Enter** fills in the highlighted entry so you can add arguments, and a command typed out in full runs right away. You can also click an entry in fullscreen. `/help` shows every command with its arguments.
 
-Rein has **33 built-in commands** and **7 built-in skills**, plus **36 commands and 7 skills in [packs](#packs)** that are off until you turn them on. Commands are handled by Rein itself. Skills are prompts sent to the agent (see [Built-in skills](#built-in-skills)).
+Rein has **33 built-in commands** and **7 built-in skills**, plus **32 commands and 1 skill in [packs](#packs)** that are off until you turn them on. More come from the [marketplace](../../features/marketplace/): `/contracts`, `/migrations`, `/deadcode`, `/flags` and the migration playbooks moved there, in the **Contracts and migrations** item. Commands are handled by Rein itself. Skills are prompts sent to the agent (see [Built-in skills](#built-in-skills)).
 
 ## While the agent is working
 
@@ -134,26 +134,6 @@ Specialist commands and skills come in **packs**, and every pack is **off** unti
 | `/arch` | — | Checks every JS/TS, Python and Go file against the [architecture rules](../../features/specs/#architecture-guardrails) in `.rein/architecture.yaml` and lists the imports that break them |
 | `/risk` | `[<plan file> \| <spec name>]` | What a plan touches: the files it names, and across how many services, repos and owners, with any contracts (OpenAPI, protobuf, GraphQL…) and migrations among them, scored low, medium or high. Defaults to the newest saved plan. See [How risky is it](../../features/plans/#how-risky-is-it) |
 | `/bestof` | `[--test "<command>"] <task>` | Runs the task on the best available Claude model and the best Codex model at once, each in its own worktree, then runs the tests in both and keeps the result that passes (the smaller change if both do). See [Best of both providers](../../features/subagents/#best-of-both-providers) |
-
-### Contracts and migrations (`migrations`)
-
-| Command | Arguments | What it does |
-|---|---|---|
-| `/contracts` | — | Lists the API contracts (OpenAPI, Swagger, protobuf, GraphQL, Avro) this branch changes against its base, each change marked breaking or safe. See [Contracts & migrations](../../features/contracts/#breaking-or-safe) |
-| `/migrations` | — | Checks the database migrations this branch adds or changes for steps that lock big tables, need a backfill they don't have, can't be undone, or break code still running mid-deploy, each with the safer way. See [Migration safety](../../features/contracts/#migration-safety) |
-| `/deadcode` | `[remove]` | Lists exported and top-level definitions (JS/TS, Python, Go) that nothing else refers to. `remove` has the agent check each one and delete what's really unused. See [Dead code and stale flags](../../features/contracts/#dead-code-and-stale-flags) |
-| `/flags` | `[remove <key>]` | Lists the feature flags the code reads (LaunchDarkly, Unleash, OpenFeature, GrowthBook, Flagsmith, Split, Flipper), marking stale ones: fully on or off in the repo's flag files, or 90+ days old. `remove <key>` has the agent remove one, keeping the live branch |
-
-Skills in this pack:
-
-| Skill | Arguments | What it does |
-|---|---|---|
-| `/codemod` | `<change>` | Makes a repetitive change across many files with a deterministic script (jscodeshift, ts-morph, OpenRewrite, LibCST, Comby…): tried on a few files, then run on all, then checked. See [Codemods](../../features/contracts/#codemods-for-repetitive-changes) |
-| `/expand-contract` | `<change>` | Plans a breaking API or schema change (rename, retype, split, remove) as expand, migrate and contract steps, each safe to deploy alone, with backfills, verification and rollback per step. Turns on plan mode. See [Expand and contract](../../features/contracts/#expand-and-contract) |
-| `/contract-tests` | `[boundary]` | Writes consumer-driven contract tests with [Pact](https://pact.io) for the services this one calls (or the boundary you name), and provider verification when the provider is in your workspace. Asks before adding Pact. See [Contract tests](../../features/contracts/#contract-tests-between-services) |
-| `/migrate:java21` | `[details]` | Plans a move from Java 8, 11 or 17 to 21 in phases that each ship alone: build tool and plugins, dependencies, removed and encapsulated APIs, the target version, then optional modern features. Plan mode. See [Migration playbooks](../../features/contracts/#migration-playbooks) |
-| `/migrate:python3` | `[details]` | Plans a Python 2 to 3 move: a test safety net, a reviewed codemod pass, the bytes/text and division fixes by hand, dependencies, running on both, then dropping Python 2. Plan mode |
-| `/migrate:react-hooks` | `[components]` | Plans converting class components to function components with hooks, leaves first, behaviour pinned by tests; error boundaries stay classes. Plan mode |
 
 ### Multi-repo systems (`system`)
 

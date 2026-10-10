@@ -1,7 +1,7 @@
 import type {Skill} from '../skills/index.js';
 import {commandEnabled} from './packs.js';
 
-export type CommandName = 'marketplace' | 'pet' | 'trackers' | 'remote' | 'voice' | 'vault' | 'lsp' | 'plugins' | 'export' | 'ide' | 'memory' | 'mcp' | 'rewind' | 'permissions' | 'add-dir' | 'workspace' | 'owners' | 'stack' | 'codemap' | 'changeset' | 'impact' | 'refs' | 'symbols' | 'services' | 'sessions' | 'env' | 'schedule' | 'cache' | 'stats' | 'deadcode' | 'flags' | 'migrations' | 'contracts' | 'bestof' | 'risk' | 'arch' | 'adr' | 'spec' | 'index' | 'map' | 'pack' | 'pr' | 'mutate' | 'coverage' | 'ci' | 'build' | 'flaky' | 'affected' | 'policy' | 'cost' | 'scope' | 'goal' | 'goal:plan' | 'btw' | 'agents' | 'agent' | 'resume' | 'login' | 'usage' | 'model' | 'context' | 'compact' | 'shells' | 'settings' | 'update' | 'tui' | 'clear' | 'help' | 'exit';
+export type CommandName = 'marketplace' | 'pet' | 'trackers' | 'remote' | 'voice' | 'vault' | 'lsp' | 'plugins' | 'export' | 'ide' | 'memory' | 'mcp' | 'rewind' | 'permissions' | 'add-dir' | 'workspace' | 'owners' | 'stack' | 'codemap' | 'changeset' | 'impact' | 'refs' | 'symbols' | 'services' | 'sessions' | 'env' | 'schedule' | 'cache' | 'stats' | 'bestof' | 'risk' | 'arch' | 'adr' | 'spec' | 'index' | 'map' | 'pack' | 'pr' | 'mutate' | 'coverage' | 'ci' | 'build' | 'flaky' | 'affected' | 'policy' | 'cost' | 'scope' | 'goal' | 'goal:plan' | 'btw' | 'agents' | 'agent' | 'resume' | 'login' | 'usage' | 'model' | 'context' | 'compact' | 'shells' | 'settings' | 'update' | 'tui' | 'clear' | 'help' | 'exit';
 
 /**
  * Built-in commands, in the order the `/` list shows them (everyday ones first). `description` is
@@ -56,10 +56,6 @@ export const COMMANDS: Command[] = [
   {name: 'arch', description: 'Check the code against the architecture rules', usage: 'Architecture rules (.rein/architecture.yaml): /arch checks every file against them'},
   {name: 'risk', description: 'What a plan touches, and how risky it is', usage: "What a plan touches: files, services, owners, contracts and migrations. /risk [plan file or spec name] (default: the newest plan)"},
   {name: 'bestof', description: 'Run a task on Claude and Codex at once; keep what passes', usage: 'Run a task on Claude and Codex at once, each in its own worktree; keep the result that passes the tests: /bestof [--test "<command>"] <task>'},
-  {name: 'contracts', description: 'Breaking changes to API contracts on this branch', usage: 'Breaking and safe changes to API contracts (OpenAPI, protobuf, GraphQL, Avro) on this branch'},
-  {name: 'migrations', description: "Risks in this branch's database migrations", usage: "Risks in this branch's database migrations: locks, missing backfills, irreversible steps, renames that break running code"},
-  {name: 'deadcode', description: 'Definitions nothing refers to', usage: 'Definitions nothing refers to (JS/TS, Python, Go): /deadcode lists them, /deadcode remove has the agent delete them'},
-  {name: 'flags', description: 'Feature flags, and the stale ones', usage: 'Feature flags the code reads, and the stale ones (fully on or off, or older than 90 days): /flags, /flags remove <key>'},
   {name: 'services', description: 'Which service calls which', usage: 'Which service calls which, from compose, Kubernetes, URLs, gRPC clients and packages: /services, /services mermaid'},
   {name: 'symbols', description: 'Symbols across repos, from their SCIP indexes', usage: 'Symbols across repos from their SCIP indexes: /symbols <name> (definition and every use), /symbols cross (used outside their repo), /symbols index'},
   {name: 'refs', description: 'Follow an endpoint or RPC across repos', usage: 'Follow an endpoint (POST /orders/{id}) or RPC (Ledger.Post) across repos: gateway, the service that serves it, every caller'},

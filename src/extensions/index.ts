@@ -4,7 +4,7 @@ import {existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync} from 'n
 import path from 'node:path';
 import {pathToFileURL} from 'node:url';
 import {reinHome} from '../store/paths.js';
-import {API_VERSION, type Command, type Rein, type SidebarSection, type StatusSegment, type Theme, type Tool} from './api.js';
+import {API_VERSION, type AfterEditCheck, type Command, type EndOfTurnCheck, type Rein, type SidebarSection, type StatusSegment, type Theme, type Tool} from './api.js';
 
 /**
  * Extensions: the code marketplace items ship (extensions/api.ts is what they get). Installed items
@@ -65,6 +65,8 @@ export class Extensions extends EventEmitter {
   readonly sidebar: Owned<SidebarSection>[] = [];
   readonly status: Owned<StatusSegment>[] = [];
   readonly themes: Owned<Theme>[] = [];
+  readonly endChecks: Owned<EndOfTurnCheck>[] = [];
+  readonly editChecks: Owned<AfterEditCheck>[] = [];
   readonly loaded = new Map<string, string>(); // id → hash
   readonly errors = new Map<string, string>();
   private settingsFile = (id: string) => path.join(reinHome(), 'plugin-data', id, 'settings.json');
@@ -111,7 +113,7 @@ export class Extensions extends EventEmitter {
 
   /** Forget everything an item registered (its tools stay until Rein restarts: the agent's tool list is fixed per session). */
   unload(id: string): void {
-    for (const list of [this.commands, this.sidebar, this.status, this.themes] as Owned<unknown>[][]) {
+    for (const list of [this.commands, this.sidebar, this.status, this.themes, this.endChecks, this.editChecks] as Owned<unknown>[][]) {
       for (let i = list.length - 1; i >= 0; i--) if (list[i]!.item === id) list.splice(i, 1);
     }
     this.loaded.delete(id);
@@ -144,6 +146,10 @@ export class Extensions extends EventEmitter {
         statusSegment: (s) => own(this.status, s, (x) => x.id),
         theme: (t) => own(this.themes, t, () => 'theme'),
         redraw: () => this.emit('change'),
+      },
+      checks: {
+        endOfTurn: (c) => own(this.endChecks, c, (x) => x.id),
+        afterEdit: (c) => own(this.editChecks, c, (x) => x.id),
       },
       exec: (command, args, opts) => host.exec(command, args, {cwd: opts?.cwd ?? host.cwd(), ...(opts?.timeoutMs ? {timeoutMs: opts.timeoutMs} : {})}),
       git: (args, cwd) => host.exec('git', args, {cwd: cwd ?? host.cwd()}),

@@ -1,5 +1,0 @@
-{
-  "name": "expand-contract",
-  "description": "Plan a zero-downtime API or schema change (rename, retype, split, remove) as expand, migrate and contract steps, each safe to deploy on its own",
-  "planMode": true
-}

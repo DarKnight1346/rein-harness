@@ -9,8 +9,6 @@ import {formatUsd, setCacheWriteTtl, setPriceOverrides} from './providers/prices
 import {Telemetry} from './telemetry/otel.js';
 import {maskSecrets} from './tools/secrets.js';
 import {sastCheck} from './tools/sast.js';
-import {classify, contractNote} from './contracts/changes.js';
-import {isMigration, lintMigration, migrationNote} from './contracts/migrations.js';
 import {loadPolicy, modelBlocked} from './policy.js';
 import {reinConfigDir} from './store/paths.js';
 import {affectedTool} from './build/tool.js';
@@ -127,10 +125,8 @@ export class Runtime {
 
   /** Whether sast and verify-affected have checked this request's changes. */
   private sastChecked = false;
-  /** contract-check ran for this request. */
-  private contractsChecked = false;
-  /** migration-check ran for this request. */
-  private migrationsChecked = false;
+  /** Marketplace items' end-of-turn checks that ran for this request (once each). */
+  private extChecksRun = new Set<string>();
   private affectedChecked = false;
   private sizeChecked = false;
   /** The last budget stop (for rein -p's exit status), cleared by your next message. */
@@ -710,13 +706,12 @@ Drop superseded reads of the same file, routine listings, and output that no lon
     if (!/^<(code_check|stop_hook)>/.test(text)) {
       this.requestStartUsd = this.engine?.sessionTokens.usd ?? 0;
       this.sastChecked = false;
-      this.contractsChecked = false;
-      this.migrationsChecked = false;
+      this.extChecksRun.clear();
+      extensions.emit('requestStart');
       this.affectedChecked = false;
       this.sizeChecked = false;
       this.budgetStop = undefined;
       this.tools.watchdog.reset();
-      this.tools.repeats.reset();
       this.escalation = undefined;
       this.verifyPasses = 0;
       this.verifiedAt = undefined;
@@ -813,29 +808,19 @@ Drop superseded reads of the same file, routine listings, and output that no lon
         if (found) return {reason: found, kind: 'diagnostics'};
       }
     }
-    // contract-check: breaking changes this request made to API contracts, once per request.
-    if (activeExperiments(this.config).includes('contract-check') && !this.contractsChecked && this.engine) {
+    // Marketplace items' checks over what this request changed (extensions: checks.endOfTurn), once each.
+    if (extensions.endChecks.length && this.engine) {
       const since = this.currentTurn();
-      const files = this.checkpoints.changedSince(since);
-      const found = files
-        .map((f) => {
-          const before = this.checkpoints.before(since, f); // null: it didn't exist; undefined: not known
-          return before === undefined ? undefined : classify(path.relative(process.cwd(), f).split(path.sep).join('/'), before ?? undefined, existsSync(f) ? readFileSync(f, 'utf8') : undefined);
-        })
-        .filter((x): x is NonNullable<typeof x> => !!x);
-      if (found.length) {
-        this.contractsChecked = true;
-        const note = contractNote(found);
-        if (note) return {reason: note, kind: 'diagnostics'};
-      }
-    }
-    // migration-check: the request's migrations that lock, need a backfill, can't be undone or break running code.
-    if (activeExperiments(this.config).includes('migration-check') && !this.migrationsChecked && this.engine) {
-      const root = process.cwd();
-      const files = this.checkpoints.changedSince(this.currentTurn()).filter((f) => existsSync(f) && isMigration(path.relative(root, f)));
-      if (files.length) {
-        this.migrationsChecked = true;
-        const note = migrationNote(files.flatMap((f) => lintMigration(root, path.relative(root, f), readFileSync(f, 'utf8'))));
+      const changed = this.checkpoints.changedSince(since);
+      for (const {item, value: c} of extensions.endChecks) {
+        const key = `${item}:${c.id}`;
+        if (this.extChecksRun.has(key) || !changed.length) continue;
+        this.extChecksRun.add(key);
+        const files = changed.map((f) => {
+          const before = this.checkpoints.before(since, f);
+          return {path: path.relative(root, f).split(path.sep).join('/'), ...(typeof before === 'string' ? {before} : {}), ...(existsSync(f) ? {after: readFileSync(f, 'utf8')} : {})};
+        });
+        const note = await Promise.resolve(c.run(files)).catch(() => undefined);
         if (note) return {reason: note, kind: 'diagnostics'};
       }
     }

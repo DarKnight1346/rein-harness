@@ -6,7 +6,8 @@
  *
  * Item authors: `import type {Rein} from 'rein-harness/api'` for the types.
  */
-export const API_VERSION = 1;
+/** 1: commands, tools, UI, services. 2: checks (endOfTurn, afterEdit) and the requestStart event. */
+export const API_VERSION = 2;
 
 export type LogKind = 'info' | 'error';
 
@@ -59,6 +60,17 @@ export type Theme = {accent?: string};
 
 export type ExecResult = {code: number; stdout: string; stderr: string};
 
+/** A file the current request changed: its path in the project, and its text before and now (undefined: it didn't exist then / was deleted). */
+export type ChangedFile = {path: string; before?: string; after?: string};
+/**
+ * A check when the agent ends a turn, over what the request changed: a note returned goes back to
+ * the agent (it carries on to address it), as Rein's own end-of-turn checks do. Each check runs at
+ * most once per request.
+ */
+export type EndOfTurnCheck = {id: string; run(changed: ChangedFile[]): string | undefined | Promise<string | undefined>};
+/** After each edit the agent makes (not a subagent's): a note returned is added to the edit's result. */
+export type AfterEditCheck = {id: string; run(edit: {path: string; args: unknown}): string | undefined};
+
 export type Rein = {
   /** The API version this Rein speaks (an item needing a newer one isn't loaded). */
   version: number;
@@ -84,6 +96,8 @@ export type Rein = {
   /** Rein's settings (read-only), and this item's own settings (kept in its data folder). */
   config(): Record<string, unknown>;
   settings: {get<T = unknown>(key: string): T | undefined; set(key: string, value: unknown): void};
-  /** Things that happen: a turn of the agent ended. Returns a function that stops listening. */
-  on(event: 'turnEnd', fn: () => void): () => void;
+  /** Checks on the agent's work: at the end of a turn, and after each edit. */
+  checks: {endOfTurn(c: EndOfTurnCheck): void; afterEdit(c: AfterEditCheck): void};
+  /** Things that happen: a turn of the agent ended, or a new request (your message) started. Returns a function that stops listening. */
+  on(event: 'turnEnd' | 'requestStart', fn: () => void): () => void;
 };

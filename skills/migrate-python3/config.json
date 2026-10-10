@@ -1,5 +1,0 @@
-{
-  "name": "migrate:python3",
-  "description": "Plan a move from Python 2 to Python 3: tooling and tests first, then a codemod pass, then bytes/str, division and dependency fixes",
-  "planMode": true
-}

@@ -5,8 +5,10 @@ description: Changes that other code depends on. Which API contract changes brea
 
 Some changes reach further than the code you're editing: the clients of an API, the services that read a message, the data already in a table. This page covers the tools that make those changes safely.
 
-:::note[Contracts and migrations pack]
-`/contracts`, `/migrations`, `/deadcode`, `/flags`, `/codemod`, `/expand-contract`, `/contract-tests`, `/migrate:java21`, `/migrate:python3`, `/migrate:react-hooks` are in the **Contracts and migrations** pack, which is off by default: turn it on in `/settings` → **Packs** ([Packs](../../reference/commands/#packs)). What Rein does on its own here works without it.
+:::note[A marketplace item]
+This is the **Contracts and migrations** item from the [marketplace](../marketplace/): its commands, skills and checks ship with it, code and all. Install it with `/marketplace install contracts` (or find it in `/marketplace`); uninstalling removes it. It adds `/contracts`, `/migrations`, `/deadcode`, `/flags`, and the skills `/contracts:codemod`, `/contracts:expand-contract`, `/contracts:contract-tests`, `/contracts:migrate-java21`, `/contracts:migrate-python3` and `/contracts:migrate-react-hooks`.
+
+Its checks on the agent's work are off until you turn them on: `/contracts checks` shows them, `/contracts checks contracts on` (or `migrations`, `codemod`) turns one on. They're kept in the item's settings.
 :::
 
 ## Breaking or safe
@@ -36,7 +38,7 @@ A change is breaking when a client written against the old contract can fail wit
 
 `$ref`s inside OpenAPI documents are followed. Avro is checked as backward compatibility: data written with the old schema must still read with the new one. A contract file that was deleted is breaking, and a new one is safe.
 
-With the `contract-check` [experiment](../../reference/configuration/#experiments) on, the agent hears about it at the end of a request that broke a contract it changed. It's told to say so if the break is intended (and make it a versioned or [expand/contract](#expand-and-contract) change), or else to make the change backward compatible.
+With the the `contracts` check [experiment](../../reference/configuration/#experiments) on, the agent hears about it at the end of a request that broke a contract it changed. It's told to say so if the break is intended (and make it a versioned or [expand/contract](#expand-and-contract) change), or else to make the change backward compatible.
 
 ## Migration safety
 
@@ -62,7 +64,7 @@ A migration that's fine on your laptop can take production down. A table rewrite
 
 Rein knows migrations by where they live: `migrations/`, `db/migrate/`, `alembic/versions/`, Flyway's `V1__name.sql`, `*.up.sql`. It reads plain SQL (Postgres first, with MySQL's online-DDL options), Rails, Django and Alembic migrations, plus the SQL inside `RunSQL`, `op.execute` and Knex or TypeORM `raw`/`query` calls. Down migrations aren't flagged for undoing things. Some findings depend on table size and database version; the agent and you decide which apply.
 
-With the `migration-check` [experiment](../../reference/configuration/#experiments) on, the agent hears about these at the end of a request that wrote migrations. It fixes the ones that apply, and says so when a step is deliberate.
+With the the `migrations` check [experiment](../../reference/configuration/#experiments) on, the agent hears about these at the end of a request that wrote migrations. It fixes the ones that apply, and says so when a step is deliberate.
 
 ## Expand and contract
 
@@ -72,10 +74,10 @@ Renaming a column, changing a field's type or removing an endpoint breaks whatev
 2. **Migrate**: backfill the data, then move readers and clients over, checking as you go.
 3. **Contract**: once nothing uses the old shape, remove it.
 
-`/expand-contract <change>` plans that for you, in [plan mode](../plans/):
+`/contracts:expand-contract <change>` plans that for you, in [plan mode](../plans/):
 
 ```text title="rein"
-> /expand-contract rename orders.total to orders.total_cents, used by the API and the billing worker
+> /contracts:expand-contract rename orders.total to orders.total_cents, used by the API and the billing worker
 ```
 
 The agent:
@@ -91,10 +93,10 @@ Steps that have to wait, for old clients or for a backfill to finish, are separa
 
 `/contracts` tells you a schema change is breaking. A **contract test** tells you before the change ships, from the consumer's side: each consumer records what it needs from a provider (the requests it makes, the response fields it reads) as a *pact*, and the provider's build replays every pact against itself.
 
-`/contract-tests` writes them with [Pact](https://pact.io):
+`/contracts:contract-tests` writes them with [Pact](https://pact.io):
 
 ```text title="rein"
-> /contract-tests the calls to the orders service
+> /contracts:contract-tests the calls to the orders service
 ```
 
 1. **Boundaries.** The agent finds this service's outgoing calls: HTTP clients and their base URLs, generated OpenAPI or gRPC clients, and message producers and consumers. It finds the service on the other side, in the [workspace](../workspaces/) or with `org_search`, and which endpoints and fields the code really uses.
@@ -106,7 +108,7 @@ Steps that have to wait, for old clients or for a backfill to finish, are separa
 
 Renaming a function used in 300 files, moving every call site to a new API, swapping a library: an agent editing those one by one is slow, uneven, and leaves a diff nobody wants to review. A **codemod** is a script that makes the change everywhere the same way.
 
-`/codemod <change>` has the agent write one:
+`/contracts:codemod <change>` has the agent write one:
 
 1. **The change.** It finds every place it applies, across the [workspace](../workspaces/) or the org if needed, notes the variations (aliased imports, odd argument shapes, generated files), and writes the rule with real before/after examples. For under about five simple places it just edits them.
 2. **The tool.** It picks what fits the language and what the project already uses:
@@ -121,7 +123,7 @@ Renaming a function used in 300 files, moving every call site to a new API, swap
 3. **Small, then everywhere.** It writes the script to be idempotent and to skip (and list) what it can't handle cleanly. It tries it on two or three files and reads the diff, then runs it on all of them. Last come the formatter, the build or type checker, and the tests.
 4. **Report.** It tells you the files changed, the rule, the command to run the codemod again on branches that land later, and what was skipped.
 
-With the `codemod-nudge` [experiment](../../reference/configuration/#experiments) on, Rein notices when the agent makes the **same hand edit in four files** within a request. It tells the agent to write a codemod for the rest. That happens once per change.
+With the the `codemod` check [experiment](../../reference/configuration/#experiments) on, Rein notices when the agent makes the **same hand edit in four files** within a request. It tells the agent to write a codemod for the rest. That happens once per change.
 
 ## Migration playbooks
 
@@ -129,11 +131,11 @@ Big platform moves follow known paths. These built-in skills put the agent on on
 
 | Skill | The path |
 | --- | --- |
-| `/migrate:java21` | Java 8, 11 or 17 → 21. Build on JDK 21 while still targeting the old version, upgrading the build tool and plugins (Gradle 8.5+, Lombok, Mockito, Spring Boot 3.2+). Then dependencies, and the removed modules (`javax.xml.bind`…) and encapsulated internals (found with `jdeps --jdk-internals`). Then `release 21` with CI, Docker images and JVM flags. Records, pattern matching and virtual threads come last, in their own PRs. OpenRewrite's `UpgradeToJava21` does the mechanical parts when the build allows it. |
-| `/migrate:python3` | Python 2 → 3, staying runnable on Python 2 until the switch. First a test safety net and `__future__` imports, then a reviewed `futurize`/`modernize` pass. Bytes vs text at every I/O boundary, `/` vs `//`, iterators and old pickles are fixed by hand. Then dependencies, CI on both versions, and finally dropping Python 2 with `pyupgrade`. |
-| `/migrate:react-hooks` | React class components → function components with hooks. Components are inventoried and converted in batches, leaves first. Tests pin the behaviour first, since Enzyme tests of internals need rewriting. A conversion table covers state, lifecycles, derived state, `memo`, refs and `useImperativeHandle`. Error boundaries stay classes. |
+| `/contracts:migrate-java21` | Java 8, 11 or 17 → 21. Build on JDK 21 while still targeting the old version, upgrading the build tool and plugins (Gradle 8.5+, Lombok, Mockito, Spring Boot 3.2+). Then dependencies, and the removed modules (`javax.xml.bind`…) and encapsulated internals (found with `jdeps --jdk-internals`). Then `release 21` with CI, Docker images and JVM flags. Records, pattern matching and virtual threads come last, in their own PRs. OpenRewrite's `UpgradeToJava21` does the mechanical parts when the build allows it. |
+| `/contracts:migrate-python3` | Python 2 → 3, staying runnable on Python 2 until the switch. First a test safety net and `__future__` imports, then a reviewed `futurize`/`modernize` pass. Bytes vs text at every I/O boundary, `/` vs `//`, iterators and old pickles are fixed by hand. Then dependencies, CI on both versions, and finally dropping Python 2 with `pyupgrade`. |
+| `/contracts:migrate-react-hooks` | React class components → function components with hooks. Components are inventoried and converted in batches, leaves first. Tests pin the behaviour first, since Enzyme tests of internals need rewriting. A conversion table covers state, lifecycles, derived state, `memo`, refs and `useImperativeHandle`. Error boundaries stay classes. |
 
-Add words after the command to steer it: `/migrate:java21 we're on 11 and Spring Boot 2.7`. For a path that isn't here, `/skill:create` writes your own playbook in the same shape.
+Add words after the command to steer it: `/contracts:migrate-java21 we're on 11 and Spring Boot 2.7`. For a path that isn't here, `/skill:create` writes your own playbook in the same shape.
 
 ## Dead code and stale flags
 
