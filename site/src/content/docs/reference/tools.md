@@ -543,6 +543,20 @@ Removes every memory fact containing `match` (case-insensitive).
 | --- | --- | --- |
 | `match` **(required)** | string | At least 3 characters |
 
+## Previews
+
+### `preview`
+
+Label `Preview`. Approval: none (it opens something for you to see; it doesn't change anything). Offered in [web UI](../../features/web-ui/) chats only. Shows the user something the agent made that has a screen, live in their Rein window. See [Previews](../../features/previews/).
+
+| Parameter | Type | Meaning |
+|---|---|---|
+| `url` | string | An http(s) URL to show, e.g. `http://localhost:3000/dashboard`. Local URLs work as-is: the browser runs on the machine Rein runs on |
+| `vnc` | string | A VNC display: `host:port`, or `:N` for display N (port 5900+N) |
+| `title` | string | A short name for it (default: the address) |
+| `password` | string | The VNC display's password, if it has one (the user is asked otherwise) |
+| `app` | boolean | Linux: start a virtual display for a native app (no VM). Rein starts and shows it; the agent then starts the app on it with its shell tool (`DISPLAY=:N app &`) |
+
 ## Pets
 
 With a Codex account and Codex's **Pets** plugin installed, the agent gets the ChatGPT Pets app's tools, whatever the model: `pets_list_pets`, `pets_get_pet_download_link`, `pets_select_pet`, `pets_create_pet`, `pets_update_pet`, `pets_delete_pet` and the others the app offers, with the app's own parameters. Read-only ones don't ask; the rest go through approval, and `pets_delete_pet` always asks. See [Pets](../../features/pets/).

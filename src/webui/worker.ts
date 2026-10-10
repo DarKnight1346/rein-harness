@@ -23,6 +23,8 @@ export type Snapshot = {
   chatModel: string;
   mode: 'ask' | 'auto' | 'bypass' | 'plan';
   busy: boolean;
+  /** Things with a screen the agent made (preview/registry.ts), and whether each is open. */
+  previews: {id: number; kind: string; target: string; title: string; source: string; open: boolean; url?: string}[];
   /** The accent of a theme from a marketplace item or your theme setting (a CSS color), if any. */
   accent?: string;
   /** The status line and sidebar, as /settings lays them out (panels.ts). */
@@ -231,6 +233,9 @@ export async function runWorker(): Promise<number> {
   const panels = await import('./panels.js');
   const nodePath = await import('node:path');
   const {rewindPoints, rewindTo} = await import('../session/rewind.js');
+  const {previewTool} = await import('../preview/tool.js');
+  const {BrowserView} = await import('../preview/cdp.js');
+  const {VncView, NeedsPassword} = await import('../preview/vnc.js');
   const label = (ref: {provider: string; model: string}) => catalog.get(ref as Parameters<typeof catalog.get>[0])?.label ?? ref.model;
 
   const waiting = new Map<number, (v: any) => void>();
@@ -269,6 +274,7 @@ export async function runWorker(): Promise<number> {
       sidebar: panels.sidebarView(),
       queued: queue,
       accent: accentNow(),
+      previews: previewList(),
     };
   };
   // The status line and sidebar follow the conversation: sent after each event burst, at most every 250ms.
@@ -278,7 +284,7 @@ export async function runWorker(): Promise<number> {
     chromeTimer = setTimeout(() => {
       chromeTimer = undefined;
       try {
-        send({t: 'event', ev: {type: 'chrome', status: panels.statusView(), sidebar: panels.sidebarView(), queued: queue, mode: mode(), chatModel: runtime.config.chatModel ?? 'auto', accent: accentNow()}});
+        send({t: 'event', ev: {type: 'chrome', status: panels.statusView(), sidebar: panels.sidebarView(), queued: queue, mode: mode(), chatModel: runtime.config.chatModel ?? 'auto', accent: accentNow(), previews: previewList()}});
       } catch {}
     }, 250);
   };
@@ -425,6 +431,66 @@ export async function runWorker(): Promise<number> {
     redraw();
   };
 
+  // Previews (preview/): a streamed browser or display per open preview, while the page looks at it.
+  const views = new Map<number, InstanceType<typeof BrowserView> | InstanceType<typeof VncView>>();
+  let watching = true;
+  const previewList = () =>
+    runtime.previews.list().map((p) => {
+      const v = views.get(p.id);
+      return {id: p.id, kind: p.kind, target: p.target, title: p.title, source: p.source, open: !!v, ...(v instanceof BrowserView && v.url ? {url: v.url} : {})};
+    });
+  const openView = async (id: number, size: {width: number; height: number}, password?: string) => {
+    const p = runtime.previews.get(id);
+    if (!p) throw new Error('that preview is gone');
+    const had = views.get(id);
+    if (had) {
+      if (had instanceof BrowserView) await had.resize(size);
+      else had.full();
+      await had.stream(true);
+      return {id, url: had instanceof BrowserView ? had.url : undefined};
+    }
+    const frame = (ev: Record<string, unknown>) => send({t: 'event', ev: {type: 'pframe', id, ...ev}});
+    if (p.kind === 'url') {
+      const v = new BrowserView();
+      views.set(id, v);
+      v.on('frame', (f) => frame({format: 'jpeg', data: f.data, width: f.width, height: f.height}));
+      v.on('navigated', (url) => send({t: 'event', ev: {type: 'preview-url', id, url}}));
+      v.on('notice', (text) => log('info', text));
+      v.on('closed', () => (views.delete(id), chrome()));
+      try {
+        await v.start(p.target, size);
+      } catch (err) {
+        v.close();
+        throw err;
+      }
+      if (!watching) await v.stream(false);
+    } else {
+      const v = new VncView();
+      views.set(id, v);
+      v.on('patch', (pt) => frame({format: 'png', ...pt}));
+      v.on('notice', (text) => log('info', text));
+      v.on('closed', () => views.get(id) === v && (views.delete(id), chrome()));
+      try {
+        await v.start(p.target, password ?? p.password);
+        if (password) p.password = password; // it worked: kept for reconnecting (never sent to the page)
+      } catch (err) {
+        views.delete(id);
+        v.close();
+        // The page asks for the password, then opens it again with it.
+        if (err instanceof NeedsPassword) return {id, needsPassword: true, error: err.message};
+        throw err;
+      }
+      v.full();
+    }
+    chrome();
+    return {id};
+  };
+  runtime.previews.on('change', () => {
+    // A preview that went (its server stopped) closes its view.
+    for (const id of [...views.keys()]) if (!runtime.previews.get(id)) views.get(id)?.close();
+    chrome();
+  });
+
   const ui: import('../commands/run.js').CommandUi = {
     surface: 'web',
     windowed: false,
@@ -473,6 +539,7 @@ export async function runWorker(): Promise<number> {
     compacting: undefined,
     setCompacting: (v) => send({t: 'event', ev: v ? {type: 'compact', phase: 'start', label: v.label} : {type: 'compact', phase: 'end'}}),
     openRewind: () => void showWindow({name: 'rewind', points: rewindPoints()}),
+    openPreview: (id) => send({t: 'event', ev: {type: 'preview-show', id}}),
     openShells: () => void showWindow({name: 'shells'}),
     exit: () => {},
     refresh: async () => {
@@ -503,6 +570,9 @@ export async function runWorker(): Promise<number> {
         // Claude models' real context windows, for those never used yet (as the terminal does).
         void catalog.probeWindows().catch(() => {});
         await runtime.loadExtensions().catch(() => {});
+        // The agent can show the user what it made, live, wherever they are (web UI chats only).
+        runtime.tools.register(previewTool(runtime.previews, (id) => send({t: 'event', ev: {type: 'preview-show', id}})));
+        runtime.engine.refreshTools();
         skills = loadSkills();
         return send({t: 'ready', snapshot: snapshot()});
       }
@@ -537,6 +607,11 @@ export async function runWorker(): Promise<number> {
         return send({t: 'snapshot', snapshot: snapshot()});
       case 'compact':
         return command('/compact');
+      case 'watching':
+        // Frames only while a page is looking (the server says when the last one goes).
+        watching = !!m.on;
+        for (const v of views.values()) void v.stream(watching);
+        return;
     }
   };
 
@@ -738,6 +813,52 @@ export async function runWorker(): Promise<number> {
         await showWindow({name: 'mcp'}, true);
         return {ok: true};
       }
+      case 'preview-open':
+        return openView(Number(args.id), {width: Number(args.width) || 1280, height: Number(args.height) || 800}, typeof args.password === 'string' && args.password ? args.password : undefined);
+      case 'preview-input': {
+        const v = views.get(Number(args.id));
+        const ev = args.ev as {type?: string};
+        if (!v || !ev || !['mouse', 'wheel', 'key', 'text'].includes(String(ev.type))) return {ok: false};
+        await v.input(ev as never);
+        return {ok: true};
+      }
+      case 'preview-nav': {
+        const v = views.get(Number(args.id));
+        if (!(v instanceof BrowserView)) throw new Error('only a web preview navigates');
+        if (args.dir === 'back' || args.dir === 'forward' || args.dir === 'reload') await v.history(args.dir);
+        else await v.navigate(String(args.url ?? ''));
+        return {ok: true};
+      }
+      case 'preview-full': {
+        // A page dropped frames (a slow link): the whole screen again, so nothing stale stays.
+        const v = views.get(Number(args.id));
+        if (v instanceof VncView) v.full();
+        return {ok: true};
+      }
+      case 'preview-resize': {
+        const v = views.get(Number(args.id));
+        if (v instanceof BrowserView) await v.resize({width: Number(args.width), height: Number(args.height)});
+        return {ok: true};
+      }
+      case 'preview-close':
+        views.get(Number(args.id))?.close();
+        if (args.remove) runtime.previews.remove(Number(args.id));
+        chrome();
+        return {ok: true};
+      case 'preview-add': {
+        // The user opens one themselves: a URL, or a VNC display, typed into the page.
+        const {vncTarget} = await import('../preview/registry.js');
+        const t = String(args.target ?? '').trim();
+        const vnc = /^(vnc:\/\/)?[\w.[\]-]*:\d+$/i.test(t) && !/^https?:/i.test(t) ? vncTarget(t) : undefined;
+        if (vnc) return runtime.previews.add({kind: 'vnc', target: vnc, title: vnc, source: 'agent'});
+        let u: URL;
+        try {
+          u = new URL(/^https?:\/\//i.test(t) ? t : `http://${t}`);
+        } catch {
+          throw new Error('give a URL (localhost:3000) or a VNC display (:1, host:5901)');
+        }
+        return runtime.previews.add({kind: 'url', target: u.toString(), title: u.host, source: 'agent'});
+      }
       case 'unqueue':
         queue = queue.filter((_, i) => i !== Number(args.index));
         chrome();
@@ -757,6 +878,8 @@ export async function runWorker(): Promise<number> {
     void handle(m).catch((err) => send({t: 'event', ev: {type: 'error', message: (err as Error).message}}));
   });
   await new Promise<void>((resolve) => process.stdin.on('end', resolve));
+  for (const v of views.values()) v.close(); // no headless browser outlives its chat
+  runtime.previews.stopAll(); // nor a virtual display
   runtime.shutdown();
   return 0;
 }

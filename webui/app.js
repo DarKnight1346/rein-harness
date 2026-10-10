@@ -54,6 +54,7 @@ function ansi(text) {
 
 const ICONS = {
   plus: 'M12 5v14M5 12h14', send: 'M5 12h14M13 5l7 7-7 7', stop: 'M7 7h10v10H7z', folder: 'M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z', file: 'M6 3h8l4 4v14H6zM14 3v4h4', chat: 'M4 5h16v11H8l-4 4z', gear: 'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z',
+  keyboard: 'M3 6h18v12H3zM7 10h.01M11 10h.01M15 10h.01M7 14h10',
   archive: 'M3 5h18v4H3zM5 9v10h14V9M10 13h4', restore: 'M4 12a8 8 0 1 0 2.3-5.7M4 4v5h5', back: 'M19 12H5M11 5l-7 7 7 7', forward: 'M5 12h14M13 5l7 7-7 7', home: 'M3 11l9-7 9 7v9H5v-9', drive: 'M3 15h18v5H3zM6 17.5h.01M3 15l3-10h12l3 10',
   menu: 'M4 6h16M4 12h16M4 18h16', panel: 'M4 5h16v14H4zM15 5v14', up: 'M12 19V5M5 12l7-7 7 7', upload: 'M12 16V4M6 10l6-6 6 6M4 20h16', refresh: 'M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7', search: 'M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14zM21 21l-5-5', more: 'M5 12h.01M12 12h.01M19 12h.01', x: 'M6 6l12 12M18 6L6 18', eye: 'M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12zM12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z', download: 'M12 4v12M6 10l6 6 6-6M4 20h16', newfolder: 'M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2zM12 10v6M9 13h6',
 };
@@ -576,7 +577,7 @@ async function openSaved(session, cwd) {
 function attachChat(id) {
   if (!/^[\da-f]{16}$/.test(id)) return;
   state.chat?.es?.close();
-  const c = {id, snapshot: undefined, live: '', tools: [], asks: new Map(), busy: false, notes: [], model: undefined, es: undefined, stick: true, feed: [], window: undefined, ui: undefined};
+  const c = {id, snapshot: undefined, live: '', tools: [], asks: new Map(), busy: false, notes: [], model: undefined, es: undefined, stick: true, feed: [], window: undefined, ui: undefined, pv: {}, pvOpen: undefined};
   state.chat = c;
   const es = new EventSource(`/api/chats/${id}/events`);
   c.es = es;
@@ -651,6 +652,15 @@ function onEvent(c, ev) {
     case 'clear':
       c.feed = [];
       break;
+    case 'pframe':
+      drawFrame(c, ev);
+      return;
+    case 'preview-url':
+      if (c.pv?.[ev.id]) ((c.pv[ev.id].url = ev.url), updatePreviewBar(c));
+      return;
+    case 'preview-show':
+      openPreview(c, ev.id);
+      return;
     case 'window':
       // A live refresh (shells, subagents) keeps what's open in the window; a new window starts fresh.
       if (!ev.refresh) c.winUi = {};
@@ -659,10 +669,11 @@ function onEvent(c, ev) {
       renderWindow(c);
       return;
     case 'chrome':
-      if (c.snapshot) Object.assign(c.snapshot, {status: ev.status, sidebar: ev.sidebar, queued: ev.queued, mode: ev.mode, chatModel: ev.chatModel, accent: ev.accent});
+      if (c.snapshot) Object.assign(c.snapshot, {status: ev.status, sidebar: ev.sidebar, queued: ev.queued, mode: ev.mode, chatModel: ev.chatModel, accent: ev.accent, previews: ev.previews});
       applyAccent(ev.accent);
       renderChrome(c);
       updateComposer(c);
+      renderPreviewChips(c);
       return;
     case 'ask':
       c.asks.set(ev.id, ev);
@@ -1033,7 +1044,7 @@ function chatView() {
   return h('main.main.chat' + (panelOpen ? '.with-panel' : ''),
     topbar(s?.title ?? 'Chat', [s && !isOneOff(s.cwd) ? h('span.path', tilde(s.cwd)) : null, h('button.icon-btn', {title: 'Sidebar', on: {click: togglePanel}}, icon('panel')), h('button.icon-btn', {title: 'More', on: {click: (e) => chatMenu(e, c)}}, icon('more'))]),
     statusEl(c),
-    h('div.chat-body', h('div.chat-col', h('div.scroll', threadEl()), composer()), panelOpen ? panelEl(c) : null, panelOpen && !wide ? h('div.rpanel-backdrop', {on: {click: togglePanel}}) : null),
+    h('div.chat-body' + (c.pvOpen ? '.with-preview' : ''), h('div.chat-col', h('div.scroll', threadEl()), h('div.pchips#pchips'), composer()), c.pvOpen ? previewPane(c) : null, panelOpen ? panelEl(c) : null, panelOpen && !wide ? h('div.rpanel-backdrop', {on: {click: togglePanel}}) : null),
   );
 }
 
@@ -1076,6 +1087,7 @@ function runInChat(c, text) {
   return api(`/api/chats/${c.id}/send`, {body: {text}}).catch((e) => toast(e.message, 'error'));
 }
 function afterChatRender() {
+  if (state.chat) (renderPreviewChips(state.chat), state.chat.pvOpen && fitPreview(state.chat));
   if (state.chat?.window) renderWindow(state.chat);
   const scroll = $('.scroll');
   if (scroll) scroll.scrollTop = scroll.scrollHeight;
@@ -1504,6 +1516,299 @@ function plansPanel(c, v) {
     closeWindow(c);
     await ask(c, 'plan-goal', {file: p.file}).catch((e) => toast(e.message, 'error'));
   }}}, h('div', h('b', p.title), h('small', `${p.done}/${p.total} milestones done`)))), h('button.btn', {on: {click: () => (closeWindow(c), (c.ui.ta.value = '/plan '), c.ui.ta.focus())}}, 'Write a new plan'));
+}
+
+// ---------- previews: what the agent made that has a screen, streamed from the machine Rein runs on ----------
+
+/** Chips above the input: each preview (a server the agent started, a display), open or not. */
+function renderPreviewChips(c) {
+  const el = $('#pchips');
+  if (!el || state.chat !== c) return;
+  // The open pane's tabs and bar follow the list (a preview added or renamed, its server gone).
+  const pane = $('#ppane');
+  if (pane && c.pvOpen) {
+    // Closed only once it was in the list and has gone (an update from before it was added doesn't count).
+    const listed = (c.snapshot?.previews ?? []).some((p) => p.id === c.pvOpen);
+    if (listed && c.pv[c.pvOpen]) c.pv[c.pvOpen].seen = true;
+    if (!listed && c.pv[c.pvOpen]?.seen) ((c.pvOpen = undefined), render());
+    else {
+      // Only the tabs and the bar: the live screen (canvas) stays where it is.
+      const list2 = c.snapshot?.previews ?? [];
+      const pv2 = c.pv[c.pvOpen];
+      pane.querySelector('.ptabs')?.replaceWith(paneTabs(c, list2));
+      pane.querySelector('.pbar')?.replaceWith(paneBar(c, list2.find((x) => x.id === c.pvOpen), pv2));
+    }
+  }
+  const list = c.snapshot?.previews ?? [];
+  el.replaceChildren(...list.map((p) => h('button.pchip' + (c.pvOpen === p.id ? '.on' : ''), {title: p.target, on: {click: () => (c.pvOpen === p.id ? closePane(c) : openPreview(c, p.id))}},
+    h('span.pdot' + (p.open ? '.live' : '')), p.kind === 'vnc' ? '▣ ' : '◫ ', p.title)),
+    h('button.pchip.add', {title: 'Preview a URL or a VNC display', on: {click: () => addPreview(c)}}, '+ Preview'));
+}
+
+async function addPreview(c) {
+  const t = prompt('Preview what? A URL (localhost:3000) or a VNC display (:1, host:5901)');
+  if (!t) return;
+  try {
+    const p = await ask(c, 'preview-add', {target: t});
+    openPreview(c, p.id);
+  } catch (err) {
+    toast(err.message, 'error');
+  }
+}
+
+function openPreview(c, id) {
+  c.pvOpen = id;
+  c.pv[id] ??= {id, canvas: undefined, w: 0, h: 0, url: ''};
+  if (state.chat === c && state.view === 'chat') render();
+}
+function closePane(c) {
+  c.pvOpen = undefined;
+  render();
+}
+
+/** The pane: tabs for the previews, a browser bar for a web one, and the live screen. */
+function previewPane(c) {
+  const list = c.snapshot?.previews ?? [];
+  const p = list.find((x) => x.id === c.pvOpen);
+  const pv = c.pv[c.pvOpen] ?? (c.pv[c.pvOpen] = {id: c.pvOpen});
+  if (!pv.canvas) {
+    pv.canvas = h('canvas.pcanvas', {tabIndex: 0});
+    bindInput(c, pv);
+  }
+  const bar = paneBar(c, p, pv);
+  const status = h('div.pstatus#pstatus', pv.error ? h('div.note.error', pv.error) : !pv.w ? h('div.working', h('span.spin', '▁▃▅▇'), h('span.rainbow', p?.kind === 'vnc' ? 'Connecting to the display…' : 'Starting the browser…')) : null);
+  return h('section.ppane#ppane',
+    paneTabs(c, list),
+    bar,
+    h('div.pscreen#pscreen', pv.canvas, status, pv.keyboard ?? null),
+  );
+}
+
+function paneTabs(c, list) {
+  return h('div.ptabs', list.filter((x) => c.pv[x.id] || x.id === c.pvOpen).map((x) => h('button.ptab' + (x.id === c.pvOpen ? '.on' : ''), {on: {click: () => openPreview(c, x.id)}}, x.title, h('span.px', {title: 'Close', on: {click: (e) => (e.stopPropagation(), closePreview(c, x.id))}}, '×'))),
+    h('span.grow'), h('button.icon-btn', {title: 'Hide the preview', on: {click: () => closePane(c)}}, icon('x', 15)));
+}
+
+/** A web preview's back / forward / reload / address bar; a display's address; the keyboard button for touch. */
+function paneBar(c, p, pv) {
+  const nav = (dir) => ask(c, 'preview-nav', {id: pv.id, dir}).catch((e) => toast(e.message, 'error'));
+  const urlIn = h('input.purl', {type: 'text', value: pv.url || p?.target || '', spellcheck: false, on: {keydown: (e) => e.key === 'Enter' && ask(c, 'preview-nav', {id: pv.id, url: /^https?:\/\//i.test(e.target.value) ? e.target.value : `http://${e.target.value}`}).catch((x) => toast(x.message, 'error'))}});
+  pv.urlIn = urlIn;
+  const bar = p?.kind === 'url'
+    ? h('div.pbar', h('button.icon-btn', {title: 'Back', on: {click: () => nav('back')}}, icon('back', 15)), h('button.icon-btn', {title: 'Forward', on: {click: () => nav('forward')}}, icon('forward', 15)), h('button.icon-btn', {title: 'Reload', on: {click: () => nav('reload')}}, icon('refresh', 15)), urlIn)
+    : h('div.pbar', h('span.ptarget', p ? `▣ ${p.target}` : ''), h('span.muted.hide-touch', 'click to focus, then type'));
+  // The device's keyboard, for phones and tablets (a hardware keyboard works straight on the screen).
+  bar.append(h('button.icon-btn.pkb', {title: 'Keyboard', 'aria-label': 'Open the keyboard', on: {click: () => pv.keyboard?.focus()}}, icon('keyboard', 16)));
+  return bar;
+}
+
+async function closePreview(c, id) {
+  delete c.pv[id];
+  if (c.pvOpen === id) c.pvOpen = undefined;
+  render();
+  await ask(c, 'preview-close', {id}).catch(() => {});
+}
+
+function updatePreviewBar(c) {
+  const pv = c.pv[c.pvOpen];
+  if (pv?.urlIn && document.activeElement !== pv.urlIn) pv.urlIn.value = pv.url;
+}
+
+/** Ask the worker for the stream at the pane's size (a web page lays out to it). */
+let fitTimer = 0;
+function fitPreview(c) {
+  clearTimeout(fitTimer);
+  fitTimer = setTimeout(async () => {
+    const pv = c.pv[c.pvOpen];
+    const screen = $('#pscreen');
+    if (!pv || !screen) return;
+    const size = {width: Math.round(screen.clientWidth), height: Math.round(screen.clientHeight)};
+    try {
+      if (!pv.started) {
+        pv.started = true;
+        const r = await ask(c, 'preview-open', {id: pv.id, ...size, ...(pv.password ? {password: pv.password} : {})});
+        pv.password = undefined;
+        if (r?.needsPassword) {
+          // The display wants a password: ask here, then open it again with it.
+          pv.started = false;
+          const pw = h('input', {type: 'password', autocomplete: 'off', placeholder: 'VNC password'});
+          const go = () => pw.value && ((pv.password = pw.value), fitPreview(c));
+          pw.addEventListener('keydown', (e) => e.key === 'Enter' && go());
+          $('#pstatus')?.replaceChildren(h('div.pw-ask', h('b', r.error.startsWith('wrong') ? 'Wrong password' : 'This display has a password'), h('div.codein', pw, h('button.btn.primary', {on: {click: go}}, 'Connect'))));
+          $('#pstatus').style.pointerEvents = 'auto';
+          pw.focus();
+          return;
+        }
+        $('#pstatus') && ($('#pstatus').style.pointerEvents = '');
+        if (r?.url) ((pv.url = r.url), updatePreviewBar(c));
+      } else await ask(c, 'preview-resize', {id: pv.id, ...size});
+    } catch (err) {
+      pv.started = false;
+      pv.error = err.message;
+      $('#pstatus')?.replaceChildren(h('div.note.error', err.message));
+    }
+  }, 120);
+}
+addEventListener('resize', () => state.chat?.pvOpen && fitPreview(state.chat));
+
+/** A frame: a whole JPEG from the browser, or a PNG patch of a display. */
+function drawFrame(c, ev) {
+  const pv = c.pv[ev.id];
+  if (!pv?.canvas) return;
+  const img = new Image();
+  img.onload = () => {
+    const cv = pv.canvas;
+    const w = ev.format === 'jpeg' ? img.naturalWidth : ev.width;
+    const hgt = ev.format === 'jpeg' ? img.naturalHeight : ev.height;
+    if (cv.width !== w || cv.height !== hgt) ((cv.width = w), (cv.height = hgt));
+    const ctx = (pv.ctx ??= cv.getContext('2d'));
+    if (ev.format === 'jpeg') ctx.drawImage(img, 0, 0);
+    else ctx.drawImage(img, ev.x, ev.y);
+    if (!pv.w) $('#pstatus')?.replaceChildren();
+    pv.w = w;
+    pv.h = hgt;
+    pv.vw = ev.width;
+    pv.vh = ev.height;
+  };
+  img.src = `data:image/${ev.format};base64,${ev.data ?? ev.png}`;
+}
+
+/**
+ * Input on the screen goes to the preview, in its own pixels. A mouse clicks, drags, scrolls and
+ * types as on a desktop. A finger (phones, tablets): a tap clicks, a swipe scrolls the preview (not
+ * the page), press-and-hold then drag drags, two fingers tapping right-click; the keyboard button
+ * opens the device's keyboard and what's typed goes in.
+ */
+function bindInput(c, pv) {
+  const cv = pv.canvas;
+  cv.style.touchAction = 'none'; // the preview handles swipes, not the browser
+  const at = (e) => {
+    const r = cv.getBoundingClientRect();
+    // The page may lay out at a different size than the frame (device pixels): scale to its viewport.
+    const sx = (pv.vw || cv.width) / r.width, sy = (pv.vh || cv.height) / r.height;
+    return {x: Math.round((e.clientX - r.left) * sx), y: Math.round((e.clientY - r.top) * sy), sx, sy};
+  };
+  const send = (ev) => ask(c, 'preview-input', {id: pv.id, ev}).catch(() => {});
+  const btn = (b) => (b === 2 ? 'right' : b === 1 ? 'middle' : 'left');
+  const xy = (p) => ({x: p.x, y: p.y});
+  let lastMove = 0;
+  // Touch state: what this finger is doing (undecided → tap, scroll or drag).
+  const touches = new Map();
+  let gesture;
+  cv.addEventListener('pointerdown', (e) => {
+    if (e.pointerType === 'mouse') {
+      cv.focus();
+      e.preventDefault();
+      return send({type: 'mouse', action: 'down', button: btn(e.button), clicks: e.detail || 1, ...xy(at(e))});
+    }
+    e.preventDefault();
+    cv.setPointerCapture?.(e.pointerId);
+    touches.set(e.pointerId, {x: e.clientX, y: e.clientY});
+    if (touches.size === 2) return void (gesture = {kind: 'two', start: Date.now(), moved: false, at: at(e)});
+    const p = at(e);
+    gesture = {kind: 'pending', start: Date.now(), x0: e.clientX, y0: e.clientY, lastX: e.clientX, lastY: e.clientY, p};
+    gesture.hold = setTimeout(() => {
+      // Held still: a drag (selecting, sliders, moving things in a VM).
+      if (gesture?.kind !== 'pending') return;
+      gesture.kind = 'drag';
+      navigator.vibrate?.(10);
+      send({type: 'mouse', action: 'move', ...xy(p)});
+      send({type: 'mouse', action: 'down', button: 'left', ...xy(p)});
+    }, 450);
+  });
+  cv.addEventListener('pointermove', (e) => {
+    if (e.pointerType === 'mouse') {
+      if (Date.now() - lastMove < 33) return;
+      lastMove = Date.now();
+      return send({type: 'mouse', action: 'move', ...xy(at(e))});
+    }
+    if (!gesture || !touches.has(e.pointerId)) return;
+    e.preventDefault();
+    touches.set(e.pointerId, {x: e.clientX, y: e.clientY});
+    if (gesture.kind === 'two') return void (gesture.moved = true);
+    const dx = e.clientX - gesture.lastX, dy = e.clientY - gesture.lastY;
+    if (gesture.kind === 'pending' && Math.hypot(e.clientX - gesture.x0, e.clientY - gesture.y0) > 8) {
+      clearTimeout(gesture.hold);
+      gesture.kind = 'scroll';
+    }
+    if (gesture.kind === 'scroll') {
+      if (Date.now() - lastMove < 33) return;
+      lastMove = Date.now();
+      const p = at(e);
+      // Content follows the finger, as a touch screen scrolls.
+      send({type: 'wheel', x: p.x, y: p.y, dx: -dx * p.sx, dy: -dy * p.sy});
+      gesture.lastX = e.clientX;
+      gesture.lastY = e.clientY;
+    } else if (gesture.kind === 'drag' && Date.now() - lastMove >= 33) {
+      lastMove = Date.now();
+      send({type: 'mouse', action: 'move', ...xy(at(e))});
+    }
+  });
+  const end = (e) => {
+    if (e.pointerType === 'mouse') return send({type: 'mouse', action: 'up', button: btn(e.button), clicks: e.detail || 1, ...xy(at(e))});
+    if (!touches.has(e.pointerId)) return;
+    touches.delete(e.pointerId);
+    if (!gesture) return;
+    clearTimeout(gesture.hold);
+    if (gesture.kind === 'two') {
+      // Two fingers tapped together: a right-click.
+      if (!touches.size && !gesture.moved && Date.now() - gesture.start < 400) {
+        send({type: 'mouse', action: 'down', button: 'right', ...xy(gesture.at)});
+        send({type: 'mouse', action: 'up', button: 'right', ...xy(gesture.at)});
+      }
+      if (!touches.size) gesture = undefined;
+      return;
+    }
+    const p = at(e);
+    if (gesture.kind === 'pending' && e.type === 'pointerup') {
+      send({type: 'mouse', action: 'move', ...xy(gesture.p)});
+      send({type: 'mouse', action: 'down', button: 'left', clicks: 1, ...xy(gesture.p)});
+      send({type: 'mouse', action: 'up', button: 'left', clicks: 1, ...xy(gesture.p)});
+    } else if (gesture.kind === 'drag') send({type: 'mouse', action: 'up', button: 'left', ...xy(p)});
+    gesture = undefined;
+  };
+  cv.addEventListener('pointerup', end);
+  cv.addEventListener('pointercancel', end);
+  cv.addEventListener('contextmenu', (e) => e.preventDefault());
+  cv.addEventListener('wheel', (e) => (e.preventDefault(), send({type: 'wheel', dx: e.deltaX, dy: e.deltaY, ...xy(at(e))})), {passive: false});
+  const mods = (e) => (e.altKey ? 1 : 0) | (e.ctrlKey ? 2 : 0) | (e.metaKey ? 4 : 0) | (e.shiftKey ? 8 : 0);
+  const keyDown = (e) => {
+    // Paste goes through the paste event (as text); everything else to the preview.
+    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'v') return;
+    if (e.key === 'Unidentified' || e.key === 'Process') return; // a phone keyboard: see the input below
+    e.preventDefault();
+    send({type: 'key', action: 'down', key: e.key, code: e.code, text: e.key.length === 1 ? e.key : undefined, modifiers: mods(e)});
+  };
+  const keyUp = (e) => {
+    if (e.key === 'Unidentified' || e.key === 'Process') return;
+    e.preventDefault();
+    send({type: 'key', action: 'up', key: e.key, code: e.code, modifiers: mods(e)});
+  };
+  cv.addEventListener('keydown', keyDown);
+  cv.addEventListener('keyup', keyUp);
+  const paste = (e) => {
+    const text = e.clipboardData?.getData('text');
+    if (text) (e.preventDefault(), send({type: 'text', text}));
+  };
+  cv.addEventListener('paste', paste);
+  // The device's own keyboard (phones, tablets): an input that's focused to bring it up. What's typed
+  // arrives as input events (a phone keyboard rarely says which key), sent on as typing.
+  const kb = h('textarea.pkeys', {autocapitalize: 'off', autocomplete: 'off', autocorrect: 'off', spellcheck: false, 'aria-label': 'Type into the preview'});
+  const press = (key) => ['down', 'up'].forEach((action) => send({type: 'key', action, key, code: key}));
+  kb.addEventListener('beforeinput', (e) => {
+    e.preventDefault();
+    if (e.inputType === 'insertText' || e.inputType === 'insertReplacementText' || e.inputType === 'insertCompositionText') e.data && send({type: 'text', text: e.data});
+    else if (e.inputType === 'deleteContentBackward') press('Backspace');
+    else if (e.inputType === 'deleteContentForward') press('Delete');
+    else if (e.inputType === 'insertLineBreak' || e.inputType === 'insertParagraph') press('Enter');
+  });
+  kb.addEventListener('keydown', (e) => {
+    // Keys a phone keyboard does report (a hardware keyboard on a tablet reports them all).
+    if (['Enter', 'Backspace', 'Tab', 'Escape', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Delete'].includes(e.key) || e.ctrlKey || e.metaKey || e.altKey) keyDown(e);
+  });
+  kb.addEventListener('keyup', (e) => ['Enter', 'Backspace', 'Tab', 'Escape', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Delete'].includes(e.key) && keyUp(e));
+  kb.addEventListener('paste', paste);
+  pv.keyboard = kb;
 }
 
 // ---------- files ----------

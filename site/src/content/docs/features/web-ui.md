@@ -96,6 +96,10 @@ A few commands are for the terminal, and say what to use instead:
 
 A new account is used by new chats right away; a chat that's already open picks it up when its model list next refreshes.
 
+### Previews
+
+When the agent starts a web server, or shows you a VM, an emulator or a desktop app, you see it live beside the conversation, from any device: the page streams from a browser on the machine Rein runs on, so `localhost` works. See [Previews](../previews/).
+
 ### Marketplace items
 
 Items you install from the [marketplace](../marketplace/) work in the web UI as in the terminal: their commands are in the `/` list and `/help`, their skills too, and what their code draws shows up here, with the same terminal colors: sidebar sections in the right sidebar, status segments in the status line. A theme item colors the page's accent (as does `theme.accent` in your settings), and uninstalling it brings back the one you had.

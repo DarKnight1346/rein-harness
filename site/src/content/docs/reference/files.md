@@ -161,6 +161,7 @@ Added to the system prompt for every provider, up to 64 KB each, duplicates remo
 | `REIN_HOME` | Root of Rein's state instead of `~/.rein`. Also disables Keychain/DPAPI for the Jev key |
 | `REIN_KEYCHAIN` | `1` (macOS): keep using the Keychain for secrets even with `REIN_HOME` set |
 | `REIN_CLAUDE_BIN` | Path to the `claude` binary (default: `claude` on `PATH`) |
+| `REIN_BROWSER` | The browser [web previews](../../features/previews/) use (default: Chrome, Chromium, Edge or Brave, whichever is installed) |
 | `REIN_OFFICIAL_MARKETPLACE` | Where the official marketplace comes from (default `https://github.com/rein-harness/rein-marketplace`): a mirror's URL, or a folder |
 | `REIN_CODEX_BIN` | Path to the `codex` binary (default: `codex` on `PATH`) |
 | `SRC_ACCESS_TOKEN` | Sourcegraph access token for [`org_search`](../../features/large-codebases/#search-the-whole-org) (`codeSearch` in config) |

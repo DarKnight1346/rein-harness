@@ -79,6 +79,7 @@ import {setAttribution, setBriefFinal, setCheapExplore, setExtraWorkingDirs, set
 import {Vault} from './vault/vault.js';
 import {parseRef, refKey, type Account, type ModelRef, type TokenCount, type ToolBinding} from './providers/types.js';
 import {removeAccount} from './accounts/service.js';
+import {Previews} from './preview/registry.js';
 import {releaseCodexAccount} from './providers/codex/adapter.js';
 import {completeWith, decide, resolveUtilityModel} from './decider/index.js';
 import {parseIndices} from './session/carry.js';
@@ -212,6 +213,8 @@ export class Runtime {
   engine!: Engine;
   /** Last auto-routing decision, for the status line / debugging. */
   lastDecision: string | undefined;
+  /** What the agent made that has a screen (web servers, displays): previews to show you (preview/registry.ts). */
+  readonly previews = new Previews();
   auto: AutoRouter = makeAutoRouter({config: () => this.config, onDecision: (d) => (this.lastDecision = d)});
   compact = (t: Transcript, _reason: CompactReason, opts?: Parameters<typeof compactTranscript>[2]): Promise<CompactResult> => {
     // The summary may not keep subfolder instructions word for word: deliver them again as needed.
@@ -986,6 +989,9 @@ Drop superseded reads of the same file, routine listings, and output that no lon
     this.workspace = findWorkspace();
     await this.vault.load();
     this.tools.shells.vault = this.vault;
+    // A local URL in a command's output (a dev server coming up) becomes a preview; it goes when the command ends.
+    this.tools.shells.on('output', (sh: import('./tools/shells.js').Shell, chunk: string) => void this.previews.detect(chunk, sh.id));
+    this.tools.shells.on('change', (sh: import('./tools/shells.js').Shell) => sh.status !== 'running' && this.previews.shellEnded(sh.id));
     this.tools.shells.devEnv = this.devEnv;
     this.tools.shells.box = this.box;
     // provenance: what the trailers say, current at the moment of each command.

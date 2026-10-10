@@ -28,6 +28,7 @@ import {settingsFiles} from '../tools/permissions.js';
 import {memoryFacts, memoryFile} from '../tools/memory.js';
 import {readFileSync} from 'node:fs';
 import {redact} from '../ui/privacy.js';
+import {vncTarget} from '../preview/registry.js';
 import nodePath from 'node:path';
 import os from 'node:os';
 import {cloneMissing, findWorkspace} from '../workspace/index.js';
@@ -58,7 +59,7 @@ import {linkPrs, prsForBranch} from '../pr/linked.js';
 import {loadPacks, packFiles, packMessage, savePack} from '../context/packs.js';
 import {repoMap} from '../context/repoMap.js';
 import {formatOwners, ownersOf} from '../context/owners.js';
-import {run} from '../util/proc.js';
+import {run, openBrowser} from '../util/proc.js';
 import {activeExperiments} from '../store/config.js';
 import {formatUsd} from '../providers/prices.js';
 
@@ -94,6 +95,8 @@ export type CommandUi = {
   setCompacting(v: {startedAt: number; label: string; idle?: boolean} | undefined): void;
   exit(r?: ExitResult): void;
   refresh(): Promise<void>;
+  /** The web UI's preview pane (the terminal opens your browser instead). */
+  openPreview?(id: number): void;
   // Terminal only: the web UI leaves these out, and the commands that need them say so.
   remoteCommand?(args: string): Promise<void>;
   openShells?(): void;
@@ -244,6 +247,32 @@ export function runCommand(raw: string, ui: CommandUi): void {
     case 'mcp':
       setOverlay({name: 'mcp'});
       break;
+    case 'preview': {
+      const arg = parsed.args.trim();
+      const all = runtime.previews.list();
+      const open = (p: (typeof all)[number]) => {
+        if (ui.openPreview) return ui.openPreview(p.id);
+        // The terminal: your own browser, or the system's VNC viewer (macOS Screen Sharing opens vnc://).
+        openBrowser(p.kind === 'url' ? p.target : `vnc://${p.target}`);
+        log('info', `Opening ${p.kind === 'url' ? p.target : `vnc://${p.target}`}${p.kind === 'vnc' ? ' (in your VNC viewer)' : ''}.`);
+      };
+      if (!arg) {
+        if (!all.length) return log('info', 'No previews yet. A server the agent starts that prints a local URL shows up here; /preview <url or :display> adds one.');
+        log('info', ['Previews:', ...all.map((p) => `  ${p.id}. ${p.kind === 'url' ? '◫' : '▣'} ${p.title}  ${p.target}${p.source === 'detected' ? '  (from a command)' : ''}`), '/preview <n> opens one.'].join('\n'));
+        break;
+      }
+      const byId = all.find((p) => String(p.id) === arg.replace('#', ''));
+      if (byId) return open(byId);
+      const vnc = /^(vnc:\/\/)?[\w.[\]-]*:\d+$/i.test(arg) && !/^https?:/i.test(arg) ? vncTarget(arg) : undefined;
+      if (vnc) return open(runtime.previews.add({kind: 'vnc', target: vnc, title: vnc, source: 'agent'}));
+      try {
+        const u = new URL(/^https?:\/\//i.test(arg) ? arg : `http://${arg}`);
+        open(runtime.previews.add({kind: 'url', target: u.toString(), title: u.host, source: 'agent'}));
+      } catch {
+        log('error', 'Usage: /preview [<n> | <url> | <:display or host:port>]');
+      }
+      break;
+    }
     case 'marketplace': {
       const [sub = '', ...rest] = parsed.args.trim().split(/\s+/);
       const arg = rest.join(' ');
