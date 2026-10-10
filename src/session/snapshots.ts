@@ -94,6 +94,34 @@ export class TreeSnapshots {
     }
   }
 
+  /** The tree as it is now, recorded in the store (for spec traceability). */
+  tree(): Promise<string> {
+    return this.writeTree();
+  }
+
+  /** The line ranges (new side) each file changed between two trees; a pure deletion is the line it was at. */
+  async hunks(from: string, to: string): Promise<{file: string; ranges: [number, number][]}[]> {
+    const d = await this.git(['diff', '-U0', '--text', '--no-color', '--no-renames', '--no-ext-diff', from, to]); // --text: the store's attributes mark every file -diff
+    if (d.code !== 0) throw new Error(d.stderr.trim() || 'git diff failed');
+    const out: {file: string; ranges: [number, number][]}[] = [];
+    let cur: {file: string; ranges: [number, number][]} | undefined;
+    for (const line of d.stdout.split('\n')) {
+      const f = line.match(/^\+\+\+ (?:b\/(.*)|\/dev\/null)$/);
+      if (f) {
+        cur = f[1] ? {file: f[1], ranges: []} : undefined;
+        if (cur) out.push(cur);
+        continue;
+      }
+      const h = line.match(/^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@/);
+      if (h && cur) {
+        const start = Number(h[1]);
+        const n = h[2] === undefined ? 1 : Number(h[2]);
+        cur.ranges.push([Math.max(1, start), Math.max(1, start + Math.max(n, 1) - 1)]);
+      }
+    }
+    return out;
+  }
+
   /** Snapshot before the user message at `turn` runs (once per turn). */
   async snapshot(turn: number): Promise<void> {
     const trees = this.load();

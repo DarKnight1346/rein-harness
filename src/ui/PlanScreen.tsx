@@ -15,7 +15,7 @@ const OPTIONS: [PlanDecision, string][] = [
 export function PlanScreen({plan, width, onDecide}: {plan: PresentedPlan; width: number; onDecide(d: PlanDecision): void}) {
   const {rows} = useWindowSize();
   const body = plan.plan.replace(/^#\s+.*\n+/, '');
-  const md = `# ${plan.title}\n\n${body}\n\n## Milestones\n${plan.milestones.map((m, i) => `${i + 1}. ${m}`).join('\n')}`;
+  const md = `# ${plan.title}\n\n${body}\n\n## Milestones\n${plan.milestones.map((m, i) => `${i + 1}. ${m}`).join('\n')}${plan.risk ? `\n\n## Risk\n\n\`\`\`text\n${plan.risk}\n\`\`\`` : ''}`;
   const lines = renderMarkdown(md, Math.max(20, width));
   const viewport = Math.max(4, Math.min(lines.length, rows - 14));
   const [top, setTop] = useState(0);

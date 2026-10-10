@@ -15,6 +15,7 @@ import {Watchdog} from './watchdog.js';
 import {addedText, findSecrets, secretMessage} from './secrets.js';
 import {injectionSigns, injectionWarning, networkCapable, untrustedSource} from './untrusted.js';
 import {addedDeps, afterEdit, checkDeps, commandDeps, depMessage} from './deps.js';
+import {checkImports, loadArchitecture, violationMessage} from './architecture.js';
 import {checkPolicy, type Policy} from '../policy.js';
 import {digestLog, formatDigest} from './logDigest.js';
 import {fingerprint, flakyNote, isTestCommand, knownFlaky, parseOutcomes, recordRun} from '../build/flaky.js';
@@ -422,7 +423,7 @@ export class ToolHost extends EventEmitter {
         }
       }
       if (planAsk && this.modeFor(origin) === 'bypass')
-        throw new ToolError('plan mode is on — this command may change things, so it waits for the plan\'s approval. Use plain read-only commands (one per call, no loops or substitutions) to explore, then call present_plan.');
+        throw new ToolError('plan mode is on — this command may change things, so it waits for the plan\'s approval. Use plain read-only commands (one per call, no loops or substitutions) to explore, then call present_plan (present_spec in spec mode).');
       if (pre?.allow && !pre.ask) approvedBy = 'hook';
       const suggestion = suggestRule(subject, (p) => this.ruleRel(p));
       const remember = (decision: ApprovalDecision) => {
@@ -490,7 +491,7 @@ export class ToolHost extends EventEmitter {
         }
         if (!approvedBy) {
           const decision = await this.opts.approve(req);
-          if (decision === 'deny' && planAsk) throw new ToolError('plan mode is on and the user declined this command (it may change things). Stick to read-only exploration, then call present_plan.');
+          if (decision === 'deny' && planAsk) throw new ToolError('plan mode is on and the user declined this command (it may change things). Stick to read-only exploration, then call present_plan (present_spec in spec mode).');
           if (decision === 'deny' && tool.askEvenInBypass) throw new ToolError("not approved (the user declined, or nobody is here to approve it, as in a headless run). Don't retry: tell the user what it would do so they can run it themselves.");
           if (decision === 'deny') throw new ToolError('the user denied this action; ask them how to proceed instead of retrying');
           if (decision === 'session' && !planAsk) this.sessionAllowed = true;
@@ -531,7 +532,25 @@ export class ToolHost extends EventEmitter {
           if (deps.length) depProblems = await checkDeps(deps);
           if (depProblems.length && depMode === 'block') throw new ToolError(depMessage(depProblems, true));
         }
+        // Architecture guardrails (.rein/architecture.yaml): imports the change adds that cross a forbidden line.
+        let archNote: string | undefined;
+        if (tool.name === 'write' || tool.name === 'edit') {
+          const arch = loadArchitecture(ctx.root);
+          if (arch?.rules.length) {
+            const violations = this.filesOf(ctx, tool, args).flatMap((f) => {
+              const own = Array.isArray((args as {edits?: unknown[]})?.edits) ? {...(args as object), edits: (args as {edits: {path?: string}[]}).edits.filter((e) => path.resolve(ctx.root, e.path ?? (args as {path?: string}).path ?? '') === f)} : args;
+              const change = afterEdit(f, own);
+              return change ? checkImports(ctx.root, arch, f, change.after, change.before) : [];
+            });
+            if (violations.length && arch.mode === 'block') throw new ToolError(violationMessage(violations, true));
+            if (violations.length) archNote = violationMessage(violations, false);
+          }
+        }
         result = repeat ?? (await tool.run(ctx, args ?? {}));
+        if (archNote && result.ok) {
+          result = {...result, text: `${result.text}\n\n${archNote}`};
+          warning = archNote.split('\n').slice(1, 3).join('; ');
+        }
         if (secrets.length && result.ok) result = {...result, text: `${result.text}\n\n${secretMessage(secrets, file, false)}`};
         if (depProblems.length) {
           result = {...result, text: `${result.text}\n\n${depMessage(depProblems, false)}`};
@@ -714,7 +733,7 @@ export class ToolHost extends EventEmitter {
   /** Plan mode: throws for file changes; returns true when a shell command needs the user's OK. */
   private checkPlanMode(ctx: ToolContext, tool: ToolDef, args: any, readOnly: boolean): boolean {
     if (tool.name === 'shell') return !readOnly && !readOnlyCommand(String(args?.command ?? ''));
-    if (tool.mutating && !this.inScratch(ctx, tool, args)) throw new ToolError('plan mode is on — nothing can be changed until the user approves your plan. Keep exploring read-only, then call present_plan.');
+    if (tool.mutating && !this.inScratch(ctx, tool, args)) throw new ToolError('plan mode is on — nothing can be changed until the user approves your plan. Keep exploring read-only, then call present_plan (present_spec in spec mode).');
     return false;
   }
 

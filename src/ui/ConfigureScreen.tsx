@@ -165,6 +165,17 @@ export const CHOICE_TABS: ChoiceTabDef[] = [
     })),
   },
   {
+    title: 'Plan review',
+    group: 'Agents',
+    key: 'planReview',
+    description: "A second model critiques each plan (and a spec's design) before you see it; the agent folds in what holds up, then presents it to you.",
+    choices: [
+      {value: 'off', label: 'Off  (default)'},
+      {value: 'other', label: "Other provider — the other provider's best model (Codex reviews Claude's plan, and the other way round)"},
+      {value: 'advisor', label: 'Advisor — the advisor model (advisorModel)'},
+    ],
+  },
+  {
     title: 'Secrets',
     group: 'Safety',
     key: 'secretScan',

@@ -30,7 +30,10 @@ and a compaction model. No OAuth tokens are extracted: all traffic goes through 
 - **Large codebases:** context packs (`/pack`), a repo map (`/map`), code owners (`/owners`), local
   semantic search (`/index`, through Ollama), Sourcegraph/Zoekt org search, sparse and partial
   clones, one search and one `/rewind` across every repo of a workspace.
-- **Coming next:** specs, contracts and migrations, and system-level understanding across repos.
+- **Specs and planning:** `/spec` writes requirements, a design and tasks you approve in turn; tasks
+  run as a parallel graph and trace back to requirements. ADRs, architecture rules on every edit, plan
+  risk, a second model's review of each plan, and `/bestof` on Claude and Codex at once.
+- **Coming next:** contracts and migrations, and system-level understanding across repos.
 
 ## Install
 

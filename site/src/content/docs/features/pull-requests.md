@@ -39,7 +39,7 @@ The `cross-review` experiment does the same with the strongest model of the *oth
 
 ### A digest for reviewers
 
-`/pr digest` writes what a reviewer reads first, from the branch's diff against its base and the test runs in this conversation: **Summary** (what changed and why), **Look closely at** (the risky parts, by file) and **Tests** (what was run and the result, or that nothing was). It's written by the [compaction model](../routing/), the cheap one, not the agent. `/pr digest post` adds it to the pull request as a comment.
+`/pr digest` writes what a reviewer reads first, from the branch's diff against its base and the test runs in this conversation: **Summary** (what changed and why), **Look closely at** (the risky parts, by file) and **Tests** (what was run and the result, or that nothing was). It's written by the [compaction model](../routing/), the cheap one, not the agent. When the branch changes [specs](../specs/) or saved [plans](../plans/), a **Specs and plans** section lists them. `/pr digest post` adds it to the pull request as a comment.
 
 ### Smaller PRs
 

@@ -57,6 +57,13 @@ import nodePath from 'node:path';
 import {cloneMissing, findWorkspace} from '../workspace/index.js';
 import {CONFIG_KEYS, defaultValue, formatValue, keyInfo, parseValue} from '../store/configKeys.js';
 import {TAB_TITLES} from './ConfigureScreen.js';
+import {describeSpec, listSpecs, nextStage, readSpec, readStage, specSlug, type Stage} from '../specs/store.js';
+import {nextSteps, specInstructions} from '../specs/tools.js';
+import {traceMarkdown} from '../specs/trace.js';
+import {adrDir, listAdrs, newAdr} from '../specs/adr.js';
+import {checkProject, loadArchitecture} from '../tools/architecture.js';
+import {formatRisk, planRisk} from '../plans/risk.js';
+import {detectTestCommand} from '../agents/bestOf.js';
 import {checkoutState, describeCheckout, sparseAdd} from '../workspace/sparse.js';
 import {buildIndex, DEFAULT_MODEL as EMBED_MODEL, formatSemanticHits, loadIndex, semanticSearch} from '../context/semantic.js';
 import {estimateGoalCost} from '../goals/estimate.js';
@@ -420,6 +427,7 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
 
   const togglePlanMode = () => {
     runtime.planMode = !runtime.planMode;
+    runtime.specMode = undefined;
     log('info', runtime.planMode ? 'Plan mode on — the agent explores read-only and presents a plan for your approval before changing anything. shift+tab to turn it off.' : 'Plan mode off.');
     bump();
   };
@@ -1250,6 +1258,130 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
           if (!files.length) return log('info', 'No changes (vs HEAD). /owners <path> looks up a file or folder.');
           log('info', `Owners of ${arg || `your ${files.length} changed file${files.length === 1 ? '' : 's'}`}:\n${formatOwners(await ownersOf(root, files))}`);
         });
+        break;
+      }
+      case 'bestof': {
+        const root = process.cwd();
+        let arg = parsed.args.trim();
+        const flag = arg.match(/^--test\s+(?:"([^"]+)"|'([^']+)'|(\S+))\s*/);
+        const test = flag ? (flag[1] ?? flag[2] ?? flag[3])! : detectTestCommand(root);
+        if (flag) arg = arg.slice(flag[0].length);
+        if (!arg) {
+          log('error', 'Usage: /bestof [--test "<command>"] <task>. It runs the task on Claude and Codex at once and keeps the result that passes the tests.');
+          break;
+        }
+        if (!test) {
+          log('error', "/bestof judges the results by the project's tests, and none was found (package.json test script, make test, pytest, go test, cargo test). Name one: /bestof --test \"<command>\" <task>");
+          break;
+        }
+        void runtime.bestOf(attachments.current.expand(arg).text, test, (line) => log('info', line)).then(
+          (summary) => {
+            log('info', summary);
+            bump();
+          },
+          (err) => log('error', (err as Error).message),
+        );
+        break;
+      }
+      case 'risk': {
+        const root = process.cwd();
+        const arg = parsed.args.trim();
+        const spec = arg ? readSpec(root, arg) : undefined;
+        const plan = spec ? undefined : arg ? nodePath.resolve(root, arg) : listPlans(root)[0]?.file;
+        const text = spec
+          ? ['requirements', 'design', 'tasks'].map((s) => readStage(root, spec.name, s as Stage)?.text ?? '').join('\n')
+          : plan
+            ? (() => {
+                try {
+                  return readFileSync(plan, 'utf8');
+                } catch {
+                  return undefined;
+                }
+              })()
+            : undefined;
+        if (text === undefined) {
+          log('error', arg ? `No plan file or spec named ${arg}.` : 'No saved plans yet: /risk <plan file or spec name>.');
+          break;
+        }
+        void planRisk(root, text).then((r) => log('info', `${spec ? `Spec ${spec.name}` : nodePath.relative(root, plan!)}\n${formatRisk(r)}`));
+        break;
+      }
+      case 'arch': {
+        const root = process.cwd();
+        const arch = loadArchitecture(root);
+        if (!arch) {
+          log('info', 'No architecture rules here. Write .rein/architecture.yaml (layers and which may import which) and Rein checks every edit against it; see the Architecture guardrails docs.');
+          break;
+        }
+        for (const e of arch.errors) log('error', e);
+        void checkProject(root, arch).then(({violations, files}) => {
+          if (!violations.length) return log('info', `${files} files keep to the ${arch.rules.length} architecture rule${arch.rules.length === 1 ? '' : 's'} (${arch.mode}).`);
+          const lines = violations.slice(0, 50).map((v) => `  ${v.file} → ${v.import}${v.rule.reason ? `  (${v.rule.reason})` : ''}`);
+          log('info', [`${violations.length}${violations.length >= 200 ? '+' : ''} import${violations.length === 1 ? '' : 's'} break the architecture rules (existing ones don't block edits; only new ones do):`, ...lines, ...(violations.length > 50 ? [`  … ${violations.length - 50} more`] : [])].join('\n'));
+        });
+        break;
+      }
+      case 'adr': {
+        const root = process.cwd();
+        const arg = parsed.args.trim();
+        if (arg.startsWith('new')) {
+          const title = arg.slice(3).trim();
+          if (!title) {
+            log('error', 'Usage: /adr new <title>, e.g. /adr new Use Postgres for the ledger');
+            break;
+          }
+          try {
+            const rel = newAdr(root, title);
+            log('info', `Created ${rel} (status Proposed).`);
+            const msg = `Fill in the architecture decision record ${rel} ("${title}") from what we've discussed and what you find in the code: Context (the forces and constraints), Decision (what we chose, stated plainly), Consequences (what gets easier, what gets harder). Keep the status Proposed. If it supersedes an earlier ADR, say so in both.`;
+            if (chat.busy) setQueued((q) => [...q, msg]);
+            else void chat.send(msg).then(bump);
+          } catch (err) {
+            log('error', (err as Error).message);
+          }
+          break;
+        }
+        const adrs = listAdrs(root);
+        const {dir, exists} = adrDir(root);
+        log('info', adrs.length ? [`Architecture decisions in ${dir}/:`, ...adrs.map((a) => `  ${String(a.number).padStart(4, '0')}  ${a.title}  (${a.status})`), '/adr new <title> starts the next one.'].join('\n') : `No ADRs ${exists ? `in ${dir}/` : 'yet'}. /adr new <title> starts one in ${dir}/.`);
+        break;
+      }
+      case 'spec': {
+        const root = process.cwd();
+        const arg = parsed.args.trim();
+        const [specSub, specName = ''] = arg.split(/\s+/);
+        const send = (msg: string) => (chat.busy ? setQueued((q) => [...q, msg]) : void chat.send(msg).then(bump));
+        if (!arg) {
+          const specs = listSpecs(root);
+          log('info', specs.length ? ['Specs in .rein/specs/:', ...specs.map((s) => `  ${describeSpec(s).replaceAll('\n', '\n  ')}`), '/spec resume <name> picks one up.'].join('\n') : 'No specs yet. /spec <what to build> writes one: requirements, design, then tasks, each approved by you.');
+          break;
+        }
+        if (specSub === 'trace') {
+          if (!readSpec(root, specName)) log('error', `No spec "${specName}" in .rein/specs/.`);
+          else log('info', traceMarkdown(root, specName));
+          break;
+        }
+        if (specSub === 'resume') {
+          const s = readSpec(root, specName);
+          if (!s) {
+            log('error', `No spec "${specName}" in .rein/specs/.`);
+            break;
+          }
+          const stage = nextStage(root, specName);
+          if (stage) {
+            runtime.planMode = true;
+            runtime.specMode = specName;
+            log('info', `Spec mode on for ${specName}: next is the ${stage}. Nothing changes until the tasks are approved (shift+tab turns it off).`);
+            send(`Continue spec "${specName}" (.rein/specs/${specName}/): read what's there, then write the ${stage} and present it with present_spec.`);
+          } else send(`Carry out spec "${specName}" (.rein/specs/${specName}/tasks.md).\n${nextSteps(specName, s.tasks)}`);
+          break;
+        }
+        let name = specSlug(arg.split(/\s+/).slice(0, 6).join(' '));
+        for (let n = 2; readSpec(root, name); n++) name = `${specSlug(arg.split(/\s+/).slice(0, 6).join(' '))}-${n}`;
+        runtime.planMode = true;
+        runtime.specMode = name;
+        log('info', `Spec mode on: ${name} (.rein/specs/${name}/). You'll approve the requirements, the design and the tasks in turn; nothing changes until then (shift+tab turns it off).`);
+        send(specInstructions(name, attachments.current.expand(arg).text));
         break;
       }
       case 'index': {

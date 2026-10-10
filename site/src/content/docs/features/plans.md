@@ -156,6 +156,39 @@ Approving a plan doesn't widen permissions. After **Save & implement now** the a
 approval mode (Ask, Auto or Bypass) like any other change.
 :::
 
+## A second opinion on the plan
+
+A plan is cheapest to fix before any code exists. With `planReview` on (`/settings` → Agents → Plan review), the first plan the agent presents in a planning session goes to a **second model** before you see it. That's the other provider's best available model (`other`: Codex reviews a Claude plan, and the other way round) or your [advisor](../routing/) (`advisor`). It looks for parts of the request the plan misses, steps that won't work or are out of order, unhandled risks, simpler approaches, and verification that wouldn't prove anything.
+
+Its critique goes to the agent, not to you. The agent checks each point against the code, folds in the ones that hold up, says in a line why it rejects the others, and presents the revised plan. That's the one you approve. Turning plan mode off and on again starts a new session, with a new review. If the reviewer finds nothing, or there's no model to review with, the plan comes straight to you.
+
+The same review runs on a [spec's](../specs/) design stage. It's off by default because it costs one extra request per plan.
+
+## How risky is it
+
+The plan window ends with a **Risk** section, worked out from the files the plan names (the ones that exist in the project or a [workspace](../workspaces/) repo):
+
+```text
+Risk: high (6 files, 3 services, 3 owners)
+  contracts: api/openapi.yaml
+  migrations: db/migrations/0042_split_users.sql
+  owners: @acme/payments, @acme/ledger, @acme/platform
+  services: services/payments, services/ledger, api
+```
+
+It counts:
+
+- **Files** the plan names.
+- **Services**: folders like `services/payments`, `apps/web`, `packages/ui`, or else the top-level folder.
+- **Repos** of the workspace.
+- **Owners**, from CODEOWNERS or Backstage, as in [`/owners`](../large-codebases/#who-owns-what).
+- **Contracts**: OpenAPI, Swagger, AsyncAPI, `.proto`, GraphQL, Avro, Thrift and Prisma schemas.
+- **Migrations**: files under `migrations/`, `db/migrate/`, `alembic/`…
+
+Contracts, migrations and every extra service, repo or owner raise the score. A plan that names no files shows `Risk: unknown`.
+
+The agent doesn't see this; it's for you. `/risk` shows the same for the newest saved plan, `/risk <file>` for another one, and `/risk <spec>` for a [spec](../specs/).
+
 ## Plan files in `.rein/plans/`
 
 Every choice except *Keep planning* writes the plan to `.rein/plans/YYYY-MM-DD-<slug>.md` in your project. The slug

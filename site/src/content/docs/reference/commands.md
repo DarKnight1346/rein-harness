@@ -32,6 +32,7 @@ In fullscreen, commands that show information open a window over the conversatio
 | `/context` | — | Shows what the context holds and how full it is, as a grid that refreshes every second while open, with the largest items (instruction files, tool results, the summary) listed below it. When viewing a subagent, shows the subagent's context. |
 | `/resume` | — | Picks a saved conversation from this project to continue. *Waits for idle.* |
 | `/rewind` | — | Restores files and/or the conversation to before one of your messages. Also **Esc Esc** with an empty input. |
+| `/bestof` | `[--test "<command>"] <task>` | Runs the task on the best available Claude model and the best Codex model at once, each in its own worktree, then runs the tests in both and keeps the result that passes (the smaller change if both do). See [Best of both providers](../../features/subagents/#best-of-both-providers) |
 | `/btw` | `<question>` | Asks a side question. A fork of the agent answers without interrupting it, and the answer is not added to the conversation. Runs immediately, even mid-reply. |
 
 ### Goals and plans
@@ -44,6 +45,10 @@ In fullscreen, commands that show information open a window over the conversatio
 | | `resume` | Continues a paused goal. |
 | | `clear` | Removes the goal. |
 | `/goal:plan` | — | Starts a saved, unfinished plan from `.rein/plans/` as a goal, with milestones tracked in the sidebar. You can also start planning a new one from the same window, which puts `/plan ` in the input. |
+| `/spec` | `<what>` · `resume <name>` · `trace <name>` | [Spec mode](../../features/specs/): the agent writes requirements, a design and tasks for `<what>`, and you approve each in turn before any code changes. Without arguments, lists the specs in `.rein/specs/`. `resume` picks one up where it stopped (or carries out its tasks once they're approved); `trace` shows which code meets each requirement |
+| `/adr` | `[new <title>]` | Lists the [architecture decision records](../../features/specs/#architecture-decisions) in `docs/adr/` (or wherever `.adr-dir` points) with their status. `new <title>` creates the next numbered one from a template and has the agent fill it in |
+| `/arch` | — | Checks every JS/TS, Python and Go file against the [architecture rules](../../features/specs/#architecture-guardrails) in `.rein/architecture.yaml` and lists the imports that break them |
+| `/risk` | `[<plan file> \| <spec name>]` | What a plan touches: the files it names, and across how many services, repos and owners, with any contracts (OpenAPI, protobuf, GraphQL…) and migrations among them, scored low, medium or high. Defaults to the newest saved plan. See [How risky is it](../../features/plans/#how-risky-is-it) |
 
 See [Goals](../../features/goals/) and [Plan mode](../../features/plans/).
 

@@ -20,7 +20,9 @@ import {digestLog, formatDigest} from './tools/logDigest.js';
 import {isTestCommand} from './build/flaky.js';
 import {effectiveBudget, overBudget, type Spend} from './budget.js';
 import {catalog, toRef} from './router/catalog.js';
-import {mergeNote, Worktrees} from './agents/worktrees.js';
+import {mergeNote, repoTop, Worktrees} from './agents/worktrees.js';
+import {shellFor} from './util/platform.js';
+import {bestOf as runBestOf, formatBestOf} from './agents/bestOf.js';
 import type {Origin} from './tools/fs.js';
 import {makeRouter, type AutoRouter} from './router/index.js';
 import {samplingHandler} from './mcp/sampling.js';
@@ -47,6 +49,9 @@ import {advisorRef, advisorTool} from './agents/advisor.js';
 import {GoalManager} from './goals/manager.js';
 import {Checkpoints} from './session/checkpoints.js';
 import {WorkspaceSnapshots} from './session/snapshots.js';
+import {SPEC_MODE_CONTEXT, specTools} from './specs/tools.js';
+import {specSection} from './specs/pr.js';
+import {adrContext} from './specs/adr.js';
 import {McpManager} from './mcp/manager.js';
 import {mcpTools} from './mcp/tools.js';
 import {skillTool} from './skills/tool.js';
@@ -157,7 +162,12 @@ export class Runtime {
     if (!ref) throw new Error('no model available for the digest');
     const system = 'You write the description a human reviewer reads before a code review. Plain language, short. No marketing, no praise.';
     const prompt = `The change (git diff against its base):\n${diff}\n\nTest runs in the conversation that made it:\n${tests.join('\n\n') || '(none)'}\n\nWrite: 1) What changed and why, in 2-4 sentences. 2) Where to look closely: the risky parts, with file names. 3) Test evidence: what was run and the result, or "no tests were run". Use these three headings: ## Summary, ## Look closely at, ## Tests.`;
-    return (await completeWith(ref, this.config, system, prompt, {timeoutMs: 180_000})).trim();
+    const digest = (await completeWith(ref, this.config, system, prompt, {timeoutMs: 180_000})).trim();
+    // Specs and plans committed with the change: the reviewer reads them next to the code.
+    const docs = (await git('diff', '--name-only', size ? (await git('merge-base', 'HEAD', size.base)).trim() : 'HEAD'))
+      .split('\n')
+      .filter((f) => /^\.rein\/(specs|plans)\//.test(f));
+    return docs.length ? `${digest}\n\n${specSection(docs)}` : digest;
   }
 
   /** /cost's budget lines: each cap in force and how much of it is used. */
@@ -223,7 +233,18 @@ export class Runtime {
   }
 
   /** Plan mode (/plan, Shift+Tab, --permission-mode plan): read-only until a plan is approved. */
-  planMode = false;
+  private plan = false;
+  /** planReview already ran in this planning session (reset when plan mode turns on). */
+  private planReviewed = false;
+  get planMode(): boolean {
+    return this.plan;
+  }
+  set planMode(on: boolean) {
+    if (on && !this.plan) this.planReviewed = false;
+    this.plan = on;
+  }
+  /** Spec mode (/spec): the spec being written; plan mode's blocking applies until its tasks are approved. */
+  specMode: string | undefined;
   /** Set by the UI: shows a presented plan and resolves with the user's decision. */
   planPresenter: ((plan: PresentedPlan) => Promise<PlanDecision | undefined>) | undefined;
   /** Set by the UI: shows the agent's questions and resolves with the answers (undefined = dismissed). */
@@ -335,6 +356,48 @@ export class Runtime {
     // The branch note is for agents (it names a local path): the issue comment says the branch itself.
     const report = (finished.output || '(no report)').replace(/\n*\[Its work is on the branch [^\]]*\]\s*$/, '').trim();
     return {report: report || '(no report)', branch};
+  }
+
+  /**
+   * /bestof: the task on the best available Claude model and the best Codex model at once, each in
+   * its own worktree; the result that passes the tests is merged into the project.
+   */
+  async bestOf(task: string, testCommand: string, log: (text: string) => void): Promise<string> {
+    const avail = catalog.available(this.config.maxUsedPct);
+    const best = (p: 'claude' | 'codex') => avail.filter((m) => m.provider === p).sort((a, b) => b.tier - a.tier)[0];
+    const pair = [best('claude'), best('codex')];
+    if (!pair[0] || !pair[1]) throw new Error(`/bestof needs a Claude and a Codex account with room to work (${!pair[0] ? 'no Claude model is available' : 'no Codex model is available'}).`);
+    if (!(await repoTop(process.cwd()))) throw new Error("/bestof needs a git repository: each attempt runs in its own worktree.");
+    const contenders = pair.map((m) => {
+      const ref = toRef(m!);
+      return {label: ref.provider === 'claude' ? 'Claude' : 'Codex', model: `${ref.provider}:${ref.model}`};
+    });
+    const result = await runBestOf(
+      {
+        spawn: (t, model, name) => {
+          const {agent, done} = this.agents.spawn({task: t, model, mode: 'new', name, background: true});
+          agent.collected = true; // the outcome is reported by /bestof, not dropped into your conversation
+          return {id: agent.id, done: done.then((a) => ({status: a.status, output: a.output ?? ''}))};
+        },
+        hold: (id) => this.worktrees.hold(id),
+        result: (id) => this.worktrees.heldResult(id),
+        test: async (command, root) => {
+          const sh = shellFor(command);
+          const r = await run(sh.file, sh.args, {cwd: root, timeoutMs: (this.config.shellMaxMinutes || 120) * 60_000}).catch((err) => ({code: 1, stdout: '', stderr: (err as Error).message}));
+          return {ok: r.code === 0, output: `${r.stdout}\n${r.stderr}`.trim()};
+        },
+        release: async (id, keep) => {
+          const r = await this.worktrees.release(id, keep);
+          if (r?.kept) this.tools.addDirs([r.kept]);
+          return r && keep ? mergeNote(r) : undefined;
+        },
+        log,
+      },
+      task,
+      contenders,
+      testCommand,
+    );
+    return formatBestOf(result, testCommand);
   }
 
   /** Tell your phone (config notifyUrl): approvals waiting, work finished, issues done. */
@@ -590,7 +653,7 @@ Drop superseded reads of the same file, routine listings, and output that no lon
       ? `<ide_selection file="${path.relative(root, sel.filePath) || sel.filePath}" lines="${sel.startLine}-${sel.endLine}">\n${sel.text.slice(0, 20_000)}\n</ide_selection>\nThe user has this selected in their editor; it may or may not be what the message is about.`
       : undefined;
     const shells = this.userShells.length ? `${this.userShells.join('\n')}\nThe user ran ${this.userShells.length > 1 ? 'these commands' : 'this command'} themselves (with !) before this message.` : undefined;
-    const context = [this.sessionContext, out.context, shells, selection, this.planMode ? PLAN_MODE_CONTEXT : undefined].filter(Boolean).join('\n');
+    const context = [this.sessionContext, out.context, shells, selection, this.planMode ? (this.specMode ? SPEC_MODE_CONTEXT(this.specMode) : PLAN_MODE_CONTEXT) : undefined, this.planMode && activeExperiments(this.config).includes('adr-check') ? adrContext(process.cwd()) : undefined].filter(Boolean).join('\n');
     if (!out.block) this.userShells = [];
     if (!out.block) this.sessionContext = undefined;
     return {block: out.block, context: context || undefined};
@@ -738,6 +801,25 @@ Drop superseded reads of the same file, routine listings, and output that no lon
     return best ? toRef(best) : undefined;
   }
 
+  /**
+   * planReview: a second model (the other provider's, or the advisor) critiques a plan or a spec's
+   * design once per planning session, before the user sees it. Returns the message for the agent.
+   */
+  async reviewPlan(kind: 'plan' | 'design', text: string): Promise<string | undefined> {
+    const mode = this.config.planReview ?? 'off';
+    if (mode === 'off' || this.planReviewed || !this.engine) return undefined;
+    const cur = this.engine.currentRef();
+    const reviewer = mode === 'advisor' ? advisorRef(this.config) : cur && this.reviewerFor(cur);
+    if (!reviewer) return undefined;
+    this.planReviewed = true;
+    const request = [...this.engine.transcript.messages].reverse().find((m) => m.role === 'user' && !/^<(code_check|stop_hook)>/.test(m.text))?.text ?? '';
+    const system = `You review a software ${kind} before any code is written. Report only concrete problems: parts of the request it misses, steps that won't work or are in the wrong order, risks it doesn't handle, simpler approaches it overlooks, and verification that wouldn't prove it works. No praise, no rewriting it.`;
+    const prompt = `The request:\n${request.slice(0, 20_000)}\n\nThe ${kind}:\n${text.slice(0, 40_000)}\n\nList each problem on one line, most important first. If there are none, reply exactly NONE.`;
+    const reply = (await completeWith(reviewer, this.config, system, prompt, {timeoutMs: 240_000})).trim();
+    if (!reply || /^none\b/i.test(reply)) return undefined;
+    return `Before the user sees it, a second model (${reviewer.provider}:${reviewer.model}) reviewed your ${kind} and reported:\n${reply.slice(0, 6000)}\nCheck each point against the code. Fold in the ones that hold up, note in a line the ones that don't, then call ${kind === 'plan' ? 'present_plan' : 'present_spec'} again with the revised ${kind}.`;
+  }
+
   /** cross-review: the reviewer's findings as a message for the agent, or undefined when it found nothing. */
   private async crossReview(by?: ModelRef, who?: string): Promise<string | undefined> {
     const cur = this.engine?.currentRef();
@@ -870,12 +952,23 @@ Drop superseded reads of the same file, routine listings, and output that no lon
         active: () => this.planMode,
         root: () => process.cwd(),
         present: async (plan) => (this.planPresenter ? this.planPresenter(plan) : undefined),
+        review: (p) => this.reviewPlan('plan', `# ${p.title}\n\n${p.plan}\n\n## Milestones\n${p.milestones.map((m) => `- ${m}`).join('\n')}`),
         done: (decision, file, title) => {
           if (decision === 'revise') return;
           this.planMode = false;
           if (decision === 'goal') {
             this.goals.set(`Carry out the plan "${title}"`, file);
           }
+        },
+      }),
+      ...specTools({
+        active: () => (this.planMode ? this.specMode : undefined),
+        root: () => process.cwd(),
+        ask: () => this.askPresenter,
+        review: (text) => this.reviewPlan('design', text),
+        approved: () => {
+          this.planMode = false;
+          this.specMode = undefined;
         },
       }),
       decideTool(() => this.config),
