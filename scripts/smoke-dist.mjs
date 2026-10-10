@@ -64,7 +64,8 @@ let tui = 'TUI skipped (node-pty is not installed)';
 if (pty) {
   const screen = await new Promise((resolve) => {
     let out = '';
-    const p = pty.spawn(process.execPath, [cli], {cols: 120, rows: 40, cwd, env: {...process.env, REIN_HOME: home, REIN_KEYCHAIN: '1', REIN_CLAUDE_BIN: fake}});
+    // CI=0: on a CI runner Ink otherwise draws nothing until exit (it checks the CI variables).
+    const p = pty.spawn(process.execPath, [cli], {cols: 120, rows: 40, cwd, env: {...process.env, CI: '0', REIN_HOME: home, REIN_KEYCHAIN: '1', REIN_CLAUDE_BIN: fake}});
     const done = () => {
       clearTimeout(timer);
       try {
