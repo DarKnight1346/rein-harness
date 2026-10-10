@@ -50,11 +50,13 @@ export function remoteWindows(bin: string): Promise<RemoteWindow[]> {
  * Stream X display `:display` (Linux), or one window (any OS: an id from remoteWindows, or part of its
  * title or app's name). Resolves once it's listening; rejects if it doesn't start.
  */
-export function startRemote(bin: string, what: number | {window: string}, timeoutMs = 10_000): Promise<RemoteStream> {
+export function startRemote(bin: string, what: number | {window: string} | {vnc: string; password?: string}, timeoutMs = 10_000): Promise<RemoteStream> {
   const token = randomBytes(24).toString('base64url');
-  const source = typeof what === 'number' ? ['--display', `:${what}`] : ['--window', what.window];
-  // The token goes in the environment, not the arguments (other users can read those).
-  const p = spawn(bin, ['serve', ...source, '--listen', '127.0.0.1:0'], {stdio: ['ignore', 'ignore', 'pipe'], env: {...process.env, REIN_REMOTE_TOKEN: token}});
+  const source = typeof what === 'number' ? ['--display', `:${what}`] : 'window' in what ? ['--window', what.window] : ['--vnc', what.vnc];
+  // The token and a VNC password go in the environment, not the arguments (other users can read
+  // those). WebTransport off: the web UI's page reaches it through Rein's proxy, over the WebSocket.
+  const env = {...process.env, REIN_REMOTE_TOKEN: token, ...(typeof what !== 'number' && 'vnc' in what && what.password ? {REIN_REMOTE_VNC_PASSWORD: what.password} : {})};
+  const p = spawn(bin, ['serve', ...source, '--listen', '127.0.0.1:0', '--webtransport', 'off'], {stdio: ['ignore', 'ignore', 'pipe'], env});
   const stop = () => p.kill();
   return new Promise((resolve, reject) => {
     let err = '';
@@ -144,4 +146,19 @@ export async function installRemote(fetchImpl: typeof fetch = fetch): Promise<{o
   } catch (err) {
     return {ok: false, text: `Couldn't install Rein Remote: ${(err as Error).message}`};
   }
+}
+
+/**
+ * A VNC preview (a VM, an emulator) as video with Rein Remote when it's installed: started on the
+ * display (with its password when there is one) and stopped with the preview. Without it, or if it
+ * can't connect, the preview stays on the frames path, which asks for a password when one's needed.
+ */
+export async function remoteForVnc(p: {target: string; password?: string; remote?: {port: number; token: string}; stop?(): void}, setting: string | undefined): Promise<void> {
+  const bin = remoteBinary(setting);
+  if (!bin || p.remote) return;
+  const r = await startRemote(bin, {vnc: p.target, ...(p.password ? {password: p.password} : {})}).catch(() => undefined);
+  if (!r) return;
+  const before = p.stop;
+  p.remote = {port: r.port, token: r.token};
+  p.stop = () => (r.stop(), before?.());
 }

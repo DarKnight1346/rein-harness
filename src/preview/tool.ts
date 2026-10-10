@@ -1,7 +1,7 @@
 import type {ToolDef} from '../tools/registry.js';
 import {startDisplay} from './display.js';
 import {vncTarget, type Previews} from './registry.js';
-import {installRemote, remoteBinary, remoteWindows, startRemote, type RemoteStream} from './remote.js';
+import {installRemote, remoteBinary, remoteForVnc, remoteWindows, startRemote, type RemoteStream} from './remote.js';
 
 /**
  * `preview`: the agent shows the user something with a screen. A web app it started (a URL, local
@@ -98,6 +98,8 @@ export function previewTool(previews: Previews, opened: (id: number) => void, re
         const target = vncTarget(args.vnc);
         if (!target) return {ok: false, text: `Not a VNC address: ${args.vnc} (use host:port or :N)`};
         const p = previews.add({kind: 'vnc', target, title: title ?? target, source: 'agent', ...(typeof args?.password === 'string' && args.password ? {password: args.password} : {})});
+        // As video with Rein Remote when it's installed (the frames path otherwise).
+        await remoteForVnc(p, reinRemote());
         opened(p.id);
         return {ok: true, text: `Showing the display at ${target} to the user (preview #${p.id}).`};
       }

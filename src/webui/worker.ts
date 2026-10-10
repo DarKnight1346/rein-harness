@@ -866,7 +866,12 @@ export async function runWorker(): Promise<number> {
           return runtime.previews.list().at(-1);
         }
         const vnc = /^(vnc:\/\/)?[\w.[\]-]*:\d+$/i.test(t) && !/^https?:/i.test(t) ? vncTarget(t) : undefined;
-        if (vnc) return runtime.previews.add({kind: 'vnc', target: vnc, title: vnc, source: 'agent'});
+        if (vnc) {
+          const p = runtime.previews.add({kind: 'vnc', target: vnc, title: vnc, source: 'agent'});
+          const {remoteForVnc} = await import('../preview/remote.js');
+          await remoteForVnc(p, runtime.config.reinRemote);
+          return p;
+        }
         let u: URL;
         try {
           u = new URL(/^https?:\/\//i.test(t) ? t : `http://${t}`);

@@ -208,4 +208,29 @@ else if (cmd === 'serve') { console.error('args=' + rest.join(' ')); console.err
       vi.unstubAllGlobals();
     }
   });
+
+  it('streams a VNC preview with Rein Remote, the password in its environment', async () => {
+    if (process.platform === 'win32') return;
+    const log = path.join(home, 'vnc-args.json');
+    const bin = path.join(home, 'rein-remote-vnc.mjs');
+    writeFileSync(bin, `#!${process.execPath}
+import {writeFileSync} from 'node:fs';
+writeFileSync(${JSON.stringify(log)}, JSON.stringify({args: process.argv.slice(2), pw: process.env.REIN_REMOTE_VNC_PASSWORD ?? null}));
+console.error('rein-remote: streaming a 1024×640 screen on http://127.0.0.1:45680 (open it in a browser)');
+setInterval(() => {}, 1000);
+`);
+    chmodSync(bin, 0o755);
+    const previews = new Previews();
+    const tool = previewTool(previews, () => {}, () => bin);
+    const r = await tool.run({} as never, {vnc: ':30', password: 's3cret'});
+    expect(r.ok).toBe(true);
+    closers.push(() => previews.stopAll());
+    const p = previews.list()[0]!;
+    expect(p).toMatchObject({kind: 'vnc', target: 'localhost:5930', remote: {port: 45680}});
+    const {readFileSync} = await import('node:fs');
+    const seen = JSON.parse(readFileSync(log, 'utf8'));
+    expect(seen.args).toEqual(['serve', '--vnc', 'localhost:5930', '--listen', '127.0.0.1:0', '--webtransport', 'off']);
+    expect(seen.pw).toBe('s3cret');
+    expect(seen.args.join(' ')).not.toContain('s3cret');
+  });
 });

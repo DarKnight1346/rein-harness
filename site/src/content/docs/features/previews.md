@@ -75,7 +75,7 @@ time.
 
 ## Video with Rein Remote
 
-A native Linux app's virtual display can stream as video instead of frames, with
+A native Linux app's virtual display, and any VNC display (a VM, an emulator), can stream as video instead of frames, with
 [Rein Remote](https://github.com/rein-harness/rein-remote) (Rein's own screen protocol). Rein uses it
 when the `rein-remote` binary is in `~/.rein/bin` or on your `PATH`:
 
@@ -114,7 +114,7 @@ When your connection is slow (mobile data, a server far away), frames that can't
 
 ## Not yet
 
-These are on the [roadmap](../../start/whats-new/): Rein Remote video for web apps, VMs and VNC displays (they stream as frames today), hardware encoding, and Rein Remote installed with Rein (all through [rein-remote](https://github.com/rein-harness/rein-remote)).
+These are on the [roadmap](../../start/whats-new/): Rein Remote video for web apps (they stream as frames today), and hardware encoding on Windows and Linux (macOS has it), through [rein-remote](https://github.com/rein-harness/rein-remote).
 
 ## Security
 
