@@ -1,4 +1,5 @@
 import type {ToolDef} from '../tools/registry.js';
+import {startDisplay} from './display.js';
 import {vncTarget, type Previews} from './registry.js';
 
 /**
@@ -19,6 +20,8 @@ export function previewTool(previews: Previews, opened: (id: number) => void): T
         url: {type: 'string', description: 'An http(s) URL to show, e.g. http://localhost:3000/dashboard'},
         vnc: {type: 'string', description: 'A VNC display: host:port, or :N for display N (port 5900+N)'},
         title: {type: 'string', description: 'A short name for it (default: the address)'},
+        password: {type: 'string', description: "The VNC display's password, if it has one (the user is asked otherwise)"},
+        app: {type: 'boolean', description: 'Linux: start a virtual display for a native (GUI) app, no VM needed. Rein starts the display and shows it; you then start the app on it with your shell tool (DISPLAY=:N your-app &)'},
       },
     },
     mutating: false,
@@ -38,10 +41,22 @@ export function previewTool(previews: Previews, opened: (id: number) => void): T
         opened(p.id);
         return {ok: true, text: `Showing ${u} to the user (preview #${p.id}). They can click and type into it; it updates as the page changes.`};
       }
+      if (args?.app === true) {
+        // A virtual display for a native app: Rein starts the display (no project code runs); the agent
+        // starts the app on it with its shell tool, so the user's approvals apply to that as always.
+        try {
+          const d = await startDisplay({width: 1280, height: 800});
+          const p = previews.add({kind: 'vnc', target: `localhost:${d.port}`, title: title ?? `display :${d.display}`, source: 'agent', stop: d.stop});
+          opened(p.id);
+          return {ok: true, text: `A virtual display is up (${d.how}, :${d.display}, 1280×800) and the user is looking at it (preview #${p.id}). Start the app on it in the background with your shell tool: DISPLAY=:${d.display} <command> &. It stops when the preview closes.`};
+        } catch (err) {
+          return {ok: false, text: `Couldn't start a virtual display: ${(err as Error).message}`};
+        }
+      }
       if (typeof args?.vnc === 'string' && args.vnc.trim()) {
         const target = vncTarget(args.vnc);
         if (!target) return {ok: false, text: `Not a VNC address: ${args.vnc} (use host:port or :N)`};
-        const p = previews.add({kind: 'vnc', target, title: title ?? target, source: 'agent'});
+        const p = previews.add({kind: 'vnc', target, title: title ?? target, source: 'agent', ...(typeof args?.password === 'string' && args.password ? {password: args.password} : {})});
         opened(p.id);
         return {ok: true, text: `Showing the display at ${target} to the user (preview #${p.id}).`};
       }

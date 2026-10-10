@@ -17,6 +17,10 @@ export type Preview = {
   title: string;
   /** Who found it: the agent asked to show it, or it appeared in a command's output. */
   source: 'agent' | 'detected';
+  /** A virtual display Rein started for a native app (display.ts): stopped when the preview goes. */
+  stop?(): void;
+  /** A VNC display's password: kept here, never sent to the page. */
+  password?: string;
   /** The shell whose output it came from (detected ones), so it goes when that command ends. */
   shellId?: number;
   createdAt: number;
@@ -82,6 +86,7 @@ export class Previews extends EventEmitter {
 
   remove(id: number): void {
     const before = this.items.length;
+    this.items.find((p) => p.id === id)?.stop?.();
     this.items = this.items.filter((p) => p.id !== id);
     if (this.items.length !== before) this.emit('change');
   }
@@ -94,6 +99,11 @@ export class Previews extends EventEmitter {
   }
 
   /** A command ended: what it served is gone (previews the agent asked for stay until it says). */
+  /** Everything Rein started for previews (virtual displays) stops: the chat is closing. */
+  stopAll(): void {
+    for (const p of this.items) p.stop?.();
+  }
+
   shellEnded(shellId: number): void {
     const gone = this.items.filter((p) => p.source === 'detected' && p.shellId === shellId);
     if (!gone.length) return;

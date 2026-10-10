@@ -466,6 +466,7 @@ i.system { background: #8a8a8a; } i.tools { background: var(--warn); } i.summary
 @media (hover: none) { .hide-touch { display: none; } }
 .pstatus { position: absolute; inset: 0; display: grid; place-items: center; pointer-events: none; }
 .pstatus:empty { display: none; }
+.pw-ask { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 16px 18px; display: grid; gap: 10px; min-width: 260px; }
 .pchips { max-width: 780px; margin: 0 auto; width: 100%; display: flex; flex-wrap: wrap; gap: 6px; padding: 0 22px; }
 .pchips:empty { display: none; }
 .pchip { display: inline-flex; align-items: center; gap: 4px; border: 1px solid var(--line); background: var(--card); color: var(--text); border-radius: 999px; padding: 3px 10px; font-size: 12.5px; font-family: var(--mono); cursor: pointer; }

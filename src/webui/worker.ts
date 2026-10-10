@@ -235,7 +235,7 @@ export async function runWorker(): Promise<number> {
   const {rewindPoints, rewindTo} = await import('../session/rewind.js');
   const {previewTool} = await import('../preview/tool.js');
   const {BrowserView} = await import('../preview/cdp.js');
-  const {VncView} = await import('../preview/vnc.js');
+  const {VncView, NeedsPassword} = await import('../preview/vnc.js');
   const label = (ref: {provider: string; model: string}) => catalog.get(ref as Parameters<typeof catalog.get>[0])?.label ?? ref.model;
 
   const waiting = new Map<number, (v: any) => void>();
@@ -439,7 +439,7 @@ export async function runWorker(): Promise<number> {
       const v = views.get(p.id);
       return {id: p.id, kind: p.kind, target: p.target, title: p.title, source: p.source, open: !!v, ...(v instanceof BrowserView && v.url ? {url: v.url} : {})};
     });
-  const openView = async (id: number, size: {width: number; height: number}) => {
+  const openView = async (id: number, size: {width: number; height: number}, password?: string) => {
     const p = runtime.previews.get(id);
     if (!p) throw new Error('that preview is gone');
     const had = views.get(id);
@@ -469,11 +469,15 @@ export async function runWorker(): Promise<number> {
       views.set(id, v);
       v.on('patch', (pt) => frame({format: 'png', ...pt}));
       v.on('notice', (text) => log('info', text));
-      v.on('closed', () => (views.delete(id), chrome()));
+      v.on('closed', () => views.get(id) === v && (views.delete(id), chrome()));
       try {
-        await v.start(p.target);
+        await v.start(p.target, password ?? p.password);
+        if (password) p.password = password; // it worked: kept for reconnecting (never sent to the page)
       } catch (err) {
+        views.delete(id);
         v.close();
+        // The page asks for the password, then opens it again with it.
+        if (err instanceof NeedsPassword) return {id, needsPassword: true, error: err.message};
         throw err;
       }
       v.full();
@@ -810,7 +814,7 @@ export async function runWorker(): Promise<number> {
         return {ok: true};
       }
       case 'preview-open':
-        return openView(Number(args.id), {width: Number(args.width) || 1280, height: Number(args.height) || 800});
+        return openView(Number(args.id), {width: Number(args.width) || 1280, height: Number(args.height) || 800}, typeof args.password === 'string' && args.password ? args.password : undefined);
       case 'preview-input': {
         const v = views.get(Number(args.id));
         const ev = args.ev as {type?: string};
@@ -869,6 +873,7 @@ export async function runWorker(): Promise<number> {
   });
   await new Promise<void>((resolve) => process.stdin.on('end', resolve));
   for (const v of views.values()) v.close(); // no headless browser outlives its chat
+  runtime.previews.stopAll(); // nor a virtual display
   runtime.shutdown();
   return 0;
 }

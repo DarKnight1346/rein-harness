@@ -1626,7 +1626,20 @@ function fitPreview(c) {
     try {
       if (!pv.started) {
         pv.started = true;
-        const r = await ask(c, 'preview-open', {id: pv.id, ...size});
+        const r = await ask(c, 'preview-open', {id: pv.id, ...size, ...(pv.password ? {password: pv.password} : {})});
+        pv.password = undefined;
+        if (r?.needsPassword) {
+          // The display wants a password: ask here, then open it again with it.
+          pv.started = false;
+          const pw = h('input', {type: 'password', autocomplete: 'off', placeholder: 'VNC password'});
+          const go = () => pw.value && ((pv.password = pw.value), fitPreview(c));
+          pw.addEventListener('keydown', (e) => e.key === 'Enter' && go());
+          $('#pstatus')?.replaceChildren(h('div.pw-ask', h('b', r.error.startsWith('wrong') ? 'Wrong password' : 'This display has a password'), h('div.codein', pw, h('button.btn.primary', {on: {click: go}}, 'Connect'))));
+          $('#pstatus').style.pointerEvents = 'auto';
+          pw.focus();
+          return;
+        }
+        $('#pstatus') && ($('#pstatus').style.pointerEvents = '');
         if (r?.url) ((pv.url = r.url), updatePreviewBar(c));
       } else await ask(c, 'preview-resize', {id: pv.id, ...size});
     } catch (err) {

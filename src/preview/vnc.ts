@@ -1,4 +1,5 @@
 import {EventEmitter} from 'node:events';
+import {createCipheriv} from 'node:crypto';
 import net from 'node:net';
 import {encodePng} from './png.js';
 import type {InputEvent} from './cdp.js';
@@ -8,8 +9,29 @@ import type {InputEvent} from './cdp.js';
  * app in a virtual display (Xvfb + x11vnc), an emulator, a desktop's screen sharing. Rein keeps the
  * framebuffer and sends what changed as PNG patches over the same channel as everything else, so
  * the page needs no VNC code and no extra connection. Raw, CopyRect and DesktopSize encodings; no
- * password (VNC's DES challenge isn't supported yet: a server that asks for one says so).
+ * password, or a VNC password (the DES challenge).
  */
+
+/**
+ * The answer to VNC's password challenge: the 16 bytes encrypted with DES, keyed by the password's
+ * first 8 bytes with each byte's bits mirrored. OpenSSL 3 drops single DES, but two-key triple DES
+ * with both keys the same is the same cipher (E·D·E with one key is E).
+ */
+export function vncResponse(password: string, challenge: Buffer): Buffer {
+  const key = Buffer.alloc(8);
+  Buffer.from(password, 'latin1').copy(key, 0, 0, 8);
+  for (let i = 0; i < 8; i++) {
+    let b = key[i]!, r = 0;
+    for (let bit = 0; bit < 8; bit++) r |= ((b >> bit) & 1) << (7 - bit);
+    key[i] = r;
+  }
+  const c = createCipheriv('des-ede-ecb', Buffer.concat([key, key]), null);
+  c.setAutoPadding(false);
+  return Buffer.concat([c.update(challenge), c.final()]);
+}
+
+/** The display wants a password and none was given (or it was wrong): the page asks for one. */
+export class NeedsPassword extends Error {}
 export type Patch = {x: number; y: number; w: number; h: number; png: string; width: number; height: number; full?: boolean};
 
 class Reader {
@@ -57,7 +79,10 @@ export class VncView extends EventEmitter {
   private lastFull = 0;
   closed = false;
 
-  async start(target: string): Promise<void> {
+  private password: string | undefined;
+
+  async start(target: string, password?: string): Promise<void> {
+    this.password = password;
     const m = target.match(/^\[?([^\]]+?)\]?:(\d+)$/);
     if (!m) throw new Error(`not a VNC address: ${target}`);
     this.sock = net.connect({host: m[1], port: Number(m[2])});
@@ -92,13 +117,19 @@ export class VncView extends EventEmitter {
       const n = (await this.need(1))[0]!;
       if (!n) throw new Error(await this.reason());
       const types = [...(await this.need(n))];
-      if (!types.includes(1)) throw new Error(types.includes(2) ? 'the display asks for a VNC password, which Rein can’t answer yet: start it without one (QEMU: -vnc :1)' : `no security type Rein supports (offered: ${types.join(', ')})`);
-      type = 1;
-      this.sock!.write(Buffer.from([1]));
+      // No password if the display allows it; else VNC's password (when one was given).
+      type = types.includes(1) ? 1 : types.includes(2) ? 2 : 0;
+      if (!type) throw new Error(types.includes(30) ? 'the display wants a macOS account sign-in (Apple Remote Desktop), which Rein can’t do yet: turn on “VNC viewers may control screen with password” in Screen Sharing’s settings' : `no security type Rein supports (offered: ${types.join(', ')})`);
+      this.sock!.write(Buffer.from([type]));
     }
     if (type === 0) throw new Error(await this.reason());
-    if (type !== 1) throw new Error('the display asks for a VNC password, which Rein can’t answer yet');
-    if (use === 8 && (await this.need(4)).readUInt32BE(0) !== 0) throw new Error(await this.reason());
+    if (type === 2) {
+      if (!this.password) throw new NeedsPassword('the display asks for a VNC password');
+      const challenge = await this.need(16);
+      this.sock!.write(vncResponse(this.password, challenge));
+      if ((await this.need(4)).readUInt32BE(0) !== 0) throw new NeedsPassword(use === 8 ? `wrong password (${await this.reason().catch(() => 'refused')})` : 'wrong password');
+    } else if (type !== 1) throw new Error(`the display asks for an unsupported security type (${type})`);
+    if (type === 1 && use === 8 && (await this.need(4)).readUInt32BE(0) !== 0) throw new Error(await this.reason());
     this.sock!.write(Buffer.from([1])); // ClientInit: shared
     const init = await this.need(24);
     this.width = init.readUInt16BE(0);
