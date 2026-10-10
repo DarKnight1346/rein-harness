@@ -64,6 +64,10 @@ import {adrDir, listAdrs, newAdr} from '../specs/adr.js';
 import {checkProject, loadArchitecture} from '../tools/architecture.js';
 import {formatRisk, planRisk} from '../plans/risk.js';
 import {detectTestCommand} from '../agents/bestOf.js';
+import {branchContracts} from '../contracts/changes.js';
+import {formatChanges} from '../contracts/diff.js';
+import {branchMigrations, formatFindings} from '../contracts/migrations.js';
+import {deadCodeTask, findDeadCode, findFlags, flagRemovalTask, formatFlags, isStale} from '../contracts/deadcode.js';
 import {checkoutState, describeCheckout, sparseAdd} from '../workspace/sparse.js';
 import {buildIndex, DEFAULT_MODEL as EMBED_MODEL, formatSemanticHits, loadIndex, semanticSearch} from '../context/semantic.js';
 import {estimateGoalCost} from '../goals/estimate.js';
@@ -1257,6 +1261,50 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
         void (arg ? Promise.resolve([arg]) : changedFiles(root)).then(async (files) => {
           if (!files.length) return log('info', 'No changes (vs HEAD). /owners <path> looks up a file or folder.');
           log('info', `Owners of ${arg || `your ${files.length} changed file${files.length === 1 ? '' : 's'}`}:\n${formatOwners(await ownersOf(root, files))}`);
+        });
+        break;
+      }
+      case 'deadcode': {
+        const remove = parsed.args.trim() === 'remove';
+        void findDeadCode(process.cwd()).then(({dead, files}) => {
+          if (!dead.length) return log('info', `Nothing unused found in ${files} source files.`);
+          if (!remove) return log('info', [`${dead.length}${dead.length >= 200 ? '+' : ''} definition${dead.length === 1 ? '' : 's'} nothing else refers to (candidates: dynamic use can't be seen):`, ...dead.slice(0, 60).map((d) => `  ${d.file}:${d.line}  ${d.kind} ${d.name}`), ...(dead.length > 60 ? [`  … ${dead.length - 60} more`] : []), '/deadcode remove has the agent check each one and delete what is really unused.'].join('\n'));
+          const msg = deadCodeTask(dead.slice(0, 100));
+          if (chat.busy) setQueued((q) => [...q, msg]);
+          else void chat.send(msg).then(bump);
+        });
+        break;
+      }
+      case 'flags': {
+        const [flagSub, key] = parsed.args.trim().split(/\s+/);
+        void findFlags(process.cwd()).then((flags) => {
+          if (flagSub === 'remove') {
+            const f = flags.find((x) => x.key === key);
+            if (!f) return log('error', key ? `The code doesn't read a flag "${key}" (through the SDKs Rein knows).` : 'Usage: /flags remove <key>');
+            const msg = flagRemovalTask(f);
+            if (chat.busy) setQueued((q) => [...q, msg]);
+            else void chat.send(msg).then(bump);
+            return;
+          }
+          if (!flags.length) return log('info', 'No feature flag reads found (LaunchDarkly, Unleash, OpenFeature, GrowthBook, Flagsmith, Split, Flipper).');
+          const stale = flags.filter((f) => isStale(f)).length;
+          log('info', [`${flags.length} flag${flags.length === 1 ? '' : 's'} read in the code, ${stale} stale (! = fully on or off in the repo's flag files, or 90+ days old):`, formatFlags(flags), '/flags remove <key> has the agent remove one, keeping the live branch.'].join('\n'));
+        });
+        break;
+      }
+      case 'migrations': {
+        void branchMigrations(process.cwd()).then(({base, findings, files}) => {
+          if (!files.length) return log('info', `No migration files added or changed against ${base}.`);
+          if (!findings.length) return log('info', `${files.length} migration file${files.length === 1 ? '' : 's'} against ${base}: nothing risky found.`);
+          log('info', `${findings.length} risk${findings.length === 1 ? '' : 's'} in ${files.length} migration file${files.length === 1 ? '' : 's'} (against ${base}):\n${formatFindings(findings)}`);
+        });
+        break;
+      }
+      case 'contracts': {
+        void branchContracts(process.cwd()).then(({base, files}) => {
+          if (!files.length) return log('info', `No API contracts (OpenAPI, protobuf, GraphQL, Avro) changed against ${base}.`);
+          const breaking = files.filter((f) => f.changes.some((c) => c.kind === 'breaking')).length;
+          log('info', [`Contract changes against ${base}: ${breaking ? `${breaking} file${breaking === 1 ? '' : 's'} with breaking changes` : 'nothing breaking'}`, ...files.map((f) => formatChanges(f.file, f.changes))].join('\n'));
         });
         break;
       }

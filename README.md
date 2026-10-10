@@ -33,7 +33,10 @@ and a compaction model. No OAuth tokens are extracted: all traffic goes through 
 - **Specs and planning:** `/spec` writes requirements, a design and tasks you approve in turn; tasks
   run as a parallel graph and trace back to requirements. ADRs, architecture rules on every edit, plan
   risk, a second model's review of each plan, and `/bestof` on Claude and Codex at once.
-- **Coming next:** contracts and migrations, and system-level understanding across repos.
+- **Contracts and migrations:** breaking-change detection for OpenAPI, protobuf, GraphQL and Avro
+  (`/contracts`), migration safety checks (`/migrations`), expand/contract plans, Pact contract
+  tests, codemods, Java 21 / Python 3 / React hooks playbooks, dead code and stale flags.
+- **Coming next:** sessions, environments and insight, then system-level understanding across repos.
 
 ## Install
 

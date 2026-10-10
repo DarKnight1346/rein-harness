@@ -52,6 +52,7 @@ export default defineConfig({
           {label: 'Goals', slug: 'features/goals'},
           {label: 'Plan mode', slug: 'features/plans'},
           {label: 'Specs', slug: 'features/specs'},
+          {label: 'Contracts & migrations', slug: 'features/contracts'},
           {label: '/btw side questions', slug: 'features/btw'},
           {label: 'Rewind & checkpoints', slug: 'features/rewind'},
           {label: 'Subagents', slug: 'features/subagents'},
