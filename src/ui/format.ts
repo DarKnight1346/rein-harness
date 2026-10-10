@@ -96,3 +96,15 @@ export function listWindow(total: number, selected: number, size: number): {star
 
 /** Rows the `/` command list may take on a terminal this tall. */
 export const commandListRows = (rows: number) => Math.max(3, Math.min(10, rows - 14));
+
+/**
+ * The `/` list's name column: as wide as its longest name (the whole list, so it doesn't shift while
+ * scrolling) plus a two-space gap, at most 28; a longer name is cut with `…`.
+ */
+export function commandColumn(names: string[]): (name: string) => string {
+  const width = Math.min(28, Math.max(8, ...names.map((n) => n.length + 1)) + 2);
+  return (name) => {
+    const n = `/${name}`;
+    return (n.length > width - 2 ? `${n.slice(0, width - 3)}…` : n).padEnd(width);
+  };
+}

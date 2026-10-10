@@ -1,5 +1,5 @@
 import {describe, expect, it} from 'vitest';
-import {commandListRows, listWindow} from '../src/ui/format.js';
+import {commandColumn, commandListRows, listWindow} from '../src/ui/format.js';
 
 describe('the / command list window', () => {
   it('shows everything when it fits', () => {
@@ -14,5 +14,14 @@ describe('the / command list window', () => {
     expect(commandListRows(50)).toBe(10);
     expect(commandListRows(20)).toBe(6);
     expect(commandListRows(10)).toBe(3);
+  });
+
+  it('keeps names clear of descriptions', () => {
+    const col = commandColumn(['ci', 'goal:plan', 'review-deep-security']);
+    expect(col('ci')).toBe('/ci'.padEnd(23));
+    expect(col('review-deep-security')).toBe('/review-deep-security  ');
+    const capped = commandColumn(['a-very-long-skill-name-from-a-plugin']);
+    expect(capped('a-very-long-skill-name-from-a-plugin')).toMatch(/…  $/);
+    expect(capped('a-very-long-skill-name-from-a-plugin')).toHaveLength(28);
   });
 });

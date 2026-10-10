@@ -11,7 +11,7 @@ import {defaultRef} from '../../router/index.js';
 import {estimateTokens, renderMessages} from '../../session/transcript.js';
 import {usageStore, windowLabel} from '../../store/usage.js';
 import type {Entry} from '../entries.js';
-import {accountLabel, commandListRows, listWindow, modelLabel} from '../format.js';
+import {accountLabel, commandColumn, commandListRows, listWindow, modelLabel} from '../format.js';
 import {ImportPrompt} from '../ImportPrompt.js';
 import {TrustHooksPrompt} from '../TrustHooksPrompt.js';
 import {HistorySearch} from '../HistorySearch.js';
@@ -325,11 +325,14 @@ export function FullscreenApp({resume}: {resume: Resume}) {
     }
   })();
 
+  // The command and file lists span the chat column (not the sidebar), a column in from each side.
+  const panelWidth = Math.max(20, mainWidth - 2);
   const panel = (() => {
     if (r.inputActive && r.suggestions.length > 0) {
       const win = listWindow(r.suggestions.length, Math.max(0, r.suggestions.indexOf(r.selected!)), commandListRows(rows));
+      const nameCol = commandColumn(r.suggestions.map((c) => c.name));
       return (
-        <Box flexDirection="column" borderStyle="round" borderColor="gray" paddingX={1}>
+        <Box flexDirection="column" borderStyle="round" borderColor="gray" paddingX={1} width={panelWidth}>
           {win.above ? <Text dimColor>  ↑ {win.above} more</Text> : null}
           {r.suggestions.slice(win.start, win.end).map((c, j) => (
             <Clickable
@@ -342,7 +345,7 @@ export function FullscreenApp({resume}: {resume: Resume}) {
             >
               <Text color={c === r.selected ? 'cyan' : undefined} dimColor={c !== r.selected} wrap="truncate">
                 {c === r.selected ? '❯ ' : '  '}
-                {`/${c.name}`.padEnd(10)}
+                {nameCol(c.name)}
                 {c.description}
                 {c.skill ? <Text dimColor> · {c.skill.plugin ? `plugin ${c.skill.plugin}` : skillSourceLabel(c.skill.source)}{c.skill.argumentHint ? ` · ${c.skill.argumentHint}` : ''}</Text> : null}
               </Text>
@@ -354,7 +357,7 @@ export function FullscreenApp({resume}: {resume: Resume}) {
     }
     if (r.inputActive && r.fileSuggestions.length > 0) {
       return (
-        <Box flexDirection="column" borderStyle="round" borderColor="gray" paddingX={1}>
+        <Box flexDirection="column" borderStyle="round" borderColor="gray" paddingX={1} width={panelWidth}>
           {r.fileSuggestions.map((f) => (
             <Clickable key={f} onClick={() => r.acceptFile(f)}>
               <Text color={f === r.fileSelected ? 'cyan' : undefined} dimColor={f !== r.fileSelected} wrap="truncate">
@@ -386,7 +389,7 @@ export function FullscreenApp({resume}: {resume: Resume}) {
               void copyToClipboard(text).then((ok) => setFlash(ok ? `Copied ${text.length} characters` : 'Copy failed (no clipboard tool)'));
             }}
           />
-          {panel ? <Box flexShrink={0}>{panel}</Box> : <Box flexShrink={0}><LiveShell width={textWidth} agentId={viewing?.id} onOpen={(id) => r.setOverlay({name: 'shell', id})} /></Box>}
+          {panel ? <Box flexShrink={0} paddingX={1}>{panel}</Box> : <Box flexShrink={0}><LiveShell width={textWidth} agentId={viewing?.id} onOpen={(id) => r.setOverlay({name: 'shell', id})} /></Box>}
         </Box>
         {showSidebar ? <Sidebar width={SIDEBAR_WIDTH} height={mainHeight} tick={r.statusTick} run={r.runCommand} view={r.view} setView={r.setView} /> : null}
       </Box>
