@@ -1,4 +1,5 @@
 import {existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync} from 'node:fs';
+import {execFileSync} from 'node:child_process';
 import os from 'node:os';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
@@ -58,6 +59,13 @@ async function events(id: string, until: (ev: any) => boolean): Promise<any[]> {
   await reader.cancel();
   return out;
 }
+
+describe('the web UI page', () => {
+  it('is valid JavaScript (a syntax error would leave the page blank)', () => {
+    const page = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'webui', 'app.js');
+    expect(() => execFileSync(process.execPath, ['--check', page], {stdio: 'pipe'})).not.toThrow();
+  });
+});
 
 describe('web UI access', () => {
   it('hashes passwords, keeps sessions, and limits failed sign-ins', () => {
