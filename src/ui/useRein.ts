@@ -3,7 +3,7 @@ import {useApp, useInput} from 'ink';
 import {detectImports, importAccounts, skipImport, type AccountRow} from '../accounts/service.js';
 import {type UsageRow} from '../accounts/usage.js';
 import {shadowedSkills, suggestCommands} from '../commands/index.js';
-import {runCommand as runCommandWith} from '../commands/run.js';
+import {runBang as runBangWith, runCommand as runCommandWith} from '../commands/run.js';
 export {goalSummary} from '../commands/run.js';
 import {loadSkills, type Skill} from '../skills/index.js';
 import {autoUpdate, reinVersion, type UpdateLine} from '../commands/update.js';
@@ -902,19 +902,8 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
    * `!command`: run it yourself in the project (no approval: you typed it), with live output, like
    * Claude Code's bash mode. The command and its output go along with your next message.
    */
-  const runBang = (command: string) => {
-    logMain('user', `! ${command}`);
-    const cap = runtime.config.shellMaxMinutes;
-    const {shell, done} = runtime.tools.shells.start(command, {cwd: process.cwd(), background: false, timeoutMs: cap ? cap * 60_000 : 24 * 3600_000, maxMs: cap ? cap * 60_000 : undefined});
-    void done.then((s) => {
-      const status = s.status === 'exited' ? `exit ${s.exitCode ?? '?'}` : s.status;
-      const output = runtime.tools.shells.tail(s, 2000);
-      runtime.noteUserShell(command, status, output);
-      const shown = runtime.tools.shells.tail(s, 30);
-      logMain(s.status === 'exited' && s.exitCode === 0 ? 'info' : 'error', `${shown || '(no output)'}\n[${shellStatusText(s)}] · goes along with your next message`);
-      void shell;
-    });
-  };
+  const runBang = (command: string) => runBangWith(command, logMain);
+
 
   // The remote page (remote/server.ts): what it shows, what it can do. Messages from it go
   // through runCommand like typed ones; a few commands only make sense at the keyboard.
@@ -1026,8 +1015,9 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
   const runCommandRef = useRef<(raw: string) => void>(() => {});
   const runCommand = (raw: string) =>
     runCommandWith(raw, {
+      surface: 'terminal',
       windowed, viewing, logMain, add, setEntries, banner, bump, chat, setOverlay, setQueued, setView, attachments, skills, setSkills,
-      opts, updating, setUpdating, setUpdateLog, compacting, setCompacting, exit, refresh, runBang, remoteCommand, openShells, openRewind, openResume,
+      opts, updating, setUpdating, setUpdateLog, compacting, setCompacting, exit, refresh, remoteCommand, openShells, openRewind, openResume,
       startVoice, stopVoice, recording,
     });
 

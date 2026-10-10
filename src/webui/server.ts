@@ -182,7 +182,7 @@ export async function startServer(opts: ServerOptions = {}): Promise<{url: strin
       if (c.error) throw new HttpError(500, c.error);
       return json(res, 200, {id: c.id});
     }
-    const chatRoute = p.match(/^\/api\/chats\/([\da-f]+)(?:\/(events|send|interrupt|answer|model|mode|compact))?$/);
+    const chatRoute = p.match(/^\/api\/chats\/([\da-f]+)(?:\/(events|send|interrupt|answer|model|mode|compact|request|window))?$/);
     if (chatRoute) {
       const c = chats.get(chatRoute[1]!);
       if (!c) throw new HttpError(404, 'that chat is closed: open it again from the list');
@@ -199,6 +199,7 @@ export async function startServer(opts: ServerOptions = {}): Promise<{url: strin
         write({type: 'busy', busy: c.busy, ...(c.busy && c.phrase ? {phrase: c.phrase} : {})});
         for (const ev of c.backlog) write(ev);
         for (const a of c.asks.values()) write({type: 'ask', ...a});
+        if (c.window) write({type: 'window', window: c.window});
         c.watchers++;
         const on = (ev: unknown) => write(ev);
         c.on('event', on);
@@ -217,7 +218,7 @@ export async function startServer(opts: ServerOptions = {}): Promise<{url: strin
       const b = await body(req);
       if (action === 'send') {
         if (typeof b.text !== 'string' || !b.text.trim()) throw new HttpError(400, 'nothing to send');
-        if (c.busy) throw new HttpError(409, 'the agent is still working: wait, or stop it first');
+        // While the agent works, a message is queued and a command (/btw, /cost…) runs now, as in the terminal.
         c.send(b.text);
       } else if (action === 'interrupt') c.interrupt();
       else if (action === 'answer') {
@@ -225,6 +226,16 @@ export async function startServer(opts: ServerOptions = {}): Promise<{url: strin
       } else if (action === 'model') c.setModel(String(b.model ?? 'auto'));
       else if (action === 'mode') c.setMode(String(b.mode ?? 'ask'));
       else if (action === 'compact') c.compact();
+      else if (action === 'window') {
+        c.window = undefined;
+        return json(res, 200, {ok: true});
+      } else if (action === 'request') {
+        if (typeof b.op !== 'string' || !/^[a-z-]{1,32}$/.test(b.op)) throw new HttpError(400, 'which request?');
+        const value = await c.request(b.op, b.args && typeof b.args === 'object' ? b.args : {}).catch((err: Error) => {
+          throw new HttpError(400, err.message);
+        });
+        return json(res, 200, {value});
+      }
       return json(res, 200, {ok: true});
     }
 

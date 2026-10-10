@@ -68,6 +68,8 @@ import {formatUsd} from '../providers/prices.js';
  * serves both.
  */
 export type CommandUi = {
+  /** Where the command was typed: the terminal UI, or a web UI chat (rein --ui). */
+  surface: 'terminal' | 'web';
   /** The fullscreen renderer (windows), as opposed to the classic one or the web. */
   windowed: boolean;
   /** The subagent being viewed, if any (commands then act on it). */
@@ -92,15 +94,40 @@ export type CommandUi = {
   setCompacting(v: {startedAt: number; label: string; idle?: boolean} | undefined): void;
   exit(r?: ExitResult): void;
   refresh(): Promise<void>;
-  runBang(command: string): void;
-  remoteCommand(args: string): Promise<void>;
-  openShells(): void;
-  openRewind(): void;
-  openResume(): void;
-  startVoice(held: boolean): void;
-  stopVoice(): Promise<void>;
-  recording: {current: unknown};
+  // Terminal only: the web UI leaves these out, and the commands that need them say so.
+  remoteCommand?(args: string): Promise<void>;
+  openShells?(): void;
+  openRewind?(): void;
+  openResume?(): void;
+  startVoice?(held: boolean): void;
+  stopVoice?(): Promise<void>;
+  recording?: {current: unknown};
 };
+
+/** Commands that only make sense in a terminal, and what to use in the web UI instead. */
+const TERMINAL_ONLY: Record<string, string> = {
+  tui: 'The web UI has one layout; /tui switches the terminal renderer',
+  voice: 'Voice input records from the terminal; in the browser, use your system dictation',
+  remote: 'The remote page is for a terminal session; you are already on the web UI',
+  exit: 'Close the chat from the list instead',
+  shells: 'Background shells are listed in the terminal; /shells is not in the web UI yet',
+  shell: 'Background shells are listed in the terminal; /shell is not in the web UI yet',
+  rewind: 'Rewind is not in the web UI yet; use it from the terminal',
+  resume: 'Open a previous conversation from the chat list',
+};
+
+/** `!command`: runs it in the project, its output going along with the next message (both UIs). */
+export function runBang(command: string, logMain: CommandUi['logMain']): void {
+  logMain('user', `! ${command}`);
+  const cap = runtime.config.shellMaxMinutes;
+  const {done} = runtime.tools.shells.start(command, {cwd: process.cwd(), background: false, timeoutMs: cap ? cap * 60_000 : 24 * 3600_000, maxMs: cap ? cap * 60_000 : undefined});
+  void done.then((s) => {
+    const status = s.status === 'exited' ? `exit ${s.exitCode ?? '?'}` : s.status;
+    runtime.noteUserShell(command, status, runtime.tools.shells.tail(s, 2000));
+    const shown = runtime.tools.shells.tail(s, 30);
+    logMain(s.status === 'exited' && s.exitCode === 0 ? 'info' : 'error', `${shown || '(no output)'}\n[${shellStatusText(s)}] · goes along with your next message`);
+  });
+}
 
 /** /goal with an estimate over the cap: the goal typed once more starts it anyway. */
 let pendingGoal: string | undefined;
@@ -108,10 +135,10 @@ let pendingGoal: string | undefined;
 
 /** A slash command, typed in the terminal or the web UI: `ui` is how it shows its result. */
 export function runCommand(raw: string, ui: CommandUi): void {
-  const {windowed, viewing, logMain, add, setEntries, banner, bump, chat, setOverlay, setQueued, setView, attachments, skills, setSkills, opts, updating, setUpdating, setUpdateLog, compacting, setCompacting, exit, refresh, runBang, remoteCommand, openShells, openRewind, openResume, startVoice, stopVoice, recording} = ui;
+  const {windowed, viewing, logMain, add, setEntries, banner, bump, chat, setOverlay, setQueued, setView, attachments, skills, setSkills, opts, updating, setUpdating, setUpdateLog, compacting, setCompacting, exit, refresh, remoteCommand, openShells, openRewind, openResume, startVoice, stopVoice, recording} = ui;
   // `!command` runs a shell command directly (main conversation only).
   if (/^\s*!\s*\S/.test(raw) && !viewing) {
-    runBang(raw.trim().slice(1).trim());
+    runBang(raw.trim().slice(1).trim(), logMain);
     return;
   }
   // Viewing a subagent: command feedback shows in its view (the main history isn't on screen).
@@ -196,6 +223,10 @@ export function runCommand(raw: string, ui: CommandUi): void {
     clear: '/clear clears the main conversation and stops every subagent',
     resume: '/resume replaces the main conversation',
   };
+  if (ui.surface === 'web' && TERMINAL_ONLY[parsed.name]) {
+    log('info', `${TERMINAL_ONLY[parsed.name]}.`);
+    return;
+  }
   if (viewing && MAIN_ONLY[parsed.name]) {
     log('info', `${MAIN_ONLY[parsed.name]}. Switch back first: /agent main, or click ◂ main at the top.`);
     return;
@@ -207,7 +238,9 @@ export function runCommand(raw: string, ui: CommandUi): void {
   // In fullscreen, commands that open a window don't echo into the history.
   const opensWindow = ['goal:plan', 'login', 'usage', 'context', 'help', 'update', 'shells', 'btw', 'resume', 'agents', 'agent'].includes(parsed.name) || (parsed.name === 'settings' && !parsed.args.trim()) || (parsed.name === 'marketplace' && !parsed.args.trim()) || (parsed.name === 'model' && !parsed.args);
   // A value typed after `/vault set NAME` stays off the screen and out of the transcript.
-  if (!(windowed && opensWindow)) log('user', parsed.name === 'vault' ? raw.trim().replace(/^(\/vault\s+set\s+\S+)\s+.*$/s, '$1 ••••') : raw.trim());
+  // The web UI has windows for these whatever the arguments (/settings safety opens on a tab).
+  const webWindow = ui.surface === 'web' && (['settings', 'model', 'goal:plan', 'mcp', 'agents'].includes(parsed.name) && (parsed.name !== 'model' || !parsed.args.trim()));
+  if (!(windowed && opensWindow) && !webWindow) log('user', parsed.name === 'vault' ? raw.trim().replace(/^(\/vault\s+set\s+\S+)\s+.*$/s, '$1 ••••') : raw.trim());
   switch (parsed.name) {
     case 'mcp':
       setOverlay({name: 'mcp'});
@@ -310,7 +343,7 @@ export function runCommand(raw: string, ui: CommandUi): void {
       if (parsed.args.trim() === 'setup') {
         if (hint?.command) {
           log('info', `Installing with Homebrew: ${hint.command}`);
-          runBang(hint.command);
+          runBang(hint.command, logMain);
           log('info', 'When it finishes, run /voice setup again for the speech model.');
           return;
         }
@@ -333,12 +366,12 @@ export function runCommand(raw: string, ui: CommandUi): void {
         return;
       }
       // Ready: /voice toggles recording (like a tap of Ctrl+Space).
-      if (recording.current) void stopVoice();
-      else startVoice(false);
+      if (recording?.current) void stopVoice?.();
+      else startVoice?.(false);
       return;
     }
     case 'remote': {
-      void remoteCommand(parsed.args.trim());
+      void remoteCommand?.(parsed.args.trim());
       return;
     }
     case 'trackers': {
@@ -473,7 +506,7 @@ export function runCommand(raw: string, ui: CommandUi): void {
         log('info', 'The agent is working — press esc to stop it first, then /rewind.');
         break;
       }
-      openRewind();
+      openRewind?.();
       break;
     case 'permissions': {
       const lines: string[] = [];
@@ -1235,7 +1268,7 @@ export function runCommand(raw: string, ui: CommandUi): void {
       break;
     }
     case 'resume':
-      void openResume();
+      void openResume?.();
       break;
     case 'shells': {
       // The viewed agent's commands (main: its own; a subagent: the ones it started).
@@ -1243,7 +1276,7 @@ export function runCommand(raw: string, ui: CommandUi): void {
       const id = Number(parsed.args.replace('#', ''));
       if (windowed) {
         if (parsed.args && shells.some((s) => s.id === id)) setOverlay({name: 'shell', id});
-        else openShells();
+        else openShells?.();
         break;
       }
       if (parsed.args && shells.some((s) => s.id === id)) {

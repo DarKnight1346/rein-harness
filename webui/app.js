@@ -25,7 +25,7 @@ const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({'&': '&amp;', '<': '&l
 
 const ICONS = {
   plus: 'M12 5v14M5 12h14', send: 'M5 12h14M13 5l7 7-7 7', stop: 'M7 7h10v10H7z', folder: 'M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z', file: 'M6 3h8l4 4v14H6zM14 3v4h4', chat: 'M4 5h16v11H8l-4 4z', gear: 'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z',
-  menu: 'M4 6h16M4 12h16M4 18h16', up: 'M12 19V5M5 12l7-7 7 7', upload: 'M12 16V4M6 10l6-6 6 6M4 20h16', refresh: 'M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7', search: 'M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14zM21 21l-5-5', more: 'M5 12h.01M12 12h.01M19 12h.01', x: 'M6 6l12 12M18 6L6 18', eye: 'M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12zM12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z', download: 'M12 4v12M6 10l6 6 6-6M4 20h16', newfolder: 'M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2zM12 10v6M9 13h6',
+  menu: 'M4 6h16M4 12h16M4 18h16', panel: 'M4 5h16v14H4zM15 5v14', up: 'M12 19V5M5 12l7-7 7 7', upload: 'M12 16V4M6 10l6-6 6 6M4 20h16', refresh: 'M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7', search: 'M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14zM21 21l-5-5', more: 'M5 12h.01M12 12h.01M19 12h.01', x: 'M6 6l12 12M18 6L6 18', eye: 'M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12zM12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z', download: 'M12 4v12M6 10l6 6 6-6M4 20h16', newfolder: 'M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2zM12 10v6M9 13h6',
 };
 const icon = (name, size = 18) => {
   const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
@@ -376,7 +376,7 @@ async function openSaved(session) {
 function attachChat(id) {
   if (!/^[\da-f]{16}$/.test(id)) return;
   state.chat?.es?.close();
-  const c = {id, snapshot: undefined, live: '', tools: [], asks: new Map(), busy: false, notes: [], model: undefined, es: undefined, stick: true};
+  const c = {id, snapshot: undefined, live: '', tools: [], asks: new Map(), busy: false, notes: [], model: undefined, es: undefined, stick: true, feed: [], window: undefined, ui: undefined};
   state.chat = c;
   const es = new EventSource(`/api/chats/${id}/events`);
   c.es = es;
@@ -396,6 +396,7 @@ function onEvent(c, ev) {
   switch (ev.type) {
     case 'snapshot':
       c.snapshot = ev.snapshot;
+      renderChrome(c);
       c.busy = ev.snapshot.busy;
       if (!c.busy) Object.assign(c, {live: '', tools: [], notes: [], model: undefined});
       void loadChats().then(() => state.view === 'chat' && renderSide());
@@ -438,6 +439,25 @@ function onEvent(c, ev) {
     case 'waiting':
       c.notes.push({text: `Every account is at its limit: continuing at ${new Date(ev.until).toLocaleTimeString()}.`});
       break;
+    case 'cmd':
+    case 'log':
+    case 'usage':
+    case 'context':
+      // What commands print, in the thread where they were typed (after the messages so far).
+      c.feed.push({...ev, at: c.snapshot?.messages.length ?? 0});
+      break;
+    case 'clear':
+      c.feed = [];
+      break;
+    case 'window':
+      c.window = ev.close ? undefined : ev.window;
+      renderWindow(c);
+      return;
+    case 'chrome':
+      if (c.snapshot) Object.assign(c.snapshot, {status: ev.status, sidebar: ev.sidebar, queued: ev.queued, mode: ev.mode, chatModel: ev.chatModel});
+      renderChrome(c);
+      updateComposer(c);
+      return;
     case 'ask':
       c.asks.set(ev.id, ev);
       break;
@@ -459,8 +479,7 @@ function scheduleThread() {
     if (!thread) return render();
     const stick = scroll ? scroll.scrollHeight - scroll.scrollTop - scroll.clientHeight < 120 : true;
     thread.replaceWith(threadEl());
-    const bar = $('#composer-wrap');
-    if (bar) bar.replaceWith(composer());
+    if (state.chat) updateComposer(state.chat);
     const title = $('.topbar .title');
     if (title && state.chat?.snapshot) title.textContent = state.chat.snapshot.title;
     if (scroll && stick) scroll.scrollTop = scroll.scrollHeight;
@@ -529,6 +548,15 @@ function askEl(c, a) {
       h('div.actions', h('button.btn.primary', {on: {click: () => answer('implement')}}, 'Implement it now'), h('button.btn', {on: {click: () => answer('goal')}}, 'Start as a goal'), h('button.btn', {on: {click: () => answer('save')}}, 'Save for later'), h('button.btn.ghost', {on: {click: () => answer('revise')}}, 'Keep planning')),
     );
   }
+  if (a.kind === 'vault') {
+    const v = {value: ''};
+    return h('div.ask',
+      h('h3', `Value for ${a.payload.secret}`),
+      h('div.sub', 'Saved in the vault on the computer Rein runs on, never in the conversation. The agent\'s shell commands get it as an environment variable.'),
+      h('input', {type: 'password', autocomplete: 'off', on: {input: (e) => (v.value = e.target.value)}}),
+      h('div.actions', h('button.btn.primary', {on: {click: () => answer(v.value)}}, 'Save'), h('button.btn', {on: {click: () => answer(undefined)}}, 'Cancel')),
+    );
+  }
   return h('div.ask', h('h3', 'Rein needs you'), h('pre', JSON.stringify(a.payload, null, 2)));
 }
 
@@ -536,7 +564,7 @@ function threadEl() {
   const c = state.chat;
   const s = c?.snapshot;
   if (!s) return h('div.thread#thread', h('div.note', 'Starting…'));
-  if (!s.messages.length && !c.busy && !c.live) {
+  if (!s.messages.length && !c.busy && !c.live && !c.feed.length && !c.asks.size) {
     const hour = new Date().getHours();
     return h('div.thread#thread', h('div.empty', h('h1', hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening'), h('p', `What should we do in ${base(s.cwd)}?`)));
   }
@@ -551,39 +579,103 @@ function threadEl() {
     }
     if (c.live.length > at) live.push(md(c.live.slice(at)));
   }
+  // Messages, with what commands printed after the message they were typed after.
+  const rows = [];
+  const feedAt = (i) => c.feed.filter((f) => f.at === i).map(feedEl);
+  rows.push(feedAt(0));
+  s.messages.forEach((m, i) => rows.push(messageEl(m), feedAt(i + 1)));
+  rows.push(c.feed.filter((f) => f.at > s.messages.length).map(feedEl));
   return h('div.thread#thread',
-    s.messages.map(messageEl),
+    rows,
     live.length ? h('div.msg.assistant', live) : null,
     c.notes.map((n) => h('div.note' + (n.error ? '.error' : ''), n.text)),
     [...c.asks.values()].map((a) => askEl(c, a)),
   );
 }
 
+/** A command's echo, its output, and the /usage and /context reports. */
+function feedEl(f) {
+  if (f.type === 'cmd') return h('div.cmd', h('span.p', '›'), f.text);
+  if (f.type === 'log') return h('div.out' + (f.kind === 'error' ? '.error' : ''), f.text);
+  if (f.type === 'usage')
+    return h('div.out.report', !f.rows.length ? 'No accounts. Sign in from a terminal: rein, then /login.' : f.rows.map((r) => h('div.acct',
+      h('div', h('b', r.provider), ' ', r.account, r.plan ? h('span.muted', ` · ${r.plan}`) : null, r.cooldownUntil ? h('span.bad', ` · limited until ${new Date(r.cooldownUntil).toLocaleTimeString()}`) : null),
+      r.error ? h('div.bad', r.error) : null,
+      r.windows.map((w) => h('div.meter', h('span.l', w.label), bar(w.usedPct), h('span.n', `${w.usedPct}%`), w.resetsAt ? h('span.muted', ` resets ${new Date(w.resetsAt).toLocaleString()}`) : null)),
+    )));
+  if (f.type === 'context') {
+    const r = f.report;
+    const k = (n) => (n >= 1000 ? `${(n / 1000).toFixed(n >= 10_000 ? 0 : 1)}k` : String(n));
+    const used = r.measured ?? r.used;
+    return h('div.out.report',
+      h('div', h('b', r.modelLabel), ` · ${k(used)}/${k(r.window)} tokens (${((used / r.window) * 100).toFixed(1)}%${r.measured !== undefined ? ', measured' : ', est.'})`),
+      h('div.ctxbar', r.categories.map((cat) => h('i.' + cat.key, {style: {width: `${(cat.tokens / r.window) * 100}%`}, title: `${cat.label}: ${k(cat.tokens)}`}))),
+      r.categories.map((cat) => h('div.legend', h('i.' + cat.key), `${cat.label}: `, h('b', k(cat.tokens)), h('span.muted', ` (${((cat.tokens / r.window) * 100).toFixed(1)}%)`))),
+      h('div.legend', h('i.free'), `Free space: ${k(Math.max(0, r.window - used))}`),
+      h('div.muted', `${r.messageCount} messages${r.summarizedCount ? ` · ${r.summarizedCount} summarized` : ''} · compacts at ${k(r.autoCompactAt)}`),
+      r.largest?.length ? h('div.muted', 'Largest: ' + r.largest.slice(0, 5).map((x) => `${x.what} (${k(x.tokens)})`).join(' · ')) : null,
+    );
+  }
+  return null;
+}
+const bar = (pct) => h('span.mbar' + (pct >= 90 ? '.hot' : pct >= 70 ? '.warm' : ''), h('i', {style: {width: `${Math.min(100, pct)}%`}}));
+
+/** The request helper for a chat's worker: the / list, settings, model choices. */
+const ask = (c, op, args = {}) => api(`/api/chats/${c.id}/request`, {body: {op, args}}).then((r) => r.value);
+
+/** The input: built once per chat (typing never loses focus mid-reply); updateComposer refreshes the rest. */
 function composer() {
   const c = state.chat;
-  const s = c?.snapshot;
-  const ta = h('textarea', {rows: 1, placeholder: c?.busy ? 'The agent is working…' : 'Message Rein', on: {
-    input: (e) => {
-      e.target.style.height = 'auto';
-      e.target.style.height = `${e.target.scrollHeight}px`;
-      sendBtn.disabled = !e.target.value.trim() || c?.busy;
-    },
-    keydown: (e) => {
-      if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
-        e.preventDefault();
-        void send();
-      }
-    },
-  }});
-  if (c?.draft) ta.value = c.draft;
-  ta.addEventListener('input', () => c && (c.draft = ta.value));
-  const send = async () => {
-    const text = ta.value.trim();
-    if (!text || !c || c.busy) return;
+  if (c?.ui) return c.ui.wrap;
+  const ta = h('textarea', {rows: 1, placeholder: 'Message Rein, / for commands'});
+  const list = h('div.cmdlist.hidden');
+  const sug = {items: [], index: 0, text: undefined};
+  const fit = () => {
+    ta.style.height = 'auto';
+    ta.style.height = `${ta.scrollHeight}px`;
+  };
+  const showList = () => {
+    list.classList.toggle('hidden', !sug.items.length);
+    list.replaceChildren(...sug.items.map((it, i) => h('button.cmd-item' + (i === sug.index ? '.on' : ''), {on: {mousedown: (e) => (e.preventDefault(), pick(i))}},
+      h('span.name', `/${it.name}`), h('span.desc', it.description), it.tag ? h('span.tag', it.tag) : null)));
+    list.querySelector('.on')?.scrollIntoView({block: 'nearest'});
+  };
+  let timer = 0;
+  const suggest = () => {
+    const text = ta.value;
+    clearTimeout(timer);
+    if (!/^\/[^\s]*$/.test(text)) {
+      sug.items = [];
+      return showList();
+    }
+    timer = setTimeout(async () => {
+      const items = await ask(c, 'suggest', {text}).catch(() => []);
+      if (ta.value !== text) return;
+      Object.assign(sug, {items, index: 0, text});
+      showList();
+    }, 40);
+  };
+  const pick = (i) => {
+    const it = sug.items[i];
+    if (!it) return;
+    ta.value = `/${it.name} `;
+    sug.items = [];
+    showList();
+    ta.focus();
+    fit();
+  };
+  const send = async (text = ta.value.trim()) => {
+    if (!text || !c) return;
     c.draft = '';
     ta.value = '';
-    c.snapshot = {...c.snapshot, messages: [...c.snapshot.messages, {role: 'user', text, at: Date.now()}]};
-    c.busy = true;
+    fit();
+    sug.items = [];
+    showList();
+    // A message shows right away; a command's echo comes back from the worker.
+    if (!/^[\/!]/.test(text) && !c.busy) {
+      c.snapshot = {...c.snapshot, messages: [...c.snapshot.messages, {role: 'user', text, at: Date.now()}]};
+      c.busy = true;
+    }
     scheduleThread();
     try {
       await api(`/api/chats/${c.id}/send`, {body: {text}});
@@ -591,19 +683,73 @@ function composer() {
       toast(err.message, 'error');
     }
   };
-  const sendBtn = h('button.send', {disabled: true, title: 'Send (Enter)', on: {click: send}}, icon('send', 17));
-  const stopBtn = h('button.send.stop', {title: 'Stop', on: {click: () => api(`/api/chats/${c.id}/interrupt`, {body: {}}).catch((e) => toast(e.message, 'error'))}}, icon('stop', 15));
-  const model = h('select', {title: 'Model', disabled: !s, on: {change: (e) => api(`/api/chats/${c.id}/model`, {body: {model: e.target.value}}).catch((x) => toast(x.message, 'error'))}},
-    h('option', {value: 'auto', selected: s?.chatModel === 'auto'}, 'Auto'),
-    (s?.models ?? []).map((m) => h('option', {value: m.ref, selected: s.chatModel === m.ref}, `${m.label} · ${m.provider === 'claude' ? 'Claude' : 'Codex'}`)),
+  ta.addEventListener('input', () => {
+    fit();
+    if (c) c.draft = ta.value;
+    sendBtn.disabled = !ta.value.trim();
+    suggest();
+  });
+  ta.addEventListener('keydown', (e) => {
+    // A list for what was typed a moment ago is stale: Enter sends what's in the box.
+    if (sug.items.length && sug.text === ta.value) {
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        e.preventDefault();
+        sug.index = (sug.index + (e.key === 'ArrowDown' ? 1 : -1) + sug.items.length) % sug.items.length;
+        return showList();
+      }
+      if (e.key === 'Tab') {
+        e.preventDefault();
+        return pick(sug.index);
+      }
+      if (e.key === 'Escape') {
+        sug.items = [];
+        return showList();
+      }
+      // Enter fills in the highlighted command; typed out in full, it runs (as in the terminal).
+      if (e.key === 'Enter' && !e.shiftKey && !e.isComposing && !(sug.index === 0 && `/${sug.items[0].name}` === ta.value.trim().toLowerCase())) {
+        e.preventDefault();
+        return pick(sug.index);
+      }
+    }
+    if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
+      e.preventDefault();
+      void send();
+    }
+    if (e.key === 'Escape' && c?.busy) void api(`/api/chats/${c.id}/interrupt`, {body: {}}).catch(() => {});
+  });
+  ta.addEventListener('blur', () => setTimeout(() => ((sug.items = []), showList()), 120));
+  if (c?.draft) ta.value = c.draft;
+  const sendBtn = h('button.send', {disabled: !ta.value.trim(), title: 'Send (Enter)', on: {click: () => send()}}, icon('send', 17));
+  const stopBtn = h('button.send.stop', {title: 'Stop (Esc)', on: {click: () => api(`/api/chats/${c.id}/interrupt`, {body: {}}).catch((e) => toast(e.message, 'error'))}}, icon('stop', 15));
+  const model = h('select', {title: 'Model', on: {change: (e) => api(`/api/chats/${c.id}/model`, {body: {model: e.target.value}}).catch((x) => toast(x.message, 'error'))}});
+  const mode = h('select', {title: 'Approvals', on: {change: (e) => api(`/api/chats/${c.id}/mode`, {body: {mode: e.target.value}}).catch((x) => toast(x.message, 'error'))}},
+    [['ask', 'Ask before changes'], ['auto', 'Auto-approve'], ['bypass', 'Allow everything'], ['plan', 'Plan only']].map(([v, l]) => h('option', {value: v}, l)),
   );
-  const mode = h('select', {title: 'Approvals', disabled: !s, on: {change: (e) => api(`/api/chats/${c.id}/mode`, {body: {mode: e.target.value}}).catch((x) => toast(x.message, 'error'))}},
-    [['ask', 'Ask before changes'], ['auto', 'Auto-approve'], ['bypass', 'Allow everything'], ['plan', 'Plan only']].map(([v, l]) => h('option', {value: v, selected: s?.mode === v}, l)),
-  );
-  return h('div.composer-wrap#composer-wrap',
-    c?.busy ? h('div.working', h('span.dot.busy'), c.asks.size ? 'Waiting for you' : `${c.phrase ?? 'Thinking'}…${c.model ? ` · ${c.model}` : ''}`) : null,
-    h('div.composer', ta, h('div.row', model, mode, h('span.spacer'), c?.busy ? stopBtn : sendBtn)),
-  );
+  const working = h('div.working.hidden');
+  const queued = h('div.queued.hidden');
+  const action = h('span.action');
+  const wrap = h('div.composer-wrap#composer-wrap', working, queued, h('div.composer-box', list, h('div.composer', ta, h('div.row', model, mode, h('span.spacer'), action))));
+  if (c) c.ui = {wrap, ta, sendBtn, stopBtn, model, mode, working, queued, action};
+  updateComposer(c);
+  return wrap;
+}
+
+function updateComposer(c) {
+  const u = c?.ui;
+  if (!u) return;
+  const s = c.snapshot;
+  u.ta.placeholder = c.busy ? 'Queue a message, or /btw <question>' : 'Message Rein, / for commands';
+  u.working.classList.toggle('hidden', !c.busy);
+  u.working.replaceChildren(h('span.dot.busy'), c.asks.size ? 'Waiting for you' : `${c.phrase ?? 'Thinking'}…${c.model ? ` · ${c.model}` : ''}`);
+  const q = s?.queued ?? [];
+  u.queued.classList.toggle('hidden', !q.length);
+  u.queued.replaceChildren(...q.map((t, i) => h('span.chip', {title: t}, `Queued: ${t.length > 60 ? t.slice(0, 60) + '…' : t}`, h('button', {title: 'Remove', on: {click: () => ask(c, 'unqueue', {index: i}).catch((e) => toast(e.message, 'error'))}}, '×'))));
+  u.action.replaceChildren(c.busy && !u.ta.value.trim() ? u.stopBtn : u.sendBtn);
+  u.model.disabled = u.mode.disabled = !s;
+  const opts = [h('option', {value: 'auto'}, 'Auto'), ...(s?.models ?? []).map((m) => h('option', {value: m.ref}, `${m.label} · ${m.provider === 'claude' ? 'Claude' : 'Codex'}`))];
+  if (u.model.options.length !== opts.length) u.model.replaceChildren(...opts);
+  u.model.value = s?.chatModel ?? 'auto';
+  u.mode.value = s?.mode ?? 'ask';
 }
 
 function chatView() {
@@ -612,13 +758,52 @@ function chatView() {
     return h('main.main', topbar(state.project ? base(state.project) : 'Rein', state.project ? [h('span.path', tilde(state.project))] : []), h('div.scroll', h('div.empty', h('h1', 'Rein'), h('p', state.project ? `Start a chat in ${base(state.project)}, or pick one on the left.` : 'Open a project folder to start.'), h('button.btn.primary', {on: {click: state.project ? newChat : pickProject}}, state.project ? 'New chat' : 'Open a project'))));
   }
   const s = c.snapshot;
-  return h('main.main',
-    topbar(s?.title ?? 'Chat', [s ? h('span.path', tilde(s.cwd)) : null, h('button.icon-btn', {title: 'More', on: {click: (e) => chatMenu(e, c)}}, icon('more'))]),
-    h('div.scroll', threadEl()),
-    composer(),
+  // Wide screens: the sidebar sits beside the chat (on unless you turned it off). Narrow ones: it slides over, when asked.
+  const wide = innerWidth >= 1100;
+  const panelOpen = wide ? localStorage.getItem('rein.panel') !== 'off' : !!state.panelShow;
+  const togglePanel = () => {
+    if (wide) localStorage.setItem('rein.panel', panelOpen ? 'off' : 'on');
+    else state.panelShow = !panelOpen;
+    render();
+  };
+  return h('main.main.chat' + (panelOpen ? '.with-panel' : ''),
+    topbar(s?.title ?? 'Chat', [s ? h('span.path', tilde(s.cwd)) : null, h('button.icon-btn', {title: 'Sidebar', on: {click: togglePanel}}, icon('panel')), h('button.icon-btn', {title: 'More', on: {click: (e) => chatMenu(e, c)}}, icon('more'))]),
+    statusEl(c),
+    h('div.chat-body', h('div.chat-col', h('div.scroll', threadEl()), composer()), panelOpen ? panelEl(c) : null, panelOpen && !wide ? h('div.rpanel-backdrop', {on: {click: togglePanel}}) : null),
   );
 }
+
+/** The status line: the segments set in /settings → Status line, then marketplace items'. Click one for its command. */
+function statusEl(c) {
+  const segs = c.snapshot?.status ?? [];
+  return h('div.statusline#statusline', segs.map((g) => h(g.command ? 'button.seg' : 'span.seg', {title: g.label, on: g.command ? {click: () => runInChat(c, g.command)} : undefined}, h('span.k', g.label), h('span.v', g.value))));
+}
+
+/** The right sidebar: the goal's plan and tasks, the sections set in /settings → Sidebar, then items' sections. */
+function panelEl(c) {
+  const secs = c.snapshot?.sidebar ?? [];
+  return h('aside.rpanel#rpanel', secs.map((sec) => h('section',
+    h('h4', sec.title),
+    sec.rows.map((r) => {
+      const kids = [r.text ? h('span.t', r.text) : null, r.pct !== undefined ? [bar(r.pct), h('span.n', `${r.pct}%`)] : null];
+      const cls = (r.dim ? '.dim' : '') + (r.bold ? '.bold' : '') + (r.active ? '.active' : '');
+      return r.command ? h('button.row' + cls, {on: {click: () => runInChat(c, r.command)}}, kids) : h('div.row' + cls, kids);
+    }),
+  )), !secs.length ? h('div.muted', {style: {padding: '12px'}}, 'Nothing here: choose sections in /settings → Sidebar.') : null);
+}
+
+function renderChrome(c) {
+  if (state.chat !== c || state.view !== 'chat') return;
+  $('#statusline')?.replaceWith(statusEl(c));
+  $('#rpanel')?.replaceWith(panelEl(c));
+}
+
+/** Run a command in the chat, as if typed. */
+function runInChat(c, text) {
+  return api(`/api/chats/${c.id}/send`, {body: {text}}).catch((e) => toast(e.message, 'error'));
+}
 function afterChatRender() {
+  if (state.chat?.window) renderWindow(state.chat);
   const scroll = $('.scroll');
   if (scroll) scroll.scrollTop = scroll.scrollHeight;
   $('.composer textarea')?.focus();
@@ -648,6 +833,113 @@ function menu(e, items) {
   const y = Math.min(e.clientY ?? r.bottom, innerHeight - m.offsetHeight - 8);
   Object.assign(m.style, {left: `${x}px`, top: `${y}px`});
   setTimeout(() => document.addEventListener('click', () => m.remove(), {once: true}));
+}
+
+// ---------- windows a command opens (/settings, /model, /goal:plan, /mcp…) ----------
+
+function closeWindow(c) {
+  c.window = undefined;
+  renderWindow(c);
+  void api(`/api/chats/${c.id}/window`, {body: {}}).catch(() => {});
+}
+
+function renderWindow(c) {
+  document.querySelector('.overlay.cmd-window')?.remove();
+  if (state.chat !== c || !c.window) return;
+  const w = c.window;
+  const body = w.name === 'settings' ? settingsPanel(c, w) : w.name === 'model' ? modelPanel(c, w) : w.name === 'plans' ? plansPanel(c, w) : h('pre.text', (w.lines ?? []).join('\n'));
+  const title = w.name === 'settings' ? 'Settings' : w.name === 'model' ? 'Models' : w.name === 'plans' ? 'Start a plan as a goal' : w.title;
+  const o = h('div.overlay.cmd-window', {on: {click: (e) => e.target === o && closeWindow(c)}},
+    h('div.dialog.wide', h('header', title, h('button.icon-btn', {style: {float: 'right'}, title: 'Close (Esc)', on: {click: () => closeWindow(c)}}, icon('x'))), h('div.body', body)));
+  o.tabIndex = -1;
+  o.addEventListener('keydown', (e) => e.key === 'Escape' && closeWindow(c));
+  document.body.append(o);
+  o.focus();
+}
+
+/** Every /settings tab, as in the terminal: the status line and sidebar layout, the choices, and every key (Advanced). */
+function settingsPanel(c, v) {
+  const tab = v.tab;
+  const set = (patch) => {
+    c.window = {...c.window, ...patch, name: 'settings'};
+    renderWindow(c);
+  };
+  const apply = async (op, args) => {
+    try {
+      set(await ask(c, op, {...args, tab}));
+    } catch (err) {
+      toast(err.message, 'error');
+    }
+  };
+  const tabs = h('div.tabs', v.tabs.map((t) => h('button.tab' + (t === tab ? '.on' : ''), {on: {click: () => set({tab: t})}}, t)));
+  let body;
+  const layout = v.layouts.find((l) => l.title === tab);
+  const group = v.groups.find((g) => g.group === tab);
+  if (layout) {
+    const on = layout.items.filter((i) => i.on).map((i) => i.id);
+    const save = (ids) => apply('layout', {key: layout.key, ids});
+    body = h('div.layout',
+      h('p.muted', layout.key === 'statusLine' ? 'Segments of the status line, left to right. Check to show; arrows reorder.' : 'Sections of the sidebar, top to bottom. Check to show; arrows reorder.'),
+      layout.items.map((it) => {
+        const i = on.indexOf(it.id);
+        return h('div.lrow',
+          h('label', h('input', {type: 'checkbox', checked: it.on, on: {change: (e) => save(e.target.checked ? [...on, it.id] : on.filter((x) => x !== it.id))}}), h('b', it.label), h('span.muted', it.description)),
+          it.on ? h('span.move', h('button.icon-btn', {disabled: i === 0, title: 'Up', on: {click: () => save(on.map((x, j) => (j === i - 1 ? it.id : j === i ? on[i - 1] : x)))}}, '↑'), h('button.icon-btn', {disabled: i === on.length - 1, title: 'Down', on: {click: () => save(on.map((x, j) => (j === i + 1 ? it.id : j === i ? on[i + 1] : x)))}}, '↓')) : null,
+        );
+      }),
+    );
+  } else if (group) {
+    body = h('div', group.settings.map((st) => h('section.setting',
+      h('h3', st.title), h('p.muted', st.description),
+      st.choices.map((ch) => h('label.opt', h('input', {type: 'radio', name: `set-${st.key}`, checked: JSON.stringify(ch.value) === JSON.stringify(st.value ?? st.choices[0].value), on: {change: () => apply('setting', {key: st.key, value: ch.value})}}), h('span', ch.label))),
+    )));
+  } else {
+    const q = {text: ''};
+    const rows = h('div.adv');
+    const draw = () => rows.replaceChildren(...v.advanced.filter((k) => !q.text || k.key.toLowerCase().includes(q.text) || k.description.toLowerCase().includes(q.text)).map((k) => {
+      const input =
+        k.kind === 'boolean' ? h('select', {on: {change: (e) => apply('setting', {key: k.key, value: e.target.value, typed: true})}}, ['', 'true', 'false'].map((x) => h('option', {value: x, selected: k.value === x}, x || `default (${k.default})`)))
+        : k.kind === 'enum' ? h('select', {on: {change: (e) => apply('setting', {key: k.key, value: e.target.value, typed: true})}}, ['', ...k.choices].map((x) => h('option', {value: x, selected: k.value === x}, x || `default (${k.default})`)))
+        : h('input', {type: k.kind === 'number' ? 'number' : 'text', value: k.value, placeholder: k.default === '(not set)' ? '' : `default: ${k.default}`, on: {change: (e) => apply('setting', {key: k.key, value: e.target.value, typed: true})}});
+      return h('div.krow', h('div', h('code', k.key), k.set ? h('span.set', 'set') : null, h('div.muted', k.description)), input);
+    }));
+    draw();
+    body = h('div', h('input.search', {type: 'search', placeholder: `Search ${v.advanced.length} settings`, on: {input: (e) => ((q.text = e.target.value.toLowerCase()), draw())}}), h('p.muted', 'Every key in ~/.rein/config.json. Lists are comma-separated; JSON values are written as JSON; empty means the default.'), rows);
+  }
+  return h('div', tabs, body);
+}
+
+/** /model: each section's choices, and the effort for the chat model. */
+function modelPanel(c, v) {
+  const sec = v.section ?? v.sections[0].id;
+  const set = (patch) => {
+    c.window = {...c.window, ...patch, name: 'model'};
+    renderWindow(c);
+  };
+  const choose = async (section, value) => {
+    try {
+      const r = await ask(c, 'model', {section, value});
+      toast(r.said);
+      set({...r.view, section: sec});
+    } catch (err) {
+      toast(err.message, 'error');
+    }
+  };
+  const s = v.sections.find((x) => x.id === sec);
+  return h('div',
+    h('div.tabs', v.sections.map((x) => h('button.tab' + (x.id === sec ? '.on' : ''), {on: {click: () => set({section: x.id})}}, x.title))),
+    h('p.muted', s.description),
+    h('div.options', s.options.map((o) => h('label.opt' + (o.disabled ? '.disabled' : ''), h('input', {type: 'radio', name: `model-${s.id}`, disabled: o.disabled, checked: o.value === s.value, on: {change: () => choose(s.id, o.value)}}), h('span', h('b', o.label), o.hint ? h('small', o.hint) : null)))),
+    s.id === 'chat' ? h('div', h('h3', 'Effort'), h('div.options', v.effort.options.map((o) => h('label.opt', h('input', {type: 'radio', name: 'effort', checked: o.value === v.effort.value, on: {change: () => choose('effort', o.value)}}), h('span', h('b', o.label), o.hint ? h('small', o.hint) : null))))) : null,
+  );
+}
+
+function plansPanel(c, v) {
+  if (!v.plans.length) return h('div', h('p.muted', 'No unfinished plans in .rein/plans yet.'), h('button.btn', {on: {click: () => (closeWindow(c), (c.ui.ta.value = '/plan '), c.ui.ta.focus())}}, 'Write a new plan'));
+  return h('div.options', v.plans.map((p) => h('button.choice', {on: {click: async () => {
+    closeWindow(c);
+    await ask(c, 'plan-goal', {file: p.file}).catch((e) => toast(e.message, 'error'));
+  }}}, h('div', h('b', p.title), h('small', `${p.done}/${p.total} milestones done`)))), h('button.btn', {on: {click: () => (closeWindow(c), (c.ui.ta.value = '/plan '), c.ui.ta.focus())}}, 'Write a new plan'));
 }
 
 // ---------- files ----------
@@ -937,8 +1229,23 @@ function settingsView() {
       ) : null,
       h('p.muted', {style: {fontSize: '13px'}}, 'To change how Rein is reached, delete ~/.rein/webui.json on this computer and restart rein --ui: the setup runs again.'),
     ),
-    h('section', h('h2', 'About'), h('p.muted', `Rein ${state.version}. Accounts and models are managed in Rein's terminal (rein, then /login and /model); the web UI uses the same ones.`)),
+    h('section', h('h2', 'Rein'),
+      h('p.muted', 'Models, approvals, the status line and sidebar, and every other setting: the same window as /settings and /model in a chat.'),
+      h('div', {style: {display: 'flex', gap: '8px'}},
+        h('button.btn.primary', {disabled: !state.chat, on: {click: () => (go(`#/chat/${state.chat.id}`), runInChat(state.chat, '/settings'))}}, 'Open settings'),
+        h('button.btn', {disabled: !state.chat, on: {click: () => (go(`#/chat/${state.chat.id}`), runInChat(state.chat, '/model'))}}, 'Models'),
+      ),
+      !state.chat ? h('p.muted', {style: {fontSize: '13px'}}, 'Open a chat first: settings are read and saved by Rein in that chat.') : null,
+    ),
+    h('section', h('h2', 'About'), h('p.muted', `Rein ${state.version}. Accounts are signed in from Rein's terminal (rein, then /login); the web UI uses the same ones.`)),
   )));
 }
+
+// Crossing the wide/narrow line moves the chat's sidebar between beside and over the chat.
+let wasWide = innerWidth >= 1100;
+addEventListener('resize', () => {
+  const wide = innerWidth >= 1100;
+  if (wide !== wasWide && state.view === 'chat') ((wasWide = wide), (state.panelShow = false), render());
+});
 
 void boot();

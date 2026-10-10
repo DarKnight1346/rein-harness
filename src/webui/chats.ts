@@ -25,6 +25,10 @@ export class Chat extends EventEmitter {
   /** Events since the last snapshot (the turn in progress), for a page that connects mid-turn. */
   backlog: Record<string, unknown>[] = [];
   asks = new Map<number, Ask>();
+  /** The window a command opened (/settings, /model…), for a page that connects while it's open. */
+  window: Record<string, unknown> | undefined;
+  private replies = new Map<number, {resolve(v: unknown): void; reject(e: Error): void}>();
+  private requests = 0;
   watchers = 0;
   lastSeen = Date.now();
   error: string | undefined;
@@ -52,7 +56,11 @@ export class Chat extends EventEmitter {
       }
       this.onMessage(m);
     });
-    this.proc.on('exit', () => this.emit('exit'));
+    this.proc.on('exit', () => {
+      for (const r of this.replies.values()) r.reject(new Error('the chat stopped'));
+      this.replies.clear();
+      this.emit('exit');
+    });
     this.write({t: 'init', ...(resume ? {resume} : {})});
   }
 
@@ -63,6 +71,16 @@ export class Chat extends EventEmitter {
       if (!this.busy) this.backlog = [];
       if (m.t === 'ready') this.emit('ready');
       this.broadcast({type: 'snapshot', snapshot: m.snapshot});
+    } else if (m.t === 'reply') {
+      const r = this.replies.get(m.id);
+      this.replies.delete(m.id);
+      if (m.error) r?.reject(new Error(m.error));
+      else r?.resolve(m.value);
+    } else if (m.t === 'event' && (m.ev.type === 'chrome' || m.ev.type === 'window')) {
+      // Not part of the turn's backlog: the latest one is all a page needs.
+      if (m.ev.type === 'chrome' && this.snapshot) Object.assign(this.snapshot, {status: m.ev.status, sidebar: m.ev.sidebar, queued: m.ev.queued, mode: m.ev.mode, chatModel: m.ev.chatModel});
+      if (m.ev.type === 'window') this.window = m.ev.close ? undefined : m.ev.window;
+      this.broadcast(m.ev);
     } else if (m.t === 'event') {
       // The first message names the chat right away (the snapshot's title comes after the turn).
       if (m.ev.type === 'user' && this.snapshot && !this.snapshot.messages.length) this.snapshot.title = String(m.ev.text).split('\n')[0]!.slice(0, 80);
@@ -89,6 +107,15 @@ export class Chat extends EventEmitter {
     if (!this.proc.killed) this.proc.stdin.write(JSON.stringify(m) + '\n');
   }
 
+  /** Ask the worker something (the / list, a setting's change…) and wait for its reply. */
+  request(op: string, args: Record<string, unknown>): Promise<unknown> {
+    const id = ++this.requests;
+    return new Promise((resolve, reject) => {
+      this.replies.set(id, {resolve, reject});
+      this.write({t: 'request', id, op, args});
+      setTimeout(() => this.replies.delete(id) && reject(new Error('the chat did not answer')), 30_000).unref();
+    });
+  }
   send(text: string): void {
     this.write({t: 'send', text});
   }
