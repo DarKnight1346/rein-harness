@@ -146,8 +146,8 @@ agent works by default ships as an experiment (`experiments` in config) until it
 
 | # | Feature | Spec | Docs | Status |
 |---|---|---|---|---|
-| 113 | Web UI server | `rein --ui` serves a web UI on port 9333; `rein --ui --port <number>` picks another. The same engine, accounts, tools and approvals as the TUI, through the official CLIs. |  | todo |
-| 114 | Web UI as a system service | `rein service --install [--port <number>]` installs the web UI as a service that starts with the system (launchd on macOS, a systemd user unit on Linux, a scheduled task on Windows); `rein service --uninstall` removes it. |  | todo |
-| 115 | First-run setup | The first visit walks through setup: no login (local only, or reached through a Tailscale tunnel), or with login credentials, for running it on your own server. |  | todo |
-| 116 | Desktop-style chat | Conversations like Claude Desktop or ChatGPT desktop: a sidebar of chats per project, streaming replies, tool calls, diffs, approvals, plans, goals, subagents and model choice, on any device. Builds on #113. |  | todo |
-| 117 | File manager | Open any directory on the machine as a project, from a full file manager for headless servers: browse, search, preview, edit, upload, download, rename, move, copy, delete and new folders. Builds on #113. |  | todo |
+| 113 | Web UI server | `rein --ui` serves a web UI on port 9333; `rein --ui --port <number>` picks another. The same engine, accounts, tools and approvals as the TUI, through the official CLIs. | features/web-ui/ | done |
+| 114 | Web UI as a system service | `rein service --install [--port <number>]` installs the web UI as a service that starts with the system (launchd on macOS, a systemd user unit on Linux, a scheduled task on Windows); `rein service --uninstall` removes it. | features/web-ui/#as-a-service | done |
+| 115 | First-run setup | The first visit walks through setup: no login (local only, or reached through a Tailscale tunnel), or with login credentials, for running it on your own server. | features/web-ui/#first-run | done |
+| 116 | Desktop-style chat | Conversations like Claude Desktop or ChatGPT desktop: a sidebar of chats per project, streaming replies, tool calls, diffs, approvals, plans, goals, subagents and model choice, on any device. Builds on #113. | features/web-ui/#chats | done |
+| 117 | File manager | Open any directory on the machine as a project, from a full file manager for headless servers: browse, search, preview, edit, upload, download, rename, move, copy, delete and new folders. Builds on #113. | features/web-ui/#files | done |
