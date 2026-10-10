@@ -54,6 +54,7 @@ export function compactText(reason: string, r: {summarized: number; summaryToken
     : reason === 'midturn' ? `Compacted mid-task at ${autoPct}% of the context window — the agent carries on from the summary`
     : reason === 'handoff' ? 'Compacted before handing the conversation to another model'
     : reason === 'context' ? "The model's context window was full — compacted, and the agent carries on"
+    : reason === 'idle' ? 'Compacted while idle, before the prompt cache expired · your next message starts from the summary'
     : 'You ran /compact · the next reply starts from the summary · /context for details';
   return {stats, why};
 }
@@ -81,4 +82,29 @@ export function age(ms: number, now = Date.now()): string {
 export function usageShort(snap: UsageSnapshot | undefined): string {
   if (!snap?.windows.length) return '';
   return snap.windows.map((w) => `${windowLabel(w.windowMins)} ${Math.round(w.usedPct)}%`).join(' · ');
+}
+
+/**
+ * The slice of a list to show in `size` rows, kept around the selected item (the `/` command list:
+ * it outgrew the screen). `above` and `below` count what's hidden, for the "↑ 3 more" lines.
+ */
+export function listWindow(total: number, selected: number, size: number): {start: number; end: number; above: number; below: number} {
+  if (total <= size) return {start: 0, end: total, above: 0, below: 0};
+  const start = Math.max(0, Math.min(total - size, selected - Math.floor(size / 2)));
+  return {start, end: start + size, above: start, below: total - start - size};
+}
+
+/** Rows the `/` command list may take on a terminal this tall. */
+export const commandListRows = (rows: number) => Math.max(3, Math.min(10, rows - 14));
+
+/**
+ * The `/` list's name column: as wide as its longest name (the whole list, so it doesn't shift while
+ * scrolling) plus a two-space gap, at most 28; a longer name is cut with `…`.
+ */
+export function commandColumn(names: string[]): (name: string) => string {
+  const width = Math.min(28, Math.max(8, ...names.map((n) => n.length + 1)) + 2);
+  return (name) => {
+    const n = `/${name}`;
+    return (n.length > width - 2 ? `${n.slice(0, width - 3)}…` : n).padEnd(width);
+  };
 }

@@ -37,6 +37,11 @@ An existing `~/.rein` keeps being used as it is, and so does `REIN_HOME`. To swi
 | `state/build-times/` | Per project, the last 10 durations of each build or test command (for `buildTimeWarnings`) |
 | `state/flaky/` | With `flaky-quarantine`: per project, recent test outcomes by code fingerprint and the tests found flaky. `/flaky clear` empties a project's file |
 | `state/mcp-pins.json` | With `mcpPinning`: each MCP server's launch config and tool list as first approved (hashes and tool names). Delete it to start over |
+| `marketplaces.json` | The [marketplaces](../../features/marketplace/) you added (the official one is always there and isn't listed) |
+| `marketplaces/<repo>/` | Each marketplace's clone (shallow). Safe to delete; fetched again |
+| `plugins/<id>/` | Items you installed from a marketplace, loaded like plugins |
+| `plugins.json` | What's installed: id, version, marketplace, and the settings each changed (so uninstalling undoes them) |
+| `pets/` | [Pets](../../features/pets/): `mine/<id>/` holds your own (a sprite sheet and `pet.json`); `active.json` says which shows; `<id>.sheet` is a ChatGPT pet's downloaded sheet; the `.json` files are frames shrunk for the terminal. The downloads and frames are safe to delete |
 | `state/usage.json` | Last-known usage windows per account, plus limit cooldowns (account unusable until a time) |
 | `exports/<id>.md` | Conversations saved with `/export` (when no file is given) |
 | `mcp-auth/<host>_<path>.json` | OAuth tokens and client registration for each remote MCP server you signed in to (owner-only), e.g. `mcp.linear.app_mcp.json`. Delete one to sign out of that server |
@@ -148,6 +153,7 @@ Added to the system prompt for every provider, up to 64 KB each, duplicates remo
 | `REIN_HOME` | Root of Rein's state instead of `~/.rein`. Also disables Keychain/DPAPI for the Jev key |
 | `REIN_KEYCHAIN` | `1` (macOS): keep using the Keychain for secrets even with `REIN_HOME` set |
 | `REIN_CLAUDE_BIN` | Path to the `claude` binary (default: `claude` on `PATH`) |
+| `REIN_OFFICIAL_MARKETPLACE` | Where the official marketplace comes from (default `https://github.com/rein-harness/rein-marketplace`): a mirror's URL, or a folder |
 | `REIN_CODEX_BIN` | Path to the `codex` binary (default: `codex` on `PATH`) |
 | `SRC_ACCESS_TOKEN` | Sourcegraph access token for [`org_search`](../../features/large-codebases/#search-the-whole-org) (`codeSearch` in config) |
 | `HTTPS_PROXY`, `HTTP_PROXY`, `ALL_PROXY`, `NO_PROXY` | Route Rein's own requests through a proxy (never local connections). See [Install → Behind a corporate proxy](../../start/install/#behind-a-corporate-proxy) |

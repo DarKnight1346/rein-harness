@@ -5,6 +5,10 @@ description: Feedback from builds, tests and CI at monorepo scale. What a change
 
 Big repos make the build-and-test loop slow and noisy: the whole suite takes an hour, logs run to thousands of lines, and one flaky test sends the agent chasing ghosts. These features make the loop fast and focused.
 
+:::note[CI and pull requests pack]
+`/ci`, `/affected`, `/flaky`, `/build`, `/coverage`, `/mutate` are in the **CI and pull requests** pack, which is off by default: turn it on in `/settings` → **Packs** ([Packs](../../reference/commands/#packs)). What Rein does on its own here works without it.
+:::
+
 ## What a change affects
 
 In a monorepo with **Nx**, **Turborepo**, **Bazel** or **Pants**, the build system already knows which projects depend on which. Rein asks it:

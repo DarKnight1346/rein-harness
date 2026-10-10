@@ -69,6 +69,7 @@ How these play together is covered in [load balancing](../../internals/load-bala
 | `budget` | object | unset (no caps) | Spending caps in USD at API list prices: `{"requestUsd": 2, "goalUsd": 20, "conversationUsd": 50}`. A repo's `.rein/settings.json` `budget` can set lower ones. See [Cost & budgets](../../features/cost/#budgets). | `/settings budget {…}`, `/settings` → Advanced |
 | `otel` | object | unset (off) | OpenTelemetry export of turns, tool calls, tokens and cost: `{"endpoint": "http://localhost:4318", "headers": {…}, "serviceName": "rein"}`. Metadata only. See [Observability](../../features/observability/). | `/settings <key>`, `/settings` → Advanced |
 | `experiments` | string[] | `[]` | Efficiency experiments to turn on by name, or `-name` to turn a default one off; see [Experiments](#experiments). | `/settings <key>`, `/settings` → Advanced |
+| `packs` | string[] | `[]` | [Command packs](../commands/#packs) to turn on: `ci`, `specs`, `migrations`, `system`, `codebase`, `insight`. A pack that's off keeps its commands out of the `/` list and `/help` and its skills from the agent. | `/settings` → Packs, `/settings <key>` |
 | `lspServers` | object | — | Use your own server command instead of Rein's, per server id: `{"python": {"command": "/path/to/server", "args": ["--stdio"]}}`. | `/settings <key>`, `/settings` → Advanced |
 | `waitForLimits` | boolean | `true` | When every account for the model is at its limit and no other model can take over, wait for the earliest reset (up to 12 hours) and continue the turn. `false` stops with `Every account for … is at its limit`. | `/settings` → Accounts → Limits |
 | `secretScan` | `"off"` \| `"warn"` \| `"block"` | `"off"` | A `write` or `edit` that adds something that looks like a credential: tell the agent (`warn`) or refuse the change (`block`). When on, credentials are also masked in saved conversations. See [Secret scanning](../../features/permissions/#secret-scanning). | `/settings secretScan`, `/settings` → Advanced |
@@ -117,6 +118,8 @@ See [permissions](../../features/permissions/) for rules, plan mode and the full
 | --- | --- | --- | --- | --- |
 | `autoUpdate` | boolean | `true` | On launch, check npm for a newer Rein and install it in the background. It takes effect on the next start. `REIN_NO_AUTOUPDATE` also turns it off. | `/settings` → General → Updates |
 | `hidePersonalInfo` | boolean | `true` | Privacy mode. Accounts show as "Claude Account 1" / "Codex Account 1", known emails in rendered text become those names, your home folder becomes `~` and your username becomes `user`. | `/settings` → General → Privacy |
+| `pet` | `"auto"` \| `"off"` | `"auto"` | Your [pet](../../features/pets/) from the ChatGPT and Codex apps at the bottom of the sidebar (needs a Codex account). | `/settings` → General → Pet |
+| `theme` | object | — | The UI's look: `{"accent": "magenta"}` (a colour name or `#hex`) colours the input box, window frames, tabs and selected rows. [Marketplace](../../features/marketplace/) themes set it. | `/settings <key>`, `/settings` → Advanced |
 | `tui` | `"fullscreen"` \| `"classic"` | unset (= fullscreen) | The renderer. `rein --classic` / `--fullscreen` override it for one run without saving. | `/tui fullscreen`, `/tui classic` |
 | `sidebar` | boolean | unset (= shown) | Whether the fullscreen sidebar is open. It auto-hides below 96 columns regardless. | `Ctrl+B` or the `[≡]` button |
 | `statusLine` | string[] | `["model","account","usage","context","sidebarToggle"]` | Top status line segments, left to right. | `/settings` → Status line |
@@ -141,16 +144,17 @@ Valid `sidebarSections` ids: `agents`, `accounts`, `models` (chat model picker),
 
 ## The `/settings` tabs
 
-`/settings` opens a window with seven tabs. Switch with click, `←` `→` or `Tab`; close with `Esc`. `/settings <tab>` (`/settings safety`) opens on that tab.
+`/settings` opens a window with eight tabs. Switch with click, `←` `→` or `Tab`; close with `Esc`. `/settings <tab>` (`/settings safety`) opens on that tab.
 
 | Tab | What's in it |
 | --- | --- |
 | **Status line** | `statusLine`: toggle segments (click / `Space`), reorder (`▲▼`, `Shift+↑↓` or `[` `]`), `r` resets |
 | **Sidebar** | `sidebarSections`: same controls as Status line |
-| **General** | Approvals (`toolApproval`), Sandbox (`sandbox`), Dev environment (`devEnvironment`), Shell (`shellMaxMinutes`), Notifications (`notifications`), Paste (`collapsePastes`), Attribution (`attribution`), Updates (`autoUpdate`), Privacy (`hidePersonalInfo`) |
+| **General** | Approvals (`toolApproval`), Sandbox (`sandbox`), Dev environment (`devEnvironment`), Shell (`shellMaxMinutes`), Notifications (`notifications`), Paste (`collapsePastes`), Attribution (`attribution`), Updates (`autoUpdate`), Privacy (`hidePersonalInfo`), Pet (`pet`) |
 | **Agents** | Subagents (`subagentLimit`), Goals (`goalMaxRounds`), Worktrees (`worktrees`), Compaction (`autoCompactPct`), Plan review (`planReview`) |
 | **Accounts** | Load balancing (`loadBalancing`), Limits (`waitForLimits`), API accounts (`apiAccounts`) |
 | **Safety** | Secrets (`secretScan`), Semgrep (`sast`), Planted instructions (`injectionScan`), Data leaving (`exfilGuard`), MCP pinning (`mcpPinning`), Dependencies (`depCheck`) |
+| **Packs** | `packs`: the [command packs](../commands/#packs) that are on (all off by default). Click or `Space` toggles one; the line below lists its commands and skills |
 | **Advanced** | Every key in the file as a list: `Enter` cycles a choice or on/off, or opens an editor for text, numbers, lists (comma-separated) and JSON; `r` resets the key to its default |
 
 In General, Agents, Accounts and Safety, `↑` `↓` pick a setting, and `Enter`, `Space` or a click cycles its value. The focused setting's explanation and all its choices show below the list; click a choice to pick it.
@@ -166,6 +170,7 @@ In General, Agents, Accounts and Safety, `↑` `↓` pick a setting, and `Enter`
 | Attribution | On *(default)* · Off |
 | Updates | Auto-update Rein *(default)* · Only when I run `/update` |
 | Privacy | Hide personal info *(default)* · Show emails and paths |
+| Pet | Show my pet *(default)* · Off |
 | Subagents | 1 · 2 · 3 · 5 · 10 *(default)* · 20 at a time |
 | Goals | Unlimited *(default)* · 10 · 25 · 50 · 100 · 250 continuations |
 | Worktrees | Automatic *(default)* · Off |
@@ -284,6 +289,7 @@ Changes meant to cut what a task costs (tokens, round trips, time), measured wit
 | `keep-going` | When the agent ends its turn and no other check sends it back, the [decision model](../../internals/decision-model/) reads the request and the final reply. If the agent stopped partway by its own account ("I've only partly done this", next steps it hasn't done, code that doesn't build yet) and isn't waiting on you, Rein sends it back to finish, up to 3 times per request. Runs after the code check. Models stop like this on long tasks, more often right after a compaction. |
 | `price-break` | For a model billed on two rate cards by prompt size, conversations are compacted before they reach the pricier one. Haiku 5.5 costs $0.10 / $0.50 per million tokens while a request's prompt is up to 100K tokens, and $0.50 / $2.50 for the whole request above that, cache reads included. With this on, Haiku 5.5 compacts at 80K (80% of the break, leaving room for one large tool result) instead of at `autoCompactPct` of its 1M window. Measured on plain Claude Code, 85% of Haiku 5.5's requests on large tasks were over 100K. Pair it with `keep-going`: models sometimes stop after a compaction. |
 | `context-cap` | Conversations are compacted at 200K tokens, or at `autoCompactPct` of the context window if that's smaller. Every request re-reads the whole conversation, and on a 1M window it otherwise grows to 300–500K tokens on large tasks, where those cache reads were about 60% of the cost. |
+| `idle-compact` | In the TUI, a conversation left idle is compacted 2 minutes before its prompt cache expires (58 minutes after the last request, or 4 with `cache-5m`), when its last request was at least 40% of the auto-compact size. The summary is written from the warm cache, so coming back costs a small summary instead of the whole history at the uncached rate. The conversation shows `Compacted while idle, before the prompt cache expired`. See [Triggers](../../internals/context/#triggers). |
 | `faithful-compaction` | Compaction keeps what a summary must not lose. Every request you made goes into the compacted context word for word, with the repository's state from git (`git status --short`, `git diff --stat HEAD`), both built by Rein rather than by a model. The summarizer sees up to 4,000 characters of each tool result (its start and end) instead of 300, so exact errors and test results survive. It is told to keep failed approaches and the current pass/fail state. The summary is written by the open session itself, one extra turn in which the model that did the work, with every tool result in full and its context already cached, writes it. That costs about a tenth of a separate call over the whole transcript; its tokens count in the totals. With no open session, the working model writes it in a separate call. |
 | `escalate` | When the end-of-turn [code check](../../features/code-intelligence/) reported problems and the model's follow-up turn still left them, the task moves to a stronger model: the cheapest available one in a higher cost tier, same provider first. The conversation carries over as with any model switch. It lasts for the rest of that task; your next message is routed normally. The route shows `(escalated: …)`. |
 

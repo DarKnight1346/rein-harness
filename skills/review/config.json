@@ -1,4 +1,4 @@
 {
   "name": "review",
-  "description": "Review the current changes (or what you name) for bugs, security issues, test coverage gaps and copyright/licensing problems; verified findings, you pick what to fix"
+  "description": "Review the changes for bugs, security issues and missing tests"
 }

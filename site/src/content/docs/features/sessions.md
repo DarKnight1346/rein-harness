@@ -65,6 +65,10 @@ Here's what you can do from it:
 - **m** sends the selected session a message. It arrives as if you'd typed it there, and is queued if that session is busy. This works for every session, background or not.
 - **k** stops a session, after you confirm with `y`.
 
+:::note[Insight and automation pack]
+`/sessions` is in the **Insight and automation** pack, which is off by default: turn it on in `/settings` → **Packs** ([Packs](../../reference/commands/#packs)). `rein sessions` works without it.
+:::
+
 Inside Rein, `/sessions` lists the others, and `/sessions send <pid> <message>` sends one a message.
 
 Each running Rein keeps a small status file in `~/.rein/live/` while it runs, and watches an inbox file next to it for messages. Both go away when it exits. Only background sessions can be attached to. A Rein running in an ordinary terminal belongs to that terminal, but it still shows up and takes messages.

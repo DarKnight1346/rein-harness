@@ -105,13 +105,49 @@ describe('splitLiveTail', () => {
 });
 
 describe('suggestCommands', () => {
-  it('filters by prefix until a space is typed', async () => {
+  it('filters until a space is typed, prefix matches first', async () => {
     const {suggestCommands, COMMANDS} = await import('../src/commands/index.js');
-    expect(suggestCommands('/')).toHaveLength(COMMANDS.length);
-    expect(suggestCommands('/u').map((c) => c.name)).toEqual(['usage', 'update']);
+    const {commandEnabled} = await import('../src/commands/packs.js');
+    // A bare `/`: everyday commands only (no pack commands, variants or diagnostics).
+    expect(suggestCommands('/')).toHaveLength(COMMANDS.filter((c) => c.listed !== false && commandEnabled(c.name)).length);
+    expect(suggestCommands('/').map((c) => c.name).slice(0, 3)).toEqual(['model', 'goal', 'btw']);
+    expect(suggestCommands('/').map((c) => c.name)).not.toContain('tui');
+    expect(suggestCommands('/tu').map((c) => c.name)[0]).toBe('tui'); // typed: found
+    expect(suggestCommands('/u').map((c) => c.name).slice(0, 2)).toEqual(['usage', 'update']);
     expect(suggestCommands('/model ')).toEqual([]);
     expect(suggestCommands('hello')).toEqual([]);
     expect(suggestCommands('/zzz')).toEqual([]);
+  });
+
+  it('matches fuzzily, best match first', async () => {
+    const {suggestCommands} = await import('../src/commands/index.js');
+    const names = (q: string) => suggestCommands(q).map((c) => c.name);
+    expect(names('/cmpct')[0]).toBe('compact'); // letters in order
+    expect(names('/plan')[0]).toBe('goal:plan'); // the start of a word
+    expect(names('/sett')[0]).toBe('settings');
+    expect(names('/model')[0]).toBe('model'); // exact beats everything
+  });
+
+  it("leaves out the commands of packs that are off, and says where they are", async () => {
+    const {suggestCommands} = await import('../src/commands/index.js');
+    const {packOffMessage, setEnabledPacks} = await import('../src/commands/packs.js');
+    expect(suggestCommands('/stats').map((c) => c.name)).not.toContain('stats');
+    expect(packOffMessage('stats')).toMatch(/Insight and automation pack, which is off.*\/settings → Packs.*"insight"/);
+    expect(packOffMessage('model')).toBeUndefined();
+    setEnabledPacks(() => ['insight']);
+    try {
+      expect(suggestCommands('/stat').map((c) => c.name)[0]).toBe('stats');
+      expect(packOffMessage('stats')).toBeUndefined();
+    } finally {
+      setEnabledPacks(() => []);
+    }
+  });
+
+  it('ranks skills with commands, and matches their aliases', async () => {
+    const {suggestCommands} = await import('../src/commands/index.js');
+    const skill = {name: 'review-deep', description: 'Deep review', aliases: ['rd'], source: 'builtin'} as any;
+    expect(suggestCommands('/rvwdeep', [skill])[0]?.name).toBe('review-deep');
+    expect(suggestCommands('/rd', [skill])[0]?.name).toBe('review-deep');
   });
 });
 

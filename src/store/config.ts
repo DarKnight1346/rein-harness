@@ -26,6 +26,10 @@ export type Config = {
   autoUpdate: boolean;
   /** Show accounts as "Claude Account 1" and redact emails/home paths in the UI (screenshot-safe). */
   hidePersonalInfo: boolean;
+  /** Your pet from the ChatGPT and Codex apps in the sidebar (needs a Codex account): auto shows it, off hides it. */
+  pet?: 'auto' | 'off';
+  /** The UI's look: `accent` is the colour of the input box, window frames and selections (name or #hex). Marketplace themes set it. */
+  theme?: {accent?: string};
   /**
    * Effort for the chat model: 'auto' = the decision model picks (only when the prompt cache is
    * cold — changing effort invalidates it), 'default' = the model's own default, or a level.
@@ -123,6 +127,8 @@ export type Config = {
   otel?: OtelConfig;
   /** Efficiency experiments to turn on, by name (see the configuration reference): measured before they become defaults. */
   experiments: string[];
+  /** Command packs that are on (commands/packs.ts): specialist commands and skills, off by default. */
+  packs?: string[];
   /** Run simple shell reads and searches the agent writes (cat, head, grep -rn, sed -n, ls, find -name) as the built-in tools. */
   steerShell: boolean;
   /** MCP servers asking for a completion (sampling): ask you per server (default), allow, or refuse. */

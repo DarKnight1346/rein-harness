@@ -11,7 +11,7 @@ import {defaultRef} from '../../router/index.js';
 import {estimateTokens, renderMessages} from '../../session/transcript.js';
 import {usageStore, windowLabel} from '../../store/usage.js';
 import type {Entry} from '../entries.js';
-import {accountLabel, modelLabel} from '../format.js';
+import {accountLabel, commandColumn, commandListRows, listWindow, modelLabel} from '../format.js';
 import {ImportPrompt} from '../ImportPrompt.js';
 import {TrustHooksPrompt} from '../TrustHooksPrompt.js';
 import {HistorySearch} from '../HistorySearch.js';
@@ -38,10 +38,13 @@ import {ResumeScreen} from '../ResumeScreen.js';
 import {LiveShell, ShellsWindow, ShellWindow, useShellsTick} from './Shells.js';
 import {AgentsWindow, agentGlyph, useAgentsTick} from './Agents.js';
 import {subagentStatusText, type Subagent} from '../../agents/manager.js';
-import {kTokens, rainbow, Working} from '../Working.js';
-import {agentLines, assistantLines, entryLines, wrap} from './lines.js';
+import {kTokens, rainbow, useBlink, Working} from '../Working.js';
+import {agentLines, assistantLines, entryLines, pendingToolLines, wrap} from './lines.js';
 import {InfoWindow, Window} from './Window.js';
 import {COMMANDS} from '../../commands/index.js';
+import {PetView} from '../Pet.js';
+import {MarketplaceScreen, UpdatesScreen} from '../MarketplaceScreen.js';
+import {commandEnabled, packsHint} from '../../commands/packs.js';
 import {skillDirs, skillSourceLabel, type Skill} from '../../skills/index.js';
 import chalk from 'chalk';
 import {isEmpty, lineRange, selectedText, type Selection} from './selection.js';
@@ -49,6 +52,7 @@ import {copyToClipboard} from '../terminal/clipboard.js';
 import stripAnsi from 'strip-ansi';
 import stringWidth from 'string-width';
 import cliTruncate from 'cli-truncate';
+import {accent} from '../theme.js';
 
 const SIDEBAR_WIDTH = 32;
 const SIDEBAR_MIN_COLS = 96;
@@ -94,6 +98,7 @@ export function FullscreenApp({resume}: {resume: Resume}) {
   // Lines pass through redact() (hide personal info): emails → "Claude Account 1", home → ~.
   const hide = hidingIdentity();
   const cache = useRef(new Map<number, {width: number; hide: boolean; lines: string[]}>());
+  const dotOn = useBlink(chat.running.length > 0);
   const mainLines = useMemo(() => {
     const out: string[] = [];
     for (const e of r.entries) {
@@ -105,8 +110,9 @@ export function FullscreenApp({resume}: {resume: Resume}) {
       out.push(...c.lines);
     }
     if (chat.live) out.push(...assistantLines(chat.live, textWidth).map(redact));
+    if (chat.running.length) out.push(...pendingToolLines(chat.running, textWidth, dotOn).map(redact));
     return out;
-  }, [r.entries, chat.live, textWidth, hide]);
+  }, [r.entries, chat.live, chat.running, dotOn, textWidth, hide]);
   // Blank-state splash: fades in at launch and out once the first message is sent (and again after
   // /clear). <Splash> animates it.
   const hasUserMessage = r.entries.some((e) => e.kind === 'user');
@@ -240,6 +246,18 @@ export function FullscreenApp({resume}: {resume: Resume}) {
             <PlanScreen plan={overlay.plan} width={windowText} onDecide={overlay.resolve} />
           </Window>
         );
+      case 'marketplace-updates':
+        return (
+          <Window title="Marketplace updates" width={windowWidth} onClose={r.closeOverlay}>
+            <UpdatesScreen items={overlay.items} updates={overlay.updates} onDone={r.closeOverlay} log={r.log} />
+          </Window>
+        );
+      case 'marketplace':
+        return (
+          <Window title="Marketplace" width={Math.min(140, cols - 4)} height={Math.min(rows - 4, 40)} onClose={r.closeOverlay}>
+            <MarketplaceScreen width={Math.min(140, cols - 4) - 4} height={Math.min(rows - 4, 40) - 3} onClose={r.closeOverlay} log={r.log} />
+          </Window>
+        );
       case 'mcp':
         return (
           <Window title="MCP servers" width={windowWidth} onClose={r.closeOverlay}>
@@ -323,36 +341,42 @@ export function FullscreenApp({resume}: {resume: Resume}) {
     }
   })();
 
+  // The command and file lists span the chat column (not the sidebar), a column in from each side.
+  const panelWidth = Math.max(20, mainWidth - 2);
   const panel = (() => {
     if (r.inputActive && r.suggestions.length > 0) {
+      const win = listWindow(r.suggestions.length, Math.max(0, r.suggestions.indexOf(r.selected!)), commandListRows(rows));
+      const nameCol = commandColumn(r.suggestions.map((c) => c.name));
       return (
-        <Box flexDirection="column" borderStyle="round" borderColor="gray" paddingX={1}>
-          {r.suggestions.map((c, i) => (
+        <Box flexDirection="column" borderStyle="round" borderColor="gray" paddingX={1} width={panelWidth}>
+          {win.above ? <Text dimColor>  ↑ {win.above} more</Text> : null}
+          {r.suggestions.slice(win.start, win.end).map((c, j) => (
             <Clickable
               key={c.name}
               onClick={() => {
                 r.onDraft('');
                 r.runCommand(`/${c.name}`);
               }}
-              onHover={() => r.setSuggestIndex(i)}
+              onHover={() => r.setSuggestIndex(win.start + j)}
             >
-              <Text color={c === r.selected ? 'cyan' : undefined} dimColor={c !== r.selected} wrap="truncate">
+              <Text color={c === r.selected ? accent() : undefined} dimColor={c !== r.selected} wrap="truncate">
                 {c === r.selected ? '❯ ' : '  '}
-                {`/${c.name}`.padEnd(10)}
+                {nameCol(c.name)}
                 {c.description}
-                {c.skill ? <Text dimColor> · {c.skill.plugin ? `plugin ${c.skill.plugin}` : skillSourceLabel(c.skill.source)}{c.skill.argumentHint ? ` · ${c.skill.argumentHint}` : ''}</Text> : null}
+                {c.skill && c.skill.source !== 'builtin' ? <Text dimColor> · {c.skill.plugin ? `plugin ${c.skill.plugin}` : skillSourceLabel(c.skill.source)}{c.skill.argumentHint ? ` · ${c.skill.argumentHint}` : ''}</Text> : null}
               </Text>
             </Clickable>
           ))}
+          {win.below ? <Text dimColor>  ↓ {win.below} more</Text> : null}
         </Box>
       );
     }
     if (r.inputActive && r.fileSuggestions.length > 0) {
       return (
-        <Box flexDirection="column" borderStyle="round" borderColor="gray" paddingX={1}>
+        <Box flexDirection="column" borderStyle="round" borderColor="gray" paddingX={1} width={panelWidth}>
           {r.fileSuggestions.map((f) => (
             <Clickable key={f} onClick={() => r.acceptFile(f)}>
-              <Text color={f === r.fileSelected ? 'cyan' : undefined} dimColor={f !== r.fileSelected} wrap="truncate">
+              <Text color={f === r.fileSelected ? accent() : undefined} dimColor={f !== r.fileSelected} wrap="truncate">
                 {f === r.fileSelected ? '❯ ' : '  '}@{f}
               </Text>
             </Clickable>
@@ -381,7 +405,7 @@ export function FullscreenApp({resume}: {resume: Resume}) {
               void copyToClipboard(text).then((ok) => setFlash(ok ? `Copied ${text.length} characters` : 'Copy failed (no clipboard tool)'));
             }}
           />
-          {panel ? <Box flexShrink={0}>{panel}</Box> : <Box flexShrink={0}><LiveShell width={textWidth} agentId={viewing?.id} onOpen={(id) => r.setOverlay({name: 'shell', id})} /></Box>}
+          {panel ? <Box flexShrink={0} paddingX={1}>{panel}</Box> : <Box flexShrink={0}><LiveShell width={textWidth} agentId={viewing?.id} onOpen={(id) => r.setOverlay({name: 'shell', id})} /></Box>}
         </Box>
         {showSidebar ? <Sidebar width={SIDEBAR_WIDTH} height={mainHeight} tick={r.statusTick} run={r.runCommand} view={r.view} setView={r.setView} /> : null}
       </Box>
@@ -398,7 +422,7 @@ export function FullscreenApp({resume}: {resume: Resume}) {
             />
           ) : (
             <Text dimColor>
-              {viewing.name} {subagentStatusText(viewing)} · type to message it · <Text color="cyan">◂ main</Text> in the sidebar or /agent main to go back
+              {viewing.name} {subagentStatusText(viewing)} · type to message it · <Text color={accent()}>◂ main</Text> in the sidebar or /agent main to go back
             </Text>
           )
         ) : chat.busy ? (
@@ -415,8 +439,8 @@ export function FullscreenApp({resume}: {resume: Resume}) {
           <Text> </Text>
         )}
       </Box>
-      <Box borderStyle="round" borderColor={r.inputActive ? 'cyan' : 'gray'} paddingX={1} width={cols} height={draftLines + 2} flexShrink={0} overflow="hidden">
-        <Text color="cyan">{'> '}</Text>
+      <Box borderStyle="round" borderColor={r.inputActive ? accent() : 'gray'} paddingX={1} width={cols} height={draftLines + 2} flexShrink={0} overflow="hidden">
+        <Text color={accent()}>{'> '}</Text>
         <Box flexDirection="column" width={inputWidth} justifyContent="flex-end" overflow="hidden">
           <TextInput width={inputWidth} maxLines={MAX_INPUT_LINES} isActive={r.inputActive} value={r.draft} onChange={r.onDraft} onPaste={r.onPaste} onImagePaste={r.onImagePaste} onHistory={r.onHistory} onExternalEdit={r.onExternalEdit} placeholder={!r.ready ? 'starting…' : viewing ? `message ${viewing.name} (subagent)…` : chat.busy ? 'queue a message, or /btw <question>' : 'message, / for commands'} onSubmit={r.onSubmit} />
         </Box>
@@ -425,7 +449,7 @@ export function FullscreenApp({resume}: {resume: Resume}) {
         {r.exitArmed ? (
           <Text color="yellow">Press Ctrl+C again to exit</Text>
         ) : r.voice !== 'idle' ? (
-          <Text color={r.voice === 'recording' ? 'red' : 'cyan'}>{voiceNote(r.voice)}</Text>
+          <Text color={r.voice === 'recording' ? 'red' : accent()}>{voiceNote(r.voice)}</Text>
         ) : (
           <Text dimColor wrap="truncate">
             esc interrupt · ctrl+c stop (twice to exit) · wheel/PgUp scroll · ⇧↵ / ⌥↵ / \↵ newline · ctrl+b sidebar
@@ -439,13 +463,21 @@ export function FullscreenApp({resume}: {resume: Resume}) {
 
 function helpLines(width: number, skills: Skill[]): string[] {
   const dirs = skillDirs();
+  const commands = COMMANDS.filter((c) => commandEnabled(c.name));
+  const col = commandColumn(commands.map((c) => c.name));
+  // Skills from Claude Code / Codex plugins come last, one sentence each (theirs run to paragraphs).
+  const fromPlugin = (s: Skill) => s.source === 'plugin' || s.source === 'codex';
+  const own = skills.filter((s) => !fromPlugin(s));
+  const plugins = skills.filter(fromPlugin);
+  const skillCol = commandColumn(skills.map((s) => s.name));
+  const firstSentence = (t: string) => t.match(/^.*?[.!?](?=\s|$)/)?.[0] ?? t;
   return [
-    ...COMMANDS.flatMap((c) => wrap(c.description, width, chalk.cyan(`/${c.name}`.padEnd(10)))),
+    ...commands.flatMap((c) => wrap(c.usage, width, chalk.cyan(col(c.name)))),
+    ...wrap(chalk.dim(packsHint()), width),
     '',
     chalk.bold('Skills') + chalk.dim(`  name clashes: built-in → ${dirs.project} (project) → ${dirs.global} (global)`),
-    ...(skills.length
-      ? skills.flatMap((s) => wrap(`${s.description} ${chalk.dim(`(${s.source})`)}`, width, chalk.magenta(`/${s.name}`.padEnd(10))))
-      : [chalk.dim('  none yet — /skill:create makes one')]),
+    ...(own.length ? own.flatMap((s) => wrap(`${s.description}${s.source === 'builtin' ? '' : ` ${chalk.dim(`(${s.source})`)}`}`, width, chalk.magenta(skillCol(s.name)))) : [chalk.dim('  none yet — /skill:create makes one')]),
+    ...(plugins.length ? ['', chalk.bold('From plugins'), ...plugins.flatMap((s) => wrap(firstSentence(s.description), width, chalk.magenta(skillCol(s.name))))] : []),
     '',
     ...wrap('esc interrupts a reply (or closes a window) · wheel / PgUp / PgDn scroll · drag to select & copy · ctrl+b sidebar · shift/option+enter or \\+enter for a new line · rein --continue picks a conversation', width).map((l) => chalk.dim(l)),
   ];
@@ -582,7 +614,7 @@ function TopBar(props: {cols: number; tick: number; sidebarOpen: boolean; onTogg
       case 'model':
         return (
           <Seg key={id} onClick={props.openModel}>
-            <Text color="cyan">{info.model}</Text>
+            <Text color={accent()}>{info.model}</Text>
           </Seg>
         );
       case 'account':
@@ -647,7 +679,7 @@ function TopBar(props: {cols: number; tick: number; sidebarOpen: boolean; onTogg
       drop: 1000,
       node: (
         <Seg key="viewing" onClick={() => props.setView('main')}>
-          <Text color="cyan">◂ main</Text>
+          <Text color={accent()}>◂ main</Text>
           <Text dimColor> · viewing </Text>
           <Text color="magenta" bold>
             {props.viewing.name}
@@ -684,7 +716,7 @@ function TopBar(props: {cols: number; tick: number; sidebarOpen: boolean; onTogg
       drop: 850,
       node: (
         <Seg key="ide" onClick={() => props.run('/ide')}>
-          <Text color="cyan">{ideText}</Text>
+          <Text color={accent()}>{ideText}</Text>
         </Seg>
       ),
     });
@@ -699,7 +731,7 @@ function TopBar(props: {cols: number; tick: number; sidebarOpen: boolean; onTogg
       drop: 800,
       node: (
         <Seg key="goal" onClick={() => props.run('/goal')}>
-          <Text color={goal.status === 'active' ? 'cyan' : goal.status === 'done' ? 'green' : 'yellow'}>{goalText}</Text>
+          <Text color={goal.status === 'active' ? accent() : goal.status === 'done' ? 'green' : 'yellow'}>{goalText}</Text>
         </Seg>
       ),
     });
@@ -752,7 +784,7 @@ function TopBar(props: {cols: number; tick: number; sidebarOpen: boolean; onTogg
       <Box flexGrow={1} />
       {toggle ? (
         <Clickable onClick={props.onToggleSidebar}>
-          <Text color={props.sidebarOpen ? 'cyan' : 'gray'}> [≡]</Text>
+          <Text color={props.sidebarOpen ? accent() : 'gray'}> [≡]</Text>
         </Clickable>
       ) : null}
     </Box>
@@ -828,6 +860,8 @@ function Sidebar({width, height, tick, run, view, setView}: {width: number; heig
           <Text dimColor>empty · /settings</Text>
         </Clickable>
       )}
+      <Box flexGrow={1} />
+      <PetView pets={runtime.pets} />
     </Box>
   );
 }
@@ -847,7 +881,7 @@ function AgentsSection({inner, view, setView}: {inner: number; view: 'main' | nu
     <>
       <Heading>AGENTS</Heading>
       <Clickable onClick={() => setView('main')}>
-        <Text color={view === 'main' ? 'cyan' : undefined} wrap="truncate">
+        <Text color={view === 'main' ? accent() : undefined} wrap="truncate">
           {view === 'main' ? '▸ ' : '  '}
           <Text bold={view === 'main'}>main</Text>
           {runtime.engine?.isBusy ? <Text color="yellow"> ●</Text> : null}
@@ -857,7 +891,7 @@ function AgentsSection({inner, view, setView}: {inner: number; view: 'main' | nu
         const g = agentGlyph(a);
         return (
           <Clickable key={a.id} onClick={() => setView(a.id)}>
-            <Text color={view === a.id ? 'cyan' : undefined} wrap="truncate">
+            <Text color={view === a.id ? accent() : undefined} wrap="truncate">
               {view === a.id ? '▸ ' : '  '}
               <Text color={g.color}>{g.g} </Text>
               <Text bold={view === a.id}>{truncate(a.name, Math.max(6, inner - 14))}</Text>
@@ -917,7 +951,7 @@ function ModelsSection({inner, run}: {inner: number; run(cmd: string): void}) {
       <Heading>CHAT MODEL</Heading>
       {models.map((m) => (
         <Clickable key={m.value} onClick={() => run(`/model ${m.value}`)}>
-          <Text color={m.value === selected ? 'cyan' : undefined} dimColor={m.value !== selected} wrap="truncate">
+          <Text color={m.value === selected ? accent() : undefined} dimColor={m.value !== selected} wrap="truncate">
             {m.value === selected ? '● ' : '○ '}
             {truncate(m.label + (m.value === 'auto' ? '' : ` · ${PROVIDERS[parseRef(m.value)!.provider].name}`), inner - 2)}
           </Text>
@@ -973,11 +1007,11 @@ function PlanSection({inner, run}: {inner: number; run(cmd: string): void}) {
         {truncate(p.title, inner)}
       </Text>
       <Text>
-        <Text color={pct === 100 ? 'green' : 'cyan'}>{b.fill}</Text>
+        <Text color={pct === 100 ? 'green' : accent()}>{b.fill}</Text>
         <Text dimColor>{b.rest}</Text> {`${pct}%`.padStart(4)}
       </Text>
       {p.milestones.slice(0, 12).map((m, i) => (
-        <Text key={i} wrap="truncate" color={i === next ? 'cyan' : m.done ? 'green' : undefined} dimColor={!m.done && i !== next}>
+        <Text key={i} wrap="truncate" color={i === next ? accent() : m.done ? 'green' : undefined} dimColor={!m.done && i !== next}>
           {truncate(`${m.done ? '✓' : i === next ? '▸' : '○'} ${m.text}`, inner)}
         </Text>
       ))}
@@ -1000,7 +1034,7 @@ function TasksSection({inner}: {inner: number}) {
     <>
       <Heading>{`TASKS ${done}/${todos.length}`}</Heading>
       {todos.slice(0, 12).map((t, i) => (
-        <Text key={i} wrap="truncate" color={t.status === 'in_progress' ? 'cyan' : undefined} dimColor={t.status === 'completed'} strikethrough={t.status === 'completed'}>
+        <Text key={i} wrap="truncate" color={t.status === 'in_progress' ? accent() : undefined} dimColor={t.status === 'completed'} strikethrough={t.status === 'completed'}>
           {truncate(todoLine(t), inner)}
         </Text>
       ))}
@@ -1059,7 +1093,7 @@ function ShortcutsSection() {
         ['/', 'commands'],
       ].map(([k, v]) => (
         <Text key={k} wrap="truncate">
-          <Text color="cyan">{k!.padEnd(8)}</Text>
+          <Text color={accent()}>{k!.padEnd(8)}</Text>
           <Text dimColor>{v}</Text>
         </Text>
       ))}

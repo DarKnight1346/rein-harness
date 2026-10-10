@@ -3,6 +3,8 @@ import {useApp, useInput} from 'ink';
 import {detectImports, importAccounts, skipImport, type AccountRow} from '../accounts/service.js';
 import {collectUsage, type UsageRow} from '../accounts/usage.js';
 import {COMMANDS, parseInput, shadowedSkills, suggestCommands} from '../commands/index.js';
+import {commandEnabled, packOffMessage, packsHint} from '../commands/packs.js';
+import {commandColumn} from './format.js';
 import {loadSkills, skillDirs, skillPrompt, type Skill} from '../skills/index.js';
 import {autoUpdate, reinVersion, runUpdate, type UpdateLine} from '../commands/update.js';
 import {runtime, type Resume} from '../runtime.js';
@@ -54,6 +56,7 @@ import {memoryFacts, memoryFile} from '../tools/memory.js';
 import {readFileSync, statSync} from 'node:fs';
 import {accountName, hidingIdentity, redact} from './privacy.js';
 import nodePath from 'node:path';
+import os from 'node:os';
 import {cloneMissing, findWorkspace} from '../workspace/index.js';
 import {CONFIG_KEYS, defaultValue, formatValue, keyInfo, parseValue} from '../store/configKeys.js';
 import {TAB_TITLES} from './ConfigureScreen.js';
@@ -143,6 +146,8 @@ export type Overlay =
   | {name: 'resume'; sessions: SessionInfo[]}
   | {name: 'rewind'; points: RewindPoint[]}
   | {name: 'mcp'}
+  | {name: 'marketplace'}
+  | {name: 'marketplace-updates'; items: import('../marketplace/index.js').Item[]; updates: {id: string; from: string; to: string}[]}
   | {name: 'plan'; plan: PresentedPlan; resolve(d: PlanDecision): void}
   | {name: 'plans'; plans: SavedPlan[]}
   | {name: 'ask'; questions: AskQuestion[]; resolve(a: AskAnswer[] | undefined): void}
@@ -178,7 +183,7 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
   const [ready, setReady] = useState(false);
   const [updating, setUpdating] = useState(false);
   /** Manual /compact in progress (drives the animated status line). */
-  const [compacting, setCompacting] = useState<{startedAt: number; label: string} | undefined>();
+  const [compacting, setCompacting] = useState<{startedAt: number; label: string; idle?: boolean} | undefined>();
   /** Update output, kept so the fullscreen update window can be closed and reopened. */
   const [updateLog, setUpdateLog] = useState<UpdateLine[]>([]);
   const windowed = opts.renderer === 'fullscreen';
@@ -247,6 +252,8 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
       if (rows?.length) setOverlay({name: 'import', rows});
       else if (rows) await skipImport();
       await refresh();
+      // Your pet from the ChatGPT and Codex apps: found in the background (it starts a codex app-server).
+      void runtime.loadPets().then(() => runtime.pets.setActivity('hello'), () => {});
       // A codex whose app-server protocol changed under Rein is switched off (see compat.ts).
       const compat = catalog.codexCompat;
       if (compat?.ok === false) log('error', incompatibleMessage(compat));
@@ -657,6 +664,49 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
     else if (overlay.name === 'plan') notify(mode, 'Rein has a plan for you', overlay.plan.title);
     else if (overlay.name === 'trust') notify(mode, 'Rein', "This project's hooks need your review");
   }, [overlay.name]);
+  // idle-compact: a conversation left idle is compacted a little before its prompt cache expires,
+  // from the warm cache (Engine.idleCompactAt). A message sent meanwhile waits in the queue.
+  useEffect(() => {
+    if (!ready || chat.busy || compacting) return;
+    const at = runtime.engine?.idleCompactAt();
+    if (at === undefined) return;
+    const t = setTimeout(() => {
+      if (chatRef.current.busy) return;
+      setCompacting({startedAt: Date.now(), label: 'Compacting while idle', idle: true});
+      void runtime.engine
+        .idleCompact()
+        .then(
+          (res) => {
+            if (res && !('skipped' in res)) add({kind: 'compact', reason: 'idle', result: res});
+          },
+          (err) => log('error', `Compaction while idle failed: ${(err as Error).message}`),
+        )
+        .finally(() => {
+          setCompacting(undefined);
+          bump();
+        });
+    }, Math.max(0, at - Date.now()));
+    t.unref?.();
+    return () => clearTimeout(t);
+  }, [ready, chat.busy, compacting, statusTick]);
+
+  // The pet reacts to the agent: working, waiting on you, then done (or failed) when the turn ends.
+  const petBusy = useRef(false);
+  useEffect(() => {
+    if (['approval', 'ask', 'plan', 'trust'].includes(overlay.name)) runtime.pets.setActivity('waiting');
+    else if (chat.busy) runtime.pets.setActivity('working');
+    else if (petBusy.current) {
+      runtime.pets.setActivity(entries.at(-1)?.kind === 'error' ? 'failed' : 'done');
+      // A pet the create-pet skill just finished: Rein's own now, and on screen.
+      const fresh = runtime.pets.pickUp();
+      if (fresh.length) {
+        void runtime.pets.refresh().then(() => runtime.pets.setActivity('hello'), () => {});
+        log('info', `${fresh.map((x) => x.name).join(', ')} ${fresh.length > 1 ? 'are' : 'is'} one of your pets now (/pet), and here in the sidebar.`);
+      }
+    }
+    petBusy.current = chat.busy;
+  }, [chat.busy, overlay.name]);
+
   const working = chat.busy || !!goalNote || queued.length > 0 || !!compacting;
   const workStarted = useRef<number | undefined>(undefined);
   useEffect(() => {
@@ -720,7 +770,7 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
   }, []);
 
   useEffect(() => {
-    if (chat.busy || !queued.length) return;
+    if (chat.busy || compacting?.idle || !queued.length) return;
     const [next, ...rest] = queued;
     setQueued(rest);
     if (next!.startsWith(DELIVER)) {
@@ -733,7 +783,7 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
       return;
     }
     runRef.current(next!); // through the normal path, so queued skills expand
-  }, [chat.busy, queued]);
+  }, [chat.busy, queued, compacting]);
 
   const prevDraft = useRef('');
   // Pastes, images and dropped files shown as placeholders in the input; expanded on send.
@@ -1058,7 +1108,7 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
       return;
     }
     if (parsed.kind === 'text') {
-      if (chat.busy) {
+      if (chat.busy || compacting?.idle) {
         // Sent when the current reply finishes (shown as "N queued" on the status line).
         setQueued((q) => [...q, parsed.text]);
         return;
@@ -1074,6 +1124,11 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
     }
     if (parsed.kind === 'unknown') {
       log('error', `Unknown command /${parsed.name}. Try /help.`);
+      return;
+    }
+    const packOff = packOffMessage(parsed.name);
+    if (packOff) {
+      log('info', packOff);
       return;
     }
     // Commands about the main conversation itself: say so instead of silently acting on main while
@@ -1093,13 +1148,105 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
       return;
     }
     // In fullscreen, commands that open a window don't echo into the history.
-    const opensWindow = ['goal:plan', 'login', 'usage', 'context', 'help', 'update', 'shells', 'btw', 'resume', 'agents', 'agent'].includes(parsed.name) || (parsed.name === 'settings' && !parsed.args.trim()) || (parsed.name === 'model' && !parsed.args);
+    const opensWindow = ['goal:plan', 'login', 'usage', 'context', 'help', 'update', 'shells', 'btw', 'resume', 'agents', 'agent'].includes(parsed.name) || (parsed.name === 'settings' && !parsed.args.trim()) || (parsed.name === 'marketplace' && !parsed.args.trim()) || (parsed.name === 'model' && !parsed.args);
     // A value typed after `/vault set NAME` stays off the screen and out of the transcript.
     if (!(windowed && opensWindow)) log('user', parsed.name === 'vault' ? raw.trim().replace(/^(\/vault\s+set\s+\S+)\s+.*$/s, '$1 ••••') : raw.trim());
     switch (parsed.name) {
       case 'mcp':
         setOverlay({name: 'mcp'});
         break;
+      case 'marketplace': {
+        const [sub = '', ...rest] = parsed.args.trim().split(/\s+/);
+        const arg = rest.join(' ');
+        const mk = () => import('../marketplace/index.js');
+        void (async () => {
+          const m = await mk();
+          if (!sub) {
+            if (windowed) return setOverlay({name: 'marketplace'});
+            const markets = await m.loadMarketplaces();
+            const inst = m.installedItems();
+            const {describe} = await import('../marketplace/actions.js');
+            log('info', markets.map((x) => [`${x.name}${x.official ? ' (official)' : ''} · ${x.url}${x.error ? ` · ${x.error}` : ''}`, ...x.items.map((it) => `  ${inst.some((i) => i.id === it.id) ? '✓' : ' '} ${it.id.padEnd(22)} ${it.version.padEnd(8)} ${it.description}${describe(it)}`)].join('\n')).join('\n\n') + '\n/marketplace install <id> · uninstall <id> · add <repo> · list · remove <repo> · update');
+          } else if (sub === 'list') {
+            log('info', ['Marketplaces:', ...m.repoUrls().map((u) => `  ${u}${m.normalizeUrl(u) === m.normalizeUrl(m.official()) ? '  (official, always on)' : ''}`), '/marketplace add <repo> adds one, /marketplace remove <repo> removes it.'].join('\n'));
+          } else if (sub === 'add') {
+            if (!arg) return log('info', 'Usage: /marketplace add <gitRepoUrl>  (like https://github.com/owner/repo)');
+            log('info', `Fetching ${arg}…`);
+            const added = await m.addMarketplace(arg);
+            log('info', `Added ${added.name} (${added.items.length} item${added.items.length === 1 ? '' : 's'}). /marketplace to browse.`);
+          } else if (sub === 'remove') {
+            if (!arg) return log('info', 'Usage: /marketplace remove <gitRepoUrl>');
+            log('info', `Removed ${m.removeMarketplace(arg)}. Items you installed from it stay installed (/marketplace uninstall <id>).`);
+          } else if (sub === 'update') {
+            // Fetch every marketplace, then the installed items that have a newer version: pick
+            // which to update (a window), or `update all` / `update <id>…` straight away.
+            log('info', 'Fetching the marketplaces…');
+            const markets = await m.loadMarketplaces({refresh: true});
+            const ups = m.updatesFor(markets);
+            const items = markets.flatMap((x) => x.items);
+            const errs = markets.filter((x) => x.error).map((x) => `${x.name}: ${x.error}`);
+            if (errs.length) log('error', errs.join('\n'));
+            if (!ups.length) return log('info', 'Everything you installed is up to date.');
+            const want = arg === 'all' ? ups : arg ? ups.filter((u) => arg.split(/\s+/).includes(u.id)) : undefined;
+            if (want) {
+              const a = await import('../marketplace/actions.js');
+              const lines: string[] = [];
+              for (const u of want) lines.push(...(await a.installItem(runtime, items, u.id)).lines);
+              const unknown = arg === 'all' ? [] : arg.split(/\s+/).filter((id) => !ups.some((u) => u.id === id));
+              log('info', [...lines, ...(unknown.length ? [`No update for ${unknown.join(', ')}.`] : [])].join('\n') || 'Nothing to update.');
+            } else if (windowed) setOverlay({name: 'marketplace-updates', items, updates: ups});
+            else log('info', [`Updates for what you installed:`, ...ups.map((u) => `  ${u.id}  ${u.from} → ${u.to}`), '/marketplace update all, or /marketplace update <id> [<id>…].'].join('\n'));
+          } else if (sub === 'install' || sub === 'uninstall') {
+            if (!arg) return log('info', `Usage: /marketplace ${sub} <id>`);
+            const a = await import('../marketplace/actions.js');
+            if (sub === 'uninstall') return log('info', await a.uninstallItem(runtime, arg));
+            const all = (await m.loadMarketplaces()).flatMap((x) => x.items);
+            const r = await a.installItem(runtime, all, arg);
+            log('info', r.lines.join('\n') + (r.restart ? '\nRestart Rein to start its MCP servers and hooks.' : ''));
+          } else log('info', 'Usage: /marketplace [add <repo> | list | remove <repo> | update | install <id> | uninstall <id>]');
+          setSkills(loadSkills());
+          bump();
+        })().catch((err) => log('error', `/marketplace: ${(err as Error).message}`));
+        break;
+      }
+      case 'pet': {
+        const arg = parsed.args.trim();
+        const p = runtime.pets;
+        void (async () => {
+          if (!arg) {
+            p.pickUp();
+            const pets = await p.list();
+            const row = (x: (typeof pets)[number]) => `  ${x.active ? '●' : '○'} ${x.name}${x.description ? ` — ${x.description}` : ''}`;
+            const mine = pets.filter((x) => x.source === 'rein');
+            const theirs = pets.filter((x) => x.source === 'chatgpt');
+            log('info', [
+              ...(mine.length ? ['Your pets (on this machine):', ...mine.map(row)] : []),
+              ...(theirs.length ? ['From your ChatGPT account (also in the ChatGPT and Codex apps):', ...theirs.map(row)] : []),
+              ...(!pets.length ? ['No pets yet.'] : []),
+              pets.some((x) => x.active) ? '/pet <name> picks another · /pet add <sheet> [name] adds one · /pet off hides it.' : '/pet <name> picks one · /pet add <sprite sheet> [name] adds one.',
+              ...(p.note && !p.pet ? [p.note] : []),
+            ].join('\n'));
+          } else if (arg.startsWith('add ') || arg === 'add') {
+            const [, file = '', ...name] = arg.split(/\s+/);
+            if (!file) return log('info', 'Usage: /pet add <sprite sheet PNG> [name]  (1536×1872 or 1536×2288, the ChatGPT pets layout)');
+            const full = nodePath.resolve(file.replace(/^~(?=$|\/)/, os.homedir()));
+            const pet = p.add(full, name.join(' ') || nodePath.basename(full, '.png').replace(/^spritesheet[-_]?/, '') || 'My pet');
+            log('info', `${pet.name} is one of your pets now, and here at the bottom of the sidebar.`);
+            p.setActivity('hello');
+          } else if (arg === 'off') {
+            await p.select('off');
+            log('info', 'No pet here now. /pet <name> brings one back.');
+          } else if (arg === 'refresh') {
+            await p.refresh();
+            log('info', p.pet ? `${p.pet.name} is here.` : (p.note ?? 'No pet.'));
+          } else {
+            const pick = await p.select(arg);
+            log('info', p.pet ? `${pick?.name ?? p.pet.name} is here, at the bottom of the sidebar (fullscreen).` : (p.note ?? 'No pet.'));
+            p.setActivity('hello');
+          }
+        })().catch((err) => log('error', `/pet: ${(err as Error).message}`));
+        break;
+      }
       case 'voice': {
         const s = detect(runtime.config.voiceModel || DEFAULT_MODEL);
         const hint = installHint(s);
@@ -1219,7 +1366,7 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
         const lines = plugins.map((p) => {
           const own = skills.filter((s) => s.plugin === p.name).map((s) => `/${s.name}`);
           const parts = [count(own.length, 'command'), count(p.agents.length, 'agent'), count(Object.keys(p.hooks ?? {}).length, 'hook event'), count(Object.keys(p.mcpServers ?? {}).length, 'MCP server')].filter(Boolean);
-          return `${p.name} ${p.version ?? ''} · ${p.from === 'claude' ? 'Claude Code' : 'Codex'}${parts.length ? ` · ${parts.join(', ')}` : ''}${own.length ? `\n  ${own.join('  ')}` : ''}`;
+          return `${p.name} ${p.version ?? ''} · ${p.from === 'claude' ? 'Claude Code' : p.from === 'rein' ? 'Marketplace' : 'Codex'}${parts.length ? ` · ${parts.join(', ')}` : ''}${own.length ? `\n  ${own.join('  ')}` : ''}`;
         });
         log('info', [...lines, ...(codexSkills.length ? [`Codex skills: ${codexSkills.join('  ')}`] : [])].join('\n'));
         return;
@@ -2292,7 +2439,7 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
           setOverlay({name: 'help'});
           break;
         }
-        log('info', COMMANDS.map((c) => `/${c.name.padEnd(8)} ${c.description}`).join('\n') + '\nesc interrupts a reply · rein --continue picks a conversation to continue');
+        log('info', ((cs) => cs.map((c) => `${commandColumn(cs.map((x) => x.name))(c.name)}${c.usage}`))(COMMANDS.filter((c) => commandEnabled(c.name))).join('\n') + `\n${packsHint()}\nesc interrupts a reply · rein --continue picks a conversation to continue`);
         break;
       case 'clear':
         runtime.agents.closeAll();

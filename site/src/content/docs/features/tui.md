@@ -108,6 +108,8 @@ Two more sections appear at the top when they're relevant:
 - **GOAL · 3/5**: when a goal is working from a plan. Shows the plan title, a progress bar and the milestones (`✓` done, `▸` next, `○` later).
 - **TASKS 2/5**: the agent's task list from `todo_write`, shown while any task is unfinished. Completed tasks are struck through.
 
+Your [pet](../pets/) from the ChatGPT and Codex apps sits at the bottom of the sidebar when you have one, and reacts to what the agent is doing.
+
 ## Windows
 
 In fullscreen, commands that show information or ask you something open a centered window over the conversation. The agent keeps streaming underneath while the window is open. Windows have a dark grey background and a rounded cyan border. Approval windows use a yellow border.
@@ -154,7 +156,9 @@ While the agent works, the line above the input shows Rein's mark: a four-cell b
 
 - `Routing…`: auto mode is choosing a model.
 - `Thinking…`, then `Responding…`.
-- The name of the running tool and its argument, e.g. `Read(src/commands/export.ts)…`.
+- `Working…`: a tool call is running.
+
+Tool calls show in the conversation itself. A call that's still running is a pending line with a blinking dot, such as `⏺ Shell(npm test)`. When it finishes, the line becomes the result: a green dot if it worked, a red one if it failed. Calls made in parallel each get their own line.
 
 After the label come the elapsed time, tokens in and out, any queued messages, and a reminder of what you can do:
 
@@ -174,7 +178,7 @@ The input box grows up to six lines and has a few tricks:
 - **Drag and drop.** Drop files onto the terminal. Images become `[Image #n]` and are sent to the model as images. Other files become `[File #3: notes.md]`, and text files up to 256 KB are included in the message.
 - **Backspace** after a token deletes the whole token and its attachment.
 - **`@mentions`.** Type `@` and part of a path to get fuzzy matches from your project's files and folders (from `rg --files`, so `.gitignore` is respected). `Tab` or `Enter` inserts the selected match. On send, a mentioned file's contents, image or folder listing goes along with your message.
-- **Slash commands.** Type `/` for a list of commands and skills. `↑↓` selects and `Tab` completes.
+- **Slash commands.** Type `/` for the everyday commands and skills, most-used first. Typing searches all of them, fuzzily and best match first: `/cmpct` finds `/compact`, and `/deep` finds `/plan:deep`. Specialist commands come in [packs](../../reference/commands/#packs) you turn on in `/settings` → Packs. It shows up to 10 at a time and scrolls with `↑↓` (`↑ 12 more` and `↓ 30 more` say what's out of view). `Tab` completes.
 - **A real line editor.** Move with `←/→` (by word with `Option`/`Alt`), `Home`/`End` or `Ctrl+A`/`Ctrl+E`, delete words with `Ctrl+W`, and edit anywhere in the draft. `↑` on the first row recalls earlier messages in this project, even from past sessions. `Ctrl+G` opens the draft in `$EDITOR` for long prompts. `Ctrl+R` searches your earlier messages, and `!command` runs a shell command yourself. Full list in [Keyboard & mouse](../../reference/keys/).
 - **Queueing.** While the agent is busy, messages you send are queued and run in order when it finishes. The placeholder reads `queue a message, or /btw <question>`. [`/btw`](../btw/) runs right away. `/clear`, `/compact`, `/tui`, `/update` and `/resume` wait until the agent is idle.
 

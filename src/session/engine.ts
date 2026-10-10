@@ -60,6 +60,10 @@ const CARRY_BUDGET_TOKENS = 24_000;
 /** Auto effort considers low only for messages up to this size (~2,000 characters). */
 const SIMPLE_MAX_TOKENS = 500;
 const CACHE_WARM_MS: Record<string, number> = {claude: 60 * 60_000, codex: 60 * 60_000};
+/** idle-compact: compact an idle conversation only past this share of its auto-compact size. */
+const IDLE_COMPACT_SHARE = 0.4;
+/** idle-compact: how long before the cache expires (at most a fifth of its lifetime). */
+const IDLE_COMPACT_MARGIN_MS = 2 * 60_000;
 /** A cold switch needs the other account to be at least this much better (no flip-flopping). */
 const BALANCE_MARGIN = 15;
 const MAX_ATTEMPTS = 5;
@@ -125,6 +129,8 @@ export class Engine {
 
   /** Tokens the provider reported for the last completed request (for /context). */
   lastUsage: {ref: ModelRef; input: number; output: number; at: number} | undefined;
+  /** idle-compact: the lastUsage.at it last tried on. */
+  private idleTried: number | undefined;
   /** The turn in progress: reply so far and finished tool calls (saved to the transcript at its end). */
   inFlight: {reply: string; tools: NonNullable<Message['tools']>} | undefined;
   /** When each account last served this conversation (its prompt cache is warm for a few minutes). */
@@ -205,6 +211,42 @@ export class Engine {
   /** `/compact`: summarize now; the next turn starts a fresh native session from the summary. */
   async compactNow(focus?: string): Promise<CompactResult> {
     const res = await compactTranscript(this.transcript, this.deps.config(), {keepRecent: 2, focus, model: this.active?.ref, live: this.liveSummarizer()});
+    if (!('skipped' in res)) {
+      this.closeActive();
+      this.cacheBroken = true;
+      this.coldReason = 'compacted';
+    }
+    return res;
+  }
+
+  /** How long the prompt cache of a conversation on `provider` lasts after its last request. */
+  cacheLifetimeMs(provider: string): number {
+    if (provider === 'claude' && activeExperiments(this.deps.config()).includes('cache-5m')) return 5 * 60_000;
+    return CACHE_WARM_MS[provider] ?? 5 * 60_000;
+  }
+
+  /**
+   * idle-compact: when to compact a conversation that's sitting idle, a little before its prompt
+   * cache expires (undefined: not now). Only a large context is worth it: the summary is written by
+   * the live session from its cache, so coming back costs a small summary instead of the whole
+   * history re-read at the uncached rate.
+   */
+  idleCompactAt(): number | undefined {
+    const u = this.lastUsage;
+    if (!u || u.at === this.idleTried || !this.active || this.running || !activeExperiments(this.deps.config()).includes('idle-compact')) return undefined;
+    const limit = this.autoCompactLimit(u.ref) ?? (catalog.get(u.ref)?.contextWindow ?? 200_000) * 0.85;
+    if (u.input < limit * IDLE_COMPACT_SHARE || !compactableCount(this.transcript, 2)) return undefined;
+    const ttl = this.cacheLifetimeMs(u.ref.provider);
+    return u.at + ttl - Math.min(IDLE_COMPACT_MARGIN_MS, ttl / 5);
+  }
+
+  /** idle-compact: compact now if it's still worth it (see idleCompactAt); undefined if not. */
+  async idleCompact(): Promise<CompactResult | undefined> {
+    const at = this.idleCompactAt();
+    const u = this.lastUsage;
+    if (at === undefined || !u || Date.now() - u.at >= this.cacheLifetimeMs(u.ref.provider)) return undefined;
+    this.idleTried = u.at; // once per idle stretch, even if it fails or finds nothing to do
+    const res = await compactTranscript(this.transcript, this.deps.config(), {keepRecent: 2, model: this.active?.ref, live: this.liveSummarizer()});
     if (!('skipped' in res)) {
       this.closeActive();
       this.cacheBroken = true;

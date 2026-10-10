@@ -5,7 +5,7 @@ import {skillSourceLabel} from '../skills/index.js';
 import {Box, Static, Text, useStdout} from 'ink';
 import {detectGraphics, imagePaths, inlineImage} from './terminal/images.js';
 import {needsBidi, visualOrder} from './bidi.js';
-import {approvalNote, compactText, routeLabel, toolResultSummary} from './format.js';
+import {approvalNote, commandColumn, commandListRows, compactText, listWindow, routeLabel, toolResultSummary} from './format.js';
 import {ImportPrompt} from './ImportPrompt.js';
 import {TrustHooksPrompt} from './TrustHooksPrompt.js';
 import {HistorySearch} from './HistorySearch.js';
@@ -22,17 +22,18 @@ import {PlansScreen} from './PlansScreen.js';
 import {StatusBar} from './StatusBar.js';
 import {UsageReport} from './UsageReport.js';
 import {TextInput} from './TextInput.js';
-import {rainbow, Working} from './Working.js';
+import {rainbow, useBlink, Working} from './Working.js';
 import {ContextView} from './ContextView.js';
 import type {Entry} from './entries.js';
 import {useRein} from './useRein.js';
-import {diffLines} from './fullscreen/lines.js';
+import {diffLines, pendingToolLines} from './fullscreen/lines.js';
 import {planPreviewLines} from './planPreview.js';
 import {renderMarkdown} from './markdown.js';
 import {redact} from './privacy.js';
 import {runtime, type Resume} from '../runtime.js';
 import {shellStatusText} from '../tools/shells.js';
 import {useShellsTick} from './fullscreen/Shells.js';
+import {accent} from './theme.js';
 
 /** Classic renderer: a running foreground command's last lines, live, above the input. */
 function ForegroundTail() {
@@ -94,6 +95,9 @@ export function ClassicApp({resume}: {resume: Resume}) {
     },
   });
   const {chat, overlay} = r;
+  const dotOn = useBlink(chat.running.length > 0);
+  const win = listWindow(r.suggestions.length, Math.max(0, r.suggestions.indexOf(r.selected!)), commandListRows(process.stdout.rows ?? 24));
+  const nameCol = commandColumn(r.suggestions.map((c) => c.name));
   useInlineImages(r.transcript);
 
   return (
@@ -105,6 +109,7 @@ export function ClassicApp({resume}: {resume: Resume}) {
             <Text>{chat.live}</Text>
           </Box>
         ) : null}
+        {chat.running.length ? <Text>{pendingToolLines(chat.running, Math.max(20, (process.stdout.columns ?? 80) - 2), dotOn).join('\n')}</Text> : null}
         <ForegroundTail />
         {chat.busy ? (
           <Working startedAt={chat.startedAt} phase={chat.phase} tool={chat.toolLabel} tokens={chat.tokens} queued={r.queued.length} waitUntil={chat.waitUntil} />
@@ -115,14 +120,14 @@ export function ClassicApp({resume}: {resume: Resume}) {
         ) : null}
         {overlay.name === 'import' && <ImportPrompt rows={overlay.rows} onImport={() => r.finishImport(true)} onSkip={() => r.finishImport(false)} />}
         {overlay.name === 'history' && (
-          <Box borderStyle="round" borderColor="cyan" paddingX={1} flexDirection="column">
+          <Box borderStyle="round" borderColor={accent()} paddingX={1} flexDirection="column">
             <HistorySearch entries={overlay.entries} onPick={r.pickHistory} onCancel={() => r.pickHistory(undefined)} />
           </Box>
         )}
         {overlay.name === 'trust' && <TrustHooksPrompt hooks={overlay.hooks} onTrust={() => r.finishTrust(true)} onSkip={() => r.finishTrust(false)} />}
         {overlay.name === 'login' && <LoginScreen onLog={r.log} onClose={r.closeOverlay} />}
         {overlay.name === 'vault' && (
-          <Box borderStyle="round" borderColor="cyan" paddingX={1} flexDirection="column">
+          <Box borderStyle="round" borderColor={accent()} paddingX={1} flexDirection="column">
             <VaultPrompt secret={overlay.secret} onSave={(v) => r.saveVault(overlay.secret, v)} onCancel={r.closeOverlay} />
           </Box>
         )}
@@ -141,18 +146,20 @@ export function ClassicApp({resume}: {resume: Resume}) {
         </Box>
         {r.inputActive && r.suggestions.length > 0 ? (
           <Box flexDirection="column" paddingLeft={2}>
-            {r.suggestions.map((c) => (
-              <Text key={c.name} color={c === r.selected ? 'cyan' : undefined} dimColor={c !== r.selected}>
-                {`/${c.name}`.padEnd(12)}
+            {win.above ? <Text dimColor>↑ {win.above} more</Text> : null}
+            {r.suggestions.slice(win.start, win.end).map((c) => (
+              <Text key={c.name} color={c === r.selected ? accent() : undefined} dimColor={c !== r.selected}>
+                {nameCol(c.name)}
                 {c.description}
-                {c.skill ? <Text dimColor> · {c.skill.plugin ? `plugin ${c.skill.plugin}` : skillSourceLabel(c.skill.source)}{c.skill.argumentHint ? ` · ${c.skill.argumentHint}` : ''}</Text> : null}
+                {c.skill && c.skill.source !== 'builtin' ? <Text dimColor> · {c.skill.plugin ? `plugin ${c.skill.plugin}` : skillSourceLabel(c.skill.source)}{c.skill.argumentHint ? ` · ${c.skill.argumentHint}` : ''}</Text> : null}
               </Text>
             ))}
+            {win.below ? <Text dimColor>↓ {win.below} more</Text> : null}
           </Box>
         ) : r.inputActive && r.fileSuggestions.length > 0 ? (
           <Box flexDirection="column" paddingLeft={2}>
             {r.fileSuggestions.map((f) => (
-              <Text key={f} color={f === r.fileSelected ? 'cyan' : undefined} dimColor={f !== r.fileSelected}>
+              <Text key={f} color={f === r.fileSelected ? accent() : undefined} dimColor={f !== r.fileSelected}>
                 @{f}
               </Text>
             ))}
@@ -160,7 +167,7 @@ export function ClassicApp({resume}: {resume: Resume}) {
         ) : r.exitArmed ? (
           <Text color="yellow">{'  '}Press Ctrl+C again to exit</Text>
         ) : r.voice !== 'idle' ? (
-          <Text color={r.voice === 'recording' ? 'red' : 'cyan'}>{'  '}{voiceNote(r.voice)}</Text>
+          <Text color={r.voice === 'recording' ? 'red' : accent()}>{'  '}{voiceNote(r.voice)}</Text>
         ) : (
           <StatusBar tick={r.statusTick} />
         )}
@@ -176,7 +183,7 @@ function EntryView({entry: raw}: {entry: Entry}) {
     case 'banner':
       return (
         <Box marginBottom={1}>
-          <Text bold color="cyan">▁▃▅▇ {entry.text}</Text>
+          <Text bold color={accent()}>▁▃▅▇ {entry.text}</Text>
           <Text dimColor>  /help for commands</Text>
         </Box>
       );
@@ -205,14 +212,14 @@ function EntryView({entry: raw}: {entry: Entry}) {
       return (
         <Box flexDirection="column" marginTop={1}>
           <Text>
-            <Text color="cyan">── </Text>
+            <Text color={accent()}>── </Text>
             {[...'▁▃▅▇'].map((c, i) => (
               <Text key={i} color={rainbow(i * 2, 0)}>
                 {c}
               </Text>
             ))}
-            <Text bold color="cyan"> Conversation compacted </Text>
-            <Text color="cyan">{'─'.repeat(30)}</Text>
+            <Text bold color={accent()}> Conversation compacted </Text>
+            <Text color={accent()}>{'─'.repeat(30)}</Text>
           </Text>
           <Text>  {stats}</Text>
           <Text dimColor>  {why}</Text>

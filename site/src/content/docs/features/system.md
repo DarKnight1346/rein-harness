@@ -5,6 +5,10 @@ description: Understanding across services and repos. Which service calls which,
 
 A change to one service is a change to everything that calls it. These features give the agent, and you, the view across services and repos that a single checkout doesn't have. They work best in a [workspace](../workspaces/), and also in a monorepo with `services/`, `apps/` or `packages/` folders.
 
+:::note[Multi-repo systems pack]
+`/services`, `/symbols`, `/refs`, `/impact`, `/changeset`, `/codemap`, `/stack` are in the **Multi-repo systems** pack, which is off by default: turn it on in `/settings` → **Packs** ([Packs](../../reference/commands/#packs)).
+:::
+
 ## Which service calls which
 
 `/services` draws the dependency graph, with the evidence for every link:

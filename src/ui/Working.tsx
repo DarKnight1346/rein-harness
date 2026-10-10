@@ -3,7 +3,21 @@ import {Text} from 'ink';
 
 export type Phase = 'routing' | 'thinking' | 'responding' | 'tool' | 'waiting';
 
-const LABEL: Record<Phase, string> = {routing: 'Routing', thinking: 'Thinking', responding: 'Responding', tool: 'Running', waiting: 'Waiting'};
+// 'tool': a tool call is running. It shows in the conversation (a pending line with a blinking dot), so
+// this line only says the agent is at work, the way Claude Code keeps its spinner word.
+const LABEL: Record<Phase, string> = {routing: 'Routing', thinking: 'Thinking', responding: 'Responding', tool: 'Working', waiting: 'Waiting'};
+
+/** On/off every half second while `active`: the dot of a tool call still running. */
+export function useBlink(active: boolean): boolean {
+  const [on, setOn] = useState(true);
+  useEffect(() => {
+    if (!active) return;
+    setOn(true);
+    const t = setInterval(() => setOn((v) => !v), 500);
+    return () => clearInterval(t);
+  }, [active]);
+  return active && on;
+}
 
 /** 59s · 2m 05s · 1h 04m · 2d 3h */
 export function elapsedText(ms: number): string {

@@ -76,6 +76,10 @@ import {isMilestoneCopy, todoTool} from './tools/todo.js';
 import {imageGenRef, imageTool} from './tools/image.js';
 import {newTranscript, saveTranscript, setSaveFilter} from './session/transcript.js';
 import {setPromptCacheTtl} from './providers/claude/session.js';
+import {setEnabledPacks} from './commands/packs.js';
+import {Pets} from './pets/index.js';
+import {loadSkills} from './skills/index.js';
+import {petTools} from './pets/tools.js';
 import {setAttribution, setBriefFinal, setCheapExplore, setExtraWorkingDirs, setInScope, setProvenance, setScopeDir, setLazyTools, setManyCalls, setNoTodo, setSelfTest, setVaultNames, systemPrompt} from './session/prompt.js';
 import {Vault} from './vault/vault.js';
 import {parseRef, refKey, type Account, type ModelRef, type TokenCount, type ToolBinding} from './providers/types.js';
@@ -339,6 +343,25 @@ export class Runtime {
   remoteApproval: {id: number; req: ApprovalRequest; resolve(d: ApprovalDecision): void} | undefined;
   remote: RemoteServer | undefined;
   /** Issue trackers handing work to Rein (trackers/watcher.ts); started by the interactive UI. */
+  /** Your pet from the ChatGPT and Codex apps (pets/index.ts). */
+  readonly pets = new Pets(() => this.config.pet !== 'off');
+
+  /**
+   * Find your pet, and when the pets plugin is installed, give the agent its tools (so the pets
+   * skills work with any model). Background, after startup: it starts a codex app-server.
+   */
+  async loadPets(): Promise<void> {
+    await this.pets.refresh();
+    const hasSkills = loadSkills().some((s) => s.plugin === 'work-pets' || s.name.startsWith('work-pets:'));
+    if (!hasSkills || this.petToolsLoaded) return;
+    const tools = await this.pets.appTools();
+    if (!tools.length) return;
+    this.petToolsLoaded = true;
+    this.tools.register(...petTools(this.pets, tools));
+    this.engine?.refreshTools();
+  }
+  private petToolsLoaded = false;
+
   readonly trackers = new TrackerWatcher({
     trackers: () => this.config.trackers ?? [],
     pollMinutes: () => this.config.trackerPollMinutes ?? 2,
@@ -1116,6 +1139,7 @@ Drop superseded reads of the same file, routine listings, and output that no lon
     setInScope(() => activeExperiments(this.config).includes('in-scope'));
     setManyCalls(() => activeExperiments(this.config).includes('many-calls'));
     setSelfTest(() => activeExperiments(this.config).includes('self-test'));
+    setEnabledPacks(() => this.config.packs ?? []);
     setPromptCacheTtl(() => (activeExperiments(this.config).includes('cache-5m') ? '5m' : undefined));
     setCacheWriteTtl(() => (activeExperiments(this.config).includes('cache-5m') ? '5m' : '1h'));
     setPriceOverrides(() => this.config.prices);
@@ -1222,10 +1246,12 @@ Drop superseded reads of the same file, routine listings, and output that no lon
     this.config = {...this.config, ...patch};
     catalog.apiAccounts = this.config.apiAccounts ?? 'fallback';
     if (toolsChanged) this.engine?.refreshTools();
+    if (patch.pet !== undefined) void this.pets.refresh().catch(() => {});
     await saveConfig(this.config);
   }
 
   shutdown(): void {
+    this.pets.close();
     this.ci.stop();
     void this.box.stop();
     void this.mcp.closeAll();

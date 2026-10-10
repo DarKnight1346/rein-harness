@@ -19,6 +19,8 @@ const big = [
   {title: 'Specs', body: 'Requirements, design and tasks approved in turn, with traceability to the code.', ids: [20, 21, 22, 53, 54, 55, 56, 57, 58]},
   {title: 'Contracts and migrations', body: 'Breaking-change detection, safe schema changes, codemods and playbooks.', ids: [38, 40, 41, 42, 43, 44, 45]},
   {title: 'System-level understanding', body: 'Service and symbol graphs across repos, impact reports, coordinated changes.', ids: [105, 106, 107, 108, 109, 110, 111, 112]},
+  {title: 'Marketplace', body: 'Add tools, commands, skills, themes and bundles from marketplace repos, in a store inside Rein.', ids: [118, 119, 120]},
+  {title: 'Web UI', body: 'Rein in the browser on any of your devices: desktop-style chat and a full file manager, run locally, over Tailscale or on your own server.', ids: [113, 114, 115, 116, 117]},
 ].map((b) => {
   const shipped = b.ids.filter((id) => status.get(id) === 'done').length;
   return {...b, href: b.href ?? 'start/whats-new', shipped, total: b.ids.length};

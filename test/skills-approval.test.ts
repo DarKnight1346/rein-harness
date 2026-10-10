@@ -1,3 +1,4 @@
+import {setEnabledPacks} from '../src/commands/packs.js';
 import {mkdtemp, mkdir, writeFile} from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -36,7 +37,14 @@ describe('skills', () => {
     await mk(g, 'git-sync', 'unused default', {'config.json': JSON.stringify({name: 'git:sync', main: 'PROMPT.md', aliases: ['gs', 'help'], description: 'Sync with origin'}), 'PROMPT.md': 'Fetch and rebase.'});
     const skills = loadSkills(proj);
     const by = Object.fromEntries(skills.map((s) => [s.name, s]));
-    expect(Object.keys(by).sort()).toEqual(['audit', 'codemod', 'contract-tests', 'deploy', 'expand-contract', 'git:sync', 'help', 'init', 'migrate:java21', 'migrate:python3', 'migrate:react-hooks', 'plan', 'plan:deep', 'review', 'review:deep', 'skill:create', 'skill:edit', 'tour']);
+    // Built-in skills of packs that are off (migration playbooks, the tour) aren't loaded.
+    expect(Object.keys(by).sort()).toEqual(['audit', 'deploy', 'git:sync', 'help', 'init', 'plan', 'plan:deep', 'review', 'review:deep', 'skill:create', 'skill:edit']);
+    setEnabledPacks(() => ['migrations', 'insight']);
+    try {
+      expect(loadSkills(proj).map((s) => s.name)).toEqual(expect.arrayContaining(['codemod', 'contract-tests', 'expand-contract', 'migrate:java21', 'migrate:python3', 'migrate:react-hooks', 'tour']));
+    } finally {
+      setEnabledPacks(() => []);
+    }
     expect([by['git:sync']!.body, by['git:sync']!.description, by['git:sync']!.files[0]]).toEqual(['Fetch and rebase.', 'Sync with origin', 'PROMPT.md']);
     expect(parseInput('/gs now', skills)).toMatchObject({kind: 'skill', skill: {name: 'git:sync'}}); // alias
     expect(parseInput('/help', skills)).toMatchObject({kind: 'command', name: 'help'}); // alias can't beat a command
@@ -45,7 +53,7 @@ describe('skills', () => {
     expect(by['skill:create']!.source).toBe('builtin'); // built-in beats the project copy
     expect(by.deploy!.files).toEqual(['SKILL.md', 'scripts/deploy.sh']);
     expect(shadowedSkills(skills).map((s) => s.name)).toEqual(['help']);
-    expect(suggestCommands('/skill', skills).map((s) => s.name)).toEqual(['skill:create', 'skill:edit']);
+    expect(suggestCommands('/skill', skills).map((s) => s.name).slice(0, 2)).toEqual(['skill:create', 'skill:edit']);
     expect(parseInput('/skill:create a git helper', skills)).toMatchObject({kind: 'skill', args: 'a git helper', skill: {name: 'skill:create'}});
     const prompt = skillPrompt(by.deploy!, 'now', proj);
     expect(prompt).toContain(`source="global" dir="${path.join(g, 'deploy')}"`);

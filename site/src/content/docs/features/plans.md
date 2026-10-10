@@ -187,6 +187,10 @@ It counts:
 
 Contracts, migrations and every extra service, repo or owner raise the score. A plan that names no files shows `Risk: unknown`.
 
+:::note[Specs and planning pack]
+`/risk` is in the **Specs and planning** pack, which is off by default: turn it on in `/settings` → **Packs** ([Packs](../../reference/commands/#packs)). The Risk section in the plan window shows either way.
+:::
+
 The agent doesn't see this; it's for you. `/risk` shows the same for the newest saved plan, `/risk <file>` for another one, and `/risk <spec>` for a [spec](../specs/).
 
 ## Plan files in `.rein/plans/`

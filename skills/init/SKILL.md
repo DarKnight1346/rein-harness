@@ -1,6 +1,6 @@
 ---
 name: init
-description: Write or improve this project's AGENTS.md (instructions every agent reads) from a look at the code
+description: Write or improve this project's AGENTS.md from a look at the code
 ---
 # Write the project's AGENTS.md
 

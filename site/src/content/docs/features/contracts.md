@@ -5,6 +5,10 @@ description: Changes that other code depends on. Which API contract changes brea
 
 Some changes reach further than the code you're editing: the clients of an API, the services that read a message, the data already in a table. This page covers the tools that make those changes safely.
 
+:::note[Contracts and migrations pack]
+`/contracts`, `/migrations`, `/deadcode`, `/flags`, `/codemod`, `/expand-contract`, `/contract-tests`, `/migrate:java21`, `/migrate:python3`, `/migrate:react-hooks` are in the **Contracts and migrations** pack, which is off by default: turn it on in `/settings` → **Packs** ([Packs](../../reference/commands/#packs)). What Rein does on its own here works without it.
+:::
+
 ## Breaking or safe
 
 `/contracts` compares every API contract the branch changes with the branch's base, and marks each change **breaking** or **safe**:
