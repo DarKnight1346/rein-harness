@@ -1,3 +1,4 @@
+import {createHash} from 'node:crypto';
 import {existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync} from 'node:fs';
 import path from 'node:path';
 import {reinHome} from '../store/paths.js';
@@ -18,9 +19,10 @@ export class TreeSnapshots {
   /** Off for this conversation after a failure (no git, too slow…); per-file checkpoints still work. */
   private disabled = false;
 
-  constructor(private readonly root: string, private readonly sessionId: () => string) {}
+  /** `store`: a sub-store name, for the other repos of a workspace (the launch repo keeps the session folder itself). */
+  constructor(private readonly root: string, private readonly sessionId: () => string, private readonly store?: string) {}
 
-  private dir = () => path.join(reinHome(), 'checkpoints', this.sessionId());
+  private dir = () => path.join(reinHome(), 'checkpoints', this.sessionId(), ...(this.store ? ['repos', this.store] : []));
   private gitDir = () => path.join(this.dir(), 'tree.git');
 
   /** Every git call: no hooks, no gc, and byte-exact (no line-ending conversion, see init). */
@@ -157,5 +159,63 @@ export class TreeSnapshots {
     for (const k of Object.keys(trees)) if (Number(k) >= turn) delete trees[k];
     writeFileSync(path.join(this.dir(), 'trees.json'), JSON.stringify(trees));
     return {restored, removed};
+  }
+}
+
+/**
+ * Cross-repo rewind: one snapshot per message across the launch repo and every other repo of the
+ * workspace, so /rewind puts the whole system back to the same moment. Paths outside the launch
+ * repo come back relative to it (`../api/src/x.ts`). A repo cloned later just has no older snapshots.
+ */
+export class WorkspaceSnapshots {
+  private readonly main: TreeSnapshots;
+  private readonly others = new Map<string, TreeSnapshots>();
+
+  constructor(private readonly root: string, private readonly sessionId: () => string, private readonly repos: () => string[] = () => []) {
+    this.main = new TreeSnapshots(root, sessionId);
+  }
+
+  private all(): [string, TreeSnapshots][] {
+    const out: [string, TreeSnapshots][] = [[this.root, this.main]];
+    for (const dir of this.repos()) {
+      const abs = path.resolve(dir);
+      if (abs === path.resolve(this.root)) continue;
+      let s = this.others.get(abs);
+      if (!s) this.others.set(abs, (s = new TreeSnapshots(abs, this.sessionId, `${path.basename(abs)}-${createHash('sha1').update(abs).digest('hex').slice(0, 8)}`)));
+      out.push([abs, s]);
+    }
+    return out;
+  }
+
+  private rel = (dir: string, file: string) => (dir === this.root ? file : path.relative(this.root, path.join(dir, file)).split(path.sep).join('/'));
+
+  async snapshot(turn: number): Promise<void> {
+    await Promise.all(this.all().map(([, s]) => s.snapshot(turn)));
+  }
+
+  has(turn: number): boolean {
+    return this.all().some(([, s]) => s.has(turn));
+  }
+
+  async changedSince(turn: number): Promise<string[]> {
+    const lists = await Promise.all(this.all().map(async ([dir, s]) => (await s.changedSince(turn)).map((f) => this.rel(dir, f))));
+    return lists.flat();
+  }
+
+  /** Restores every repo that has a snapshot for `turn`; a repo that fails doesn't stop the others. */
+  async restore(turn: number): Promise<{restored: string[]; removed: string[]; failed: string[]}> {
+    const out = {restored: [] as string[], removed: [] as string[], failed: [] as string[]};
+    if (!this.has(turn)) throw new Error('no snapshot for that message');
+    for (const [dir, s] of this.all()) {
+      if (!s.has(turn)) continue;
+      try {
+        const r = await s.restore(turn);
+        out.restored.push(...r.restored.map((f) => this.rel(dir, f)));
+        out.removed.push(...r.removed.map((f) => this.rel(dir, f)));
+      } catch (err) {
+        out.failed.push(`${dir === this.root ? 'this repo' : path.basename(dir)}: ${(err as Error).message}`);
+      }
+    }
+    return out;
   }
 }

@@ -119,7 +119,7 @@ It's for classification, triage and quick checks over text the agent already has
 | `/model` → Decision model (`decisionModel`) | `jev`, `cheapest` (default) or a specific model |
 | `jevModel` | Pinned Jev version (file only) |
 | `autoSwitchThreshold`, `autoMinConfidence` | Routing thresholds (file only) |
-| `/settings` → Approvals (`toolApproval: "auto"`) | Turns on auto approvals |
+| `/settings` → General → Approvals (`toolApproval: "auto"`) | Turns on auto approvals |
 
 The other thresholds (0.85, 0.5, 0.7, 0.6) are constants in the files named above. If you have routing data that says one is off, a PR that changes it with the reasoning is welcome.
 

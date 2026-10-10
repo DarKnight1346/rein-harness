@@ -56,6 +56,8 @@ Rein reads only lines starting with `- ` or `* ` as facts. When the agent next c
 
 Whether to commit `.rein/MEMORY.md` is up to you. Committed, it works as shared team knowledge; ignored, it stays personal.
 
+In a [workspace](../workspaces/#workspace-memory), there's also **workspace memory**: facts about the whole system, shared by all its repos, in the workspace folder's `.rein/MEMORY.md`.
+
 ## Instruction files
 
 Rein reads the open `AGENTS.md` standard **and** Claude Code's `CLAUDE.md`, so a repo set up for either works without changes. Each file found becomes its own section of the system prompt, labelled with its path, most general first:

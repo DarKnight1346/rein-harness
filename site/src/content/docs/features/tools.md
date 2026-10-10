@@ -153,7 +153,7 @@ Confinement applies to the **file tools** and to the shell's working directory. 
 
 ## Shell behavior
 
-**Foreground** commands (the default) block the tool call while you watch the output live. The default timeout is **2 minutes**; the agent can raise it per command with `timeout_ms`, up to your cap in `/settings` → **Shell** (10, 30, 60, 120, 240 or 480 minutes, or no limit; default **120 minutes**, saved as `shellMaxMinutes`). The agent gets the last 2000 lines (at most 30,000 characters) plus the exit status:
+**Foreground** commands (the default) block the tool call while you watch the output live. The default timeout is **2 minutes**; the agent can raise it per command with `timeout_ms`, up to your cap in `/settings` → **General → Shell** (10, 30, 60, 120, 240 or 480 minutes, or no limit; default **120 minutes**, saved as `shellMaxMinutes`). The agent gets the last 2000 lines (at most 30,000 characters) plus the exit status:
 
 ```text title="rein"
 [exit 0 after 14s]

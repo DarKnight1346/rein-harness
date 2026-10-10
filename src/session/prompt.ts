@@ -4,8 +4,9 @@ import {readFile} from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import {reinConfigDir} from '../store/paths.js';
-import {memoryFacts} from '../tools/memory.js';
+import {memoryFacts, workspaceFacts, workspaceMemoryFile} from '../tools/memory.js';
 import {describeWorkspace, findWorkspace} from '../workspace/index.js';
+import {checkoutState, sparsePrompt} from '../workspace/sparse.js';
 
 const BASE_PROMPT = `You are Rein, a coding assistant working in the user's project from a terminal chat.
 - Be direct and concise. Lead with the answer.
@@ -185,6 +186,8 @@ export async function systemPrompt(opts: {tools?: boolean; scratch?: string; pro
     sections.push(`Project root: ${process.cwd()}${extra.length ? `\nAlso working directories: ${extra.join(', ')}` : ''}`);
     const ws = findWorkspace();
     if (ws?.repos.length) sections.push(describeWorkspace(ws));
+    const sparse = sparsePrompt(await checkoutState(process.cwd()));
+    if (sparse) sections.push(sparse);
     const scope = scopeDir();
     if (scope)
       sections.push(
@@ -211,6 +214,16 @@ export async function systemPrompt(opts: {tools?: boolean; scratch?: string; pro
         ? `# Project memory (.rein/MEMORY.md)\nLearned in earlier sessions on this project — rely on it, keep it current with remember / forget:\n${facts.map((f) => `- ${f}`).join('\n')}`
         : '# Project memory\nEmpty so far. When you learn something lasting about this project (commands, conventions, decisions, gotchas), save it with remember.',
     );
+    // Workspace memory: what holds across the workspace's repos (remember with scope "workspace").
+    const wsFile = workspaceMemoryFile(process.cwd());
+    if (wsFile) {
+      const ws = workspaceFacts(process.cwd());
+      sections.push(
+        ws.length
+          ? `# Workspace memory (${wsFile})\nShared by every repo in this workspace — rely on it; keep it current with remember (scope "workspace") / forget:\n${ws.map((f) => `- ${f}`).join('\n')}`
+          : '# Workspace memory\nEmpty so far. Facts about how the workspace\'s repos fit together (which calls which, shared conventions, release order) go here: remember with scope "workspace".',
+      );
+    }
   }
   for (const f of await agentsFiles(scopeDir() ?? process.cwd())) {
     sections.push(`# Project instructions (${f.path})\nFollow these instructions from ${path.basename(f.path)}:\n\n${f.text}`);

@@ -45,6 +45,7 @@ export default defineConfig({
         {label: 'Features', items: [
           {label: 'Accounts & failover', slug: 'features/accounts'},
           {label: 'Workspaces', slug: 'features/workspaces'},
+          {label: 'Large codebases', slug: 'features/large-codebases'},
           {label: 'Model routing', slug: 'features/routing'},
           {label: 'Cost & budgets', slug: 'features/cost'},
           {label: 'Observability', slug: 'features/observability'},

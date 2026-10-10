@@ -46,7 +46,7 @@ Every mutating tool call (writes, edits, deletes, shell commands, MCP adds and r
 4. **Plan mode** refuses file changes. A shell command not on the read-only list goes to the decision model, then to you.
 5. **Outside paths** ask about access first.
 6. **Scratchpad** writes don't ask.
-7. **Approval mode** (`/settings` → Approvals): `ask` (default), `auto` (the decision model allows at p ≥ 0.85 and otherwise asks you; it never auto-denies), or `bypass`.
+7. **Approval mode** (`/settings` → General → Approvals): `ask` (default), `auto` (the decision model allows at p ≥ 0.85 and otherwise asks you; it never auto-denies), or `bypass`.
 8. A **checkpoint** is taken before any file change, for [/rewind](../../features/rewind/).
 
 `mcp_add` always asks, even with "allow for the session" on, because it runs a command or contacts a URL. Project `.mcp.json` servers need a one-time approval before they connect.

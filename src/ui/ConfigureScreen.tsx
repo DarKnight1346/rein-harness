@@ -2,6 +2,7 @@ import React, {useState} from 'react';
 import {Box, Text, useInput} from 'ink';
 import {TabBar} from './TabBar.js';
 import {runtime} from '../runtime.js';
+import type {Config} from '../store/config.js';
 import {DEFAULT_SIDEBAR, DEFAULT_STATUS, enabledItems, SIDEBAR_ITEMS, STATUS_ITEMS, type LayoutItem} from './layout.js';
 import {Clickable} from './terminal/clicks.js';
 import {TextInput} from './TextInput.js';
@@ -13,10 +14,12 @@ const TABS: Tab[] = [
   {id: 'sidebar', title: 'Sidebar', items: SIDEBAR_ITEMS, defaults: DEFAULT_SIDEBAR, key: 'sidebarSections'},
 ];
 type Choice = {value: string | number | boolean; label: string};
-type ChoiceTabDef = {title: string; key: 'autoCompactPct' | 'toolApproval' | 'shellMaxMinutes' | 'subagentLimit' | 'goalMaxRounds' | 'hidePersonalInfo' | 'autoUpdate' | 'loadBalancing' | 'notifications' | 'sandbox' | 'apiAccounts' | 'worktrees' | 'collapsePastes' | 'attribution' | 'waitForLimits'; description: string; choices: Choice[]};
-const CHOICE_TABS: ChoiceTabDef[] = [
+type Group = 'General' | 'Agents' | 'Accounts' | 'Safety';
+type ChoiceTabDef = {title: string; group: Group; key: keyof Config; description: string; choices: Choice[]};
+export const CHOICE_TABS: ChoiceTabDef[] = [
   {
     title: 'Approvals',
+    group: 'General',
     key: 'toolApproval',
     description: 'What happens when the agent wants to write, edit or delete a file. Reads and searches never ask.',
     choices: [
@@ -27,6 +30,7 @@ const CHOICE_TABS: ChoiceTabDef[] = [
   },
   {
     title: 'Sandbox',
+    group: 'General',
     key: 'sandbox',
     description: "An OS sandbox around the agent's shell commands (macOS sandbox-exec, Linux bubblewrap). Your own ! commands, hooks and MCP servers aren't sandboxed.",
     choices: [
@@ -37,6 +41,7 @@ const CHOICE_TABS: ChoiceTabDef[] = [
   },
   {
     title: 'Shell',
+    group: 'General',
     key: 'shellMaxMinutes',
     description: 'Longest a foreground command may run. The agent picks a timeout per command (2 min by default) up to this cap. Background processes have no limit.',
     choices: [10, 30, 60, 120, 240, 480, 0].map((v) => ({
@@ -46,18 +51,21 @@ const CHOICE_TABS: ChoiceTabDef[] = [
   },
   {
     title: 'Subagents',
+    group: 'Agents',
     key: 'subagentLimit',
     description: 'How many subagents may run at once (the agent is told the limit and waits or does the work itself when it is reached).',
     choices: [1, 2, 3, 5, 10, 20].map((v) => ({value: v, label: `${v} at a time${v === 10 ? '  (default)' : ''}`})),
   },
   {
     title: 'Goals',
+    group: 'Agents',
     key: 'goalMaxRounds',
     description: 'How many automatic continuations a /goal may take before it pauses itself (/goal resume continues).',
     choices: [0, 10, 25, 50, 100, 250].map((v) => ({value: v, label: v === 0 ? 'Unlimited  (default)' : `${v} continuations`})),
   },
   {
     title: 'Load balancing',
+    group: 'Accounts',
     key: 'loadBalancing',
     description: 'How Rein spreads work across your subscriptions. Balanced moves a conversation to the account with the most room only when its prompt cache has gone cold (idle 5+ min) or the account is near its limit; new chats and subagents start on the least-used account.',
     choices: [
@@ -67,6 +75,7 @@ const CHOICE_TABS: ChoiceTabDef[] = [
   },
   {
     title: 'Notifications',
+    group: 'General',
     key: 'notifications',
     description: 'Get your attention when Rein needs you (an approval, a question, a plan to review) or finishes a task that took a while.',
     choices: [
@@ -77,6 +86,7 @@ const CHOICE_TABS: ChoiceTabDef[] = [
   },
   {
     title: 'Paste',
+    group: 'General',
     key: 'collapsePastes',
     description: 'Big pastes (more than 3 lines or 800 characters) can show in the input as a short placeholder, sent in full with your message, or go in as plain text you can edit.',
     choices: [
@@ -86,6 +96,7 @@ const CHOICE_TABS: ChoiceTabDef[] = [
   },
   {
     title: 'Limits',
+    group: 'Accounts',
     key: 'waitForLimits',
     description: 'When every account for the model is at its usage limit (and no other model can take over), Rein can wait for the earliest reset and carry on by itself: a goal left running overnight keeps going. Waits of more than 12 hours (a weekly limit) are not waited for. Esc stops a wait.',
     choices: [
@@ -95,6 +106,7 @@ const CHOICE_TABS: ChoiceTabDef[] = [
   },
   {
     title: 'Attribution',
+    group: 'General',
     key: 'attribution',
     description: 'Commits and pull requests the agent writes end with a line crediting Rein: "Co-Authored by [Rein Harness](https://github.com/DarKnight1346/rein-harness)". Takes effect on the next turn.',
     choices: [
@@ -104,6 +116,7 @@ const CHOICE_TABS: ChoiceTabDef[] = [
   },
   {
     title: 'Worktrees',
+    group: 'Agents',
     key: 'worktrees',
     description: "Subagents working at the same time as other work get their own copy of the project (a git worktree), so they can't trip over each other. Their changes merge back on their own when they finish; you never manage a worktree.",
     choices: [
@@ -113,6 +126,7 @@ const CHOICE_TABS: ChoiceTabDef[] = [
   },
   {
     title: 'API accounts',
+    group: 'Accounts',
     key: 'apiAccounts',
     description: 'When Rein uses pay-per-use API accounts (Anthropic Console, Bedrock, Vertex, OpenAI keys) added in /login. Subscriptions always come first.',
     choices: [
@@ -122,6 +136,7 @@ const CHOICE_TABS: ChoiceTabDef[] = [
   },
   {
     title: 'Updates',
+    group: 'General',
     key: 'autoUpdate',
     description: 'On launch, check npm for a newer Rein and install it in the background (takes effect next start). /update or rein --update also updates the claude and codex CLIs.',
     choices: [
@@ -131,6 +146,7 @@ const CHOICE_TABS: ChoiceTabDef[] = [
   },
   {
     title: 'Privacy',
+    group: 'General',
     key: 'hidePersonalInfo',
     description: 'Hide your emails and username in the UI so screenshots are safe to share. Accounts show as "Claude Account 1", "Codex Account 1"; your home folder shows as ~.',
     choices: [
@@ -140,6 +156,7 @@ const CHOICE_TABS: ChoiceTabDef[] = [
   },
   {
     title: 'Compaction',
+    group: 'Agents',
     key: 'autoCompactPct',
     description: "Summarize the conversation automatically when the context reaches this share of the model's window — mid-turn too: the agent keeps working from the summary.",
     choices: [0, 50, 60, 70, 80, 90, 95].map((v) => ({
@@ -147,15 +164,78 @@ const CHOICE_TABS: ChoiceTabDef[] = [
       label: v === 0 ? 'Off (only /compact, or when a model rejects a full context)' : `At ${v}% of the context window${v === 80 ? '  (default)' : ''}`,
     })),
   },
+  {
+    title: 'Secrets',
+    group: 'Safety',
+    key: 'secretScan',
+    description: 'When a write or edit adds something that looks like a credential (API keys, tokens, private keys). On, credentials are also masked in saved conversations.',
+    choices: [
+      {value: 'off', label: 'Off  (default)'},
+      {value: 'warn', label: 'Warn — the change goes through and the agent is told'},
+      {value: 'block', label: 'Block — the change is refused with the reason'},
+    ],
+  },
+  {
+    title: 'Semgrep',
+    group: 'Safety',
+    key: 'sast',
+    description: 'Run Semgrep (when installed) on what each request changed, at the end of the turn; findings on added lines go back to the agent.',
+    choices: [
+      {value: 'off', label: 'Off  (default)'},
+      {value: 'semgrep', label: 'Semgrep'},
+    ],
+  },
+  {
+    title: 'Planted instructions',
+    group: 'Safety',
+    key: 'injectionScan',
+    description: 'Flag instructions planted in web pages, search results and MCP results: the agent is told they are data, and you see a warning.',
+    choices: [
+      {value: false, label: 'Off  (default)'},
+      {value: true, label: 'On'},
+    ],
+  },
+  {
+    title: 'Data leaving',
+    group: 'Safety',
+    key: 'exfilGuard',
+    description: 'Once a conversation has seen outside content and private data, calls that can send data out (web_fetch, MCP, curl, git push…) need your yes, even in bypass.',
+    choices: [
+      {value: false, label: 'Off  (default)'},
+      {value: true, label: 'On'},
+    ],
+  },
+  {
+    title: 'MCP pinning',
+    group: 'Safety',
+    key: 'mcpPinning',
+    description: "Remember each MCP server's config and tools when it first connects; if either changes, its tools are held until you accept it in /mcp.",
+    choices: [
+      {value: false, label: 'Off  (default)'},
+      {value: true, label: 'On'},
+    ],
+  },
+  {
+    title: 'Dependencies',
+    group: 'Safety',
+    key: 'depCheck',
+    description: 'Vet packages a change adds: does it exist, is it a typosquat, its license, known vulnerabilities (looked up on the registries and OSV).',
+    choices: [
+      {value: 'off', label: 'Off  (default)'},
+      {value: 'warn', label: 'Warn — the change goes through and the agent is told'},
+      {value: 'block', label: 'Block — the change is refused with the reasons'},
+    ],
+  },
 ];
-const TAB_TITLES = [...TABS.map((t) => t.title), ...CHOICE_TABS.map((t) => t.title), 'Advanced'];
+const GROUPS: Group[] = ['General', 'Agents', 'Accounts', 'Safety'];
+export const TAB_TITLES = [...TABS.map((t) => t.title), ...GROUPS, 'Advanced'];
 
 /**
  * `/settings`: choose and order what the status line and sidebar show. Changes save immediately
  * and apply live (the bar and sidebar behind the window update as you toggle).
  */
-export function ConfigureScreen({onClose, onChange, bare}: {onClose(): void; onChange(): void; bare?: boolean}) {
-  const [tabIndex, setTabIndex] = useState(0);
+export function ConfigureScreen({onClose, onChange, bare, initialTab}: {onClose(): void; onChange(): void; bare?: boolean; initialTab?: string}) {
+  const [tabIndex, setTabIndex] = useState(() => Math.max(0, TAB_TITLES.findIndex((t) => t.toLowerCase() === initialTab?.toLowerCase())));
   const [cursor, setCursor] = useState(0);
   const switchTab = (i: number) => {
     setTabIndex((i + TAB_TITLES.length) % TAB_TITLES.length);
@@ -165,46 +245,61 @@ export function ConfigureScreen({onClose, onChange, bare}: {onClose(): void; onC
   const frame = bare ? {} : {borderStyle: 'round' as const, borderColor: 'cyan', paddingX: 1};
   if (tabIndex === TAB_TITLES.length - 1) return <AdvancedTab tabs={tabs} frame={frame} onClose={onClose} onChange={onChange} switchTab={(d) => switchTab(tabIndex + d)} />;
   if (tabIndex >= TABS.length) {
-    const def = CHOICE_TABS[tabIndex - TABS.length]!;
-    return <ChoiceTab key={def.key} def={def} tabs={tabs} frame={frame} onClose={onClose} onChange={onChange} switchTab={(d) => switchTab(tabIndex + d)} />;
+    const group = GROUPS[tabIndex - TABS.length]!;
+    return <GroupTab key={group} defs={CHOICE_TABS.filter((d) => d.group === group)} tabs={tabs} frame={frame} onClose={onClose} onChange={onChange} switchTab={(d) => switchTab(tabIndex + d)} />;
   }
   return <LayoutTab tab={TABS[tabIndex]!} tabs={tabs} frame={frame} cursor={cursor} setCursor={setCursor} onClose={onClose} onChange={onChange} switchTab={(d) => switchTab(tabIndex + d)} />;
 }
 
 type TabProps = {tabs: React.ReactNode; frame: object; onClose(): void; onChange(): void; switchTab(dir: 1 | -1): void};
 
-/** Single-choice setting (approvals, auto-compact threshold). */
-function ChoiceTab({def, tabs, frame, onClose, onChange, switchTab}: TabProps & {def: ChoiceTabDef}) {
-  const current = runtime.config[def.key];
-  const [cursor, setCursor] = useState(Math.max(0, def.choices.findIndex((c) => c.value === current)));
-  const choose = (i: number) => {
-    const c = def.choices[i];
-    if (c) void runtime.setConfig({[def.key]: c.value}).then(onChange);
+/** A group of single-choice settings: ↑↓ picks one, enter/space cycles it; its explanation and choices show below. */
+function GroupTab({defs, tabs, frame, onClose, onChange, switchTab}: TabProps & {defs: ChoiceTabDef[]}) {
+  const [row, setRow] = useState(0);
+  const def = defs[row]!;
+  const value = (d: ChoiceTabDef) => (runtime.config as Record<string, unknown>)[d.key];
+  const at = (d: ChoiceTabDef) => Math.max(0, d.choices.findIndex((c) => c.value === value(d)));
+  const choose = (d: ChoiceTabDef, i: number) => {
+    const c = d.choices[(i + d.choices.length) % d.choices.length];
+    if (c) void runtime.setConfig({[d.key]: c.value}).then(onChange);
   };
+  const short = (label: string) => label.split(' — ')[0]!.replace(/\s+\(default\)$/, '');
   useInput((input, key) => {
     if (key.escape || input === 'q') onClose();
     else if (key.tab || key.rightArrow) switchTab(1);
     else if (key.leftArrow) switchTab(-1);
-    else if (key.upArrow) setCursor((c) => Math.max(0, c - 1));
-    else if (key.downArrow) setCursor((c) => Math.min(def.choices.length - 1, c + 1));
-    else if (key.return || input === ' ') choose(cursor);
+    else if (key.upArrow) setRow((r) => Math.max(0, r - 1));
+    else if (key.downArrow) setRow((r) => Math.min(defs.length - 1, r + 1));
+    else if (key.return || input === ' ') choose(def, at(def) + 1);
   });
   return (
     <Box flexDirection="column" {...frame}>
       {tabs}
-      <Text dimColor>{def.description}</Text>
       <Box flexDirection="column" marginY={1}>
+        {defs.map((d, i) => (
+          <Clickable key={d.key} onHover={() => setRow(i)} onClick={() => (i === row ? choose(d, at(d) + 1) : setRow(i))}>
+            <Text color={i === row ? 'cyan' : undefined} wrap="truncate">
+              {i === row ? '❯ ' : '  '}
+              {d.title.padEnd(22)}
+              <Text bold={i === row}>{short(d.choices[at(d)]?.label ?? String(value(d)))}</Text>
+            </Text>
+          </Clickable>
+        ))}
+      </Box>
+      <Text dimColor wrap="wrap">{def.description}</Text>
+      <Box flexDirection="column" marginTop={1}>
         {def.choices.map((c, i) => (
-          <Clickable key={String(c.value)} onHover={() => setCursor(i)} onClick={() => choose(i)}>
-            <Text color={i === cursor ? 'cyan' : undefined} wrap="truncate">
-              {i === cursor ? '❯ ' : '  '}
-              {c.value === current ? '● ' : '○ '}
+          <Clickable key={String(c.value)} onClick={() => choose(def, i)}>
+            <Text dimColor={i !== at(def)} wrap="truncate">
+              {i === at(def) ? '● ' : '○ '}
               {c.label}
             </Text>
           </Clickable>
         ))}
       </Box>
-      <Text dimColor>click/enter choose · ←→ tab · esc close</Text>
+      <Box marginTop={1}>
+        <Text dimColor>↑↓ setting · enter/space or click to change · ←→ tab · esc close</Text>
+      </Box>
     </Box>
   );
 }

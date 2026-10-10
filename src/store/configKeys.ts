@@ -64,6 +64,8 @@ export const CONFIG_KEYS: KeyInfo[] = [
   k('budget', 'Spending caps in USD at API prices: {"requestUsd": 2, "goalUsd": 20, "conversationUsd": 50}', json),
   k('goalConfirmUsd', '/goal asks before starting when goals here typically cost more than this many USD (0 = never asks)', num(0)),
   k('otel', 'OpenTelemetry export: {"endpoint": "http://localhost:4318", "headers": {}, "serviceName": "rein"}', json),
+  k('codeSearch', 'Org-wide code search for the agent (org_search): {"type": "sourcegraph", "url": "https://sourcegraph.example.com"} or type zoekt. Sourcegraph token: SRC_ACCESS_TOKEN', json),
+  k('semanticIndex', 'Local semantic search through Ollama: {} for nomic-embed-text at 127.0.0.1:11434, or {"model": "…", "url": "…"}. Build the index with /index', json),
   k('lsp', 'Code intelligence through language servers: auto or off', oneOf('auto', 'off')),
   k('lspIdleMinutes', 'Stop a language server after this many idle minutes', num(1)),
   k('lspServers', 'Your own language servers: {"ruby": {"command": "solargraph", "args": ["stdio"]}}', json),

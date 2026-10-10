@@ -170,7 +170,7 @@ Reviewers only read, they must quote the code behind every finding, and each fin
 Some findings will be false positives. Nothing gets fixed unless you pick it, and picking none is a fine outcome.
 :::
 
-If only one provider is signed in, or you've fixed one subagent model in `/model`, `/review:deep` runs one reviewer per area and says so. The deep review starts up to eight subagents at once, within your subagent limit (`/settings` → **Subagents**).
+If only one provider is signed in, or you've fixed one subagent model in `/model`, `/review:deep` runs one reviewer per area and says so. The deep review starts up to eight subagents at once, within your subagent limit (`/settings` → **Agents → Subagents**).
 
 ## Write your first skill
 

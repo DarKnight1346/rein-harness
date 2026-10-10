@@ -46,6 +46,8 @@ Rein uses the nearest `rein.workspace.yaml` (or `rein.workspace.yml`) at or abov
 | `repos[].role` | What the repo does in the system, in your own words. The agent sees it. |
 | `repos[].branch` | The repo's default branch. Shown to the agent, and used by `/workspace clone`. |
 | `repos[].url` | Git URL, so `/workspace clone` can fetch the repo when its folder is missing. |
+| `repos[].sparse` | Folders to check out (git's cone mode); the rest stays in git, not on disk. See [Huge repos](#huge-repos-sparse-and-partial-clones). |
+| `repos[].filter` | Partial clone: `blob:none` fetches file contents only when needed, `tree:0` folders too. |
 
 Entries Rein can't use (no path or name, a name used twice, invalid YAML) are skipped and reported by `/workspace`, and on stderr in `rein -p`.
 
@@ -62,8 +64,54 @@ Entries Rein can't use (no path or name, a name used twice, invalid YAML) are sk
 `/workspace clone` clones every repo that has a `url` and no folder yet (with `--branch` when `branch` is set), then updates what the agent sees.
 
 :::note
-Rewind's whole-project snapshots still cover only the repo you launched in. Edits in the other repos are restored from Rein's per-file checkpoints (see [Rewind](../rewind/)).
+`/rewind` covers every repo: each one is snapshotted before every message, and a code rewind restores them all to the same point (see [Rewind](../rewind/#every-repo-of-a-workspace)).
 :::
+
+## Huge repos: sparse and partial clones
+
+A monorepo with millions of files doesn't need to be on disk whole for you to work on one corner of it. Say which folders you need:
+
+```yaml title="rein.workspace.yaml"
+repos:
+  - name: mono
+    url: git@github.com:acme/mono.git
+    sparse: [services/payments, libs/money]
+    filter: blob:none
+```
+
+`/workspace clone` then runs `git clone --filter=blob:none --sparse` and `git sparse-checkout set --cone services/payments libs/money`. Only those folders and the top-level files are checked out, and with `filter` git downloads file contents only when something reads them.
+
+```text title="rein"
+> /workspace sparse
+  ⎿ Checkouts:
+      mono  sparse: services/payments, libs/money · partial clone (blob:none)
+      web  full checkout
+
+> /workspace sparse mono services/ledger
+  ⎿ Checked out services/ledger in mono.
+```
+
+The agent is told what's missing. When you launch Rein in a sparse checkout (in a workspace or not), the system prompt says which folders are on disk. It also says the rest is in git: `git ls-tree -r --name-only HEAD <folder>` lists it, and `git show HEAD:<path>` reads a file without checking it out. To change files outside the checkout, the agent asks you to widen it.
+
+Repos you cloned sparse yourself (`git clone --sparse`) work the same way. Rein reads git's own settings, so `sparse` in the manifest only matters for `/workspace clone`.
+
+## One tree for every repo
+
+The repos stay separate on disk, but the agent can treat them as one tree. `search` and `list` with `workspace: true` run over every cloned repo in one call (a `path` is taken inside each), and group what they find by repo:
+
+```text
+## web (.)
+src/cart.ts:12:  await fetch("/orders")
+
+## api (../api)
+../api/src/orders.ts:40:router.post("/orders", createOrder)
+```
+
+Paths are relative to the repo you launched in, so `read` and `edit` take them as they are. The system prompt tells the agent this option exists when you're in a workspace.
+
+## Workspace memory
+
+Some things are true of the system, not of one repo: "api releases before web", "every service reads its config from Vault". The agent saves those with `remember` and `scope: "workspace"`, in the workspace's own `.rein/MEMORY.md` (next to `rein.workspace.yaml`). Every repo of the workspace sees them, in a **Workspace memory** section of the system prompt next to its own project memory. `forget` removes matching facts from both. Like project memory, it's a plain file you can edit or commit.
 
 ## Pull requests across repos
 

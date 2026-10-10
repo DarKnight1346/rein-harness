@@ -118,7 +118,7 @@ When subagents work at the same time, they could overwrite each other's edits. R
 - **Real conflicts go to the main agent.** If both changed the same lines, your project's version stays and the subagent's version is kept for the main agent, which is told which files to merge.
 - **Nothing is lost if Rein stops.** If Rein exits or crashes while a subagent still has a copy, the next start in that project merges the work in and says so.
 
-Copies live in `~/.rein/worktrees/`, never in your project. Outside a git repository, subagents always edit the project directly. To turn this off: `/settings` → **Worktrees** → **Off** (`worktrees` in the config).
+Copies live in `~/.rein/worktrees/`, never in your project. Outside a git repository, subagents always edit the project directly. To turn this off: `/settings` → **Agents → Worktrees** → **Off** (`worktrees` in the config).
 
 ## The completion check
 

@@ -30,7 +30,7 @@ That means reading `.env` *inside* your project never prompts. Rein treats the p
 
 ## The command sandbox
 
-Approvals decide *whether* a command runs. The sandbox limits *what it can do* once it runs, which is what makes long unattended runs (bypass mode, `/goal`) safe. It's **on by default** (`/settings` → **Sandbox**):
+Approvals decide *whether* a command runs. The sandbox limits *what it can do* once it runs, which is what makes long unattended runs (bypass mode, `/goal`) safe. It's **on by default** (`/settings` → **General → Sandbox**):
 
 | Mode | The agent's shell commands… |
 |---|---|
@@ -51,7 +51,7 @@ On macOS it also allows Bazel's output folder (`/private/var/tmp/_bazel_<you>`) 
 
 ## Approval modes
 
-Pick a mode in `/settings` → **Approvals** (saved as `toolApproval` in `~/.rein/config.json`). The mode only decides what happens to mutating calls that nothing else (a rule, a hook, the scratchpad, the read-only list) has already settled.
+Pick a mode in `/settings` → **General → Approvals** (saved as `toolApproval` in `~/.rein/config.json`). The mode only decides what happens to mutating calls that nothing else (a rule, a hook, the scratchpad, the read-only list) has already settled.
 
 | Mode | What happens |
 |---|---|

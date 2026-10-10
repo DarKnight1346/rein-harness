@@ -8,6 +8,7 @@
 export function untrustedSource(tool: string): string | undefined {
   if (tool === 'web_fetch') return 'a web page';
   if (tool === 'web_search') return 'web search results';
+  if (tool === 'org_search') return 'org-wide code search';
   if (tool === 'mcp_call' || tool.startsWith('mcp__') && !tool.startsWith('mcp__rein__')) return 'an MCP server';
   return undefined;
 }

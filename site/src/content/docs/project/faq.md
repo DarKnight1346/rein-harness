@@ -76,7 +76,7 @@ Claude Account 1 hit its limit (resets 3:45 PM) — retrying
 (partial reply discarded)
 ```
 
-The account cools down until its reset time (15 minutes if no reset time could be read). If no account offers that model, Rein switches to another model: auto mode re-routes, otherwise it picks the closest model in cost tier (`No Sonnet account available — switching to …`). A turn gets up to 5 attempts, then `gave up after several failovers`. When every account for the model is out and no other model can take over, Rein waits for the earliest reset (up to 12 hours) and continues the turn by itself; Esc stops the wait, and `/settings` → Limits turns it off.
+The account cools down until its reset time (15 minutes if no reset time could be read). If no account offers that model, Rein switches to another model: auto mode re-routes, otherwise it picks the closest model in cost tier (`No Sonnet account available — switching to …`). A turn gets up to 5 attempts, then `gave up after several failovers`. When every account for the model is out and no other model can take over, Rein waits for the earliest reset (up to 12 hours) and continues the turn by itself; Esc stops the wait, and `/settings` → Accounts → Limits turns it off.
 
 Rein usually moves *before* a rejection: an account under 10% headroom hands the conversation to a better one. See [Load balancing](../../internals/load-balancing/).
 
@@ -96,7 +96,7 @@ With more than one Claude account and balanced load balancing, Rein also pings i
 
 ### What does privacy mode hide?
 
-Privacy mode is on by default (`/settings` → Privacy). Accounts show as `Claude Account 1` and `Codex Account 1` instead of emails. Known emails in any displayed text become those names, your home folder shows as `~`, and your OS username as `user`. It changes the **display only**: saved transcripts and config files are untouched. See [Configuration](../../reference/configuration/).
+Privacy mode is on by default (`/settings` → General → Privacy). Accounts show as `Claude Account 1` and `Codex Account 1` instead of emails. Known emails in any displayed text become those names, your home folder shows as `~`, and your OS username as `user`. It changes the **display only**: saved transcripts and config files are untouched. See [Configuration](../../reference/configuration/).
 
 ### Where does Rein keep its data?
 

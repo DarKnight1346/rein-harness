@@ -124,7 +124,7 @@ Details worth knowing:
 | --- | --- | --- |
 | `manual` | You run `/compact` | `You ran /compact · the next reply starts from the summary · /context for details` |
 | `midturn` | While the agent works, a request's input reaches `autoCompactPct` of the window. The agent carries on (see below) | `Compacted mid-task at 80% of the context window — the agent carries on from the summary` |
-| `auto` | After a turn, input tokens ≥ `autoCompactPct` of the window (default 80%) | `Auto-compacted at 80% of the context window · change it in /settings → Compaction` |
+| `auto` | After a turn, input tokens ≥ `autoCompactPct` of the window (default 80%) | `Auto-compacted at 80% of the context window · change it in /settings → Agents → Compaction` |
 | `handoff` | A carry into a new session would exceed 24k tokens | `Compacted before handing the conversation to another model` |
 | `context` | The model rejected the prompt as too long (Claude: "prompt is too long"; Codex: `contextWindowExceeded`). If the agent had already done work in the turn, it's kept and the agent carries on like a mid-turn compaction; otherwise the engine compacts and retries the request once | `The model's context window was full — compacted, and the agent carries on` |
 
@@ -150,7 +150,7 @@ While it runs you see `Compacting N messages…`, then a rule:
 ```text title="rein"
 ── ▁▃▅▇ Conversation compacted ─────────────────────────────
   48 messages → 2.1k-token summary · context 96k → 9.4k (−90%) · Haiku
-  Auto-compacted at 80% of the context window · change it in /settings → Compaction
+  Auto-compacted at 80% of the context window · change it in /settings → Agents → Compaction
 ```
 
 ## Context warnings

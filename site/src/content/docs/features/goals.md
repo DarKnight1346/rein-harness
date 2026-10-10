@@ -111,7 +111,7 @@ The Goal window looks like this:
 status: paused · 7 continuations · 1 escalation
   14:02:11 turn: gave up → escalated to the advisor
   14:09:40 done claim: rejected (0.38 via jev)
-  14:15:02 turn: paused after 25 automatic continuations (limit in /settings → Goals)
+  14:15:02 turn: paused after 25 automatic continuations (limit in /settings → Agents → Goals)
 
 /goal pause · /goal resume · /goal clear
 ```
@@ -155,7 +155,7 @@ Each `<goal_reminder>` re-lists the milestones with the next one marked `→`, s
 
 ### Round limit
 
-`goalMaxRounds` caps automatic continuations. It defaults to `0` (unlimited); set it in **/settings → Goals** to 10, 25, 50, 100 or 250. When the cap is hit the goal pauses with `paused after N automatic continuations (limit in /settings → Goals)`. `/goal resume` past the cap resets the counter, so you get another full run.
+`goalMaxRounds` caps automatic continuations. It defaults to `0` (unlimited); set it in **/settings → Agents → Goals** to 10, 25, 50, 100 or 250. When the cap is hit the goal pauses with `paused after N automatic continuations (limit in /settings → Agents → Goals)`. `/goal resume` past the cap resets the counter, so you get another full run.
 
 ```json title="~/.rein/config.json"
 {

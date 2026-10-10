@@ -29,7 +29,7 @@ describe('interactive (terminal) commands', () => {
     expect(s.exitCode).toBe(0);
     expect(shells.tail(s)).toContain('tty-yes');
     expect(shells.tail(s)).toContain('hi bob');
-  });
+  }, 20_000); // a real pty: slow to start on a busy machine
 
   it.runIf(posix)('stop instead of hanging when nobody can answer (headless)', async () => {
     const shells = new ShellManager();

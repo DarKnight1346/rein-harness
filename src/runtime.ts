@@ -10,6 +10,9 @@ import {sastCheck} from './tools/sast.js';
 import {loadPolicy, modelBlocked} from './policy.js';
 import {reinConfigDir} from './store/paths.js';
 import {affectedTool} from './build/tool.js';
+import {repoMapTool} from './context/repoMap.js';
+import {orgSearchTool} from './context/orgSearch.js';
+import {semanticSearchTool} from './context/semantic.js';
 import {affected, changedFiles} from './build/affected.js';
 import {CiWatcher} from './build/ci.js';
 import {branchSize} from './pr/github.js';
@@ -43,7 +46,7 @@ import {agentTools} from './agents/tools.js';
 import {advisorRef, advisorTool} from './agents/advisor.js';
 import {GoalManager} from './goals/manager.js';
 import {Checkpoints} from './session/checkpoints.js';
-import {TreeSnapshots} from './session/snapshots.js';
+import {WorkspaceSnapshots} from './session/snapshots.js';
 import {McpManager} from './mcp/manager.js';
 import {mcpTools} from './mcp/tools.js';
 import {skillTool} from './skills/tool.js';
@@ -242,6 +245,7 @@ export class Runtime {
     judge: (req) => this.judgeChange(req),
     readOnlyJudge: (command) => this.judgeReadOnly(command),
     configDirs: () => [...(this.config?.additionalDirectories ?? []), ...workspaceDirs(this.workspace)],
+    workspaceRepos: () => (this.workspace?.repos ?? []).filter((r) => r.present).map((r) => ({name: r.name, path: r.path})),
     scope: () => this.scope,
     secretScan: () => this.config.secretScan ?? 'off',
     depCheck: () => this.config.depCheck ?? 'off',
@@ -344,7 +348,7 @@ export class Runtime {
   /** File checkpoints for /rewind, per conversation (Rein's own file changes, ignored files too). */
   readonly checkpoints = new Checkpoints(() => this.engine?.transcript.id ?? 'none');
   /** Whole-tree snapshots for /rewind (covers shell-made changes); see snapshots.ts. */
-  readonly snapshots = new TreeSnapshots(process.cwd(), () => this.engine?.transcript.id ?? 'none');
+  readonly snapshots = new WorkspaceSnapshots(process.cwd(), () => this.engine?.transcript.id ?? 'none', () => workspaceDirs(this.workspace));
 
   /** Index of the user message the agent is working on (checkpoints are grouped by it). */
   currentTurn(): number {
@@ -856,6 +860,9 @@ Drop superseded reads of the same file, routine listings, and output that no lon
       }),
       ...webTools(() => this.config),
       affectedTool(() => activeExperiments(this.config), () => process.cwd()),
+      repoMapTool(() => activeExperiments(this.config)),
+      orgSearchTool(() => this.config),
+      semanticSearchTool(() => this.config, () => process.cwd()),
       skillTool(() => process.cwd(), () => (this.planMode = true)),
       ...memoryTools(() => process.cwd()),
       askUserTool(() => this.askPresenter),

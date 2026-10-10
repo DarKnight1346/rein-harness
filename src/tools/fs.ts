@@ -36,6 +36,8 @@ export type ToolContext = {
   shellCap?: boolean;
   /** outline-reads experiment: a long file read without a range comes back as an outline. */
   outlineReads?: boolean;
+  /** The workspace's cloned repos, for search / list with workspace: true. */
+  workspaceRepos?: {name: string; path: string}[];
 };
 
 /** Which subagent made a tool call (undefined = the main agent). */
@@ -159,11 +161,11 @@ const OUTLINE_MIN_LINES = 500;
 const OUTLINE_MAX_ENTRIES = 200;
 // Declarations at the top level or one level in, in most languages: functions, methods, classes,
 // types, constants, sections. Comments and closing braces are skipped.
-const DECLARATION =
+export const DECLARATION =
   /^(?:\t|  |    )?(?:export\s+|default\s+|public\s+|private\s+|protected\s+|internal\s+|static\s+|async\s+|abstract\s+|final\s+|pub(?:\(crate\))?\s+|override\s+|@\w+\s+)*(?:function\*?|class|interface|type|enum|struct|trait|impl|module|namespace|object|record|def|func|fn|const|let|var|val|package|import\s*\(|describe|it|test|macro_rules!|#{1,3}\s|\w[\w.<>\[\], *&:]*\s+\**\w+\s*\()/;
 
 // Indented variables and statements are a function's insides, not part of the outline.
-const LOCAL = /^\s+(?:const|let|var|val|return|if|for|while|switch|await|throw|else|import|case|default)\b/;
+export const LOCAL = /^\s+(?:const|let|var|val|return|if|for|while|switch|await|throw|else|import|case|default)\b/;
 
 /** The declarations of a long text file with their line numbers, or undefined for a short one. */
 async function outlineOf(file: string, compact?: boolean): Promise<{lines: number; text: string} | undefined> {
@@ -467,7 +469,27 @@ const size = (n: number) => (n < 1024 ? `${n} B` : n < 1024 ** 2 ? `${(n / 1024)
  * `depth` levels deep (default 1); hidden entries and heavy dirs (.git, node_modules, …) are skipped
  * unless `all`.
  */
-export async function listTool(ctx: ToolContext, args: {path?: string; depth?: number; all?: boolean}): Promise<ToolResult> {
+/**
+ * Synthetic monorepo view: run search or list once per workspace repo (`path` taken inside each),
+ * with paths relative to the project (`../api/src/x.ts`), so read and edit take them as they are.
+ */
+async function acrossWorkspace(ctx: ToolContext, sub: string | undefined, each: (path: string) => Promise<ToolResult>): Promise<ToolResult> {
+  const repos = ctx.workspaceRepos ?? [];
+  if (!repos.length) throw new ToolError("workspace: true needs a workspace (rein.workspace.yaml) with cloned repos; this project isn't in one");
+  const parts: string[] = [];
+  for (const r of repos) {
+    const prefix = toPosix(path.relative(ctx.root, r.path)) || '.';
+    const target = sub ? `${prefix}/${sub.replace(/^\.?\/+/, '')}` : prefix;
+    if (!existsSync(path.resolve(ctx.root, target))) continue;
+    const res = await each(target).catch((err) => ({ok: false, text: (err as Error).message}));
+    if (res.text === 'No matches.') continue;
+    parts.push(`## ${r.name} (${prefix})\n${res.text}`);
+  }
+  return {ok: true, text: parts.length ? parts.join('\n\n') : 'No matches in any workspace repo.'};
+}
+
+export async function listTool(ctx: ToolContext, args: {path?: string; depth?: number; all?: boolean; workspace?: boolean}): Promise<ToolResult> {
+  if (args.workspace) return acrossWorkspace(ctx, args.path, (p) => listTool(ctx, {...args, workspace: false, path: p}));
   const dir = resolveInRoot(ctx, args.path ?? '.');
   const st = await stat(dir).catch(() => undefined);
   if (!st) throw new ToolError(`${args.path ?? '.'} does not exist`);
@@ -498,7 +520,7 @@ export async function listTool(ctx: ToolContext, args: {path?: string; depth?: n
   return {ok: true, text: `${header}\n${out.join('\n')}${total > out.length ? `\n… ${total - out.length} more entries (narrow the path or depth)` : ''}`};
 }
 
-type SearchArgs = {pattern: string; path?: string; glob?: string; files_only?: boolean; case_insensitive?: boolean};
+type SearchArgs = {pattern: string; path?: string; glob?: string; files_only?: boolean; case_insensitive?: boolean; workspace?: boolean};
 
 /** ripgrep: the bundled binary (@vscode/ripgrep), else one on PATH, else the JS fallback. */
 let rgBin: string | null | undefined;
@@ -515,6 +537,7 @@ export async function ripgrep(): Promise<string | null> {
 /** Regex search over file contents (`path:line:text`), or file paths when `files_only`. */
 export async function searchTool(ctx: ToolContext, args: SearchArgs): Promise<ToolResult> {
   if (typeof args.pattern !== 'string' || !args.pattern) throw new ToolError('pattern is required');
+  if (args.workspace) return acrossWorkspace(ctx, args.path, (p) => searchTool(ctx, {...args, workspace: false, path: p}));
   let re: RegExp;
   try {
     re = new RegExp(args.pattern, args.case_insensitive ? 'i' : '');
@@ -535,7 +558,7 @@ export async function searchTool(ctx: ToolContext, args: SearchArgs): Promise<To
     lines = res.stdout
       .split(/\r?\n/)
       .filter(Boolean)
-      .map((l) => (l.startsWith(root + path.sep) ? l.slice(root.length + 1) : l))
+      .map((l) => (l.startsWith(root + path.sep) ? l.slice(root.length + 1) : !base.startsWith(root + path.sep) && base !== root && l.startsWith(base) ? path.relative(root, base) + l.slice(base.length) : l))
       // Only the path part becomes /-separated: matched code may contain backslashes.
       .map((l) => {
         if (args.files_only) return toPosix(l);

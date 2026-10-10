@@ -78,6 +78,8 @@ export type ToolHostOptions = {
   judge?: (req: ApprovalRequest) => Promise<{allow: boolean; note: string}>;
   /** Extra working directories from config (`additionalDirectories`). */
   configDirs?: () => string[];
+  /** The workspace's cloned repos (rein.workspace.yaml): search and list with workspace: true cover them all. */
+  workspaceRepos?: () => {name: string; path: string}[];
   /** injectionScan: flag instructions planted in web pages, search results and MCP results. */
   injectionScan?: () => boolean;
   /** exfilGuard: network calls need a yes once untrusted content and private data are both in the conversation. */
@@ -846,6 +848,7 @@ export class ToolHost extends EventEmitter {
       shellMaxMs: this.opts.shellMaxMs?.(),
       sandbox: this.opts.sandbox?.(),
       sessionId: this.opts.sessionId?.(),
+      workspaceRepos: this.opts.workspaceRepos?.(),
     };
   }
 

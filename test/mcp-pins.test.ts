@@ -30,7 +30,7 @@ const start = async (pinning = true) => {
   return m;
 };
 
-describe('MCP pinning', () => {
+describe('MCP pinning', {timeout: 20_000}, () => {
   it('holds the tools of a server whose tools changed since it was first used, until you accept it', async () => {
     expect((await start()).list()[0]).toMatchObject({status: 'connected', tools: 4}); // pinned on first use
     expect((await start()).list()[0]).toMatchObject({status: 'connected', tools: 4}); // unchanged

@@ -58,6 +58,7 @@ A directory tree: folders first, files with sizes. Hidden entries and `.git`, `n
 | `path` | string | Directory, default the project root |
 | `depth` | integer | Levels to descend, 1–5, default 1 |
 | `all` | boolean | Include hidden entries and heavy folders |
+| `workspace` | boolean | In a [workspace](../../features/workspaces/#one-tree-for-every-repo): list every repo (`path` inside each), as one tree |
 
 ### `search`
 
@@ -72,6 +73,7 @@ Regex search over file contents, returning `path:line:text`, or over file paths 
 | `glob` | string | Only files matching, for example `"*.ts"` or `"src/**/*.tsx"` |
 | `files_only` | boolean | Match file paths instead of contents |
 | `case_insensitive` | boolean | |
+| `workspace` | boolean | In a [workspace](../../features/workspaces/#one-tree-for-every-repo): search every repo (`path` inside each), grouped by repo |
 
 ### `write`
 
@@ -333,6 +335,39 @@ Label `Affected`. Approval: none (read-only). Only listed with the `affected-too
 
 Asks the build system which projects or targets the change affects, and returns them with the command that tests just those. See [What a change affects](../../features/build-and-test/#what-a-change-affects).
 
+### `repo_map`
+
+Label `RepoMap`. Approval: none (read-only). Only listed with the `repo-map` [experiment](../configuration/#experiments) on.
+
+| Parameter | Type | Notes |
+| --- | --- | --- |
+| `path` | string | A folder to map, project-relative. Omit for the whole project |
+| `budget_tokens` | integer | Size of the map, 500–20,000 (default 4,000) |
+
+Each source file's top-level declarations, ranked by how much the file exports. See [A map of the repo](../../features/large-codebases/#a-map-of-the-repo).
+
+### `org_search`
+
+Label `OrgSearch`. Approval: none (read-only). Only listed once `codeSearch` is [configured](../configuration/).
+
+| Parameter | Type | Notes |
+| --- | --- | --- |
+| `query` **(required)** | string | In the server's own syntax (Sourcegraph or Zoekt) |
+| `max` | integer | Most results, 1–100 (default 30) |
+
+Searches every repo your Sourcegraph or Zoekt server indexes, and returns `repo  file:line: text` per match. See [Search the whole org](../../features/large-codebases/#search-the-whole-org).
+
+### `semantic_search`
+
+Label `SemanticSearch`. Approval: none (read-only). Only listed once `semanticIndex` is [configured](../configuration/) and `/index` has built this project's index.
+
+| Parameter | Type | Notes |
+| --- | --- | --- |
+| `query` **(required)** | string | What you're looking for, in words |
+| `k` | integer | How many chunks, 1–30 (default 8) |
+
+The chunks (about 60 lines each) closest in meaning to the query, with `file:start-end`, a similarity score and their first lines. See [Search by meaning](../../features/large-codebases/#search-by-meaning).
+
 ### `lsp_install`
 
 Label `InstallLanguageServer`. Approval: **always asks, even in bypass mode.**
@@ -429,6 +464,7 @@ Saves one lasting fact to project memory, loaded into every future session in th
 | Parameter | Type | Notes |
 | --- | --- | --- |
 | `fact` **(required)** | string | One or two sentences |
+| `scope` | `project` \| `workspace` | `workspace` saves it to the [workspace's](../../features/workspaces/#workspace-memory) memory instead, shared by all its repos. Only in a workspace; default `project` |
 
 ### `forget`
 
@@ -444,6 +480,8 @@ Removes every memory fact containing `match` (case-insensitive).
 
 See [MCP](../../features/mcp/) for configuration files and the `/mcp` screen.
 
+
+In a workspace it removes matching facts from the workspace's memory too.
 ### `mcp_list`
 
 Label `McpList`. Approval: none. No parameters. Lists servers with status, transport, source file and tools.

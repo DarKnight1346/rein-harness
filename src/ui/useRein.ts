@@ -56,6 +56,9 @@ import {accountName, hidingIdentity, redact} from './privacy.js';
 import nodePath from 'node:path';
 import {cloneMissing, findWorkspace} from '../workspace/index.js';
 import {CONFIG_KEYS, defaultValue, formatValue, keyInfo, parseValue} from '../store/configKeys.js';
+import {TAB_TITLES} from './ConfigureScreen.js';
+import {checkoutState, describeCheckout, sparseAdd} from '../workspace/sparse.js';
+import {buildIndex, DEFAULT_MODEL as EMBED_MODEL, formatSemanticHits, loadIndex, semanticSearch} from '../context/semantic.js';
 import {estimateGoalCost} from '../goals/estimate.js';
 import {loadPolicy, type PolicyRule} from '../policy.js';
 import {reinConfigDir} from '../store/paths.js';
@@ -67,6 +70,9 @@ import {addedLinesByFile, findReport, parseCoverage, ranges, uncoveredChanges} f
 import {detectMutator, formatMutation, mutate} from '../build/mutate.js';
 import {branchSize, currentPr, describePr, queueFor, reviewComments, runQueue} from '../pr/github.js';
 import {linkPrs, prsForBranch} from '../pr/linked.js';
+import {loadPacks, packFiles, packMessage, savePack} from '../context/packs.js';
+import {repoMap} from '../context/repoMap.js';
+import {formatOwners, ownersOf} from '../context/owners.js';
 import {run} from '../util/proc.js';
 import {activeExperiments} from '../store/config.js';
 import {formatUsd} from '../providers/prices.js';
@@ -98,7 +104,7 @@ export type Overlay =
   /** `/vault set NAME`: enter the value, hidden. */
   | {name: 'vault'; secret: string}
   | {name: 'model'}
-  | {name: 'settings'}
+  | {name: 'settings'; tab?: string}
   | {name: 'approval'; req: ApprovalRequest; resolve(d: ApprovalDecision): void; position: number; total: number}
   | {name: 'import'; rows: AccountRow[]}
   | {name: 'trust'; hooks: ProjectHooks}
@@ -481,6 +487,7 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
           t.restored.forEach((f) => changed.add(f));
           removedCount += t.removed.length;
           t.removed.forEach((f) => changed.add(f));
+          for (const f of t.failed) log('error', `Couldn't restore the snapshot of ${f}`);
         } catch (err) {
           log('error', `Couldn't restore the project snapshot: ${(err as Error).message}`);
         }
@@ -1236,6 +1243,88 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
         });
         break;
       }
+      case 'owners': {
+        const root = process.cwd();
+        const arg = parsed.args.trim();
+        void (arg ? Promise.resolve([arg]) : changedFiles(root)).then(async (files) => {
+          if (!files.length) return log('info', 'No changes (vs HEAD). /owners <path> looks up a file or folder.');
+          log('info', `Owners of ${arg || `your ${files.length} changed file${files.length === 1 ? '' : 's'}`}:\n${formatOwners(await ownersOf(root, files))}`);
+        });
+        break;
+      }
+      case 'index': {
+        const root = process.cwd();
+        const arg = parsed.args.trim();
+        const cfg = runtime.config.semanticIndex;
+        if (arg === 'status') {
+          const idx = loadIndex(root);
+          log('info', idx ? `Semantic index: ${Object.keys(idx.files).length} files, ${Object.values(idx.files).reduce((n, f) => n + f.chunks.length, 0)} chunks, ${idx.model}, built ${idx.built.slice(0, 16).replace('T', ' ')}.${cfg ? '' : ' Set semanticIndex in /settings to give the agent semantic_search.'}` : 'No semantic index for this project yet: /index builds it.');
+          break;
+        }
+        if (arg) {
+          void semanticSearch(root, cfg, arg, 8).then((hits) => log('info', formatSemanticHits(hits, 6)), (err) => log('error', (err as Error).message));
+          break;
+        }
+        log('info', `Indexing with ${cfg?.model || EMBED_MODEL} through Ollama…`);
+        let last = 0;
+        void buildIndex(root, cfg, (done, total) => {
+          if (done - last >= 500 || done === total) (last = done), log('info', `  embedded ${done} of ${total} chunks`);
+        }).then(
+          (r) => log('info', `Semantic index: ${r.files} files, ${r.chunks} chunks (${r.embedded} file${r.embedded === 1 ? '' : 's'} embedded, ${r.removed} removed).${cfg ? ' The agent can use semantic_search.' : ' Set semanticIndex in /settings (e.g. /settings semanticIndex {}) to give the agent semantic_search.'}`),
+          (err) => log('error', (err as Error).message),
+        );
+        break;
+      }
+      case 'map': {
+        const send = parsed.args.trim() === 'send';
+        void repoMap(process.cwd()).then((m) => {
+          if (!m.shown) return log('info', 'No source files with declarations here.');
+          const text = `Repo map (${m.shown} of ${m.files} files with declarations, top-level declarations only):\n${m.text}`;
+          if (!send) return log('info', `${text.split('\n').slice(0, 80).join('\n')}${text.split('\n').length > 80 ? '\n…' : ''}\n/map send gives the whole map to the agent.`);
+          const msg = `${text}\n\nUse this map to find your way; read only the files you need.`;
+          if (chat.busy) setQueued((q) => [...q, msg]);
+          else void chat.send(msg).then(bump);
+        });
+        break;
+      }
+      case 'pack': {
+        const root = process.cwd();
+        const [name = '', ...rest] = parsed.args.trim().split(/\s+/);
+        const {packs, error} = loadPacks(root);
+        if (error) {
+          log('error', error);
+          break;
+        }
+        if (name === 'save') {
+          const [packName, ...globs] = rest;
+          if (!packName || !globs.length) {
+            log('error', 'Usage: /pack save <name> <glob> [glob…], e.g. /pack save payments "services/payments/**" docs/payments.md');
+            break;
+          }
+          savePack(root, {name: packName, files: globs.map((g) => g.replace(/^["']|["']$/g, ''))});
+          log('info', `Saved context pack "${packName}" in .rein/packs.yaml. /pack ${packName} attaches it.`);
+          break;
+        }
+        if (!name) {
+          log('info', packs.length ? ['Context packs (.rein/packs.yaml):', ...packs.map((p) => `  ${p.name}  ${p.files.join(', ')}${p.note ? `  · ${p.note}` : ''}`), '/pack <name> [message] attaches one.'].join('\n') : 'No context packs yet. /pack save <name> <globs…> makes one (saved in .rein/packs.yaml).');
+          break;
+        }
+        const pack = packs.find((p) => p.name === name);
+        if (!pack) {
+          log('error', `No context pack "${name}".${packs.length ? ` Packs: ${packs.map((p) => p.name).join(', ')}.` : ''}`);
+          break;
+        }
+        void packFiles(root, pack).then(({files, more}) => {
+          if (!files.length) return log('error', `Context pack "${name}" matches no files (${pack.files.join(', ')}).`);
+          const text = packMessage(pack, files, parsed.args.trim().slice(name.length).trim());
+          if (more) log('info', `Context pack "${name}": attaching the first ${files.length} of ${files.length + more} files.`);
+          if (chat.busy) return setQueued((q) => [...q, text]);
+          const msg = attachments.current.expand(text);
+          add({kind: 'user', text, ...(msg.images.length ? {images: msg.images.map((i) => i.path)} : {})});
+          void chat.send(msg.text, msg.images).then(bump);
+        });
+        break;
+      }
       case 'pr': {
         const root = process.cwd();
         const [sub, arg] = parsed.args.trim().split(/\s+/);
@@ -1418,6 +1507,25 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
             const {updated, failed} = await linkPrs(prs);
             log(failed.length ? 'error' : 'info', [updated.length && `Linked ${updated.join(', ')}.`, ...failed].filter(Boolean).join('\n'));
           });
+          break;
+        }
+        if (wsSub === 'sparse') {
+          const [, repoName, ...folders] = parsed.args.trim().split(/\s+/);
+          if (repoName) {
+            const repo = ws.repos.find((r) => r.name === repoName && r.present);
+            if (!repo) log('error', `No cloned repo named ${repoName} in this workspace.`);
+            else if (!folders.length) log('error', 'Usage: /workspace sparse <repo> <folder> [folder…]');
+            else void checkoutState(repo.path).then(async (c) => {
+              if (!c.sparse) return log('error', `${repoName} isn't a sparse checkout: it has every folder already.`);
+              const r = await sparseAdd(repo.path, folders);
+              log(r.ok ? 'info' : 'error', r.ok ? `Checked out ${folders.join(', ')} in ${repoName}.` : r.output);
+              runtime.engine?.refreshTools();
+            });
+            break;
+          }
+          void Promise.all(ws.repos.filter((r) => r.present).map(async (r) => `  ${r.name}  ${describeCheckout(await checkoutState(r.path)) || 'full checkout'}`)).then((rows) =>
+            log('info', ['Checkouts:', ...rows, '/workspace sparse <repo> <folder…> checks out more folders of a sparse one.'].join('\n')),
+          );
           break;
         }
         if (parsed.args.trim() === 'clone') {
@@ -1701,6 +1809,11 @@ export function useRein(opts: {resume: Resume; renderer: Renderer; onClear(): vo
           } catch (err) {
             log('error', `Couldn't import: ${(err as Error).message}`);
           }
+          break;
+        }
+        // /settings general|agents|…: open on that tab.
+        if (sub && TAB_TITLES.some((t) => t.toLowerCase() === parsed.args.trim().toLowerCase())) {
+          setOverlay({name: 'settings', tab: parsed.args.trim()});
           break;
         }
         // /settings keys · /settings <key> [<value> | reset]: any key in config.json, from the prompt.

@@ -113,7 +113,7 @@ rein
 
 Rein keeps itself current:
 
-- **Auto-update on launch.** Each launch Rein asks npm for the latest release in the background. If a newer one exists, it installs it in a detached process and tells you `Rein updated 0.1.0 → 0.1.1 — restart rein to use it.` Startup is never delayed, and a lock file stops several Rein windows from installing at once. Turn it off in `/settings` → **Updates** → *Only when I run /update*, or set `REIN_NO_AUTOUPDATE=1`.
+- **Auto-update on launch.** Each launch Rein asks npm for the latest release in the background. If a newer one exists, it installs it in a detached process and tells you `Rein updated 0.1.0 → 0.1.1 — restart rein to use it.` Startup is never delayed, and a lock file stops several Rein windows from installing at once. Turn it off in `/settings` → **General → Updates** → *Only when I run /update*, or set `REIN_NO_AUTOUPDATE=1`.
 - **`rein --update`** (or **`/update`** inside Rein) updates everything in one go. It updates the `claude` CLI and then the `codex` CLI. Next it checks that Codex's app-server protocol still works with this Rein. Last, it installs the latest Rein from npm.
 
 ```sh

@@ -49,7 +49,8 @@ An existing `~/.rein` keeps being used as it is, and so does `REIN_HOME`. To swi
 | `sessions/<id>.jsonl` | Conversation transcripts, append-only: one line per message, plus meta lines (summary, native session refs, tokens, subagents, goal) and `progress` lines that record a running turn's tool calls, so a crash mid-turn loses nothing |
 | `sessions/<id>.meta.json` | Small index entry per conversation, used for listing and `/resume` |
 | `scratch/<id>/` | The session's scratchpad. The agent can write here without approval. Pasted and dropped images are copied to `scratch/<id>/images/` |
-| `checkpoints/<id>/` | [`/rewind`](../../features/rewind/) data: `tree.git` (a private git store of whole-project snapshots, never your project's `.git`), `trees.json`, and per-file checkpoints (`index.jsonl` + content-addressed `blobs/`, ≤ 10 MB per file) |
+| `checkpoints/<id>/` | [`/rewind`](../../features/rewind/) data: `tree.git` (a private git store of whole-project snapshots, never your project's `.git`), `trees.json`, and per-file checkpoints (`index.jsonl` + content-addressed `blobs/`, ≤ 10 MB per file); in a workspace, `repos/<repo>-<hash>/` holds the same snapshot store for each other repo |
+| `index/<hash>.json` | [Semantic indexes](../../features/large-codebases/#search-by-meaning), one per project: each file's change key and its chunks' vectors. `/index` rebuilds it |
 | `skills/` | Global skills, one folder each with a `SKILL.md` |
 | `mcp.json` | User-scope MCP servers (`mcp_add` with `scope: "user"`) |
 | `settings.json` | Global permission rules and hooks (Claude Code format) |
@@ -78,6 +79,7 @@ When Rein imports your existing `claude` and `codex` logins on first run, it reg
 | `.rein/settings.json` | Project permission rules and hooks. "Always allow" in an approval prompt saves rules here | Yes, if the team shares rules |
 | `.rein/settings.local.json` | Personal project rules, plus `enabledMcpjsonServers` (the project `.mcp.json` servers you approved) | No |
 | `.rein/MEMORY.md` | [Project memory](../../features/memory/): facts the agent saved with `remember`, loaded into every session here. Edit it freely | Usually |
+| `.rein/MEMORY.md` in a workspace folder | [Workspace memory](../../features/workspaces/#workspace-memory): facts shared by every repo of the workspace (`remember` with `scope: "workspace"`) | Usually |
 | `.rein/plans/` | Saved plans, `YYYY-MM-DD-<slug>.md`, with `## Milestones` checkboxes | Yes |
 | `.rein/skills/` | Project skills | Yes |
 | `.mcp.json` *(project root)* | Project MCP servers (`mcp_add` default scope). Each one needs your one-time approval before it runs | Yes |
@@ -102,6 +104,10 @@ Existing Claude Code rules and hooks keep working: `Bash(npm test:*)`, `Edit(src
 ### MCP servers
 
 Earlier sources win on a name clash: `<project>/.mcp.json`, then `~/.rein/mcp.json`, then `~/.claude.json` (servers added with `claude mcp add`). `${VAR}` and `${VAR:-default}` are expanded from your environment. See [MCP](../../features/mcp/).
+
+### Context packs
+
+`<project>/.rein/packs.yaml`: named file bundles that `/pack <name>` attaches. See [Context packs](../../features/large-codebases/#context-packs).
 
 ### Policy
 
@@ -132,6 +138,7 @@ Added to the system prompt for every provider, up to 64 KB each, duplicates remo
 | `REIN_KEYCHAIN` | `1` (macOS): keep using the Keychain for secrets even with `REIN_HOME` set |
 | `REIN_CLAUDE_BIN` | Path to the `claude` binary (default: `claude` on `PATH`) |
 | `REIN_CODEX_BIN` | Path to the `codex` binary (default: `codex` on `PATH`) |
+| `SRC_ACCESS_TOKEN` | Sourcegraph access token for [`org_search`](../../features/large-codebases/#search-the-whole-org) (`codeSearch` in config) |
 | `HTTPS_PROXY`, `HTTP_PROXY`, `ALL_PROXY`, `NO_PROXY` | Route Rein's own requests through a proxy (never local connections). See [Install → Behind a corporate proxy](../../start/install/#behind-a-corporate-proxy) |
 | `NODE_EXTRA_CA_CERTS` | A PEM file of extra CA certificates, for a TLS-inspecting proxy (read by Node at startup) |
 | `XDG_CONFIG_HOME`, `XDG_DATA_HOME`, `XDG_STATE_HOME` | Where a new install keeps its config, data and state on Linux (see above) |
@@ -180,6 +187,7 @@ Quit Rein first.
 | `checkpoints/` | Yes | `/rewind` for past conversations |
 | `voice/` | Yes | The speech model (`/voice setup` downloads it again) |
 | `lsp/` | Yes | Installed language servers (the agent offers to install them again) |
+| `index/` | Yes | Semantic indexes (`/index` builds them again) |
 | `sessions/` | Yes | Conversation history: `/resume`, `rein --continue`, `sessions_search` |
 | `config.json` | Yes | Your settings (defaults return) |
 | `accounts/<provider>/<id>/` | **No.** Use `/login` → remove | The login of an account you added. Deleting it by hand leaves `accounts.json` pointing at a missing folder |
