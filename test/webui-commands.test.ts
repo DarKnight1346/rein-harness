@@ -92,6 +92,9 @@ describe('web UI commands (the real worker)', () => {
     expect((await ask('setting', {key: 'maxUsedPct', value: '85', typed: true})).value.advanced.find((k: any) => k.key === 'maxUsedPct').value).toBe('85');
     expect(JSON.parse(readFileSync(path.join(home, 'config.json'), 'utf8')).maxUsedPct).toBe(85);
     expect((await call(`/api/chats/${id}/request`, {op: 'setting', args: {key: 'maxUsedPct', value: 'lots', typed: true}})).json.error).toMatch(/is a number/);
+    // A choice must be one of the tab's; any other value is refused.
+    expect((await ask('setting', {key: 'toolApproval', value: 'auto'})).value.groups[0].settings[0].value).toBe('auto');
+    expect((await call(`/api/chats/${id}/request`, {op: 'setting', args: {key: 'chatModel', value: {evil: true}}})).json.error).toMatch(/isn't one of the choices/);
     await ask('layout', {key: 'statusLine', ids: ['messages', 'context']});
 
     // The status line follows the layout.
@@ -110,5 +113,12 @@ describe('web UI commands (the real worker)', () => {
     evs = events(id, (ev) => ev.type === 'log' && /terminal renderer/.test(ev.text));
     await call(`/api/chats/${id}/send`, {text: '/tui classic'});
     expect((await evs).at(-1).text).toBe('The web UI has one layout; /tui switches the terminal renderer.');
+
+    // /clear empties the conversation on the page too: a fresh snapshot follows the clear.
+    let sawClear = false;
+    evs = events(id, (ev) => (ev.type === 'clear' && (sawClear = true), sawClear && ev.type === 'snapshot'));
+    await new Promise((r) => setTimeout(r, 200));
+    await call(`/api/chats/${id}/send`, {text: '/clear'});
+    expect((await evs).at(-1)).toMatchObject({type: 'snapshot', snapshot: {messages: []}});
   }, 90_000);
 });

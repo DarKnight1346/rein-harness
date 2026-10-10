@@ -242,7 +242,12 @@ export async function runWorker(): Promise<number> {
       if (e.kind === 'update') return log('info', String((e.line as any).text ?? e.line));
       if (e.kind === 'compact') return send({t: 'event', ev: {type: 'notice', text: 'skipped' in e.result ? `Nothing to compact: ${e.result.skipped}` : `Compacted ${e.result.summarized} messages.`}});
     },
-    setEntries: () => send({t: 'event', ev: {type: 'clear'}}),
+    // /clear: the engine is reset by the command; the page gets the empty conversation.
+    setEntries: () => {
+      queue = [];
+      send({t: 'event', ev: {type: 'clear'}});
+      send({t: 'snapshot', snapshot: snapshot()});
+    },
     banner: () => ({id: 0, kind: 'banner', text: ''}),
     bump: chrome,
     chat: {

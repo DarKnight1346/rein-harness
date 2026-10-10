@@ -164,7 +164,13 @@ export function settingsView(tab?: string): SettingsView {
 export async function applySetting(key: string, value: unknown, typed: boolean): Promise<void> {
   const info = CONFIG_KEYS.find((i) => i.key === key);
   if (!info) throw new Error(`there's no setting "${key}"`);
-  const v = typed ? (String(value).trim() === '' ? undefined : parseValue(info, String(value))) : value;
+  // A choice (General, Agents, Accounts, Safety) must be one the tab offers; anything else is typed and parsed.
+  if (!typed) {
+    const choice = CHOICE_TABS.find((d) => d.key === key)?.choices.find((c) => JSON.stringify(c.value) === JSON.stringify(value));
+    if (!choice) throw new Error(`that isn't one of the choices for ${key}`);
+    return runtime.setConfig({[key]: choice.value} as never);
+  }
+  const v = String(value).trim() === '' ? undefined : parseValue(info, String(value));
   await runtime.setConfig({[key]: v} as never);
 }
 
