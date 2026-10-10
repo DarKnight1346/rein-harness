@@ -233,7 +233,7 @@ export async function runWorker(): Promise<number> {
   const panels = await import('./panels.js');
   const nodePath = await import('node:path');
   const {rewindPoints, rewindTo} = await import('../session/rewind.js');
-  const {previewTool} = await import('../preview/tool.js');
+  const {previewTool, remoteInstallTool} = await import('../preview/tool.js');
   const {BrowserView} = await import('../preview/cdp.js');
   const {VncView, NeedsPassword} = await import('../preview/vnc.js');
   const label = (ref: {provider: string; model: string}) => catalog.get(ref as Parameters<typeof catalog.get>[0])?.label ?? ref.model;
@@ -575,6 +575,7 @@ export async function runWorker(): Promise<number> {
         await runtime.loadExtensions().catch(() => {});
         // The agent can show the user what it made, live, wherever they are (web UI chats only).
         runtime.tools.register(previewTool(runtime.previews, (id) => send({t: 'event', ev: {type: 'preview-show', id}}), () => runtime.config.reinRemote));
+        runtime.tools.register(remoteInstallTool());
         runtime.engine.refreshTools();
         skills = loadSkills();
         return send({t: 'ready', snapshot: snapshot()});

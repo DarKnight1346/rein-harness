@@ -5,9 +5,9 @@ import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {afterEach, beforeEach, describe, expect, it} from 'vitest';
+import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {Previews} from '../src/preview/registry.js';
-import {remoteBinary, remoteWindows, startRemote} from '../src/preview/remote.js';
+import {installRemote, parseSums, remoteBinary, remoteTarget, remoteWindows, startRemote} from '../src/preview/remote.js';
 import {previewTool} from '../src/preview/tool.js';
 import {saveWebConfig} from '../src/webui/auth.js';
 import {startServer} from '../src/webui/server.js';
@@ -157,5 +157,55 @@ else if (cmd === 'serve') { console.error('args=' + rest.join(' ')); console.err
     // Without rein-remote: says what it needs.
     const none = previewTool(new Previews(), () => {}, () => 'off');
     expect((await none.run({} as never, {window: 'iphone'})).text).toMatch(/needs Rein Remote/);
+  });
+
+  it('names the release build for each machine and reads SHA256SUMS', () => {
+    expect(remoteTarget('darwin', 'arm64')).toBe('aarch64-apple-darwin');
+    expect(remoteTarget('linux', 'x64')).toBe('x86_64-unknown-linux-gnu');
+    expect(remoteTarget('win32', 'x64')).toBe('x86_64-pc-windows-msvc');
+    expect(remoteTarget('win32', 'arm64')).toBeUndefined();
+    const h = 'a'.repeat(64);
+    expect(parseSums(`${h}  rein-remote-v1-x.tar.gz\n${'b'.repeat(64)} *other.zip\n`)).toEqual(new Map([['rein-remote-v1-x.tar.gz', h], ['other.zip', 'b'.repeat(64)]]));
+  });
+
+  it('installs the release build only when it matches its SHA256SUMS', async () => {
+    if (process.platform === 'win32') return;
+    const {execFileSync} = await import('node:child_process');
+    const {createHash} = await import('node:crypto');
+    const {existsSync, mkdirSync, readFileSync} = await import('node:fs');
+    const target = remoteTarget()!;
+    const tag = 'v0.1.0';
+    const name = `rein-remote-${tag}-${target}`;
+    mkdirSync(path.join(home, 'pkg', name), {recursive: true});
+    writeFileSync(path.join(home, 'pkg', name, 'rein-remote'), '#!/bin/sh\necho rein-remote 0.1.0\n');
+    chmodSync(path.join(home, 'pkg', name, 'rein-remote'), 0o755);
+    execFileSync('tar', ['czf', path.join(home, `${name}.tar.gz`), '-C', path.join(home, 'pkg'), name]);
+    const archive = readFileSync(path.join(home, `${name}.tar.gz`));
+    const serve = (sums: string) =>
+      vi.fn(async (url: string) => {
+        if (url.includes('/releases/latest')) return new Response(JSON.stringify({tag_name: tag, assets: [{name: `${name}.tar.gz`}, {name: 'SHA256SUMS'}]}));
+        if (url.endsWith('/SHA256SUMS')) return new Response(sums);
+        if (url.endsWith(`/${name}.tar.gz`)) return new Response(archive);
+        return new Response('', {status: 404});
+      });
+    const good = `${createHash('sha256').update(archive).digest('hex')}  ${name}.tar.gz\n`;
+    const dest = path.join(home, 'bin', 'rein-remote');
+    // A tampered archive (the sums say otherwise): nothing is installed.
+    vi.stubGlobal('fetch', serve(`${'0'.repeat(64)}  ${name}.tar.gz\n`));
+    try {
+      const bad = await installRemote();
+      expect(bad.ok).toBe(false);
+      expect(bad.text).toMatch(/doesn't match its SHA256SUMS/);
+      expect(existsSync(dest)).toBe(false);
+      vi.stubGlobal('fetch', serve(''));
+      expect((await installRemote()).text).toMatch(/doesn't list/);
+      vi.stubGlobal('fetch', serve(good));
+      const ok = await installRemote();
+      expect(ok).toMatchObject({ok: true});
+      expect(execFileSync(dest).toString()).toContain('rein-remote 0.1.0');
+      expect(remoteBinary('auto')).toBe(dest);
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 });

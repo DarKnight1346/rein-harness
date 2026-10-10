@@ -262,6 +262,14 @@ export function runCommand(raw: string, ui: CommandUi): void {
         log('info', ['Previews:', ...all.map((p) => `  ${p.id}. ${p.kind === 'url' ? '◫' : '▣'} ${p.title}  ${p.target}${p.source === 'detected' ? '  (from a command)' : ''}`), '/preview <n> opens one.'].join('\n'));
         break;
       }
+      if (arg === 'install') {
+        void import('../preview/remote.js').then(async ({installRemote}) => {
+          log('info', 'Installing Rein Remote…');
+          const r = await installRemote();
+          log(r.ok ? 'info' : 'error', r.text);
+        });
+        break;
+      }
       const byId = all.find((p) => String(p.id) === arg.replace('#', ''));
       if (byId) return open(byId);
       const vnc = /^(vnc:\/\/)?[\w.[\]-]*:\d+$/i.test(arg) && !/^https?:/i.test(arg) ? vncTarget(arg) : undefined;

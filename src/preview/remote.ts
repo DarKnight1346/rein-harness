@@ -73,3 +73,75 @@ export function startRemote(bin: string, what: number | {window: string}, timeou
     });
   });
 }
+
+export const REMOTE_REPO = 'rein-harness/rein-remote';
+
+/** The release build for this machine (Rust's target names), or undefined where there's none. */
+export function remoteTarget(platform = process.platform, arch = process.arch): string | undefined {
+  const cpu = arch === 'arm64' ? 'aarch64' : arch === 'x64' ? 'x86_64' : undefined;
+  if (!cpu) return undefined;
+  if (platform === 'darwin') return `${cpu}-apple-darwin`;
+  if (platform === 'linux') return `${cpu}-unknown-linux-gnu`;
+  if (platform === 'win32' && cpu === 'x86_64') return 'x86_64-pc-windows-msvc';
+  return undefined;
+}
+
+/** `sha256  name` lines (sha256sum's format) as name → hash. */
+export function parseSums(text: string): Map<string, string> {
+  const out = new Map<string, string>();
+  for (const line of text.split('\n')) {
+    const m = line.trim().match(/^([0-9a-f]{64})\s+\*?(.+)$/i);
+    if (m) out.set(m[2]!.trim(), m[1]!.toLowerCase());
+  }
+  return out;
+}
+
+/**
+ * Install Rein Remote's latest release into ~/.rein/bin: this machine's build, checked against the
+ * release's SHA256SUMS before anything is unpacked. Asked for by the user (/preview install) or the
+ * agent's remote_install tool (which always asks first).
+ */
+export async function installRemote(fetchImpl: typeof fetch = fetch): Promise<{ok: boolean; text: string}> {
+  const {createHash} = await import('node:crypto');
+  const {copyFileSync, chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync} = await import('node:fs');
+  const os = await import('node:os');
+  const {latestRelease, unpack, findFile} = await import('../lsp/servers.js');
+  const target = remoteTarget();
+  if (!target) return {ok: false, text: `Rein Remote has no build for ${process.platform}/${process.arch} yet.`};
+  try {
+    const {tag, assets} = await latestRelease(REMOTE_REPO);
+    const asset = `rein-remote-${tag}-${target}.${process.platform === 'win32' ? 'zip' : 'tar.gz'}`;
+    if (!assets.includes(asset)) return {ok: false, text: `Rein Remote ${tag} has no ${asset}.`};
+    const get = async (name: string) => {
+      const r = await fetchImpl(`https://github.com/${REMOTE_REPO}/releases/download/${tag}/${name}`);
+      if (!r.ok) throw new Error(`download of ${name} failed (HTTP ${r.status})`);
+      return Buffer.from(await r.arrayBuffer());
+    };
+    const want = parseSums((await get('SHA256SUMS')).toString('utf8')).get(asset);
+    if (!want) return {ok: false, text: `Rein Remote ${tag}'s SHA256SUMS doesn't list ${asset}: not installing it.`};
+    const archive = await get(asset);
+    const got = createHash('sha256').update(archive).digest('hex');
+    if (got !== want) return {ok: false, text: `${asset} doesn't match its SHA256SUMS (expected ${want}, got ${got}): not installing it.`};
+    const tmp = mkdtempSync(path.join(os.tmpdir(), 'rein-remote-'));
+    try {
+      const file = path.join(tmp, asset);
+      writeFileSync(file, archive);
+      const exe = process.platform === 'win32' ? 'rein-remote.exe' : 'rein-remote';
+      const out = path.join(tmp, 'out');
+      mkdirSync(out);
+      await unpack(file, asset, out, path.join(`rein-remote-${tag}-${target}`, exe)).catch(() => {});
+      const found = findFile(out, exe);
+      if (!found) return {ok: false, text: `${exe} wasn't in ${asset}.`};
+      const dir = path.join(reinHome(), 'bin');
+      mkdirSync(dir, {recursive: true});
+      const dest = path.join(dir, exe);
+      copyFileSync(found, dest);
+      if (process.platform !== 'win32') chmodSync(dest, 0o755);
+      return {ok: true, text: `Installed Rein Remote ${tag} (${target}) to ${dest}, checked against its SHA256SUMS.`};
+    } finally {
+      rmSync(tmp, {recursive: true, force: true});
+    }
+  } catch (err) {
+    return {ok: false, text: `Couldn't install Rein Remote: ${(err as Error).message}`};
+  }
+}

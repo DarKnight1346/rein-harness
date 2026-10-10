@@ -751,7 +751,7 @@ export function findFile(dir: string, name: string, depth = 4): string | undefin
   return undefined;
 }
 
-async function latestRelease(repo: string): Promise<{tag: string; assets: string[]}> {
+export async function latestRelease(repo: string): Promise<{tag: string; assets: string[]}> {
   const rel = await fetch(`https://api.github.com/repos/${repo}/releases/latest`, {headers: {accept: 'application/vnd.github+json', 'user-agent': 'rein-harness'}});
   if (!rel.ok) throw new Error(`couldn't read ${repo}'s latest release (HTTP ${rel.status})`);
   const j = (await rel.json()) as {tag_name: string; assets?: {name: string}[]};

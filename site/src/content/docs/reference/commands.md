@@ -74,7 +74,7 @@ See [Goals](../../features/goals/) and [Plan mode](../../features/plans/).
 | | `<id> <message>` | Sends a message to that subagent (useful in classic). |
 | `/shells` | *(none)* | Shell commands the agent started. Open one to see its logs (`k` kills it). |
 | | `<id>` | Opens that shell's logs directly. |
-| `/preview` | `[<n> \| <url> \| <:display or host:port>]` | [Previews](../../features/previews/) of what the agent made with a screen: web servers it started (found in their output) and displays. No argument lists them; `<n>` opens one (the web UI shows it live beside the chat; the terminal opens your browser, or your VNC viewer for a display); a URL or a display adds one. In the web UI, **+ Preview** also takes `window:<app or title>` for [any app's window](../../features/previews/#any-apps-window). |
+| `/preview` | `[<n> \| <url> \| <:display or host:port>]` | [Previews](../../features/previews/) of what the agent made with a screen: web servers it started (found in their output) and displays. No argument lists them; `<n>` opens one (the web UI shows it live beside the chat; the terminal opens your browser, or your VNC viewer for a display); a URL or a display adds one. `/preview install` installs [Rein Remote](../../features/previews/#video-with-rein-remote) (checked against its release's `SHA256SUMS`). In the web UI, **+ Preview** also takes `window:<app or title>` for [any app's window](../../features/previews/#any-apps-window). |
 
 ### Project and permissions
 

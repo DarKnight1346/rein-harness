@@ -88,9 +88,11 @@ when the `rein-remote` binary is in `~/.rein/bin` or on your `PATH`:
 - The pane's address shows **· video** while it streams this way.
 
 With `rein-remote` installed, `Xvfb` alone is enough for a virtual display (`x11vnc` isn't needed,
-though Rein starts it too when it's there, for the fallback below). It isn't bundled with Rein yet:
-build it from its repository (`cargo build --release -p rr-server`, then copy
-`target/release/rein-remote` to `~/.rein/bin/`). Turn it off with
+though Rein starts it too when it's there, for the fallback below). Install it with
+[`/preview install`](../../reference/commands/): Rein downloads the latest release for your
+computer from [its repository](https://github.com/rein-harness/rein-remote/releases), checks it against
+the release's `SHA256SUMS`, and puts it in `~/.rein/bin/`. The agent can offer the same
+(`remote_install`, which always asks you first). Turn it off with
 [`/settings reinRemote off`](../../reference/configuration/), or point the setting at a binary.
 
 The stream is a WebSocket on the web UI's own address, after the same sign-in and checks as the rest

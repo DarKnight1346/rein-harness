@@ -435,6 +435,10 @@ Label `Stack`. Approval: **mutating**. From the [Multi-repo systems](../../featu
 
 `up` runs `docker compose up -d --wait` and reports each service's state, health and ports. See [The services a change needs](../../features/system/#the-services-a-change-needs).
 
+### `remote_install`
+
+Label `InstallReinRemote`. Approval: **always asks, even in bypass mode.** Offered in [web UI](../../features/web-ui/) chats with the `preview` tool. Installs [Rein Remote](../../features/previews/#video-with-rein-remote) into `~/.rein/bin`: the latest release for this computer, checked against the release's `SHA256SUMS` before anything is unpacked (a mismatch installs nothing). No parameters. The `preview` tool's `window` suggests it when Rein Remote isn't there.
+
 ### `lsp_install`
 
 Label `InstallLanguageServer`. Approval: **always asks, even in bypass mode.**

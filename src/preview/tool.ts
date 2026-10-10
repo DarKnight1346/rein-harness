@@ -1,7 +1,7 @@
 import type {ToolDef} from '../tools/registry.js';
 import {startDisplay} from './display.js';
 import {vncTarget, type Previews} from './registry.js';
-import {remoteBinary, remoteWindows, startRemote, type RemoteStream} from './remote.js';
+import {installRemote, remoteBinary, remoteWindows, startRemote, type RemoteStream} from './remote.js';
 
 /**
  * `preview`: the agent shows the user something with a screen. A web app it started (a URL, local
@@ -49,7 +49,14 @@ export function previewTool(previews: Previews, opened: (id: number) => void, re
       }
       if (typeof args?.window === 'string' && args.window.trim()) {
         const bin = remoteBinary(reinRemote());
-        if (!bin) return {ok: false, text: "Showing a window needs Rein Remote (rein-remote in ~/.rein/bin or on PATH, from github.com/rein-harness/rein-remote), and the reinRemote setting isn't off."};
+        if (!bin)
+          return {
+            ok: false,
+            text:
+              reinRemote() === 'off'
+                ? 'Showing a window needs Rein Remote, and the reinRemote setting is off.'
+                : "Showing a window needs Rein Remote, which isn't installed: the user can run /preview install, or you can install it with remote_install (it asks them).",
+          };
         try {
           const list = await remoteWindows(bin);
           const want = args.window.trim();
@@ -97,5 +104,20 @@ export function previewTool(previews: Previews, opened: (id: number) => void, re
       const known = previews.list();
       return {ok: false, text: `Give a url, a vnc address or a window.${known.length ? ` Previews now: ${known.map((p) => `#${p.id} ${p.target}`).join(', ')}.` : ''}`};
     },
+  };
+}
+
+/** `remote_install`: Rein Remote's latest release into ~/.rein/bin (checked against its SHA256SUMS). Always asks. */
+export function remoteInstallTool(): ToolDef {
+  return {
+    name: 'remote_install',
+    label: 'InstallReinRemote',
+    description: "Install Rein Remote (Rein's screen streaming, for window previews and video) into Rein's own folder, from its GitHub release, checked against the release's checksums. Always asks the user; use it when they want a window preview and it isn't installed.",
+    inputSchema: {type: 'object', properties: {}},
+    mutating: true,
+    alwaysAsk: true,
+    askEvenInBypass: true,
+    summarize: () => 'Rein Remote',
+    run: async () => installRemote(),
   };
 }
