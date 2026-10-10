@@ -25,6 +25,7 @@ const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({'&': '&amp;', '<': '&l
 
 const ICONS = {
   plus: 'M12 5v14M5 12h14', send: 'M5 12h14M13 5l7 7-7 7', stop: 'M7 7h10v10H7z', folder: 'M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z', file: 'M6 3h8l4 4v14H6zM14 3v4h4', chat: 'M4 5h16v11H8l-4 4z', gear: 'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z',
+  archive: 'M3 5h18v4H3zM5 9v10h14V9M10 13h4', restore: 'M4 12a8 8 0 1 0 2.3-5.7M4 4v5h5', back: 'M19 12H5M11 5l-7 7 7 7', forward: 'M5 12h14M13 5l7 7-7 7', home: 'M3 11l9-7 9 7v9H5v-9', drive: 'M3 15h18v5H3zM6 17.5h.01M3 15l3-10h12l3 10',
   menu: 'M4 6h16M4 12h16M4 18h16', panel: 'M4 5h16v14H4zM15 5v14', up: 'M12 19V5M5 12l7-7 7 7', upload: 'M12 16V4M6 10l6-6 6 6M4 20h16', refresh: 'M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7', search: 'M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14zM21 21l-5-5', more: 'M5 12h.01M12 12h.01M19 12h.01', x: 'M6 6l12 12M18 6L6 18', eye: 'M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12zM12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z', download: 'M12 4v12M6 10l6 6 6-6M4 20h16', newfolder: 'M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2zM12 10v6M9 13h6',
 };
 const icon = (name, size = 18) => {
@@ -99,6 +100,8 @@ const ago = (ms) => {
 const base = (p) => p.replace(/[\\/]+$/, '').split(/[\\/]/).pop() || p;
 const sep = () => (state.platform === 'win32' ? '\\' : '/');
 const join = (dir, name) => (dir.endsWith('/') || dir.endsWith('\\') ? dir + name : dir + sep() + name);
+/** A one-off chat's own folder (no project): don't show its name as if it were one. */
+const isOneOff = (p) => !!state.oneOffRoot && !!p && p.startsWith(state.oneOffRoot);
 const tilde = (p) => (state.home && p.startsWith(state.home) ? '~' + p.slice(state.home.length) : p);
 
 // ---------- state ----------
@@ -127,7 +130,7 @@ async function boot() {
   applyTheme();
   try {
     const s = await api('/api/state', {quiet: true});
-    Object.assign(state, {setup: s.setup, mode: s.mode, me: s.user, home: s.home, platform: s.platform, version: s.version});
+    Object.assign(state, {setup: s.setup, mode: s.mode, me: s.user, home: s.home, platform: s.platform, version: s.version, oneOffRoot: s.oneOffRoot});
   } catch (err) {
     document.getElementById('app').replaceChildren(h('div.center', h('div.card', h('h1', "Can't reach Rein"), h('p.lead', String(err.message)))));
     return;
@@ -145,9 +148,8 @@ function applyTheme() {
 }
 
 async function afterSignIn() {
-  await loadProjects();
+  await loadSidebar();
   if (!state.project && state.projects[0]) state.project = state.projects[0].path;
-  await loadChats();
 }
 
 function setupView() {
@@ -244,17 +246,25 @@ const go = (hash) => {
 
 // ---------- data ----------
 
-async function loadProjects() {
-  state.projects = (await api('/api/projects')).projects;
+/** The sidebar's data: projects you opened with their chats, one-off chats, archived ones. */
+async function loadSidebar() {
+  state.side = await api('/api/sidebar');
+  state.projects = state.side.projects.map((p) => ({path: p.path, name: p.name}));
+  if (state.project && !state.projects.some((p) => p.path === state.project)) state.project = state.projects[0]?.path ?? '';
 }
-async function loadChats() {
-  state.chats = await api(`/api/chats${state.project ? `?project=${encodeURIComponent(state.project)}` : ''}`);
-}
+const loadProjects = loadSidebar;
+const loadChats = loadSidebar;
 function setProject(p) {
   state.project = p;
   localStorage.setItem('rein.project', p);
-  void loadChats().then(render);
+  void loadSidebar().then(render);
 }
+const collapsed = new Set(JSON.parse(localStorage.getItem('rein.collapsed') ?? '[]'));
+const toggleCollapsed = (key) => {
+  collapsed.has(key) ? collapsed.delete(key) : collapsed.add(key);
+  localStorage.setItem('rein.collapsed', JSON.stringify([...collapsed]));
+  renderSide();
+};
 
 // ---------- the shell ----------
 
@@ -269,24 +279,65 @@ function render() {
 }
 
 function sidebar() {
-  const proj = state.projects.find((p) => p.path === state.project);
-  const openIds = new Set(state.chats.open.map((c) => c.session).filter(Boolean));
-  const chatBtn = (c, saved) =>
-    h('button.side-item' + (state.view === 'chat' && state.chat && (state.chat.id === c.id || state.chat.snapshot?.session === c.session) ? '.active' : ''), {
-      on: {click: () => (saved ? void openSaved(c.session) : go(`#/chat/${c.id}`))},
-      title: c.title,
-    }, h('span.dot' + (c.waiting ? '.wait' : c.busy ? '.busy' : '')), h('span.t', c.title || 'New chat'), saved ? h('span.meta', ago(c.updatedAt)) : null);
+  const side = state.side ?? {projects: [], oneoff: {open: [], saved: []}, archived: []};
+  const active = (c) => state.view === 'chat' && state.chat && (state.chat.id === c.id || (c.session && state.chat.snapshot?.session === c.session));
+  const archive = async (session, on = true) => {
+    try {
+      await api('/api/chats/archive', {body: {session, archived: on}});
+      if (on && state.chat?.snapshot?.session === session) ((state.chat.es?.close(), (state.chat = undefined)), go('#/chat'));
+      await loadSidebar();
+      renderSide();
+      toast(on ? 'Archived. Restore it from Archived at the bottom.' : 'Restored.');
+    } catch (err) {
+      toast(err.message, 'error');
+    }
+  };
+  const chatRow = (c, saved, cwd) => {
+    const session = saved ? c.session : c.session;
+    return h('div.chat-row' + (active(c) ? '.active' : ''),
+      h('button.side-item', {on: {click: () => (saved ? void openSaved(c.session, cwd) : go(`#/chat/${c.id}`))}, title: c.title},
+        h('span.dot' + (c.waiting ? '.wait' : c.busy ? '.busy' : saved ? '' : '.ok')), h('span.t', c.title || 'New chat'), saved && c.updatedAt ? h('span.meta', ago(c.updatedAt)) : null),
+      session ? h('button.row-act', {title: 'Archive', on: {click: (e) => (e.stopPropagation(), archive(session))}}, icon('archive', 15)) : null,
+    );
+  };
+  const chatsOf = (g, cwd) => [...g.open.map((c) => chatRow(c, false, cwd)), ...g.saved.map((c) => chatRow(c, true, cwd))];
+  const project = (p) => {
+    const key = `p:${p.path}`;
+    const closed = collapsed.has(key);
+    const n = p.open.length + p.saved.length;
+    return h('div.proj' + (state.project === p.path ? '.current' : ''),
+      h('div.proj-head',
+        h('button.proj-toggle', {title: closed ? 'Expand' : 'Collapse', on: {click: () => toggleCollapsed(key)}}, h('span.chev' + (closed ? '' : '.open'), '›'), icon('folder', 15), h('span.t', p.name), closed && n ? h('span.meta', String(n)) : null),
+        h('button.row-act', {title: `New chat in ${p.name}`, on: {click: () => newChat(p.path)}}, icon('plus', 15)),
+        h('button.row-act', {title: 'More', on: {click: (e) => menu(e, [
+          ['New chat here', () => newChat(p.path)],
+          ['Show the files', () => go(`#/files?path=${encodeURIComponent(p.path)}`)],
+          null,
+          ['Close the project', () => closeProject(p)],
+        ])}}, icon('more', 15)),
+      ),
+      closed ? null : h('div.proj-chats', n ? chatsOf(p, p.path) : h('div.empty-row', 'No chats yet')),
+    );
+  };
+  const oneoffN = side.oneoff.open.length + side.oneoff.saved.length;
   return h('aside.side',
     h('div.side-top',
       h('div.brand', h('span.brandmark', '▁▃▅▇'), h('span', 'Rein')),
-      h('button.project-btn', {on: {click: pickProject}, title: state.project}, icon('folder', 16), h('span.t', proj?.name ?? (state.project ? base(state.project) : 'Open a project…'), state.project ? h('span.p', tilde(state.project)) : null)),
-      h('button.btn.primary', {disabled: !state.project, on: {click: newChat}}, icon('plus', 16), 'New chat'),
+      h('div.side-actions',
+        h('button.btn.primary', {title: 'A chat without a project', on: {click: () => newChat()}}, icon('plus', 16), 'New chat'),
+        h('button.btn', {title: 'Open a folder as a project', on: {click: pickProject}}, icon('folder', 16), 'Open project'),
+      ),
     ),
     h('div.side-scroll',
-      state.chats.open.length ? [h('div.side-label', 'Open'), state.chats.open.map((c) => chatBtn(c, false))] : null,
-      h('div.side-label', 'Recent'),
-      state.chats.saved.filter((s) => !openIds.has(s.session)).slice(0, 60).map((s) => chatBtn(s, true)),
-      !state.chats.saved.length && !state.chats.open.length ? h('div.muted', {style: {padding: '6px 9px', fontSize: '13px'}}, state.project ? 'No conversations here yet.' : 'Open a project to start.') : null,
+      oneoffN ? [h('div.side-label', 'Chats'), chatsOf(side.oneoff)] : null,
+      h('div.side-label', 'Projects'),
+      side.projects.length ? side.projects.map(project) : h('div.empty-row', 'Open a folder to work in it.'),
+      side.archived.length ? [
+        h('button.side-label.toggle', {on: {click: () => toggleCollapsed('archived')}}, h('span', `Archived (${side.archived.length})`), h('span.chev' + (collapsed.has('archived') ? '' : '.open'), '›')),
+        collapsed.has('archived') ? null : side.archived.map((c) => h('div.chat-row.archived',
+          h('button.side-item', {title: c.cwd ? tilde(c.cwd) : '', on: {click: () => openSaved(c.session, c.cwd)}}, h('span.dot'), h('span.t', c.title || 'Chat'), c.updatedAt ? h('span.meta', ago(c.updatedAt)) : null),
+          h('button.row-act', {title: 'Restore', on: {click: () => archive(c.session, false)}}, icon('restore', 15)))),
+      ] : null,
     ),
     h('div.side-bottom',
       h('button.side-item' + (state.view === 'files' ? '.active' : ''), {on: {click: () => go(`#/files?path=${encodeURIComponent(state.project || state.home)}`)}}, icon('folder', 16), h('span.t', 'Files')),
@@ -295,84 +346,195 @@ function sidebar() {
   );
 }
 
+async function closeProject(p) {
+  try {
+    await api('/api/projects/close', {body: {path: p.path}});
+    if (state.chat && state.chat.snapshot?.cwd === p.path && !state.chat.busy) ((state.chat.es?.close(), (state.chat = undefined)), go('#/chat'));
+    if (state.project === p.path) state.project = '';
+    await loadSidebar();
+    render();
+    toast(`Closed ${p.name}. Its chats are kept: open the folder again to see them.`);
+  } catch (err) {
+    toast(err.message, 'error');
+  }
+}
+
 const topbar = (title, extra = []) => h('div.topbar', h('button.icon-btn.menu-btn', {on: {click: () => ((state.sideOpen = true), render())}, 'aria-label': 'Menu'}, icon('menu')), h('div.title', title), ...extra);
 
 // ---------- projects ----------
 
 function pickProject() {
-  folderPicker({title: 'Open a project', start: state.project || state.home, recent: state.projects, onPick: async (dir) => {
+  openDialog({title: 'Open a project', start: state.project || state.home, action: 'Open', onPick: async (dir) => {
     await api('/api/projects', {body: {path: dir}});
-    await loadProjects();
+    collapsed.delete(`p:${dir}`);
     setProject(dir);
     go('#/chat');
   }});
 }
+/** Move to… / Copy to…: the same dialog. */
+const folderPicker = ({title, start, onPick, action = 'Choose'}) => openDialog({title, start, onPick, action});
 
-/** A dialog to choose a folder: recent projects, then a browser of this machine. */
-function folderPicker({title, start, recent = [], onPick, action = 'Open'}) {
-  let cwd = start;
-  let entries = [];
-  const list = h('div', {style: {maxHeight: '46vh', overflow: 'auto', border: '1px solid var(--line)', borderRadius: '10px'}});
-  const pathInput = h('input', {type: 'text', value: tilde(cwd), on: {keydown: (e) => e.key === 'Enter' && load(e.target.value)}});
-  const load = async (dir) => {
+/**
+ * A folder chooser like an operating system's File → Open: quick access and drives on the left,
+ * back / forward / up and an address bar, the folder's contents with sortable columns (files are
+ * shown dimmed: you're choosing a folder), a filter, New folder, and the chosen folder at the bottom.
+ */
+function openDialog({title, start, action, onPick}) {
+  const st = {dir: '', parent: undefined, entries: [], sel: undefined, back: [], fwd: [], sort: 'name', asc: true, filter: '', hidden: false, editing: false};
+  const ov = h('div.overlay.open-dialog');
+  const close = () => (ov.remove(), document.removeEventListener('keydown', keys));
+  const done = (dir) => (close(), onPick(dir));
+  const nav = h('nav.od-nav');
+  const crumbs = h('div.od-crumbs');
+  const filter = h('input.od-filter', {type: 'search', placeholder: 'Filter', on: {input: (e) => ((st.filter = e.target.value.toLowerCase()), draw())}});
+  const body = h('div.od-list');
+  const chosen = h('input.od-chosen', {type: 'text', on: {keydown: (e) => e.key === 'Enter' && go2(e.target.value, true)}});
+  const btn = (ic, tip, fn) => h('button.icon-btn', {title: tip, on: {click: fn}}, icon(ic, 16));
+  const backB = btn('back', 'Back', () => st.back.length && load(st.back.pop(), 'back'));
+  const fwdB = btn('forward', 'Forward', () => st.fwd.length && load(st.fwd.pop(), 'fwd'));
+  const upB = btn('up', 'Up', () => st.parent && load(st.parent));
+  const load = async (dir, how) => {
     try {
-      const r = await api(`/api/fs/list?path=${encodeURIComponent(dir)}`);
-      cwd = r.path;
-      entries = r.entries.filter((e) => e.dir);
-      pathInput.value = tilde(cwd);
-      list.replaceChildren(
-        r.parent ? h('button.side-item', {on: {click: () => load(r.parent)}}, icon('up', 16), h('span.t', '..')) : null,
-        entries.map((e) => h('button.side-item', {on: {click: () => load(e.path), dblclick: () => done(e.path)}}, icon('folder', 16), h('span.t', e.name))),
-        !entries.length ? h('div.muted', {style: {padding: '10px'}}, 'No folders here.') : null,
-      );
+      const r = await api(`/api/fs/list?path=${encodeURIComponent(dir)}${st.hidden ? '&hidden=1' : ''}`);
+      if (st.dir && r.path !== st.dir) {
+        if (how === 'back') st.fwd.push(st.dir);
+        else if (how === 'fwd') st.back.push(st.dir);
+        else ((st.back.push(st.dir)), (st.fwd = []));
+      }
+      Object.assign(st, {dir: r.path, parent: r.parent, entries: r.entries, sel: undefined, filter: ''});
+      filter.value = '';
+      draw();
     } catch (err) {
       toast(err.message, 'error');
     }
   };
-  const ov = h('div.overlay', {on: {click: (e) => e.target === ov && ov.remove()}});
-  const done = (dir) => {
-    ov.remove();
-    onPick(dir);
+  // Typed into the address bar or the folder box: a path (~ allowed), absolute or relative to here.
+  const go2 = (text, choose) => {
+    const t = text.trim();
+    if (!t) return choose && done(st.dir);
+    const target = /^(~|\/|[A-Za-z]:[\\/])/.test(t) ? t : join(st.dir, t);
+    if (choose) api(`/api/fs/list?path=${encodeURIComponent(target)}`).then((r) => done(r.path), (e) => toast(e.message, 'error'));
+    else load(target);
   };
-  ov.append(h('div.dialog',
-    h('header', title),
-    h('div.body',
-      recent.length ? [h('div.side-label', 'Recent projects'), recent.slice(0, 8).map((p) => h('button.side-item', {on: {click: () => done(p.path)}}, icon('folder', 16), h('span.t', p.name), h('span.meta', tilde(p.path))))] : null,
-      h('div.side-label', 'Browse'),
-      pathInput,
-      h('div', {style: {height: '8px'}}),
-      list,
+  const segs = (p) => {
+    const win = /^[A-Za-z]:/.test(p);
+    const parts = p.split(/[\\/]+/).filter(Boolean);
+    const out = [];
+    let acc = win ? '' : '/';
+    if (!win) out.push(['/', '/']);
+    for (const part of parts) {
+      acc = win && !acc ? `${part}\\` : join(acc, part);
+      out.push([part, acc]);
+    }
+    return out;
+  };
+  const sortBy = (k) => ((st.asc = st.sort === k ? !st.asc : true), (st.sort = k), draw());
+  const kindOf = (e) => (e.dir ? 'Folder' : (e.name.includes('.') ? e.name.split('.').pop().toUpperCase() + ' file' : 'File'));
+  const draw = () => {
+    backB.disabled = !st.back.length;
+    fwdB.disabled = !st.fwd.length;
+    upB.disabled = !st.parent;
+    crumbs.replaceChildren(...(st.editing
+      ? [h('input.od-addr', {type: 'text', value: tilde(st.dir), on: {keydown: (e) => (e.key === 'Enter' ? ((st.editing = false), go2(e.target.value)) : e.key === 'Escape' && ((st.editing = false), draw())), blur: () => ((st.editing = false), draw())}})]
+      : [...segs(st.dir).flatMap(([name, p], i, all) => [h('button.crumb', {on: {click: () => load(p)}}, i === 0 && name === '/' ? icon('drive', 14) : name), ...(i < all.length - 1 ? [h('span.crumb-sep', '›')] : [])]), h('button.crumb-edit', {title: 'Type a path', on: {click: () => ((st.editing = true), draw(), crumbs.querySelector('input')?.select())}})]));
+    crumbs.querySelector('input')?.focus();
+    const rows = st.entries.filter((e) => !st.filter || e.name.toLowerCase().includes(st.filter));
+    const dirFirst = (a, b) => (a.dir === b.dir ? 0 : a.dir ? -1 : 1);
+    const cmp = {name: (a, b) => a.name.localeCompare(b.name, undefined, {numeric: true, sensitivity: 'base'}), modified: (a, b) => a.modified - b.modified, kind: (a, b) => kindOf(a).localeCompare(kindOf(b)), size: (a, b) => a.size - b.size}[st.sort];
+    rows.sort((a, b) => dirFirst(a, b) || (st.asc ? 1 : -1) * cmp(a, b));
+    const col = (k, label) => h('button.od-col' + (st.sort === k ? '.on' : ''), {on: {click: () => sortBy(k)}}, label, st.sort === k ? (st.asc ? ' ▲' : ' ▼') : '');
+    body.replaceChildren(
+      h('div.od-row.od-head', col('name', 'Name'), col('modified', 'Date modified'), col('kind', 'Type'), col('size', 'Size')),
+      ...rows.map((e) => h('div.od-row' + (e.dir ? '' : '.file') + (st.sel === e.path ? '.sel' : ''), {
+        tabIndex: e.dir ? 0 : -1,
+        on: e.dir ? {click: () => ((st.sel = e.path), (chosen.value = e.name), draw()), dblclick: () => load(e.path)} : {},
+      }, h('span.od-name', icon(e.dir ? 'folder' : 'file', 16), h('span', e.name)), h('span', e.modified ? new Date(e.modified).toLocaleString([], {dateStyle: 'short', timeStyle: 'short'}) : ''), h('span', kindOf(e)), h('span', e.dir ? '' : fmtSize(e.size)))),
+      !rows.length ? h('div.od-empty', st.filter ? 'Nothing matches.' : 'This folder is empty.') : null,
+    );
+    if (!st.sel) chosen.value = '';
+    chosen.placeholder = base(st.dir) || st.dir;
+    for (const b of nav.querySelectorAll('button')) b.classList.toggle('on', b.dataset.path === st.dir);
+    body.querySelector('.sel')?.scrollIntoView({block: 'nearest'});
+  };
+  const keys = (e) => {
+    if (!document.body.contains(ov)) return;
+    if (e.target.tagName === 'INPUT' && e.target !== chosen) return;
+    const dirs = st.entries.filter((x) => x.dir && (!st.filter || x.name.toLowerCase().includes(st.filter)));
+    if (e.key === 'Escape') close();
+    else if (e.key === 'Backspace' && e.target !== chosen) (e.preventDefault(), st.parent && load(st.parent));
+    else if ((e.key === 'ArrowDown' || e.key === 'ArrowUp') && dirs.length) {
+      e.preventDefault();
+      const i = dirs.findIndex((x) => x.path === st.sel);
+      const next = dirs[Math.max(0, Math.min(dirs.length - 1, i + (e.key === 'ArrowDown' ? 1 : -1)))];
+      Object.assign(st, {sel: next.path});
+      chosen.value = next.name;
+      draw();
+    } else if (e.key === 'Enter' && e.target !== chosen && st.sel) (e.preventDefault(), load(st.sel));
+  };
+  document.addEventListener('keydown', keys);
+  const newFolder = async () => {
+    const name = prompt('New folder name');
+    if (!name) return;
+    try {
+      await api('/api/fs/mkdir', {body: {path: join(st.dir, name)}});
+      await load(st.dir);
+      const made = st.entries.find((x) => x.name === name);
+      if (made) ((st.sel = made.path), (chosen.value = name), draw());
+    } catch (err) {
+      toast(err.message, 'error');
+    }
+  };
+  ov.append(h('div.dialog.od',
+    h('header', title, h('button.icon-btn', {style: {float: 'right'}, title: 'Cancel', on: {click: close}}, icon('x'))),
+    h('div.od-bar', backB, fwdB, upB, crumbs, filter),
+    h('div.od-main', nav, body),
+    h('div.od-foot',
+      h('label', 'Folder:'), chosen,
+      h('label.od-hidden', h('input', {type: 'checkbox', on: {change: (e) => ((st.hidden = e.target.checked), load(st.dir))}}), ' Hidden'),
+      h('button.btn', {on: {click: newFolder}}, icon('newfolder', 15), 'New folder'),
+      h('span.grow'),
+      h('button.btn', {on: {click: close}}, 'Cancel'),
+      h('button.btn.primary', {on: {click: () => (st.sel ? done(st.sel) : go2(chosen.value, true))}}, action),
     ),
-    h('footer', h('button.btn', {on: {click: () => ov.remove()}}, 'Cancel'), h('button.btn.primary', {on: {click: () => done(cwd)}}, `${action} this folder`)),
   ));
   document.body.append(ov);
-  void load(cwd);
+  // Quick access, recent projects, then drives.
+  api('/api/fs/roots').then(({roots}) => {
+    const item = (r, ic) => h('button.od-place', {'data-path': r.path, title: r.path, on: {click: () => load(r.path)}}, icon(ic, 15), h('span', r.name));
+    nav.replaceChildren(
+      h('div.od-group', 'Quick access'), ...roots.filter((r) => r.kind !== 'drive').map((r) => item(r, r.name === 'Home' ? 'home' : 'folder')),
+      state.projects.length ? h('div.od-group', 'Projects') : null, ...state.projects.slice(0, 8).map((p) => item(p, 'folder')),
+      h('div.od-group', 'This computer'), ...roots.filter((r) => r.kind === 'drive').map((r) => item(r, 'drive')),
+    );
+    draw();
+  }, () => {});
+  void load(start || state.home);
 }
 
 // ---------- chats ----------
 
-async function newChat() {
-  if (!state.project) return pickProject();
+/** A new chat: in a project, or (no project given) a one-off chat with its own folder. */
+async function newChat(project) {
   try {
     toast('Starting a chat…');
-    const r = await api('/api/chats', {body: {project: state.project}});
-    await loadChats();
+    const r = await api('/api/chats', {body: project ? {project} : {oneoff: true}});
+    if (project) ((state.project = project), localStorage.setItem('rein.project', project));
+    await loadSidebar();
     go(`#/chat/${r.id}`);
   } catch (err) {
     toast(err.message, 'error');
   }
 }
-async function openSaved(session) {
+async function openSaved(session, cwd) {
   try {
-    const r = await api('/api/chats', {body: {project: state.project, resume: session}});
-    await loadChats();
+    const r = await api('/api/chats', {body: {project: cwd || state.project, resume: session}});
+    await loadSidebar();
     go(`#/chat/${r.id}`);
   } catch (err) {
     toast(err.message, 'error');
   }
 }
 
-/** Watch a chat: a snapshot, then live events (server-sent). */
 function attachChat(id) {
   if (!/^[\da-f]{16}$/.test(id)) return;
   state.chat?.es?.close();
@@ -617,7 +779,7 @@ function threadEl() {
   if (!s) return h('div.thread#thread', h('div.note', 'Starting…'));
   if (!s.messages.length && !c.busy && !c.live && !c.feed.length && !c.asks.size) {
     const hour = new Date().getHours();
-    return h('div.thread#thread', h('div.empty', h('h1', hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening'), h('p', `What should we do in ${base(s.cwd)}?`)));
+    return h('div.thread#thread', h('div.empty', h('h1', hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening'), h('p', isOneOff(s.cwd) ? 'What should we do?' : `What should we do in ${base(s.cwd)}?`)));
   }
   // The turn in progress: the reply so far with its tool calls where they happened.
   const live = [];
@@ -807,7 +969,17 @@ function updateComposer(c) {
 function chatView() {
   const c = state.chat;
   if (!c) {
-    return h('main.main', topbar(state.project ? base(state.project) : 'Rein', state.project ? [h('span.path', tilde(state.project))] : []), h('div.scroll', h('div.empty', h('h1', 'Rein'), h('p', state.project ? `Start a chat in ${base(state.project)}, or pick one on the left.` : 'Open a project folder to start.'), h('button.btn.primary', {on: {click: state.project ? newChat : pickProject}}, state.project ? 'New chat' : 'Open a project'))));
+    const hour = new Date().getHours();
+    return h('main.main', topbar('Rein'), h('div.scroll', h('div.empty',
+      h('div.big-mark.brandmark', '▁▃▅▇'),
+      h('h1', hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening'),
+      h('p', 'Start a chat, or work in a project folder.'),
+      h('div.empty-actions',
+        h('button.btn.primary', {on: {click: () => newChat()}}, icon('plus', 16), 'New chat'),
+        state.project ? h('button.btn', {on: {click: () => newChat(state.project)}}, icon('folder', 16), `Chat in ${base(state.project)}`) : null,
+        h('button.btn', {on: {click: pickProject}}, icon('folder', 16), 'Open a project'),
+      ),
+    )));
   }
   const s = c.snapshot;
   // Wide screens: the sidebar sits beside the chat (on unless you turned it off). Narrow ones: it slides over, when asked.
@@ -819,7 +991,7 @@ function chatView() {
     render();
   };
   return h('main.main.chat' + (panelOpen ? '.with-panel' : ''),
-    topbar(s?.title ?? 'Chat', [s ? h('span.path', tilde(s.cwd)) : null, h('button.icon-btn', {title: 'Sidebar', on: {click: togglePanel}}, icon('panel')), h('button.icon-btn', {title: 'More', on: {click: (e) => chatMenu(e, c)}}, icon('more'))]),
+    topbar(s?.title ?? 'Chat', [s && !isOneOff(s.cwd) ? h('span.path', tilde(s.cwd)) : null, h('button.icon-btn', {title: 'Sidebar', on: {click: togglePanel}}, icon('panel')), h('button.icon-btn', {title: 'More', on: {click: (e) => chatMenu(e, c)}}, icon('more'))]),
     statusEl(c),
     h('div.chat-body', h('div.chat-col', h('div.scroll', threadEl()), composer()), panelOpen ? panelEl(c) : null, panelOpen && !wide ? h('div.rpanel-backdrop', {on: {click: togglePanel}}) : null),
   );
@@ -1275,7 +1447,7 @@ async function act(kind, entries) {
       await api('/api/projects', {body: {path: entries[0].path}});
       await loadProjects();
       setProject(entries[0].path);
-      return newChat();
+      return newChat(entries[0].path);
     }
   } catch (err) {
     toast(err.message, 'error');

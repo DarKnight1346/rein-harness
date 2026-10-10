@@ -38,7 +38,12 @@ With a username and password, put HTTPS in front of the web UI, either a reverse
 
 ## Chats
 
-The sidebar shows the project you're in, its open chats, and its recent conversations: the same saved conversations you see with `rein --continue`. **New chat** starts one in the project; the project button opens any folder on the machine as a project.
+The sidebar on the left lists your chats like a desktop chat app:
+
+- **New chat** starts a one-off chat, with no project. Each gets its own folder (`~/.rein/chats/<date>-<id>/`) for whatever it makes. One-off chats are listed under **Chats**.
+- **Open project** opens any folder on the machine as a project, in a dialog like an operating system's File → Open. On the left are quick access (home, Desktop, Documents, Downloads…), your projects, and the drives and volumes. At the top are back, forward, up and an address bar: click a part of the path to go there, or click the empty end to type a path. The folder's contents come with sortable columns (name, date modified, type, size; files are shown dimmed, since you're choosing a folder), a filter, **Hidden** and **New folder**. Double-click a folder to open it; **Open** takes the selected one, or the one you're in.
+- Under **Projects**, each project lists its open chats and its saved conversations (the same ones `rein --continue` sees). Click a project's name to collapse or expand it, **+** starts a chat in it, and ⋯ shows its files or **closes** it. Closing takes it off the sidebar and nothing else: its conversations stay saved, and opening the folder again brings them back.
+- Hover a chat and click the archive button to **archive** it: it leaves the list (closing it if it's open) and goes under **Archived** at the bottom, where the restore button brings it back. Archiving never deletes a conversation.
 
 A chat runs in its own Rein process, in its project's folder, so several can run at once and keep going when you close the page. Open the same chat on another device and you see it live there too. A chat nobody has looked at for 30 minutes, and that isn't working, is closed (it's saved; open it again from the list).
 
@@ -64,6 +69,7 @@ What a command prints shows in the thread under `› /command`, and `/usage` and
 | `/agents` | The conversation's subagents: open one to follow what it does, message it, or **Stop** it (clicking one in the sidebar opens this too) |
 | `/mcp` | The MCP servers and their state |
 | `/vault set NAME` | A hidden field for the value |
+| `/login` | The accounts Rein uses and whether each is signed in: re-authenticate or remove one, add any kind (Claude subscription or Console API key, Claude on Bedrock or Vertex, Codex with ChatGPT or an OpenAI API key), and the Jev key. See [Signing in from the browser](#signing-in-from-the-browser) |
 
 The **Settings** page (bottom left) opens the same settings and model windows for the chat you're in.
 
@@ -71,9 +77,18 @@ A few commands are for the terminal, and say what to use instead:
 
 | Command | Instead |
 |---|---|
-| `/login` | Sign accounts in from a terminal (`rein`, then `/login`); every chat uses them |
 | `/resume` | Open a conversation from the list on the left |
 | `/tui`, `/voice`, `/remote`, `/exit` | Terminal features (close a chat from the list) |
+
+### Signing in from the browser
+
+`/login` signs accounts in through the official `claude` and `codex` CLIs on the computer Rein runs on, as the terminal does. Rein never sees the tokens: the CLIs keep them. Both work from any device, not only the one Rein runs on:
+
+- **Claude:** **Sign in** opens Anthropic's page. After you sign in it shows a code; paste it into the window.
+- **Codex with ChatGPT:** Rein asks Codex for a **device code** and shows it with a link to OpenAI's page. Open the link on any device, sign in, and enter the code. (The terminal's ChatGPT login ends in a callback to `localhost` on Rein's machine, which a phone can't reach; the device code doesn't need it.) It needs a Codex with the device-code login; an older one says to update Codex or sign in from a terminal.
+- **API keys** (Anthropic Console, OpenAI) and the **Jev** key go into a hidden field. **Bedrock** and **Vertex** use the AWS or Google Cloud credentials already on the machine; the window asks for the region and profile or project and checks them.
+
+A new account is used by new chats right away; a chat that's already open picks it up when its model list next refreshes.
 
 ### Status line and sidebar
 

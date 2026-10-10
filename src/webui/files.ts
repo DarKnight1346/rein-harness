@@ -50,11 +50,22 @@ export async function list(dir: string, hidden = false): Promise<{path: string; 
 }
 
 /** Places to start from: home, and on Windows each drive. */
-export async function roots(): Promise<{name: string; path: string}[]> {
-  const out = [{name: 'Home', path: os.homedir()}];
+/** Where to start browsing: quick access (home and its usual folders), then drives or volumes. */
+export async function roots(): Promise<{name: string; path: string; kind: 'place' | 'drive'}[]> {
+  const home = os.homedir();
+  const out: {name: string; path: string; kind: 'place' | 'drive'}[] = [{name: 'Home', path: home, kind: 'place'}];
+  for (const name of ['Desktop', 'Documents', 'Downloads', 'Projects', 'code', 'src']) if (existsSync(path.join(home, name))) out.push({name, path: path.join(home, name), kind: 'place'});
   if (process.platform === 'win32') {
-    for (const l of 'CDEFGHIJKLMNOPQRSTUVWXYZ') if (existsSync(`${l}:\\`)) out.push({name: `${l}:`, path: `${l}:\\`});
-  } else out.push({name: '/', path: '/'});
+    for (const l of 'CDEFGHIJKLMNOPQRSTUVWXYZ') if (existsSync(`${l}:\\`)) out.push({name: `${l}:`, path: `${l}:\\`, kind: 'drive'});
+  } else {
+    out.push({name: '/', path: '/', kind: 'drive'});
+    // Mounted volumes and disks (macOS /Volumes, Linux /mnt and /media).
+    const {readdir} = await import('node:fs/promises');
+    for (const base of ['/Volumes', '/mnt', '/media']) {
+      const names = await readdir(base).catch(() => [] as string[]);
+      for (const n of names.slice(0, 12)) if (!n.startsWith('.')) out.push({name: n, path: path.join(base, n), kind: 'drive'});
+    }
+  }
   return out;
 }
 

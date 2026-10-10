@@ -53,12 +53,13 @@ const configKeys = [...configType.matchAll(/^ {2}(\w+)\??:/gm)].map((m) => m[1])
 const configPage = page('reference/configuration');
 for (const k of configKeys) if (!mentions(configPage, k)) fail(`reference/configuration: config key \`${k}\` is not documented`);
 
-// 4. Tools the model can call (every `name: '<tool>'` tool definition outside src/ui) → reference/tools.
+// 4. Tools the model can call (every `name: '<tool>'` tool definition outside src/ui and src/webui, whose
+//    windows look the same) → reference/tools.
 const toolsPage = page('reference/tools');
 const walk = (dir) => readdirSync(dir, {withFileTypes: true}).flatMap((e) => (e.isDirectory() ? walk(path.join(dir, e.name)) : [path.join(dir, e.name)]));
 const tools = new Set();
 for (const file of walk(path.join(repo, 'src'))) {
-  if (!file.endsWith('.ts') || file.includes(`${path.sep}ui${path.sep}`)) continue;
+  if (!file.endsWith('.ts') || file.includes(`${path.sep}ui${path.sep}`) || file.includes(`${path.sep}webui${path.sep}`)) continue;
   for (const m of read(file).matchAll(/^\s*name: '([a-z_]+)',?$/gm)) tools.add(m[1]);
 }
 for (const t of tools) if (!mentions(toolsPage, t)) fail(`reference/tools: tool \`${t}\` is not documented`);
