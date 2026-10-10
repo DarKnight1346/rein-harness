@@ -31,7 +31,7 @@ With only Claude accounts there's no pet. Built-in pets come as WebP: Rein conve
 | `/pet off` | No pet, here and in the apps |
 | `/pet refresh` | Reads your pet again, after you changed it in another app |
 
-`/pet` doesn't show in a bare `/` list; type `/pet`. To keep your pet out of Rein only, set **Pet** to **Off** in `/settings` → **General** (`"pet": "off"`).
+To keep your pet out of Rein only, set **Pet** to **Off** in `/settings` → **General** (`"pet": "off"`).
 
 ## The pets skills
 
