@@ -127,7 +127,10 @@ describe('the web preview', async () => {
     const blocked = await sandboxBlocked();
     try {
       const frame = new Promise<any>((r) => v.once('frame', r));
+      // The page itself (the stream starts on about:blank, before the navigation).
+      const loaded = new Promise<void>((r) => v.on('loaded', (u) => u === url && r()));
       await within(v.start(url, {width: 640, height: 480}), (step = 'starting the browser'), 35_000);
+      await within(loaded, (step = 'loading the page'));
       const f = await within(frame, (step = 'the first frame'));
       expect([f.width, f.height]).toEqual([640, 480]);
       const went = new Promise<string>((r) => v.on('navigated', (u) => u.endsWith('/two') && r(u)));

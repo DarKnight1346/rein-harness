@@ -54,6 +54,7 @@ function ansi(text) {
 
 const ICONS = {
   plus: 'M12 5v14M5 12h14', send: 'M5 12h14M13 5l7 7-7 7', stop: 'M7 7h10v10H7z', folder: 'M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z', file: 'M6 3h8l4 4v14H6zM14 3v4h4', chat: 'M4 5h16v11H8l-4 4z', gear: 'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z',
+  keyboard: 'M3 6h18v12H3zM7 10h.01M11 10h.01M15 10h.01M7 14h10',
   archive: 'M3 5h18v4H3zM5 9v10h14V9M10 13h4', restore: 'M4 12a8 8 0 1 0 2.3-5.7M4 4v5h5', back: 'M19 12H5M11 5l-7 7 7 7', forward: 'M5 12h14M13 5l7 7-7 7', home: 'M3 11l9-7 9 7v9H5v-9', drive: 'M3 15h18v5H3zM6 17.5h.01M3 15l3-10h12l3 10',
   menu: 'M4 6h16M4 12h16M4 18h16', panel: 'M4 5h16v14H4zM15 5v14', up: 'M12 19V5M5 12l7-7 7 7', upload: 'M12 16V4M6 10l6-6 6 6M4 20h16', refresh: 'M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7', search: 'M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14zM21 21l-5-5', more: 'M5 12h.01M12 12h.01M19 12h.01', x: 'M6 6l12 12M18 6L6 18', eye: 'M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12zM12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z', download: 'M12 4v12M6 10l6 6 6-6M4 20h16', newfolder: 'M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2zM12 10v6M9 13h6',
 };
@@ -1526,11 +1527,16 @@ function renderPreviewChips(c) {
   // The open pane's tabs and bar follow the list (a preview added or renamed, its server gone).
   const pane = $('#ppane');
   if (pane && c.pvOpen) {
-    if (!(c.snapshot?.previews ?? []).some((p) => p.id === c.pvOpen)) ((c.pvOpen = undefined), render());
+    // Closed only once it was in the list and has gone (an update from before it was added doesn't count).
+    const listed = (c.snapshot?.previews ?? []).some((p) => p.id === c.pvOpen);
+    if (listed && c.pv[c.pvOpen]) c.pv[c.pvOpen].seen = true;
+    if (!listed && c.pv[c.pvOpen]?.seen) ((c.pvOpen = undefined), render());
     else {
-      const fresh = previewPane(c);
-      pane.querySelector('.ptabs')?.replaceWith(fresh.querySelector('.ptabs'));
-      pane.querySelector('.pbar')?.replaceWith(fresh.querySelector('.pbar'));
+      // Only the tabs and the bar: the live screen (canvas) stays where it is.
+      const list2 = c.snapshot?.previews ?? [];
+      const pv2 = c.pv[c.pvOpen];
+      pane.querySelector('.ptabs')?.replaceWith(paneTabs(c, list2));
+      pane.querySelector('.pbar')?.replaceWith(paneBar(c, list2.find((x) => x.id === c.pvOpen), pv2));
     }
   }
   const list = c.snapshot?.previews ?? [];
@@ -1569,19 +1575,31 @@ function previewPane(c) {
     pv.canvas = h('canvas.pcanvas', {tabIndex: 0});
     bindInput(c, pv);
   }
+  const bar = paneBar(c, p, pv);
+  const status = h('div.pstatus#pstatus', pv.error ? h('div.note.error', pv.error) : !pv.w ? h('div.working', h('span.spin', '▁▃▅▇'), h('span.rainbow', p?.kind === 'vnc' ? 'Connecting to the display…' : 'Starting the browser…')) : null);
+  return h('section.ppane#ppane',
+    paneTabs(c, list),
+    bar,
+    h('div.pscreen#pscreen', pv.canvas, status, pv.keyboard ?? null),
+  );
+}
+
+function paneTabs(c, list) {
+  return h('div.ptabs', list.filter((x) => c.pv[x.id] || x.id === c.pvOpen).map((x) => h('button.ptab' + (x.id === c.pvOpen ? '.on' : ''), {on: {click: () => openPreview(c, x.id)}}, x.title, h('span.px', {title: 'Close', on: {click: (e) => (e.stopPropagation(), closePreview(c, x.id))}}, '×'))),
+    h('span.grow'), h('button.icon-btn', {title: 'Hide the preview', on: {click: () => closePane(c)}}, icon('x', 15)));
+}
+
+/** A web preview's back / forward / reload / address bar; a display's address; the keyboard button for touch. */
+function paneBar(c, p, pv) {
   const nav = (dir) => ask(c, 'preview-nav', {id: pv.id, dir}).catch((e) => toast(e.message, 'error'));
   const urlIn = h('input.purl', {type: 'text', value: pv.url || p?.target || '', spellcheck: false, on: {keydown: (e) => e.key === 'Enter' && ask(c, 'preview-nav', {id: pv.id, url: /^https?:\/\//i.test(e.target.value) ? e.target.value : `http://${e.target.value}`}).catch((x) => toast(x.message, 'error'))}});
   pv.urlIn = urlIn;
   const bar = p?.kind === 'url'
     ? h('div.pbar', h('button.icon-btn', {title: 'Back', on: {click: () => nav('back')}}, icon('back', 15)), h('button.icon-btn', {title: 'Forward', on: {click: () => nav('forward')}}, icon('forward', 15)), h('button.icon-btn', {title: 'Reload', on: {click: () => nav('reload')}}, icon('refresh', 15)), urlIn)
-    : h('div.pbar', h('span.ptarget', p ? `▣ ${p.target}` : ''), h('span.muted', 'click to focus, then type'));
-  const status = h('div.pstatus#pstatus', pv.error ? h('div.note.error', pv.error) : !pv.w ? h('div.working', h('span.spin', '▁▃▅▇'), h('span.rainbow', p?.kind === 'vnc' ? 'Connecting to the display…' : 'Starting the browser…')) : null);
-  return h('section.ppane#ppane',
-    h('div.ptabs', list.filter((x) => c.pv[x.id] || x.id === c.pvOpen).map((x) => h('button.ptab' + (x.id === c.pvOpen ? '.on' : ''), {on: {click: () => openPreview(c, x.id)}}, x.title, h('span.px', {title: 'Close', on: {click: (e) => (e.stopPropagation(), closePreview(c, x.id))}}, '×'))),
-      h('span.grow'), h('button.icon-btn', {title: 'Hide the preview', on: {click: () => closePane(c)}}, icon('x', 15))),
-    bar,
-    h('div.pscreen#pscreen', pv.canvas, status),
-  );
+    : h('div.pbar', h('span.ptarget', p ? `▣ ${p.target}` : ''), h('span.muted.hide-touch', 'click to focus, then type'));
+  // The device's keyboard, for phones and tablets (a hardware keyboard works straight on the screen).
+  bar.append(h('button.icon-btn.pkb', {title: 'Keyboard', 'aria-label': 'Open the keyboard', on: {click: () => pv.keyboard?.focus()}}, icon('keyboard', 16)));
+  return bar;
 }
 
 async function closePreview(c, id) {
@@ -1642,39 +1660,142 @@ function drawFrame(c, ev) {
   img.src = `data:image/${ev.format};base64,${ev.data ?? ev.png}`;
 }
 
-/** Mouse, wheel and keys on the screen go to the preview (in its own pixels). */
+/**
+ * Input on the screen goes to the preview, in its own pixels. A mouse clicks, drags, scrolls and
+ * types as on a desktop. A finger (phones, tablets): a tap clicks, a swipe scrolls the preview (not
+ * the page), press-and-hold then drag drags, two fingers tapping right-click; the keyboard button
+ * opens the device's keyboard and what's typed goes in.
+ */
 function bindInput(c, pv) {
   const cv = pv.canvas;
+  cv.style.touchAction = 'none'; // the preview handles swipes, not the browser
   const at = (e) => {
     const r = cv.getBoundingClientRect();
     // The page may lay out at a different size than the frame (device pixels): scale to its viewport.
     const sx = (pv.vw || cv.width) / r.width, sy = (pv.vh || cv.height) / r.height;
-    return {x: Math.round((e.clientX - r.left) * sx), y: Math.round((e.clientY - r.top) * sy)};
+    return {x: Math.round((e.clientX - r.left) * sx), y: Math.round((e.clientY - r.top) * sy), sx, sy};
   };
   const send = (ev) => ask(c, 'preview-input', {id: pv.id, ev}).catch(() => {});
   const btn = (b) => (b === 2 ? 'right' : b === 1 ? 'middle' : 'left');
+  const xy = (p) => ({x: p.x, y: p.y});
   let lastMove = 0;
-  cv.addEventListener('mousedown', (e) => (cv.focus(), e.preventDefault(), send({type: 'mouse', action: 'down', button: btn(e.button), clicks: e.detail || 1, ...at(e)})));
-  cv.addEventListener('mouseup', (e) => send({type: 'mouse', action: 'up', button: btn(e.button), clicks: e.detail || 1, ...at(e)}));
-  cv.addEventListener('mousemove', (e) => {
-    if (Date.now() - lastMove < 33) return;
-    lastMove = Date.now();
-    send({type: 'mouse', action: 'move', ...at(e)});
+  // Touch state: what this finger is doing (undecided → tap, scroll or drag).
+  const touches = new Map();
+  let gesture;
+  cv.addEventListener('pointerdown', (e) => {
+    if (e.pointerType === 'mouse') {
+      cv.focus();
+      e.preventDefault();
+      return send({type: 'mouse', action: 'down', button: btn(e.button), clicks: e.detail || 1, ...xy(at(e))});
+    }
+    e.preventDefault();
+    cv.setPointerCapture?.(e.pointerId);
+    touches.set(e.pointerId, {x: e.clientX, y: e.clientY});
+    if (touches.size === 2) return void (gesture = {kind: 'two', start: Date.now(), moved: false, at: at(e)});
+    const p = at(e);
+    gesture = {kind: 'pending', start: Date.now(), x0: e.clientX, y0: e.clientY, lastX: e.clientX, lastY: e.clientY, p};
+    gesture.hold = setTimeout(() => {
+      // Held still: a drag (selecting, sliders, moving things in a VM).
+      if (gesture?.kind !== 'pending') return;
+      gesture.kind = 'drag';
+      navigator.vibrate?.(10);
+      send({type: 'mouse', action: 'move', ...xy(p)});
+      send({type: 'mouse', action: 'down', button: 'left', ...xy(p)});
+    }, 450);
   });
+  cv.addEventListener('pointermove', (e) => {
+    if (e.pointerType === 'mouse') {
+      if (Date.now() - lastMove < 33) return;
+      lastMove = Date.now();
+      return send({type: 'mouse', action: 'move', ...xy(at(e))});
+    }
+    if (!gesture || !touches.has(e.pointerId)) return;
+    e.preventDefault();
+    touches.set(e.pointerId, {x: e.clientX, y: e.clientY});
+    if (gesture.kind === 'two') return void (gesture.moved = true);
+    const dx = e.clientX - gesture.lastX, dy = e.clientY - gesture.lastY;
+    if (gesture.kind === 'pending' && Math.hypot(e.clientX - gesture.x0, e.clientY - gesture.y0) > 8) {
+      clearTimeout(gesture.hold);
+      gesture.kind = 'scroll';
+    }
+    if (gesture.kind === 'scroll') {
+      if (Date.now() - lastMove < 33) return;
+      lastMove = Date.now();
+      const p = at(e);
+      // Content follows the finger, as a touch screen scrolls.
+      send({type: 'wheel', x: p.x, y: p.y, dx: -dx * p.sx, dy: -dy * p.sy});
+      gesture.lastX = e.clientX;
+      gesture.lastY = e.clientY;
+    } else if (gesture.kind === 'drag' && Date.now() - lastMove >= 33) {
+      lastMove = Date.now();
+      send({type: 'mouse', action: 'move', ...xy(at(e))});
+    }
+  });
+  const end = (e) => {
+    if (e.pointerType === 'mouse') return send({type: 'mouse', action: 'up', button: btn(e.button), clicks: e.detail || 1, ...xy(at(e))});
+    if (!touches.has(e.pointerId)) return;
+    touches.delete(e.pointerId);
+    if (!gesture) return;
+    clearTimeout(gesture.hold);
+    if (gesture.kind === 'two') {
+      // Two fingers tapped together: a right-click.
+      if (!touches.size && !gesture.moved && Date.now() - gesture.start < 400) {
+        send({type: 'mouse', action: 'down', button: 'right', ...xy(gesture.at)});
+        send({type: 'mouse', action: 'up', button: 'right', ...xy(gesture.at)});
+      }
+      if (!touches.size) gesture = undefined;
+      return;
+    }
+    const p = at(e);
+    if (gesture.kind === 'pending' && e.type === 'pointerup') {
+      send({type: 'mouse', action: 'move', ...xy(gesture.p)});
+      send({type: 'mouse', action: 'down', button: 'left', clicks: 1, ...xy(gesture.p)});
+      send({type: 'mouse', action: 'up', button: 'left', clicks: 1, ...xy(gesture.p)});
+    } else if (gesture.kind === 'drag') send({type: 'mouse', action: 'up', button: 'left', ...xy(p)});
+    gesture = undefined;
+  };
+  cv.addEventListener('pointerup', end);
+  cv.addEventListener('pointercancel', end);
   cv.addEventListener('contextmenu', (e) => e.preventDefault());
-  cv.addEventListener('wheel', (e) => (e.preventDefault(), send({type: 'wheel', dx: e.deltaX, dy: e.deltaY, ...at(e)})), {passive: false});
+  cv.addEventListener('wheel', (e) => (e.preventDefault(), send({type: 'wheel', dx: e.deltaX, dy: e.deltaY, ...xy(at(e))})), {passive: false});
   const mods = (e) => (e.altKey ? 1 : 0) | (e.ctrlKey ? 2 : 0) | (e.metaKey ? 4 : 0) | (e.shiftKey ? 8 : 0);
-  cv.addEventListener('keydown', (e) => {
+  const keyDown = (e) => {
     // Paste goes through the paste event (as text); everything else to the preview.
     if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'v') return;
+    if (e.key === 'Unidentified' || e.key === 'Process') return; // a phone keyboard: see the input below
     e.preventDefault();
     send({type: 'key', action: 'down', key: e.key, code: e.code, text: e.key.length === 1 ? e.key : undefined, modifiers: mods(e)});
-  });
-  cv.addEventListener('keyup', (e) => (e.preventDefault(), send({type: 'key', action: 'up', key: e.key, code: e.code, modifiers: mods(e)})));
-  cv.addEventListener('paste', (e) => {
+  };
+  const keyUp = (e) => {
+    if (e.key === 'Unidentified' || e.key === 'Process') return;
+    e.preventDefault();
+    send({type: 'key', action: 'up', key: e.key, code: e.code, modifiers: mods(e)});
+  };
+  cv.addEventListener('keydown', keyDown);
+  cv.addEventListener('keyup', keyUp);
+  const paste = (e) => {
     const text = e.clipboardData?.getData('text');
     if (text) (e.preventDefault(), send({type: 'text', text}));
+  };
+  cv.addEventListener('paste', paste);
+  // The device's own keyboard (phones, tablets): an input that's focused to bring it up. What's typed
+  // arrives as input events (a phone keyboard rarely says which key), sent on as typing.
+  const kb = h('textarea.pkeys', {autocapitalize: 'off', autocomplete: 'off', autocorrect: 'off', spellcheck: false, 'aria-label': 'Type into the preview'});
+  const press = (key) => ['down', 'up'].forEach((action) => send({type: 'key', action, key, code: key}));
+  kb.addEventListener('beforeinput', (e) => {
+    e.preventDefault();
+    if (e.inputType === 'insertText' || e.inputType === 'insertReplacementText' || e.inputType === 'insertCompositionText') e.data && send({type: 'text', text: e.data});
+    else if (e.inputType === 'deleteContentBackward') press('Backspace');
+    else if (e.inputType === 'deleteContentForward') press('Delete');
+    else if (e.inputType === 'insertLineBreak' || e.inputType === 'insertParagraph') press('Enter');
   });
+  kb.addEventListener('keydown', (e) => {
+    // Keys a phone keyboard does report (a hardware keyboard on a tablet reports them all).
+    if (['Enter', 'Backspace', 'Tab', 'Escape', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Delete'].includes(e.key) || e.ctrlKey || e.metaKey || e.altKey) keyDown(e);
+  });
+  kb.addEventListener('keyup', (e) => ['Enter', 'Backspace', 'Tab', 'Escape', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Delete'].includes(e.key) && keyUp(e));
+  kb.addEventListener('paste', paste);
+  pv.keyboard = kb;
 }
 
 // ---------- files ----------

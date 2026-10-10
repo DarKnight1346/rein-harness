@@ -198,6 +198,7 @@ export class BrowserView extends EventEmitter {
         void this.recover();
         break;
       case 'Page.loadEventFired':
+        this.emit('loaded', this.url);
         // A screencast sends frames on paints; a page that's done painting gets one frame now.
         void this.call('Page.captureScreenshot', {format: 'jpeg', quality: 70}).then((r) => this.emit('frame', {data: r.data, width: this.size.width, height: this.size.height} satisfies Frame), () => {});
         break;

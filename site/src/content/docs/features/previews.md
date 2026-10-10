@@ -15,7 +15,21 @@ The page is shown by a headless Chrome running on the same machine as the server
 - An app that calls its own API on another port (a UI on 5173, an API on 3001) works too: the browser making those calls is next to both servers.
 - Hot reload, websockets and absolute paths work, because nothing is rewritten.
 
-The preview has back, forward, reload and an address bar. Click, scroll and type in it as in a browser; paste goes in as typing. It lays out at the size of the pane, so a narrow pane shows the app's mobile layout.
+The preview has back, forward, reload and an address bar. It lays out at the size of the pane, so on a phone, or in a narrow pane, you see the app's mobile layout.
+
+## On any device
+
+Previews work wherever the web UI does: a phone, a tablet, another computer. The app runs on the machine Rein runs on (a server anywhere, your desktop), and only its screen comes to you.
+
+| | With a mouse and keyboard | On a touch screen |
+|---|---|---|
+| Click | Click | Tap |
+| Scroll | Wheel or trackpad | Swipe (the preview scrolls, not the page) |
+| Drag, select | Drag | Press and hold, then drag |
+| Right-click | Right-click | Tap with two fingers |
+| Type | Click into the preview and type (paste goes in as typing) | The ⌨ button opens your device's keyboard; what you type, Backspace and Enter go to the preview |
+
+These work the same in a web preview and on a display.
 
 A preview found in a command's output goes away when that command ends.
 
